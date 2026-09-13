@@ -1,6 +1,6 @@
 {
   "name": "agentonic",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@11.21.0",
@@ -23,7 +23,8 @@
     "skeletons:update": "node scripts/skeleton-audit.mjs update",
     "db:check": "node scripts/check-database.mjs",
     "db:check-prisma": "tsx --conditions=react-server scripts/check-prisma.ts",
-    "version:check": "node scripts/versioning.mjs check"
+    "version:check": "node scripts/versioning.mjs check",
+    "db:check-access": "node scripts/check-access.mjs"
   },
   "devDependencies": {
     "@workspace/typescript-config": "workspace:*",
