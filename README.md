@@ -2,7 +2,7 @@
 
 Platform monorepo for the staff admin app, customer app and platform workers. Agent execution code belongs in the separate `Avilabs-LLC/agentonic-runtime` repository.
 
-The authoritative design is in [docs/agentonic-architecture.md](docs/agentonic-architecture.md), including the UI contract (§21) and implementation status (§22). [docs/schema.dbml](docs/schema.dbml) describes the complete target model. Four identity tables and authentication services are implemented; agent lifecycle screens and execution are not enabled.
+The authoritative design is in [docs/agentonic-architecture.md](docs/agentonic-architecture.md), including the UI contract (§21) and implementation status (§§22–23). [docs/schema.dbml](docs/schema.dbml) describes the complete target model. Sixteen identity/access tables and their server services are implemented; agent lifecycle screens and execution are not enabled.
 
 ## Local development
 
@@ -19,7 +19,7 @@ pnpm dev
 
 Both apps use the same Base UI/shadcn Mira preset (`b1GfVg2Oe`), Figtree font and shared UI package. Authentication cookies are separate per app, host-only and HTTP-only. Customer membership never grants staff access.
 
-The local bootstrap has already provisioned dedicated roles and applied the first migration to the configured nonproduction Supabase project. The three confirmed Auth users are now linked: one staff administrator and two customer owners, each with a separate test workspace. Their actual access boundaries have been verified; interactive sign-in uses the private passwords chosen in Supabase. App `.env.local` files contain only their restricted database credentials and public Supabase configuration. No bootstrap or migration URL belongs in either app's environment.
+The local bootstrap has already provisioned dedicated roles and applied the first two migrations to the configured nonproduction Supabase project. The three confirmed Auth users are now linked: one staff administrator and two customer owners, each with a separate test workspace. Their actual access boundaries have been verified; interactive sign-in uses the private passwords chosen in Supabase. App `.env.local` files contain only their restricted database credentials and public Supabase configuration. No bootstrap or migration URL belongs in either app's environment.
 
 For a fresh authorized nonproduction setup, fill `.env.bootstrap.local` from its example, provide the verified Supabase CA, and run:
 
@@ -69,9 +69,23 @@ packages/database/      Prisma model, generated client and SQL migrations
 scripts/                Explicit setup, verification and skeleton tooling
 ```
 
-App roles are non-owner and non-BYPASSRLS. Tables remain SELECT-only. Tenant queries require a verified actor, transaction-local workspace and active membership. A restricted discovery function returns only the caller's active workspace IDs. Workers have no application data grants yet.
+App roles are non-owner and non-BYPASSRLS. Tables remain SELECT-only; validated command functions handle authorized writes and audit them atomically. Tenant queries require a verified actor, transaction-local workspace and current resource authority as well as active membership. A restricted discovery function returns only the caller's active workspace IDs. Workers have no application data grants yet.
 
 The VM has been inspected only. No Azure packages, services, firewall rules or deployment files have been installed. Future releases use systemd and fixed release directories as described in the architecture.
+
+## Identity and resource access services
+
+`packages/server/src/access.ts` is the server-only entry point for workspace membership, draft-agent creation, explicit agent/collection sharing, contacts, scoped staff support and invitation services. It derives identity and confirmed email from Supabase, validates strict contracts and invokes the database's fixed-operation permission boundary. It is not a public API route or an invitation-delivery service. The corresponding UI arrives with the next workflow milestones; existing disabled navigation remains accurate.
+
+There is no seeded runtime template yet. Agent drafts require a real, ready template published in the next milestone. Collection permissions are independent of agent permissions. Only resource owners can delegate private content access; staff must use exact, expiring support grants and audited reads. Customers cannot publish or deploy.
+
+To verify the actual configured test accounts and permission commands:
+
+```sh
+pnpm db:check-access
+```
+
+This explicit nonproduction check temporarily exercises resource creation, invitation acceptance, sharing, support reads and offboarding through restricted app credentials. All test transactions are rolled back, including their audit events. It sends no emails, changes no Auth users and prints no account addresses or credentials. The bootstrap credential is used only for read-only lookup of the configured test identities.
 
 ## Branch releases
 

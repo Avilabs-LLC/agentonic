@@ -2,27 +2,27 @@
   "version": 1,
   "routes": {
     "apps/admin/app/(panel)/account/page.tsx": {
-      "source": "cff0f701ef0024a9c13ef587e1fcddf649ec28c622c74d0692970816f99a8658",
+      "source": "40edf5ddfb97e9f4af526549f6174dadb05fcd76c305d90d98c405a87524077a",
       "skeleton": "2a15fbaab770b187c4a48e99e99dd1c6362961c444bae415cecd7084566d792c"
     },
     "apps/admin/app/(panel)/page.tsx": {
-      "source": "cff0f701ef0024a9c13ef587e1fcddf649ec28c622c74d0692970816f99a8658",
+      "source": "40edf5ddfb97e9f4af526549f6174dadb05fcd76c305d90d98c405a87524077a",
       "skeleton": "c24ddf21baf62365f324a21749ffa9aa28474a0298bb4399fde80cd46862f649"
     },
     "apps/admin/app/login/page.tsx": {
-      "source": "cff0f701ef0024a9c13ef587e1fcddf649ec28c622c74d0692970816f99a8658",
+      "source": "40edf5ddfb97e9f4af526549f6174dadb05fcd76c305d90d98c405a87524077a",
       "skeleton": "795d2398d385b5c4e401c56eb617479c8b3852d9fbc7e031ed2caf5dfa8ba367"
     },
     "apps/customer/app/(panel)/account/page.tsx": {
-      "source": "29f370c2ec98b6223d681f326b71e13e6257c38a72e109ee544e1d2fdf13bec5",
+      "source": "4657752d9bfaeb03d50fb679e16e142f0d01bce86f6898a9d210852f34d197d8",
       "skeleton": "e6a03f2f351d8d31b6613ce18782c471d3d7abb236cd2f71a1134deef511575f"
     },
     "apps/customer/app/(panel)/page.tsx": {
-      "source": "29f370c2ec98b6223d681f326b71e13e6257c38a72e109ee544e1d2fdf13bec5",
+      "source": "4657752d9bfaeb03d50fb679e16e142f0d01bce86f6898a9d210852f34d197d8",
       "skeleton": "1e62bd0d0ee8b7ac59567f36669b297143a6d5ba702d9d276c1741d65a0c84e8"
     },
     "apps/customer/app/login/page.tsx": {
-      "source": "29f370c2ec98b6223d681f326b71e13e6257c38a72e109ee544e1d2fdf13bec5",
+      "source": "4657752d9bfaeb03d50fb679e16e142f0d01bce86f6898a9d210852f34d197d8",
       "skeleton": "ee5843c44111abc68a28caec8ba8e504bd4cb97073b6ffc0fab3b14f935a3013"
     }
   }
