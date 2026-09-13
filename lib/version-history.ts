@@ -1,5 +1,10 @@
 export const VERSION_HISTORY = [
   {
+    "version": "0.3.0",
+    "date": "2026-09-13",
+    "summary": "Identity and resource access, invitations, scoped support, offboarding and audit"
+  },
+  {
     "version": "0.2.0",
     "date": "2026-09-13",
     "summary": "Shared platform foundation, separate app authentication and identity isolation"

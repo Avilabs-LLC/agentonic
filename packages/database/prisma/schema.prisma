@@ -18,6 +18,8 @@ model User {
   staff                  PlatformStaff?    @relation("PlatformStaffUser")
   personalWorkspace      Workspace?        @relation("WorkspacePersonalOwnerUser")
   memberships            WorkspaceMember[] @relation("WorkspaceMemberUser")
+  auditEventsByActorUser AuditEvent[]      @relation("AuditEventActorUser")
+  contactsByLinkedUser   Contact[]         @relation("ContactLinkedUser")
 
   @@map("users")
   @@schema("agentonic")
@@ -30,6 +32,9 @@ model PlatformStaff {
   disabledAt                      DateTime?            @map("disabled_at") @db.Timestamptz
   createdAt                       DateTime             @default(now()) @map("created_at") @db.Timestamptz
   user                            User                 @relation("PlatformStaffUser", fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "platform_staff_user_id_fkey")
+  supportAccessGrantsByStaff      SupportAccessGrant[] @relation("SupportAccessGrantStaff")
+  codeRepositorysByCreatedByStaff CodeRepository[]     @relation("CodeRepositoryCreatedByStaff")
+  agentsByCreatedByStaff          Agent[]              @relation("AgentCreatedByStaff")
 
   @@map("platform_staff")
   @@schema("agentonic")
@@ -50,6 +55,16 @@ model Workspace {
   createdAt                         DateTime                @default(now()) @map("created_at") @db.Timestamptz
   personalOwner                     User?                   @relation("WorkspacePersonalOwnerUser", fields: [personalOwnerUserId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "workspaces_personal_owner_user_id_fkey")
   members                           WorkspaceMember[]       @relation("WorkspaceMemberWorkspace")
+  workspaceInvitationsByWorkspace   WorkspaceInvitation[]   @relation("WorkspaceInvitationWorkspace")
+  supportAccessGrantsByWorkspace    SupportAccessGrant[]    @relation("SupportAccessGrantWorkspace")
+  agentsByWorkspace                 Agent[]                 @relation("AgentWorkspace")
+  agentMemberGrantsByWorkspace      AgentMemberGrant[]      @relation("AgentMemberGrantWorkspace")
+  knowledgeCollectionsByWorkspace   KnowledgeCollection[]   @relation("KnowledgeCollectionWorkspace")
+  collectionMemberGrantsByWorkspace CollectionMemberGrant[] @relation("CollectionMemberGrantWorkspace")
+  auditEventsByWorkspace            AuditEvent[]            @relation("AuditEventWorkspace")
+  contactsByWorkspace               Contact[]               @relation("ContactWorkspace")
+  agentContactGrantsByWorkspace     AgentContactGrant[]     @relation("AgentContactGrantWorkspace")
+  codeRepositorysByWorkspace        CodeRepository[]        @relation("CodeRepositoryWorkspace")
 
   @@map("workspaces")
   @@schema("agentonic")
@@ -66,10 +81,274 @@ model WorkspaceMember {
   createdAt                               DateTime                @default(now()) @map("created_at") @db.Timestamptz
   workspace                               Workspace               @relation("WorkspaceMemberWorkspace", fields: [workspaceId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "workspace_members_workspace_id_fkey")
   user                                    User                    @relation("WorkspaceMemberUser", fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "workspace_members_user_id_fkey")
+  workspaceInvitationsByInvitedByMember   WorkspaceInvitation[]   @relation("WorkspaceInvitationInvitedByMember")
+  supportAccessGrantsByApprovedByMember   SupportAccessGrant[]    @relation("SupportAccessGrantApprovedByMember")
+  agentsByOwnerMember                     Agent[]                 @relation("AgentOwnerMember")
+  agentMemberGrantsByMember               AgentMemberGrant[]      @relation("AgentMemberGrantMember")
+  agentMemberGrantsByGrantedByMember      AgentMemberGrant[]      @relation("AgentMemberGrantGrantedByMember")
+  knowledgeCollectionsByOwnerMember       KnowledgeCollection[]   @relation("KnowledgeCollectionOwnerMember")
+  collectionMemberGrantsByMember          CollectionMemberGrant[] @relation("CollectionMemberGrantMember")
+  collectionMemberGrantsByGrantedByMember CollectionMemberGrant[] @relation("CollectionMemberGrantGrantedByMember")
+  auditEventsByActorMember                AuditEvent[]            @relation("AuditEventActorMember")
+  agentContactGrantsByGrantedByMember     AgentContactGrant[]     @relation("AgentContactGrantGrantedByMember")
+  agentsByCreatedByMember                 Agent[]                 @relation("AgentCreatedByMember")
 
   @@unique([workspaceId, id])
   @@unique([workspaceId, userId])
   @@index([userId])
   @@map("workspace_members")
+  @@schema("agentonic")
+}
+
+model WorkspaceInvitation {
+  id                String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId       String          @map("workspace_id") @db.Uuid
+  emailNormalized   String          @map("email_normalized")
+  role              String
+  tokenHash         String          @unique @map("token_hash")
+  invitedByMemberId String          @map("invited_by_member_id") @db.Uuid
+  expiresAt         DateTime        @map("expires_at") @db.Timestamptz
+  acceptedAt        DateTime?       @map("accepted_at") @db.Timestamptz
+  revokedAt         DateTime?       @map("revoked_at") @db.Timestamptz
+  createdAt         DateTime        @default(now()) @map("created_at") @db.Timestamptz
+  workspace         Workspace       @relation("WorkspaceInvitationWorkspace", fields: [workspaceId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "workspace_invitations_relation_4_fk")
+  invitedByMember   WorkspaceMember @relation("WorkspaceInvitationInvitedByMember", fields: [workspaceId, invitedByMemberId], references: [workspaceId, id], onDelete: Restrict, onUpdate: Restrict, map: "workspace_invitations_relation_5_fk")
+
+  @@unique([workspaceId, id])
+  @@index([workspaceId, emailNormalized])
+  @@map("workspace_invitations")
+  @@schema("agentonic")
+}
+
+model SupportAccessGrant {
+  id                                 String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId                        String          @map("workspace_id") @db.Uuid
+  staffId                            String          @map("staff_id") @db.Uuid
+  approvedByMemberId                 String          @map("approved_by_member_id") @db.Uuid
+  reason                             String
+  scope                              Json
+  expiresAt                          DateTime        @map("expires_at") @db.Timestamptz
+  revokedAt                          DateTime?       @map("revoked_at") @db.Timestamptz
+  createdAt                          DateTime        @default(now()) @map("created_at") @db.Timestamptz
+  workspace                          Workspace       @relation("SupportAccessGrantWorkspace", fields: [workspaceId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "support_access_grants_relation_6_fk")
+  staff                              PlatformStaff   @relation("SupportAccessGrantStaff", fields: [staffId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "support_access_grants_relation_7_fk")
+  approvedByMember                   WorkspaceMember @relation("SupportAccessGrantApprovedByMember", fields: [workspaceId, approvedByMemberId], references: [workspaceId, id], onDelete: Restrict, onUpdate: Restrict, map: "support_access_grants_relation_8_fk")
+  auditEventsBySupportAccessGrant    AuditEvent[]    @relation("AuditEventSupportAccessGrant")
+  agentsByCreationSupportAccessGrant Agent[]         @relation("AgentCreationSupportAccessGrant")
+
+  @@unique([workspaceId, id])
+  @@unique([workspaceId, staffId, id])
+  @@map("support_access_grants")
+  @@schema("agentonic")
+}
+
+model Contact {
+  id                          String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId                 String              @map("workspace_id") @db.Uuid
+  displayName                 String              @map("display_name")
+  linkedUserId                String?             @map("linked_user_id") @db.Uuid
+  userLinkVerifiedAt          DateTime?           @map("user_link_verified_at") @db.Timestamptz
+  blockedAt                   DateTime?           @map("blocked_at") @db.Timestamptz
+  deletedAt                   DateTime?           @map("deleted_at") @db.Timestamptz
+  createdAt                   DateTime            @default(now()) @map("created_at") @db.Timestamptz
+  workspace                   Workspace           @relation("ContactWorkspace", fields: [workspaceId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "contacts_relation_28_fk")
+  linkedUser                  User?               @relation("ContactLinkedUser", fields: [linkedUserId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "contacts_relation_29_fk")
+  agentContactGrantsByContact AgentContactGrant[] @relation("AgentContactGrantContact")
+  auditEventsByActorContact   AuditEvent[]        @relation("AuditEventActorContact")
+
+  @@unique([workspaceId, id])
+  @@unique([workspaceId, linkedUserId])
+  @@map("contacts")
+  @@schema("agentonic")
+}
+
+model AgentContactGrant {
+  id                  String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId         String          @map("workspace_id") @db.Uuid
+  agentId             String          @map("agent_id") @db.Uuid
+  contactId           String          @map("contact_id") @db.Uuid
+  allowedCapabilities Json            @default("[]") @map("allowed_capabilities")
+  grantedByMemberId   String          @map("granted_by_member_id") @db.Uuid
+  expiresAt           DateTime?       @map("expires_at") @db.Timestamptz
+  revokedAt           DateTime?       @map("revoked_at") @db.Timestamptz
+  createdAt           DateTime        @default(now()) @map("created_at") @db.Timestamptz
+  workspace           Workspace       @relation("AgentContactGrantWorkspace", fields: [workspaceId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "agent_contact_grants_relation_30_fk")
+  agent               Agent           @relation("AgentContactGrantAgent", fields: [workspaceId, agentId], references: [workspaceId, id], onDelete: Restrict, onUpdate: Restrict, map: "agent_contact_grants_relation_31_fk")
+  contact             Contact         @relation("AgentContactGrantContact", fields: [workspaceId, contactId], references: [workspaceId, id], onDelete: Restrict, onUpdate: Restrict, map: "agent_contact_grants_relation_32_fk")
+  grantedByMember     WorkspaceMember @relation("AgentContactGrantGrantedByMember", fields: [workspaceId, grantedByMemberId], references: [workspaceId, id], onDelete: Restrict, onUpdate: Restrict, map: "agent_contact_grants_relation_33_fk")
+
+  @@unique([workspaceId, id])
+  @@unique([workspaceId, agentId, contactId])
+  @@map("agent_contact_grants")
+  @@schema("agentonic")
+}
+
+model CodeRepository {
+  id                             String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name                           String
+  repositoryUrl                  String          @unique @map("repository_url")
+  repositorySubdirectory         String          @default(".") @map("repository_subdirectory")
+  defaultBranch                  String          @default("main") @map("default_branch")
+  visibility                     String
+  workspaceId                    String?         @map("workspace_id") @db.Uuid
+  provisioningStatus             String          @default("planned") @map("provisioning_status")
+  createdByStaffId               String          @map("created_by_staff_id") @db.Uuid
+  createdAt                      DateTime        @default(now()) @map("created_at") @db.Timestamptz
+  workspace                      Workspace?      @relation("CodeRepositoryWorkspace", fields: [workspaceId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "code_repositories_relation_35_fk")
+  createdByStaff                 PlatformStaff   @relation("CodeRepositoryCreatedByStaff", fields: [createdByStaffId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "code_repositories_relation_36_fk")
+  agentTemplatesByCodeRepository AgentTemplate[] @relation("AgentTemplateCodeRepository")
+
+  @@map("code_repositories")
+  @@schema("agentonic")
+}
+
+model AgentTemplate {
+  id                         String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  slug                       String            @unique
+  name                       String
+  deprecatedAt               DateTime?         @map("deprecated_at") @db.Timestamptz
+  codeRepositoryId           String            @map("code_repository_id") @db.Uuid
+  createdAt                  DateTime          @default(now()) @map("created_at") @db.Timestamptz
+  templateVersionsByTemplate TemplateVersion[] @relation("TemplateVersionTemplate")
+  codeRepository             CodeRepository    @relation("AgentTemplateCodeRepository", fields: [codeRepositoryId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "agent_templates_relation_37_fk")
+
+  @@map("agent_templates")
+  @@schema("agentonic")
+}
+
+model TemplateVersion {
+  id                      String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  templateId              String        @map("template_id") @db.Uuid
+  version                 String
+  gitCommitSha            String        @map("git_commit_sha")
+  manifestSha256          String        @map("manifest_sha256")
+  structureManifest       Json          @map("structure_manifest")
+  runtimeContractVersion  String        @map("runtime_contract_version")
+  createdAt               DateTime      @default(now()) @map("created_at") @db.Timestamptz
+  template                AgentTemplate @relation("TemplateVersionTemplate", fields: [templateId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "template_versions_relation_9_fk")
+  agentsByTemplateVersion Agent[]       @relation("AgentTemplateVersion")
+
+  @@unique([templateId, version])
+  @@map("template_versions")
+  @@schema("agentonic")
+}
+
+model Agent {
+  id                           String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId                  String              @map("workspace_id") @db.Uuid
+  name                         String
+  slug                         String
+  description                  String?
+  ownerMemberId                String              @map("owner_member_id") @db.Uuid
+  templateVersionId            String              @map("template_version_id") @db.Uuid
+  status                       String              @default("draft")
+  updatedAt                    DateTime            @default(now()) @map("updated_at") @db.Timestamptz
+  archivedAt                   DateTime?           @map("archived_at") @db.Timestamptz
+  createdByMemberId            String?             @map("created_by_member_id") @db.Uuid
+  createdByStaffId             String?             @map("created_by_staff_id") @db.Uuid
+  creationSupportAccessGrantId String?             @map("creation_support_access_grant_id") @db.Uuid
+  createdAt                    DateTime            @default(now()) @map("created_at") @db.Timestamptz
+  workspace                    Workspace           @relation("AgentWorkspace", fields: [workspaceId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "agents_relation_10_fk")
+  ownerMember                  WorkspaceMember     @relation("AgentOwnerMember", fields: [workspaceId, ownerMemberId], references: [workspaceId, id], onDelete: Restrict, onUpdate: Restrict, map: "agents_relation_11_fk")
+  templateVersion              TemplateVersion     @relation("AgentTemplateVersion", fields: [templateVersionId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "agents_relation_12_fk")
+  agentMemberGrantsByAgent     AgentMemberGrant[]  @relation("AgentMemberGrantAgent")
+  auditEventsByActorAgent      AuditEvent[]        @relation("AuditEventActorAgent")
+  agentContactGrantsByAgent    AgentContactGrant[] @relation("AgentContactGrantAgent")
+  createdByMember              WorkspaceMember?    @relation("AgentCreatedByMember", fields: [workspaceId, createdByMemberId], references: [workspaceId, id], onDelete: Restrict, onUpdate: Restrict, map: "agents_relation_38_fk")
+  createdByStaff               PlatformStaff?      @relation("AgentCreatedByStaff", fields: [createdByStaffId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "agents_relation_39_fk")
+  creationSupportAccessGrant   SupportAccessGrant? @relation("AgentCreationSupportAccessGrant", fields: [workspaceId, createdByStaffId, creationSupportAccessGrantId], references: [workspaceId, staffId, id], onDelete: Restrict, onUpdate: Restrict, map: "agents_relation_40_fk")
+
+  @@unique([workspaceId, id])
+  @@unique([workspaceId, slug])
+  @@map("agents")
+  @@schema("agentonic")
+}
+
+model AgentMemberGrant {
+  id                String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId       String          @map("workspace_id") @db.Uuid
+  agentId           String          @map("agent_id") @db.Uuid
+  memberId          String          @map("member_id") @db.Uuid
+  role              String
+  grantedByMemberId String          @map("granted_by_member_id") @db.Uuid
+  revokedAt         DateTime?       @map("revoked_at") @db.Timestamptz
+  createdAt         DateTime        @default(now()) @map("created_at") @db.Timestamptz
+  workspace         Workspace       @relation("AgentMemberGrantWorkspace", fields: [workspaceId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "agent_member_grants_relation_13_fk")
+  agent             Agent           @relation("AgentMemberGrantAgent", fields: [workspaceId, agentId], references: [workspaceId, id], onDelete: Restrict, onUpdate: Restrict, map: "agent_member_grants_relation_14_fk")
+  member            WorkspaceMember @relation("AgentMemberGrantMember", fields: [workspaceId, memberId], references: [workspaceId, id], onDelete: Restrict, onUpdate: Restrict, map: "agent_member_grants_relation_15_fk")
+  grantedByMember   WorkspaceMember @relation("AgentMemberGrantGrantedByMember", fields: [workspaceId, grantedByMemberId], references: [workspaceId, id], onDelete: Restrict, onUpdate: Restrict, map: "agent_member_grants_relation_16_fk")
+
+  @@unique([workspaceId, id])
+  @@unique([workspaceId, agentId, memberId])
+  @@map("agent_member_grants")
+  @@schema("agentonic")
+}
+
+model KnowledgeCollection {
+  id                                 String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId                        String                  @map("workspace_id") @db.Uuid
+  name                               String
+  slug                               String
+  ownerMemberId                      String                  @map("owner_member_id") @db.Uuid
+  description                        String?
+  archivedAt                         DateTime?               @map("archived_at") @db.Timestamptz
+  createdAt                          DateTime                @default(now()) @map("created_at") @db.Timestamptz
+  workspace                          Workspace               @relation("KnowledgeCollectionWorkspace", fields: [workspaceId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "knowledge_collections_relation_17_fk")
+  ownerMember                        WorkspaceMember         @relation("KnowledgeCollectionOwnerMember", fields: [workspaceId, ownerMemberId], references: [workspaceId, id], onDelete: Restrict, onUpdate: Restrict, map: "knowledge_collections_relation_18_fk")
+  collectionMemberGrantsByCollection CollectionMemberGrant[] @relation("CollectionMemberGrantCollection")
+
+  @@unique([workspaceId, id])
+  @@unique([workspaceId, slug])
+  @@map("knowledge_collections")
+  @@schema("agentonic")
+}
+
+model CollectionMemberGrant {
+  id                String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId       String              @map("workspace_id") @db.Uuid
+  collectionId      String              @map("collection_id") @db.Uuid
+  memberId          String              @map("member_id") @db.Uuid
+  permission        String
+  grantedByMemberId String              @map("granted_by_member_id") @db.Uuid
+  revokedAt         DateTime?           @map("revoked_at") @db.Timestamptz
+  createdAt         DateTime            @default(now()) @map("created_at") @db.Timestamptz
+  workspace         Workspace           @relation("CollectionMemberGrantWorkspace", fields: [workspaceId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "collection_member_grants_relation_19_fk")
+  collection        KnowledgeCollection @relation("CollectionMemberGrantCollection", fields: [workspaceId, collectionId], references: [workspaceId, id], onDelete: Restrict, onUpdate: Restrict, map: "collection_member_grants_relation_20_fk")
+  member            WorkspaceMember     @relation("CollectionMemberGrantMember", fields: [workspaceId, memberId], references: [workspaceId, id], onDelete: Restrict, onUpdate: Restrict, map: "collection_member_grants_relation_21_fk")
+  grantedByMember   WorkspaceMember     @relation("CollectionMemberGrantGrantedByMember", fields: [workspaceId, grantedByMemberId], references: [workspaceId, id], onDelete: Restrict, onUpdate: Restrict, map: "collection_member_grants_relation_22_fk")
+
+  @@unique([workspaceId, id])
+  @@unique([workspaceId, collectionId, memberId])
+  @@map("collection_member_grants")
+  @@schema("agentonic")
+}
+
+model AuditEvent {
+  id                   String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId          String              @map("workspace_id") @db.Uuid
+  actorUserId          String?             @map("actor_user_id") @db.Uuid
+  actorMemberId        String?             @map("actor_member_id") @db.Uuid
+  actorAgentId         String?             @map("actor_agent_id") @db.Uuid
+  supportAccessGrantId String?             @map("support_access_grant_id") @db.Uuid
+  runId                String?             @map("run_id") @db.Uuid
+  action               String
+  resourceType         String              @map("resource_type")
+  resourceId           String              @map("resource_id")
+  outcome              String
+  requestId            String?             @map("request_id")
+  redactedDetails      Json                @default("{}") @map("redacted_details")
+  actorContactId       String?             @map("actor_contact_id") @db.Uuid
+  createdAt            DateTime            @default(now()) @map("created_at") @db.Timestamptz
+  workspace            Workspace           @relation("AuditEventWorkspace", fields: [workspaceId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "audit_events_relation_23_fk")
+  actorUser            User?               @relation("AuditEventActorUser", fields: [actorUserId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "audit_events_relation_24_fk")
+  actorMember          WorkspaceMember?    @relation("AuditEventActorMember", fields: [workspaceId, actorMemberId], references: [workspaceId, id], onDelete: Restrict, onUpdate: Restrict, map: "audit_events_relation_25_fk")
+  actorAgent           Agent?              @relation("AuditEventActorAgent", fields: [workspaceId, actorAgentId], references: [workspaceId, id], onDelete: Restrict, onUpdate: Restrict, map: "audit_events_relation_26_fk")
+  supportAccessGrant   SupportAccessGrant? @relation("AuditEventSupportAccessGrant", fields: [workspaceId, supportAccessGrantId], references: [workspaceId, id], onDelete: Restrict, onUpdate: Restrict, map: "audit_events_relation_27_fk")
+  actorContact         Contact?            @relation("AuditEventActorContact", fields: [workspaceId, actorContactId], references: [workspaceId, id], onDelete: Restrict, onUpdate: Restrict, map: "audit_events_relation_34_fk")
+
+  @@unique([workspaceId, id])
+  @@index([workspaceId, createdAt])
+  @@index([workspaceId, resourceType, resourceId])
+  @@map("audit_events")
   @@schema("agentonic")
 }
