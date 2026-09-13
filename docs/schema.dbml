@@ -1,0 +1,2116 @@
+// Agentonic authoritative schema companion — 2026-09-13.
+// Authority: agentonic-architecture.md. Supersedes both independent draft DBMLs.
+// FULL TARGET DESIGN: not a migration. Prisma implements the four identity tables;
+// remaining entities/safeguards are pending. See architecture section 22.
+// Every table is labeled LAUNCH or CONDITIONAL. LATER features are intentionally omitted.
+// PostgreSQL / managed Supabase; private agentonic schema; app roles non-owner, non-BYPASSRLS.
+// Tenant relationships include workspace_id. Live tenant IDs and published payloads are immutable.
+// Export needs reviewed SQL additions listed in the companion before customer operation.
+
+Project agentonic {
+  database_type: 'PostgreSQL'
+  Note: '''
+    Authoritative relational design paired with agentonic-architecture.md.
+    Customer drafts freeze immutable candidates; staff approves exact submissions for production.
+    Shared Git code releases serve many agents; customer assets remain tenant-scoped.
+    Fixed systemd release directories, desired/observed reconciliation, restricted runtime API.
+    Contacts are separate from panel identities. Empty grants deny. Actor AND agent AND
+    resource AND actual delivery audience must be authorized. Tenant membership alone is insufficient.
+    RLS, immutable-publication triggers, partial indexes, active-owner checks, leases and
+    cross-row policy enforcement require custom SQL and service transactions: see companion section 16.
+    CONDITIONAL document_contact_access is excluded until mixed-access ACL integration passes tests.
+    LATER and omitted: customer billing/contracts, model-weight training, multiple simultaneous
+    embedding profiles, sophisticated support workflow UI, containers and multi-host routing.
+    This diagram does not claim SQL-only safeguards or acceptance workflows are implemented.
+  '''
+}
+
+// IDENTITY
+Table agentonic.users {
+  id uuid [pk, not null, default: `gen_random_uuid()`]
+  display_name text [not null]
+  avatar_url text
+  deleted_at timestamptz
+  auth_user_id uuid [unique, note: 'Supabase auth.users FK added in SQL; required while active, nullable only after verified account erasure.']
+  created_at timestamptz [not null, default: `now()`]
+
+  checks {
+    `auth_user_id IS NOT NULL OR deleted_at IS NOT NULL`
+  }
+
+  Note: '''SCOPE: LAUNCH. Global panel identity only. Supabase Auth owns authentication. Contacts and pending workspace invitations are separate. Controlled erasure may unlink Auth while retaining a pseudonymized historical actor.'''
+}
+
+Table agentonic.platform_staff {
+  id uuid [pk, not null, default: `gen_random_uuid()`]
+  user_id uuid [not null, unique]
+  role text [not null, check: `role IN ('administrator', 'operator', 'support', 'billing')`]
+  disabled_at timestamptz
+  created_at timestamptz [not null, default: `now()`]
+
+  Note: '''SCOPE: LAUNCH. Agentonic staff are distinct from customer workspace roles. Staff status alone grants no customer-content access.'''
+}
+
+Table agentonic.workspaces {
+  id uuid [pk, not null, default: `gen_random_uuid()`]
+  kind text [not null, check: `kind IN ('personal', 'organization')`]
+  name text [not null]
+  slug text [not null, unique]
+  personal_owner_user_id uuid [unique]
+  status text [not null, default: 'active', check: `status IN ('active', 'suspended', 'closing', 'closed')`]
+  preferred_region text
+  deleted_at timestamptz
+  updated_at timestamptz [not null, default: `now()`]
+  timezone text [not null, note: 'Explicit selected IANA timezone; SQL validates pg_timezone_names.']
+  retention_policy jsonb [not null, note: 'Validated finite durations for conversations, checkpoints, memory, sources, logs, audit and backups; configured before onboarding.']
+  created_at timestamptz [not null, default: `now()`]
+
+  checks {
+    `(kind = 'personal' AND personal_owner_user_id IS NOT NULL) OR (kind = 'organization' AND personal_owner_user_id IS NULL)`
+  }
+
+  Note: '''SCOPE: LAUNCH. Primary tenant, ownership and billing boundary. A personal workspace has one owning user; an organization can have many members and agents. A person may have a personal workspace plus several organization memberships. Agents are not simultaneously owned by multiple tenants. Region is a requirement to validate against actual database, storage and provider placement, not a residency guarantee.'''
+}
+
+Table agentonic.workspace_members {
+  id uuid [pk, not null, default: `gen_random_uuid()`]
+  workspace_id uuid [not null]
+  user_id uuid [not null]
+  role text [not null, default: 'member', check: `role IN ('owner', 'admin', 'member', 'viewer')`]
+  status text [not null, default: 'active', check: `status IN ('active', 'suspended', 'removed')`]
+  joined_at timestamptz [not null, default: `now()`]
+  removed_at timestamptz
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (workspace_id, id) [unique]
+    (workspace_id, user_id) [unique]
+    user_id
+  }
+
+  Note: '''SCOPE: LAUNCH. Stable membership identity retained after offboarding. Authorization always checks current active status. Owner/admin can manage the workspace; private agent content still requires an explicit grant. Transactional invariant: retain at least one active owner; a personal workspace has only its designated owner.'''
+}
+
+Table agentonic.workspace_invitations {
+  id uuid [pk, not null, default: `gen_random_uuid()`]
+  workspace_id uuid [not null]
+  email_normalized text [not null]
+  role text [not null, check: `role IN ('admin', 'member', 'viewer')`]
+  token_hash text [not null, unique]
+  invited_by_member_id uuid [not null]
+  expires_at timestamptz [not null]
+  accepted_at timestamptz
+  revoked_at timestamptz
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (workspace_id, id) [unique]
+    (workspace_id, email_normalized)
+  }
+
+  Note: '''SCOPE: LAUNCH. Store a hash of a cryptographically random one-use invite token, never the token. Accept only for the verified intended email; lock the invite and upsert membership atomically. SQL partial unique index prevents duplicate live invitations per workspace/email.'''
+}
+
+Table agentonic.support_access_grants {
+  id uuid [pk, not null, default: `gen_random_uuid()`]
+  workspace_id uuid [not null]
+  staff_id uuid [not null]
+  approved_by_member_id uuid [not null]
+  reason text [not null]
+  scope jsonb [not null, note: 'Versioned allowlist of operations and resource IDs; no wildcard content access by default.']
+  expires_at timestamptz [not null]
+  revoked_at timestamptz
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (workspace_id, id) [unique]
+    (workspace_id, staff_id, id) [unique]
+  }
+
+  Note: '''SCOPE: LAUNCH. Time-limited customer-authorized support access; every use writes an audit event. Operational health and content access are separate capabilities. Scope must be checked against this workspace and validated by schema. Also authorizes bounded setup/review assistance. Customer submission explicitly consents to staff review of its exact configuration and selected test evidence; selecting a reviewer issues a scoped expiring grant. No blanket access to customer transcripts or mailbox contents. Staff content reads and preview freezes require the matching current grant.'''
+}
+
+Table agentonic.contacts {
+  id uuid [pk, not null, default: `gen_random_uuid()`]
+  workspace_id uuid [not null]
+  display_name text [not null]
+  linked_user_id uuid
+  user_link_verified_at timestamptz
+  blocked_at timestamptz
+  deleted_at timestamptz
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (workspace_id, id) [unique]
+    (workspace_id, linked_user_id) [unique]
+  }
+
+  checks {
+    `(linked_user_id IS NULL) = (user_link_verified_at IS NULL)`
+  }
+
+  Note: '''SCOPE: LAUNCH. Workspace-scoped channel person; no panel membership implied. Panel interaction resolves a contact linked to its verified user. Linked membership revocation takes precedence over surviving contact grants. Link ownership is verified, never inferred from email text. SQL unique nonnull linked_user_id per workspace.'''
+}
+
+Table agentonic.agent_contact_grants {
+  id uuid [pk, not null, default: `gen_random_uuid()`]
+  workspace_id uuid [not null]
+  agent_id uuid [not null]
+  contact_id uuid [not null]
+  allowed_capabilities jsonb [not null, default: `'[]'::jsonb`]
+  granted_by_member_id uuid [not null]
+  expires_at timestamptz
+  revoked_at timestamptz
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (workspace_id, id) [unique]
+    (workspace_id, agent_id, contact_id) [unique]
+  }
+
+  Note: '''SCOPE: LAUNCH. Selected channel people may interact within validated capabilities. Empty capabilities deny all. Verified linked users also resolve current membership and member grants; blocking/offboarding cannot be bypassed via contact status. Transcript and knowledge grants remain separate.'''
+}
+
+// DESIGN
+Table agentonic.agent_templates {
+  id uuid [pk, not null, default: `gen_random_uuid()`]
+  slug text [not null, unique]
+  name text [not null]
+  deprecated_at timestamptz
+  code_repository_id uuid [not null]
+  created_at timestamptz [not null, default: `now()`]
+
+  Note: '''SCOPE: LAUNCH. Platform-maintained, sanitized code skeleton. Seed from the Corby convention, not its company-specific data, prompts, secrets or integrations. No live dependency on Corby main. Catalog publication is staff-controlled. Template visibility inherits its repository scope; referenced template versions are readable only through authorized catalog selection or existing agent provenance.'''
+}
+
+Table agentonic.template_versions {
+  id uuid [pk, not null, default: `gen_random_uuid()`]
+  template_id uuid [not null]
+  version text [not null]
+  git_commit_sha text [not null]
+  manifest_sha256 text [not null]
+  structure_manifest jsonb [not null, note: 'Versioned schema describing canonical paths, entrypoints and contracts.']
+  runtime_contract_version text [not null]
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (template_id, version) [unique]
+  }
+
+  Note: '''SCOPE: LAUNCH. Immutable template release. Manifest records prompts/, skills/, src/tools/registry.ts, src/agent/, src/guardrails/, src/memory/, src/knowledge/, src/scheduling/, src/surfaces/, src/mcp/, evals/, migrations/, deploy/, data/ and docs/ contracts. Empty directories are not mandatory.'''
+}
+
+Table agentonic.agents {
+  id uuid [pk, not null, default: `gen_random_uuid()`]
+  workspace_id uuid [not null]
+  name text [not null]
+  slug text [not null]
+  description text
+  owner_member_id uuid [not null]
+  template_version_id uuid [not null]
+  status text [not null, default: 'draft', check: `status IN ('draft', 'active', 'paused', 'archived')`]
+  updated_at timestamptz [not null, default: `now()`]
+  archived_at timestamptz
+  created_by_member_id uuid
+  created_by_staff_id uuid
+  creation_support_access_grant_id uuid
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (workspace_id, id) [unique]
+    (workspace_id, slug) [unique]
+  }
+
+  checks {
+    `num_nonnulls(created_by_member_id, created_by_staff_id) = 1`
+    `creation_support_access_grant_id IS NULL OR created_by_staff_id IS NOT NULL`
+    `created_by_staff_id IS NULL OR creation_support_access_grant_id IS NOT NULL`
+  }
+
+  Note: '''SCOPE: LAUNCH. Long-lived workspace-owned agent with accountable active same-workspace member. Created by an authorized customer or staff acting within delegated setup authority. Customer drafts require no repository or host. Template selects baseline; each frozen configuration selects an authorized shared/custom code release. Owner may personalize, preview and submit, but cannot deploy production. Creator and owner are distinct; staff creator needs explicit setup grant. No automatic access to other agents or transcripts. Workspace identity is immutable.'''
+}
+
+Table agentonic.agent_member_grants {
+  id uuid [pk, not null, default: `gen_random_uuid()`]
+  workspace_id uuid [not null]
+  agent_id uuid [not null]
+  member_id uuid [not null]
+  role text [not null, check: `role IN ('maintainer', 'operator', 'viewer')`]
+  granted_by_member_id uuid [not null]
+  revoked_at timestamptz
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (workspace_id, id) [unique]
+    (workspace_id, agent_id, member_id) [unique]
+  }
+
+  Note: '''SCOPE: LAUNCH. Explicit customer capabilities. Maintainer edits drafts, chooses approved capabilities, previews and submits; operator invokes; viewer sees permitted metadata. Owner can manage this agent and assign these grants. No customer role grants production publication, deployment or platform code editing. Workspace owner/admin can create agents; other creators require an explicit workspace policy added before enabling that case. Transcript, knowledge, source authority and private memory permissions remain independent.'''
+}
+
+Table agentonic.code_releases {
+  id uuid [pk, not null, default: `gen_random_uuid()`]
+  version text [not null]
+  template_version_id uuid [not null]
+  git_commit_sha text [not null]
+  artifact_sha256 text [not null]
+  registry_sha256 text [not null]
+  runtime_contract_version text [not null]
+  retired_at timestamptz
+  code_repository_id uuid [not null]
+  artifact_bucket text [not null]
+  artifact_key text [not null]
+  artifact_size_bytes bigint [not null, check: `artifact_size_bytes > 0`]
+  published_by_staff_id uuid [not null]
+  revoked_at timestamptz
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (code_repository_id, version) [unique]
+    (artifact_bucket, artifact_key) [unique]
+  }
+
+  Note: '''SCOPE: LAUNCH. Immutable reviewed code artifact shared across authorized agents/workspaces; custom code inherits repository workspace restriction. Platform-controlled private artifact store, separate from tenant stored_objects; no customer prompts, documents or secrets in shared artifacts. Publisher verifies repository/template compatibility and digest. Download requires deployment-worker authority or explicitly scoped staff access, never generic tenant storage access. One code build can serve many configurations. New releases do not silently upgrade agents. Retirement blocks new activation; security revocation also stops unsafe execution through live policy. Retain artifacts referenced by deployments/configurations; no customer cascade can delete shared code.'''
+}
+
+Table agentonic.code_tools {
+  id uuid [pk, not null, default: `gen_random_uuid()`]
+  code_release_id uuid [not null]
+  package_key text [not null]
+  name text [not null]
+  implementation_path text [not null]
+  input_schema jsonb [not null]
+  read_only boolean [not null]
+  requires_confirmation boolean [not null]
+  standing_authorization_allowed boolean [not null, default: false]
+  expose_over_http boolean [not null]
+  policy_contract jsonb [not null]
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (code_release_id, id) [unique]
+    (code_release_id, package_key, name) [unique]
+  }
+
+  checks {
+    `NOT expose_over_http OR (read_only AND NOT requires_confirmation)`
+  }
+
+  Note: '''SCOPE: LAUNCH. Immutable manifest extracted from single code registry; package plus release scopes names. Policy contract specifies hard restrictions versus explicitly configurable settings. HTTP exposure requires read-only and no confirmation. Standing permission never overrides human-only contract.'''
+}
+
+Table agentonic.configuration_drafts {
+  id uuid [pk, not null, default: `gen_random_uuid()`]
+  workspace_id uuid [not null]
+  agent_id uuid [not null]
+  base_configuration_release_id uuid
+  title text [not null]
+  revision bigint [not null, default: 1, check: `revision > 0`]
+  content jsonb [not null]
+  created_by_member_id uuid
+  proposed_by_run_id uuid
+  updated_at timestamptz [not null, default: `now()`]
+  status text [not null, default: 'draft', check: `status IN ('draft', 'archived')`]
+  requested_access jsonb [not null, default: `'{}'::jsonb`, note: 'Validated proposed sources, connections, operations, recipients and scopes; empty requests grant nothing.']
+  created_by_staff_id uuid
+  support_access_grant_id uuid
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (workspace_id, id) [unique]
+    (workspace_id, agent_id, id) [unique]
+  }
+
+  checks {
+    `num_nonnulls(created_by_member_id, created_by_staff_id, proposed_by_run_id) = 1`
+    `support_access_grant_id IS NULL OR created_by_staff_id IS NOT NULL`
+    `created_by_staff_id IS NULL OR support_access_grant_id IS NOT NULL`
+  }
+
+  Note: '''SCOPE: LAUNCH. Mutable self-service authoring document containing prompt/partials, non-executable skill files, models, approved tool selections and limits. requested_access stores proposals without changing effective production grants or live source definitions. Revision advances on either content or requested-access edits. Freezing produces immutable configuration_releases; later edits cannot alter submitted/previewed versions. Agent skill_save only proposes drafts. Staff edits require scoped support grant. Platform security instructions and hard tool policy cannot be overridden by customer text. Code remains reviewed Git code.'''
+}
+
+Table agentonic.configuration_releases {
+  id uuid [pk, not null, default: `gen_random_uuid()`]
+  workspace_id uuid [not null]
+  agent_id uuid [not null]
+  code_release_id uuid [not null]
+  source_draft_id uuid [not null]
+  source_draft_revision bigint [not null, check: `source_draft_revision > 0`]
+  version text [not null]
+  content jsonb [not null]
+  content_sha256 text [not null]
+  composed_prompt_sha256 text [not null]
+  asset_manifest_sha256 text [not null]
+  retired_at timestamptz
+  frozen_by_member_id uuid
+  frozen_by_staff_id uuid
+  support_access_grant_id uuid
+  requested_access_snapshot jsonb [not null]
+  requested_access_sha256 text [not null]
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (workspace_id, id) [unique]
+    (workspace_id, agent_id, id) [unique]
+    (workspace_id, agent_id, code_release_id, id) [unique]
+    (workspace_id, agent_id, version) [unique]
+  }
+
+  checks {
+    `num_nonnulls(frozen_by_member_id, frozen_by_staff_id) = 1`
+    `support_access_grant_id IS NULL OR frozen_by_staff_id IS NOT NULL`
+    `frozen_by_staff_id IS NULL OR support_access_grant_id IS NOT NULL`
+  }
+
+  Note: '''SCOPE: LAUNCH. Complete immutable candidate bundle, not production approval. Authorized customer or scoped staff freezes an exact draft revision, compatible available code release, prompt/skill files, tool index and requested_access_snapshot with canonical hashes. Asset entries include stable path/revision/hash. Freeze and normalized configuration_tools commit atomically. Snapshot contains typed selected resource IDs, environment bindings, exact proposed scopes, revisions/hashes of source definitions, sharing/output limits and nonsecret connection identity. No credentials; provider authority and live grants are rechecked. Preview uses staging envelope; submission review authorizes a production envelope separately. Content changes require a new freeze. Publisher materializes Corby prompts/skills; no code rebuild for prompt edits. Current document contents may refresh within approved scope; source scope expansion requires another submission.'''
+}
+
+Table agentonic.configuration_tools {
+  id uuid [pk, not null, default: `gen_random_uuid()`]
+  workspace_id uuid [not null]
+  agent_id uuid [not null]
+  code_release_id uuid [not null]
+  configuration_release_id uuid [not null]
+  code_tool_id uuid [not null]
+  enabled boolean [not null, default: false]
+  effective_policy jsonb [not null]
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (workspace_id, id) [unique]
+    (workspace_id, configuration_release_id, code_tool_id) [unique]
+    (workspace_id, agent_id, code_release_id, configuration_release_id, id) [unique]
+    (workspace_id, agent_id, code_release_id, configuration_release_id, code_tool_id, id) [unique]
+  }
+
+  Note: '''SCOPE: LAUNCH. Immutable normalized index of complete bundle tool settings. Publication validates it exactly matches bundle content and code policy contract; cannot weaken hard registry requirements. Live caller/credential/grant checks further restrict every invocation. Empty enabled selection grants no tool.'''
+}
+
+Table agentonic.code_repositories {
+  id uuid [pk, not null, default: `gen_random_uuid()`]
+  name text [not null]
+  repository_url text [not null, unique]
+  repository_subdirectory text [not null, default: '.']
+  default_branch text [not null, default: 'main']
+  visibility text [not null, check: `visibility IN ('platform', 'workspace')`]
+  workspace_id uuid
+  provisioning_status text [not null, default: 'planned', check: `provisioning_status IN ('planned', 'ready', 'archived')`]
+  created_by_staff_id uuid [not null]
+  created_at timestamptz [not null, default: `now()`]
+
+  checks {
+    `(visibility = 'platform' AND workspace_id IS NULL) OR (visibility = 'workspace' AND workspace_id IS NOT NULL)`
+  }
+
+  Note: '''SCOPE: LAUNCH. Platform-controlled source inventory. Shared sanitized runtime repository or optional workspace-restricted custom code. Planned record is not evidence that GitHub repository exists. Only reviewed fixed commits become releases. Customers neither need GitHub accounts nor create repos when creating agents. Global-table RLS hides custom repository metadata from other workspaces.'''
+}
+
+Table agentonic.workspace_code_release_grants {
+  id uuid [pk, not null, default: `gen_random_uuid()`]
+  workspace_id uuid [not null]
+  code_release_id uuid [not null]
+  granted_by_staff_id uuid [not null]
+  revoked_at timestamptz
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (workspace_id, id) [unique]
+    (workspace_id, code_release_id) [unique]
+  }
+
+  Note: '''SCOPE: LAUNCH. Explicit workspace availability for shared or custom code. Service transaction verifies repository is platform shared or owned by this exact workspace and compatible with agent template. Grant does not confer GitHub/artifact access. Recheck live grant/repository restrictions on freeze, preview, review, activation and execution; immutable historical configs cannot revive revoked code. Composite FK enforces availability record existence, not live authorization.'''
+}
+
+Table agentonic.agent_submissions {
+  id uuid [pk, not null, default: `gen_random_uuid()`]
+  workspace_id uuid [not null]
+  agent_id uuid [not null]
+  code_release_id uuid [not null]
+  configuration_release_id uuid [not null]
+  submission_number bigint [not null, check: `submission_number > 0`]
+  submitted_by_member_id uuid
+  submitted_by_staff_id uuid
+  support_access_grant_id uuid
+  customer_note text
+  review_consent jsonb [not null, note: 'Explicit bounded consent for staff configuration review and selected preview evidence; no broad mailbox/transcript access.']
+  status text [not null, default: 'submitted', check: `status IN ('submitted', 'in_review', 'changes_requested', 'approved', 'rejected', 'withdrawn', 'revoked')`]
+  submitted_at timestamptz [not null, default: `now()`]
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (workspace_id, id) [unique]
+    (workspace_id, agent_id, submission_number) [unique]
+    (workspace_id, agent_id, code_release_id, configuration_release_id, id) [unique]
+    (workspace_id, agent_id, id) [unique]
+  }
+
+  checks {
+    `num_nonnulls(submitted_by_member_id, submitted_by_staff_id) = 1`
+    `support_access_grant_id IS NULL OR submitted_by_staff_id IS NOT NULL`
+    `submitted_by_staff_id IS NULL OR support_access_grant_id IS NOT NULL`
+  }
+
+  Note: '''SCOPE: LAUNCH. Immutable submission identity/payload pins exact candidate including requested access. Status is a transactionally maintained projection of review decisions; no direct customer status writes. Resubmission creates a new numbered record; old feedback survives. Editing a draft never changes a submission. Staff may submit on behalf only under explicit customer setup/submission consent. In-review is a claim, not approval; review consent is scoped to selected assets. Withdrawal/revocation invalidates new activation; live grant/credential revocations take effect immediately.'''
+}
+
+Table agentonic.submission_review_decisions {
+  id uuid [pk, not null, default: `gen_random_uuid()`]
+  workspace_id uuid [not null]
+  agent_id uuid [not null]
+  submission_id uuid [not null]
+  decision_number bigint [not null, check: `decision_number > 0`]
+  decision text [not null, check: `decision IN ('in_review', 'changes_requested', 'approved', 'rejected', 'withdrawn', 'revoked')`]
+  actor_member_id uuid
+  actor_staff_id uuid
+  support_access_grant_id uuid
+  feedback text
+  approval_expires_at timestamptz
+  approved_access_sha256 text
+  assessment_snapshot jsonb [not null, note: 'Versioned review/evaluation evidence IDs and exact approved source/connection scopes; no secrets.']
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (workspace_id, id) [unique]
+    (workspace_id, submission_id, decision_number) [unique]
+    (workspace_id, agent_id, id) [unique]
+    (workspace_id, agent_id, submission_id, decision, id) [unique]
+    (workspace_id, agent_id, decision, id) [unique]
+  }
+
+  checks {
+    `num_nonnulls(actor_member_id, actor_staff_id) = 1`
+    `actor_member_id IS NULL OR decision = 'withdrawn'`
+    `decision <> 'approved' OR (approval_expires_at IS NOT NULL AND approved_access_sha256 IS NOT NULL)`
+    `approval_expires_at IS NULL OR approval_expires_at > created_at`
+    `support_access_grant_id IS NULL OR actor_staff_id IS NOT NULL`
+    `actor_staff_id IS NULL OR support_access_grant_id IS NOT NULL`
+  }
+
+  Note: '''SCOPE: LAUNCH. Append-only customer-visible decision history. Customers can withdraw their own authorized submission; staff review/approve/reject/revoke with scoped current content access. Approval is for exact unchanged submission and requested access, cannot silently broaden it; changes require another candidate/submission. Transaction validates evidence matches code/config and source-definition fingerprints, freezes assessment and allocates decision_number. Latest effective status and expiry govern activation; prior approval cannot override a later revocation. Staff decision and customer authorization are distinct.'''
+}
+
+// INTEGRATIONS
+Table agentonic.connections {
+  id uuid [pk, not null, default: `gen_random_uuid()`]
+  workspace_id uuid [not null]
+  name text [not null]
+  provider text [not null, note: 'Extensible identifier: slack, google_drive, github, mssql, anthropic, azure_openai, etc.']
+  kind text [not null, check: `kind IN ('oauth', 'api_key', 'database', 'mcp', 'managed_identity')`]
+  external_account_id text
+  owner_member_id uuid [not null]
+  configuration jsonb [not null, default: `'{}'::jsonb`, note: 'Non-secret endpoints, scopes, tenant IDs, database names; strict redaction/schema validation.']
+  status text [not null, default: 'active', check: `status IN ('pending', 'active', 'expired', 'revoked', 'error')`]
+  credential_expires_at timestamptz
+  last_verified_at timestamptz
+  revoked_at timestamptz
+  secret_reference text [note: 'Opaque backend-neutral reference; initially resolved through restricted Supabase Vault broker. Never a credential value.']
+  environment text [not null, check: `environment IN ('development', 'staging', 'production')`]
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (workspace_id, id) [unique]
+    (workspace_id, environment, id) [unique]
+  }
+
+  Note: '''SCOPE: LAUNCH. Workspace-owned connection to an external account. Sharing the account record does not grant its credentials or operations to agents. Raw SQL analytics credentials must be read-only and cannot access Agentonic internal tables. Customer OAuth consent creates a connection only; agent use and source ingestion need separate authorization. Refresh tokens stay in Vault; callback state/PKCE and account ownership verified by server. Credential rotation retaining identical account/scope can be operational; account/privilege expansion needs review. Selected provider scopes and upstream access always cap effective authority.'''
+}
+
+Table agentonic.agent_connection_grants {
+  id uuid [pk, not null, default: `gen_random_uuid()`]
+  workspace_id uuid [not null]
+  agent_id uuid [not null]
+  connection_id uuid [not null]
+  environment text [not null, check: `environment IN ('development', 'staging', 'production')`]
+  allowed_operations jsonb [not null, note: 'Explicit allowlist; effective privileges intersect registry policy, user authority and provider scopes.']
+  granted_by_member_id uuid [not null]
+  expires_at timestamptz
+  revoked_at timestamptz
+  approved_review_decision_id uuid
+  activated_by_staff_id uuid
+  approved_decision_kind text [not null, default: 'approved', check: `approved_decision_kind = 'approved'`]
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (workspace_id, id) [unique]
+    (workspace_id, agent_id, connection_id, environment) [unique]
+  }
+
+  checks {
+    `environment <> 'production' OR (approved_review_decision_id IS NOT NULL AND activated_by_staff_id IS NOT NULL)`
+  }
+
+  Note: '''SCOPE: LAUNCH. Explicit environment-specific binding. Runtime secrets are materialized only for authorized workloads, preferably through a credential broker. Recheck revocation on every tool call; a deployment config snapshot cannot revive a grant. Production activation requires staff approval covering this exact agent/environment/resources/operations, plus current consent of granted_by_member_id. Approved review decision must actually be approved, unexpired at activation and not superseded/revoked. Staging uses separate limited test authority, not pending production requests. Effective access intersects the running configuration approved envelope; broader grants approved for a later candidate do not expand an older running version. Narrowing/revocation is immediate; scope expansion is proposed in a new draft. Validate reference policy in SQL/service transaction.'''
+}
+
+Table agentonic.channel_endpoints {
+  id uuid [pk, not null, default: `gen_random_uuid()`]
+  workspace_id uuid [not null]
+  agent_id uuid [not null]
+  environment text [not null, check: `environment IN ('development', 'staging', 'production')`]
+  surface text [not null, note: 'slack, web, api, cli, teams, email, etc.']
+  connection_id uuid
+  external_endpoint_key text [not null, note: 'Provider installation/account/channel route; use generated stable key for web/CLI.']
+  configuration jsonb [not null, default: `'{}'::jsonb`]
+  enabled boolean [not null, default: false]
+  access_mode text [not null, default: 'restricted', check: `access_mode IN ('restricted', 'public')`]
+  public_capabilities jsonb [not null, default: `'[]'::jsonb`]
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (workspace_id, id) [unique]
+    (workspace_id, surface, external_endpoint_key) [unique]
+    (workspace_id, agent_id, environment, id) [unique]
+  }
+
+  Note: '''SCOPE: LAUNCH. Routing only. Default restricted and disabled; empty grants deny access. Explicit public mode has separately validated limited capabilities and no implicit private-content access. Authenticate provider signatures and resolve contacts. Validate connection grant and environment destinations. SQL routing registry prevents ambiguous active provider routes across workspaces.'''
+}
+
+Table agentonic.external_identities {
+  id uuid [pk, not null, default: `gen_random_uuid()`]
+  workspace_id uuid [not null]
+  connection_id uuid [not null]
+  contact_id uuid [not null]
+  external_user_id text [not null]
+  verified_at timestamptz [not null]
+  revoked_at timestamptz
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (workspace_id, id) [unique]
+    (workspace_id, connection_id, external_user_id) [unique]
+  }
+
+  Note: '''SCOPE: LAUNCH. Verified provider identity scoped by workspace and connection (provider/account namespace). Separate contacts can represent the same provider user in different workspaces. Endpoint authentication verifies the connection and external identity before selecting a contact. Identity existence is not permission.'''
+}
+
+Table agentonic.api_credentials {
+  id uuid [pk, not null, default: `gen_random_uuid()`]
+  workspace_id uuid [not null]
+  agent_id uuid [not null]
+  acting_member_id uuid [not null]
+  name text [not null]
+  token_prefix text [not null]
+  token_hash text [not null, unique]
+  allowed_operations jsonb [not null]
+  environment text [not null, check: `environment IN ('development', 'staging', 'production')`]
+  expires_at timestamptz [not null]
+  last_used_at timestamptz
+  revoked_at timestamptz
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (workspace_id, id) [unique]
+  }
+
+  Note: '''SCOPE: LAUNCH. Hashed inbound client API keys, not outbound provider secrets. Each key is restricted to one agent/environment and a sponsoring member; losing membership or agent permissions disables it immediately. Dedicated machine principals can be added when needed.'''
+}
+
+Table agentonic.runtime_credentials {
+  id uuid [pk, not null, default: `gen_random_uuid()`]
+  workspace_id uuid [not null]
+  agent_id uuid [not null]
+  environment text [not null, check: `environment IN ('development', 'staging', 'production')`]
+  token_hash text [not null, unique]
+  token_prefix text [not null]
+  expires_at timestamptz [not null]
+  revoked_at timestamptz
+  last_used_at timestamptz
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (workspace_id, id) [unique]
+  }
+
+  Note: '''SCOPE: LAUNCH. Machine authentication to trusted internal API for precisely one agent/environment; does not impersonate its owner. API separately verifies original actor and current resource authority. Never a database service-role key.'''
+}
+
+// OPERATIONS
+Table agentonic.runtime_hosts {
+  id uuid [pk, not null, default: `gen_random_uuid()`]
+  name text [not null, unique]
+  provider text [not null, default: 'azure']
+  region text [not null]
+  resource_reference text [not null]
+  dedicated_workspace_id uuid
+  status text [not null, default: 'provisioning', check: `status IN ('provisioning', 'ready', 'draining', 'offline')`]
+  last_heartbeat_at timestamptz
+  isolation_class text [not null, default: 'shared_trusted', check: `isolation_class IN ('shared_trusted', 'dedicated_workspace')`]
+  created_at timestamptz [not null, default: `now()`]
+
+  checks {
+    `(isolation_class = 'dedicated_workspace') = (dedicated_workspace_id IS NOT NULL)`
+  }
+
+  Note: '''SCOPE: LAUNCH. Platform-only Azure VM inventory. One initial host, reviewed platform code, separate systemd OS identities and resource limits. Host selection is operational placement, not automatic multi-host routing. Dedicated placement must match workspace. No arbitrary customer executable code.'''
+}
+
+Table agentonic.schedules {
+  id uuid [pk, not null, default: `gen_random_uuid()`]
+  workspace_id uuid [not null]
+  agent_id uuid [not null]
+  environment text [not null, check: `environment IN ('development', 'staging', 'production')`]
+  created_by_member_id uuid [not null]
+  endpoint_id uuid [not null]
+  name text [not null]
+  cron_expression text
+  run_at timestamptz
+  task_prompt text [not null]
+  mode text [not null, default: 'kickoff', check: `mode IN ('kickoff', 'autonomous')`]
+  delivery_target jsonb [not null, note: 'Validated recipients/channel destination; recheck audience authorization at delivery.']
+  next_run_at timestamptz
+  catch_up_window_seconds integer [not null, default: 86400, check: `catch_up_window_seconds >= 0`]
+  updated_at timestamptz [not null, default: `now()`]
+  timezone text [note: 'Null explicitly inherits workspace timezone; effective timezone frozen per occurrence.']
+  revision bigint [not null, default: 1, check: `revision > 0`]
+  kickoff_recipients jsonb [not null, default: `'[]'::jsonb`]
+  kickoff_message text
+  running_memo jsonb [not null, default: `'{}'::jsonb`]
+  dst_policy jsonb [not null, note: 'Explicit overlap/gap and catch-up behavior, validated by scheduler.']
+  enabled boolean [not null, default: false]
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (workspace_id, id) [unique]
+    (workspace_id, agent_id, id) [unique]
+    (enabled, next_run_at)
+    (workspace_id, agent_id, environment, id) [unique]
+  }
+
+  checks {
+    `(cron_expression IS NULL) <> (run_at IS NULL)`
+  }
+
+  Note: '''SCOPE: LAUNCH. Versioned editable kickoff or autonomous task. Explicit kickoff recipients/message, report delivery_target and running memo. Resolve inherited or selected IANA zone plus DST/catch-up rules into immutable occurrence snapshot. Creator must retain authority; offboarding disables schedule. Every protected unattended call needs current bounded standing authorization. Claim occurrence and enqueue in one transaction.'''
+}
+
+Table agentonic.schedule_fires {
+  id uuid [pk, not null, default: `gen_random_uuid()`]
+  workspace_id uuid [not null]
+  schedule_id uuid [not null]
+  agent_id uuid [not null]
+  scheduled_for timestamptz [not null]
+  run_id uuid
+  schedule_snapshot jsonb [not null]
+  status text [not null, default: 'claimed', check: `status IN ('claimed', 'awaiting_reply', 'running', 'succeeded', 'failed', 'skipped', 'cancelled')`]
+  completed_at timestamptz
+  environment text [not null, check: `environment IN ('development', 'staging', 'production')`]
+  schedule_revision bigint [not null, check: `schedule_revision > 0`]
+  effective_timezone text [not null]
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (workspace_id, id) [unique]
+    (workspace_id, schedule_id, scheduled_for) [unique]
+    (workspace_id, agent_id, environment, id) [unique]
+  }
+
+  Note: '''SCOPE: LAUNCH. One logical occurrence per schedule/time; retries do not create another occurrence. Persist snapshot so editing a schedule does not rewrite past tasks. This deduplicates scheduling, not arbitrary external side effects.'''
+}
+
+Table agentonic.background_jobs {
+  id uuid [pk, not null, default: `gen_random_uuid()`]
+  workspace_id uuid [not null]
+  deduplication_key text [not null]
+  payload jsonb [not null, note: 'Validated versioned command with tenant-scoped IDs; no arbitrary executable code or secrets.']
+  status text [not null, default: 'queued', check: `status IN ('queued', 'leased', 'succeeded', 'retry', 'dead', 'cancelled')`]
+  available_at timestamptz [not null, default: `now()`]
+  lease_owner text
+  lease_expires_at timestamptz
+  lease_generation bigint [not null, default: 0]
+  attempt_count integer [not null, default: 0, check: `attempt_count >= 0`]
+  max_attempts integer [not null, default: 5, check: `max_attempts > 0`]
+  last_error text
+  finished_at timestamptz
+  kind text [not null, check: `kind IN ('run', 'ingest', 'deploy', 'stop', 'restart', 'evaluate', 'deliver', 'purge', 'reconcile')`]
+  agent_id uuid
+  environment text [check: `environment IN ('development', 'staging', 'production')`]
+  conflict_key text
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (workspace_id, id) [unique]
+    (workspace_id, kind, deduplication_key) [unique]
+    (status, available_at)
+    (status, lease_expires_at)
+  }
+
+  checks {
+    `kind NOT IN ('deploy','stop','restart') OR (agent_id IS NOT NULL AND environment IS NOT NULL AND conflict_key IS NOT NULL)`
+  }
+
+  Note: '''SCOPE: LAUNCH. Initial PostgreSQL durable queue/outbox, claimed with FOR UPDATE SKIP LOCKED plus expiring leases, fencing generation, retry backoff and dead-letter state. Enqueue in same transaction as business state. Use a mature queue implementation with equivalent guarantees; this table describes the required logical record. Workers validate payload references against workspace. Idempotency and external reconciliation remain necessary. Conflicting service operations use the same agent_environment lease regardless of job kind. conflict_key is server-derived. Queued conflicts can coexist; only execution is serialized. Tenant maintenance never executes under global customer authority.'''
+}
+
+Table agentonic.audit_events {
+  id uuid [pk, not null, default: `gen_random_uuid()`]
+  workspace_id uuid [not null]
+  actor_user_id uuid
+  actor_member_id uuid
+  actor_agent_id uuid
+  support_access_grant_id uuid
+  run_id uuid
+  action text [not null]
+  resource_type text [not null]
+  resource_id text [not null]
+  outcome text [not null, check: `outcome IN ('allowed', 'denied', 'succeeded', 'failed')`]
+  request_id text
+  redacted_details jsonb [not null, default: `'{}'::jsonb`]
+  actor_contact_id uuid
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (workspace_id, id) [unique]
+    (workspace_id, created_at)
+    (workspace_id, resource_type, resource_id)
+  }
+
+  Note: '''SCOPE: LAUNCH. Append-only security and administrative audit. Actor user/member consistency and support grant use are validated. Polymorphic resource IDs are intentional historical labels, not live foreign keys; they survive resource removal. System actors may have null IDs but must be identified in action/details. Tenant rows retained by policy; global platform events belong to separate infrastructure logs. Restrict update/delete to controlled retention jobs.'''
+}
+
+Table agentonic.agent_environments {
+  id uuid [pk, not null, default: `gen_random_uuid()`]
+  workspace_id uuid [not null]
+  agent_id uuid [not null]
+  environment text [not null, check: `environment IN ('development', 'staging', 'production')`]
+  host_id uuid [not null]
+  systemd_unit text [not null]
+  os_user text [not null]
+  service_port integer [check: `service_port BETWEEN 1024 AND 65535`]
+  released_at timestamptz
+  desired_deployment_id uuid
+  observed_deployment_id uuid
+  activation_state text [not null, default: 'offline', check: `activation_state IN ('offline', 'preparing', 'switching', 'healthy', 'reconciling', 'failed')`]
+  generation bigint [not null, default: 0, check: `generation >= 0`]
+  operation_lease_owner text
+  operation_lease_expires_at timestamptz
+  memory_max_bytes bigint [not null, check: `memory_max_bytes > 0`]
+  cpu_quota_percent integer [not null, check: `cpu_quota_percent > 0`]
+  updated_at timestamptz [not null, default: `now()`]
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (workspace_id, id) [unique]
+    (workspace_id, agent_id, environment) [unique]
+    (workspace_id, agent_id, environment, host_id, id) [unique]
+  }
+
+  Note: '''SCOPE: LAUNCH. One persistent service slot per agent/environment, serializing deploy/stop/restart by fencing generation. SQL partial unique host/unit, host/os_user and nonnull host/port WHERE released_at IS NULL. Release slot only after verified stop; old deployment history reserves no ports. Desired and observed pointers are reconciled across non-atomic filesystem/systemd/DB changes. Null desired requests stopped service.'''
+}
+
+Table agentonic.deployments {
+  id uuid [pk, not null, default: `gen_random_uuid()`]
+  workspace_id uuid [not null]
+  agent_id uuid [not null]
+  environment text [not null, check: `environment IN ('development', 'staging', 'production')`]
+  agent_environment_id uuid [not null]
+  host_id uuid [not null]
+  code_release_id uuid [not null]
+  configuration_release_id uuid [not null]
+  release_directory text [not null]
+  code_artifact_sha256 text [not null]
+  configuration_sha256 text [not null]
+  materialized_assets_sha256 text [not null]
+  nonsecret_environment_snapshot jsonb [not null]
+  status text [not null, default: 'queued', check: `status IN ('queued', 'preparing', 'ready', 'activating', 'healthy', 'draining', 'stopped', 'failed')`]
+  evaluation_run_id uuid
+  observed_code_sha256 text
+  observed_configuration_sha256 text
+  started_at timestamptz
+  stopped_at timestamptz
+  last_heartbeat_at timestamptz
+  health_summary jsonb
+  requested_by_member_id uuid
+  requested_by_staff_id uuid
+  support_access_grant_id uuid
+  submission_id uuid
+  approval_decision_id uuid
+  approval_decision_kind text [not null, default: 'approved', check: `approval_decision_kind = 'approved'`]
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (workspace_id, id) [unique]
+    (workspace_id, agent_id, environment, id) [unique]
+    (workspace_id, agent_id, environment, host_id, id) [unique]
+    (workspace_id, agent_id, environment, code_release_id, configuration_release_id, id) [unique]
+    (host_id, release_directory) [unique]
+  }
+
+  checks {
+    `num_nonnulls(requested_by_member_id, requested_by_staff_id) = 1`
+    `support_access_grant_id IS NULL OR requested_by_staff_id IS NOT NULL`
+    `environment <> 'production' OR (requested_by_staff_id IS NOT NULL AND submission_id IS NOT NULL AND approval_decision_id IS NOT NULL)`
+    `(submission_id IS NULL) = (approval_decision_id IS NULL)`
+  }
+
+  Note: '''SCOPE: LAUNCH. Fixed artifact/config directory, immutable identity after preparation. A healthy attempt may coexist with preparing candidates; do not use a building/running combined unique index. Lock slot, prepare safely without live consumers, drain/checkpoint, switch target and restart, verify observed hashes then reconcile pointers. Rollback creates an attempt with prior approved pair. Runtime cannot write release directory. No promise of zero downtime or automatic data rollback. Production requires actual staff initiator and exact submission/approved decision pair. Candidate staging deployments require no production approval. Activation rechecks latest decision/expiry, exact approved access and live authorization, and successful evaluation for this pair. Rollback also needs currently valid approval or explicit staff reapproval of the prior immutable candidate; stale approval is not authority. A queued job records initiating actor, not a fake workspace member.'''
+}
+
+Table agentonic.standing_authorizations {
+  id uuid [pk, not null, default: `gen_random_uuid()`]
+  workspace_id uuid [not null]
+  agent_id uuid [not null]
+  environment text [not null, check: `environment IN ('development', 'staging', 'production')`]
+  schedule_id uuid [not null]
+  responsible_member_id uuid [not null]
+  code_release_id uuid [not null]
+  code_tool_id uuid [not null]
+  operation text [not null]
+  scope_schema_version text [not null]
+  argument_resource_limits jsonb [not null]
+  allowed_recipients jsonb [not null, default: `'[]'::jsonb`]
+  allowed_data_scope jsonb [not null]
+  max_cost_per_occurrence_usd numeric(20,8) [not null, check: `max_cost_per_occurrence_usd >= 0`]
+  max_calls_per_occurrence integer [not null, check: `max_calls_per_occurrence > 0`]
+  valid_from timestamptz [not null]
+  valid_until timestamptz [not null]
+  review_due_at timestamptz [not null]
+  revoked_at timestamptz
+  connection_id uuid
+  credential_reference text
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (workspace_id, id) [unique]
+    (workspace_id, agent_id, environment, code_release_id, id) [unique]
+    (workspace_id, agent_id, environment, code_release_id, code_tool_id, id) [unique]
+  }
+
+  checks {
+    `valid_until > valid_from`
+    `review_due_at > valid_from AND review_due_at <= valid_until`
+    `(connection_id IS NULL) = (credential_reference IS NULL)`
+  }
+
+  Note: '''SCOPE: LAUNCH. Immutable bounded hall pass, live revocation allowed. Pins registry tool, credential, agent/environment/schedule, responsible person, resources, recipients and budgets. No wildcard by default. Validate actual args each call; empty recipients permit no recipient-directed operation. Check registry standing eligibility, current membership/grants, review deadline, occurrence budgets and actual credential version. New code/credential requires reauthorization. Lock occurrence counters to enforce concurrent limits. Connection/reference may both be absent only for a registry tool requiring no external credential. Validator binds actual connection, schedule occurrence and argument limits to this authorization.'''
+}
+
+Table agentonic.platform_jobs {
+  id uuid [pk, not null, default: `gen_random_uuid()`]
+  kind text [not null, check: `kind IN ('template_sync', 'maintenance_dispatch', 'host_reconcile')`]
+  deduplication_key text [not null, unique]
+  payload jsonb [not null]
+  status text [not null, default: 'queued', check: `status IN ('queued', 'leased', 'succeeded', 'retry', 'dead', 'cancelled')`]
+  available_at timestamptz [not null, default: `now()`]
+  lease_owner text
+  lease_expires_at timestamptz
+  lease_generation bigint [not null, default: 0, check: `lease_generation >= 0`]
+  attempt_count integer [not null, default: 0, check: `attempt_count >= 0`]
+  max_attempts integer [not null, default: 5, check: `max_attempts > 0`]
+  last_error text
+  finished_at timestamptz
+  created_at timestamptz [not null, default: `now()`]
+
+  checks {
+    `status <> 'leased' OR (lease_owner IS NOT NULL AND lease_expires_at IS NOT NULL)`
+  }
+
+  Note: '''SCOPE: LAUNCH. Separate platform-only queue for global operations, no fake workspace. Same lease/renewal/fencing/retry guarantees as tenant queue. Fan out authorized customer maintenance as tenant jobs with separately derived context. Restricted executor accepts typed commands, never arbitrary scripts.'''
+}
+
+// KNOWLEDGE
+Table agentonic.stored_objects {
+  id uuid [pk, not null, default: `gen_random_uuid()`]
+  workspace_id uuid [not null]
+  provider text [not null, check: `provider IN ('supabase_storage', 'azure_blob')`]
+  bucket text [not null]
+  object_key text [not null]
+  content_sha256 text [not null]
+  content_type text [not null]
+  size_bytes bigint [not null, check: `size_bytes >= 0`]
+  classification text [not null, default: 'confidential', check: `classification IN ('internal', 'confidential', 'restricted')`]
+  expires_at timestamptz
+  deleted_at timestamptz
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (workspace_id, id) [unique]
+    (provider, bucket, object_key) [unique]
+  }
+
+  Note: '''SCOPE: LAUNCH. Private object inventory for source files, datasets, checkpoints and large outputs. Object keys are tenant-prefixed; signed URLs are short-lived and issued only after parent-resource authorization. A workspace member cannot list/read arbitrary objects. Physical deletion waits for every live reference and retention rule.'''
+}
+
+Table agentonic.knowledge_collections {
+  id uuid [pk, not null, default: `gen_random_uuid()`]
+  workspace_id uuid [not null]
+  name text [not null]
+  slug text [not null]
+  owner_member_id uuid [not null]
+  description text
+  archived_at timestamptz
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (workspace_id, id) [unique]
+    (workspace_id, slug) [unique]
+  }
+
+  Note: '''SCOPE: LAUNCH. Sharing boundary for reference knowledge: e.g. company handbook, engineering repos or one owner private library. No shared-by-default workspace flag. Agent and human grants must both permit retrieval. Membership in the organization is insufficient.'''
+}
+
+Table agentonic.collection_member_grants {
+  id uuid [pk, not null, default: `gen_random_uuid()`]
+  workspace_id uuid [not null]
+  collection_id uuid [not null]
+  member_id uuid [not null]
+  permission text [not null, check: `permission IN ('read', 'curate')`]
+  granted_by_member_id uuid [not null]
+  revoked_at timestamptz
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (workspace_id, id) [unique]
+    (workspace_id, collection_id, member_id) [unique]
+  }
+
+  Note: '''SCOPE: LAUNCH. Human access to a collection. Owner implicitly curates. Curate includes read and ingestion management, subject to upstream authority. Sharing/revocation is audited.'''
+}
+
+Table agentonic.agent_collection_grants {
+  id uuid [pk, not null, default: `gen_random_uuid()`]
+  workspace_id uuid [not null]
+  collection_id uuid [not null]
+  agent_id uuid [not null]
+  permission text [not null, check: `permission IN ('read', 'contribute')`]
+  granted_by_member_id uuid [not null]
+  revoked_at timestamptz
+  approved_review_decision_id uuid
+  activated_by_staff_id uuid
+  environment text [not null, check: `environment IN ('development', 'staging', 'production')`]
+  approved_decision_kind text [not null, default: 'approved', check: `approved_decision_kind = 'approved'`]
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (workspace_id, id) [unique]
+    (workspace_id, collection_id, agent_id, environment) [unique]
+  }
+
+  checks {
+    `environment <> 'production' OR (approved_review_decision_id IS NOT NULL AND activated_by_staff_id IS NOT NULL)`
+  }
+
+  Note: '''SCOPE: LAUNCH. Agents can share a collection without sharing memories, credentials or conversations. Contribute creates proposed source material; publication is explicit. Current permissions are checked at retrieval time and never inferred from an old release. Production activation requires staff approval covering this exact agent/environment/resources/operations, plus current consent of granted_by_member_id. Approved review decision must actually be approved, unexpired at activation and not superseded/revoked. Staging uses separate limited test authority, not pending production requests. Effective access intersects the running configuration approved envelope; broader grants approved for a later candidate do not expand an older running version. Narrowing/revocation is immediate; scope expansion is proposed in a new draft. Validate reference policy in SQL/service transaction.'''
+}
+
+Table agentonic.knowledge_sources {
+  id uuid [pk, not null, default: `gen_random_uuid()`]
+  workspace_id uuid [not null]
+  collection_id uuid [not null]
+  connection_id uuid
+  kind text [not null, note: 'repo, drive_folder, slack_channel, upload, url, transcript, skill_mirror, etc.']
+  locator text [not null]
+  configuration jsonb [not null, default: `'{}'::jsonb`]
+  authorized_by_member_id uuid [not null]
+  sync_cursor jsonb
+  sync_interval_seconds integer [check: `sync_interval_seconds > 0`]
+  last_success_at timestamptz
+  access_mode text [not null, default: 'collection', check: `access_mode IN ('collection', 'source_acl')`]
+  enabled boolean [not null, default: false]
+  environment text [not null, check: `environment IN ('development', 'staging', 'production')`]
+  definition_revision bigint [not null, default: 1, check: `definition_revision > 0`]
+  definition_sha256 text [not null]
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (workspace_id, id) [unique]
+    (workspace_id, collection_id, kind, locator) [unique]
+  }
+
+  Note: '''SCOPE: LAUNCH. Launch deliberately approves uniformly shared collection material and exact environment connection before enabling. source_acl mode is CONDITIONAL: prohibited until effective document permissions, freshness/revocation and retrieval/delivery gates are implemented. Skill mirrors derive from immutable DB configuration assets; no Git wins rule. Cursor updates follow committed ingestion. Definition hash/revision covers locator, connection identity, access mode and ingestion/resource scope, not cursor or refreshed document contents. Proposed changes stay in draft requested_access until approval. Production source enable/expansion requires applicable approved source scope and authorized curator; no automatic activation from an OAuth connection. Approved refresh may advance document versions without agent redeployment. Uploads can be indexed for authorized private staging preview before submission, never automatically exposed to production agents. Customer source content is untrusted reference material, not platform policy.'''
+}
+
+Table agentonic.ingestion_jobs {
+  id uuid [pk, not null, default: `gen_random_uuid()`]
+  workspace_id uuid [not null]
+  source_id uuid [not null]
+  job_key text [not null]
+  status text [not null, default: 'queued', check: `status IN ('queued', 'running', 'succeeded', 'failed', 'cancelled')`]
+  cursor_before jsonb
+  cursor_after jsonb
+  documents_processed integer [not null, default: 0, check: `documents_processed >= 0`]
+  error_summary text
+  started_at timestamptz
+  finished_at timestamptz
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (workspace_id, id) [unique]
+    (workspace_id, source_id, job_key) [unique]
+  }
+
+  Note: '''SCOPE: LAUNCH. Logical ingestion operation, executed via background_jobs. Persist provider cursor only after documents, tombstones and ACL updates commit. Failures retain the old valid cursor and can retry. Unique job_key deduplicates connector events.'''
+}
+
+Table agentonic.documents {
+  id uuid [pk, not null, default: `gen_random_uuid()`]
+  workspace_id uuid [not null]
+  source_id uuid [not null]
+  external_document_id text [not null]
+  title text [not null]
+  source_url text
+  active_version_id uuid
+  acl_valid_until timestamptz
+  source_modified_at timestamptz
+  deleted_at timestamptz
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (workspace_id, id) [unique]
+    (workspace_id, source_id, external_document_id) [unique]
+  }
+
+  Note: '''SCOPE: LAUNCH. Stable source item identity. Same content hash does not imply same permissions; never globally deduplicate document access. Source deletions and permission revocations tombstone immediately. Search only the active ready version and fail closed on expired source ACLs.'''
+}
+
+Table agentonic.document_contact_access {
+  id uuid [pk, not null, default: `gen_random_uuid()`]
+  workspace_id uuid [not null]
+  document_id uuid [not null]
+  contact_id uuid [not null]
+  source_acl_revision text [not null]
+  verified_at timestamptz [not null]
+  expires_at timestamptz [not null]
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (workspace_id, id) [unique]
+    (workspace_id, document_id, contact_id) [unique]
+  }
+
+  Note: '''SCOPE: CONDITIONAL — enable only with tested mixed-access connector ACL synchronization. CONDITIONAL materialized effective upstream readers, including verified group expansion/denies. Unknown or stale mapping denies. Linked panel users resolve their contact. Collection and agent grants still apply. Exclude this table from launch migration until feature is implemented; no launch table has an incoming FK to it.'''
+}
+
+Table agentonic.document_versions {
+  id uuid [pk, not null, default: `gen_random_uuid()`]
+  workspace_id uuid [not null]
+  document_id uuid [not null]
+  version_key text [not null]
+  content_sha256 text [not null]
+  object_id uuid
+  parser_version text [not null]
+  chunker_version text [not null]
+  language text [not null, default: 'und']
+  status text [not null, default: 'processing', check: `status IN ('processing', 'ready', 'failed')`]
+  metadata jsonb [not null, default: `'{}'::jsonb`]
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (workspace_id, id) [unique]
+    (workspace_id, document_id, version_key) [unique]
+    (workspace_id, document_id, id) [unique]
+  }
+
+  Note: '''SCOPE: LAUNCH. Immutable parsed source version. Build chunks/embeddings before atomically switching documents.active_version_id. Retain prior versions only for configured history/citations; source revocation blocks all versions immediately.'''
+}
+
+Table agentonic.document_chunks {
+  id uuid [pk, not null, default: `gen_random_uuid()`]
+  workspace_id uuid [not null]
+  document_version_id uuid [not null]
+  ordinal integer [not null, check: `ordinal >= 0`]
+  content text [not null]
+  content_sha256 text [not null]
+  locator jsonb [not null, default: `'{}'::jsonb`, note: 'Page/heading/line offsets for citations.']
+  search_vector tsvector [note: 'SQL-maintained language-aware full text vector; GIN index in custom migration.']
+  embedding "vector(1024)"
+  embedded_at timestamptz
+  embedding_profile_id uuid
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (workspace_id, id) [unique]
+    (workspace_id, document_version_id, ordinal) [unique]
+  }
+
+  checks {
+    `(embedding IS NULL) = (embedding_profile_id IS NULL)`
+    `(embedding IS NULL) = (embedded_at IS NULL)`
+  }
+
+  Note: '''SCOPE: LAUNCH. Retrieval units inherit all source/document/collection authorization. Filtering must happen before vector/text ranking, not after an unrestricted top-k. Stored text is untrusted reference material and cannot authorize tools. Initial fixed vector(1024) with singleton model/config provenance. Parser/chunker versions on document version. Partial HNSW and GIN indexes in SQL. Active document publication requires all intended chunks ready; no incompatible vectors.'''
+}
+
+Table agentonic.collection_contact_grants {
+  id uuid [pk, not null, default: `gen_random_uuid()`]
+  workspace_id uuid [not null]
+  collection_id uuid [not null]
+  contact_id uuid [not null]
+  granted_by_member_id uuid [not null]
+  revoked_at timestamptz
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (workspace_id, id) [unique]
+    (workspace_id, collection_id, contact_id) [unique]
+  }
+
+  Note: '''SCOPE: LAUNCH. Explicit reference knowledge reader access for authorized nonmember contacts. Linked users still subject to current membership/offboarding rules. Caller, agent, source and output audience permissions must all allow disclosure.'''
+}
+
+Table agentonic.retrieval_profile {
+  id uuid [pk, not null, default: `gen_random_uuid()`]
+  singleton_key boolean [not null, unique, default: true, check: `singleton_key = true`]
+  provider text [not null]
+  model_identifier text [not null]
+  dimensions integer [not null, default: 1024, check: `dimensions = 1024`]
+  configuration jsonb [not null]
+  profile_sha256 text [not null, unique]
+  created_at timestamptz [not null, default: `now()`]
+
+  Note: '''SCOPE: LAUNCH. Exactly one verified configured profile before ingestion. Singleton uniqueness is at most one; onboarding enforces existence. Immutable while vectors exist. Explicit maintenance reindex clears old vectors before changing profile; incompatible model spaces never mix. Multiple simultaneous profiles are LATER.'''
+}
+
+Table agentonic.meeting_summaries {
+  id uuid [pk, not null, default: `gen_random_uuid()`]
+  workspace_id uuid [not null]
+  document_version_id uuid [not null, unique]
+  meeting_at timestamptz [not null]
+  participants jsonb [not null]
+  topics jsonb [not null]
+  decisions jsonb [not null]
+  action_items jsonb [not null]
+  source_provenance jsonb [not null]
+  summarizer_version text [not null]
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (workspace_id, id) [unique]
+  }
+
+  Note: '''SCOPE: LAUNCH. Structured derived meeting record, inheriting document/source/collection and recipient permissions. JSON participants/action assignees are extracted content, never authority-bearing IDs. Reprocessing creates a new document version; source deletion/ACL revocation hides derivatives.'''
+}
+
+// RUNTIME
+Table agentonic.conversations {
+  id uuid [pk, not null, default: `gen_random_uuid()`]
+  workspace_id uuid [not null]
+  agent_id uuid [not null]
+  environment text [not null, check: `environment IN ('development', 'staging', 'production')`]
+  endpoint_id uuid [not null]
+  external_conversation_key text [not null]
+  owner_contact_id uuid [not null]
+  title text
+  last_active_at timestamptz [not null, default: `now()`]
+  expires_at timestamptz
+  deleted_at timestamptz
+  audience_mode text [not null, default: 'private', check: `audience_mode IN ('private', 'group')`]
+  audience_verified_at timestamptz
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (workspace_id, id) [unique]
+    (workspace_id, endpoint_id, external_conversation_key) [unique]
+    (workspace_id, agent_id, environment, id) [unique]
+    (workspace_id, agent_id, last_active_at)
+  }
+
+  Note: '''SCOPE: LAUNCH. Private contact-owned thread. Verified panel users resolve linked contacts; explicit participants may read/reply. Agent managers get no implicit transcript permission. Multi-user delivery intersects every actual recipient authorization, including external channel audience; unknown audience denies private disclosure. Sessions remain private per conversation.'''
+}
+
+Table agentonic.conversation_participants {
+  id uuid [pk, not null, default: `gen_random_uuid()`]
+  workspace_id uuid [not null]
+  conversation_id uuid [not null]
+  contact_id uuid [not null]
+  can_reply boolean [not null, default: true]
+  revoked_at timestamptz
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (workspace_id, id) [unique]
+    (workspace_id, conversation_id, contact_id) [unique]
+  }
+
+  Note: '''SCOPE: LAUNCH. Explicit contact transcript ACL independent of agent operation. Owner retains access while authorized; recipient checks include real channel audience, not only stored participants. Revocation cannot retract already delivered messages.'''
+}
+
+Table agentonic.agent_sessions {
+  id uuid [pk, not null, default: `gen_random_uuid()`]
+  workspace_id uuid [not null]
+  agent_id uuid [not null]
+  environment text [not null, check: `environment IN ('development', 'staging', 'production')`]
+  conversation_id uuid [not null]
+  sdk text [not null]
+  external_session_id text [not null]
+  generation integer [not null, check: `generation > 0`]
+  checkpoint_object_id uuid
+  status text [not null, default: 'active', check: `status IN ('active', 'expired', 'closed')`]
+  last_active_at timestamptz [not null, default: `now()`]
+  expires_at timestamptz
+  pinned_until timestamptz
+  checkpoint_format_version text
+  checkpoint_sha256 text
+  checkpoint_verified_at timestamptz
+  lease_owner text
+  lease_expires_at timestamptz
+  lease_generation bigint [not null, default: 0, check: `lease_generation >= 0`]
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (workspace_id, id) [unique]
+    (workspace_id, conversation_id, generation) [unique]
+    (workspace_id, agent_id, environment, conversation_id, id) [unique]
+  }
+
+  Note: '''SCOPE: LAUNCH. SDK handle plus actual supported resumable checkpoint in authorized off-VM storage. Checkpoint format/hash compatibility and restoration must be proven. SQL one active session per conversation and fenced turn serialization. A session ID or rendered transcript alone is not recovery.'''
+}
+
+Table agentonic.agent_runs {
+  id uuid [pk, not null, default: `gen_random_uuid()`]
+  workspace_id uuid [not null]
+  agent_id uuid [not null]
+  code_release_id uuid [not null]
+  environment text [not null, check: `environment IN ('development', 'staging', 'production')`]
+  deployment_id uuid [not null]
+  conversation_id uuid
+  session_id uuid
+  acting_contact_id uuid [not null]
+  trigger_kind text [not null, check: `trigger_kind IN ('message', 'api', 'schedule', 'delegation', 'evaluation', 'manual')`]
+  idempotency_key text [not null]
+  trace_id text [not null]
+  status text [not null, default: 'queued', check: `status IN ('queued', 'running', 'awaiting_approval', 'succeeded', 'failed', 'cancelled', 'timed_out')`]
+  effective_prompt_sha256 text [not null]
+  effective_config jsonb [not null, note: 'Resolved model routing, guardrails, limits and config digest; redact secrets.']
+  request_object_id uuid
+  result_object_id uuid
+  started_at timestamptz
+  finished_at timestamptz
+  error_code text
+  error_summary text
+  configuration_release_id uuid [not null]
+  max_turns integer [not null, check: `max_turns > 0`]
+  max_tool_calls integer [not null, check: `max_tool_calls >= 0`]
+  max_duration_seconds integer [not null, check: `max_duration_seconds > 0`]
+  schedule_fire_id uuid
+  preview_id uuid
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (workspace_id, id) [unique]
+    (workspace_id, agent_id, idempotency_key) [unique]
+    (workspace_id, agent_id, id) [unique]
+    (workspace_id, code_release_id, id) [unique]
+    (workspace_id, conversation_id, id) [unique]
+    (workspace_id, agent_id, created_at)
+    (workspace_id, status, created_at)
+    (workspace_id, agent_id, code_release_id, configuration_release_id, id) [unique]
+    (workspace_id, agent_id, environment, id) [unique]
+  }
+
+  checks {
+    `session_id IS NULL OR conversation_id IS NOT NULL`
+    `finished_at IS NULL OR started_at IS NULL OR finished_at >= started_at`
+    `preview_id IS NULL OR environment = 'staging'`
+  }
+
+  Note: '''SCOPE: LAUNCH. Logical task pinned to actual deployed code/config pair, verified original acting contact and immutable effective nonsecret settings. Linked panel membership and grants rechecked on each action/resume; schedules resolve their current responsible member to a verified linked contact. Retried events retain identity. Limits include aggregate delegated work. Record observable outputs and redacted audit, not hidden reasoning. Usage ledger is provider-cost truth, no customer billing engine. Customer preview turns must reference the active unexpired preview and its exact deployment; server classifies them so omitting preview_id cannot bypass preview policy. Compare actor/deployment and enforce preview budget in addition to run/workspace limits.'''
+}
+
+Table agentonic.messages {
+  id uuid [pk, not null, default: `gen_random_uuid()`]
+  workspace_id uuid [not null]
+  conversation_id uuid [not null]
+  run_id uuid
+  author_contact_id uuid
+  role text [not null, check: `role IN ('user', 'assistant', 'tool', 'system')`]
+  sequence_number bigint [not null, check: `sequence_number > 0`]
+  external_message_id text
+  content jsonb [not null, note: 'Versioned text/content-block schema; attachments reference private stored_objects via authorized API.']
+  redacted_at timestamptz
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (workspace_id, id) [unique]
+    (workspace_id, conversation_id, sequence_number) [unique]
+    (workspace_id, conversation_id, external_message_id) [unique]
+  }
+
+  checks {
+    `role <> 'user' OR author_contact_id IS NOT NULL`
+    `role NOT IN ('assistant', 'tool') OR run_id IS NOT NULL`
+    `(role = 'user') = (author_contact_id IS NOT NULL)`
+  }
+
+  Note: '''SCOPE: LAUNCH. Durable transcript with a transactionally allocated order. Provider event deduplication happens before enqueueing a run. Messages from users require an authorized author; assistant/tool messages require a matching run. Do not store private reasoning traces.'''
+}
+
+Table agentonic.tool_invocations {
+  id uuid [pk, not null, default: `gen_random_uuid()`]
+  workspace_id uuid [not null]
+  run_id uuid [not null]
+  code_release_id uuid [not null]
+  configuration_tool_id uuid [not null]
+  invocation_key text [not null]
+  status text [not null, default: 'requested', check: `status IN ('requested', 'denied', 'awaiting_approval', 'running', 'succeeded', 'failed', 'unknown')`]
+  arguments_sha256 text [not null]
+  redacted_arguments jsonb
+  redacted_result jsonb
+  policy_snapshot jsonb [not null]
+  external_idempotency_key text
+  started_at timestamptz
+  finished_at timestamptz
+  error_code text
+  agent_id uuid [not null]
+  configuration_release_id uuid [not null]
+  standing_authorization_id uuid
+  connection_id uuid
+  environment text [not null, check: `environment IN ('development', 'staging', 'production')`]
+  authorization_kind text [not null, default: 'none', check: `authorization_kind IN ('none', 'policy', 'one_off', 'standing')`]
+  code_tool_id uuid [not null]
+  arguments_object_id uuid
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (workspace_id, id) [unique]
+    (workspace_id, run_id, invocation_key) [unique]
+    (workspace_id, id, arguments_sha256) [unique]
+  }
+
+  checks {
+    `(authorization_kind = 'standing') = (standing_authorization_id IS NOT NULL)`
+  }
+
+  Note: '''SCOPE: LAUNCH. One logical tool action bound to the tool manifest of the actual run release. Record authorization result even on denial. Unknown external outcome requires reconciliation before retry, especially email/payment/write operations. Never promise exactly-once effects without provider support.'''
+}
+
+Table agentonic.tool_approvals {
+  id uuid [pk, not null, default: `gen_random_uuid()`]
+  workspace_id uuid [not null]
+  tool_invocation_id uuid [not null]
+  requested_contact_id uuid [not null]
+  arguments_sha256 text [not null]
+  decision text [not null, default: 'pending', check: `decision IN ('pending', 'approved', 'rejected', 'expired', 'cancelled')`]
+  decided_by_contact_id uuid
+  decided_at timestamptz
+  expires_at timestamptz [not null]
+  consumed_at timestamptz
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (workspace_id, id) [unique]
+    (workspace_id, tool_invocation_id) [unique]
+  }
+
+  checks {
+    `decision NOT IN ('approved', 'rejected') OR (decided_by_contact_id IS NOT NULL AND decided_at IS NOT NULL)`
+    `consumed_at IS NULL OR decision = 'approved'`
+    `consumed_at IS NULL OR (decision = 'approved' AND consumed_at <= expires_at)`
+  }
+
+  Note: '''SCOPE: LAUNCH. Exact invocation and immutable canonical argument hash. Secure payload required for execution lives in authorized encrypted storage, while ordinary logs are redacted. Validate current deciding contact authority, decision time and expiry. Atomically consume once under row lock, transition invocation and record outcome. Trigger prevents resetting consumption or rewriting approved args. Standing authorization is separate; never global autoapproval.'''
+}
+
+Table agentonic.memory_entries {
+  id uuid [pk, not null, default: `gen_random_uuid()`]
+  workspace_id uuid [not null]
+  agent_id uuid [not null]
+  environment text [not null, check: `environment IN ('development', 'staging', 'production')`]
+  scope text [not null, check: `scope IN ('contact', 'conversation', 'agent')`]
+  subject_contact_id uuid
+  conversation_id uuid
+  source_run_id uuid
+  key text [not null]
+  content jsonb [not null]
+  confidence numeric(4,3) [check: `confidence >= 0 AND confidence <= 1`]
+  approved_by_member_id uuid
+  expires_at timestamptz
+  updated_at timestamptz [not null, default: `now()`]
+  deleted_at timestamptz
+  provenance jsonb [not null]
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (workspace_id, id) [unique]
+    (workspace_id, agent_id, environment, scope)
+    (workspace_id, subject_contact_id)
+  }
+
+  checks {
+    `(scope = 'contact' AND subject_contact_id IS NOT NULL AND conversation_id IS NULL) OR (scope = 'conversation' AND conversation_id IS NOT NULL AND subject_contact_id IS NULL) OR (scope = 'agent' AND subject_contact_id IS NULL AND conversation_id IS NULL AND approved_by_member_id IS NOT NULL)`
+  }
+
+  Note: '''SCOPE: LAUNCH. Private contact memory or conversation-authorized memory; agent scope is explicitly approved nonpersonal operational facts. No automatic organization sharing. Source run stays in same agent/environment. SQL live scope-specific unique keys; expiry/correction/erasure and provenance enforced. Linked contacts never recover revoked person permissions.'''
+}
+
+Table agentonic.agent_state {
+  id uuid [pk, not null, default: `gen_random_uuid()`]
+  workspace_id uuid [not null]
+  agent_id uuid [not null]
+  environment text [not null, check: `environment IN ('development', 'staging', 'production')`]
+  key text [not null]
+  schema_version text [not null]
+  value jsonb [not null]
+  revision bigint [not null, default: 1, check: `revision > 0`]
+  source_run_id uuid
+  updated_at timestamptz [not null, default: `now()`]
+  expires_at timestamptz
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (workspace_id, id) [unique]
+    (workspace_id, agent_id, environment, key) [unique]
+  }
+
+  Note: '''SCOPE: LAUNCH. Validated durable plans and operational state; not general shared memory. Privacy cannot be relaxed by copying private conversation facts here. Optimistic updates, off-VM recovery, finite retention. Rebuildable local caches are separate.'''
+}
+
+// COLLABORATION
+Table agentonic.agent_links {
+  id uuid [pk, not null, default: `gen_random_uuid()`]
+  workspace_id uuid [not null]
+  caller_agent_id uuid [not null]
+  callee_agent_id uuid [not null]
+  purpose text [not null]
+  input_contract jsonb [not null]
+  output_contract jsonb [not null]
+  max_depth integer [not null, default: 2, check: `max_depth BETWEEN 1 AND 8`]
+  max_child_runs integer [not null, default: 5, check: `max_child_runs > 0`]
+  approved_by_member_id uuid [not null]
+  revoked_at timestamptz
+  allowed_tool_keys jsonb [not null, default: `'[]'::jsonb`, note: 'Versioned package/tool keys; empty means none, newly added tools never inherited.']
+  max_cost_usd numeric(20,8) [not null, check: `max_cost_usd >= 0`]
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (workspace_id, id) [unique]
+    (workspace_id, caller_agent_id, callee_agent_id) [unique]
+    (workspace_id, caller_agent_id, callee_agent_id, id) [unique]
+  }
+
+  checks {
+    `caller_agent_id <> callee_agent_id`
+  }
+
+  Note: '''SCOPE: LAUNCH. Directional delegation grant inside one workspace. A to B does not permit B to A or transitive calls. Management permission over both agents is required to create a link. Delegated execution preserves the initiating contact, intersects caller/callee permissions and checks recipient disclosure. No implicit memory/credential sharing. LAUNCH foundation; enable per approved use case only. Enforce original actor, tool allowlist, bounded recipient disclosure and aggregate limits.'''
+}
+
+Table agentonic.delegations {
+  id uuid [pk, not null, default: `gen_random_uuid()`]
+  workspace_id uuid [not null]
+  link_id uuid [not null]
+  caller_agent_id uuid [not null]
+  callee_agent_id uuid [not null]
+  parent_run_id uuid [not null]
+  child_run_id uuid [not null]
+  request_key text [not null]
+  depth integer [not null, check: `depth > 0`]
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (workspace_id, id) [unique]
+    (workspace_id, child_run_id) [unique]
+    (workspace_id, parent_run_id, request_key) [unique]
+  }
+
+  checks {
+    `parent_run_id <> child_run_id`
+  }
+
+  Note: '''SCOPE: LAUNCH. Run lineage for delegation. Transactional validation enforces same original acting contact/environment, no ancestry cycles, depth/fanout/cost limits and current link authorization. Child output is not automatically disclosed if it contains inaccessible data. Charges are recorded once on actual child calls and rolled up by lineage without re-billing.'''
+}
+
+// COMMERCIAL
+Table agentonic.usage_events {
+  id uuid [pk, not null, default: `gen_random_uuid()`]
+  workspace_id uuid [not null]
+  agent_id uuid
+  run_id uuid
+  ingestion_job_id uuid
+  provider text [not null]
+  model_identifier text
+  provider_event_key text [not null]
+  provider_request_id text
+  pricing_snapshot jsonb [not null]
+  occurred_at timestamptz [not null]
+  quantity numeric(24,8) [check: `quantity >= 0`]
+  provider_cost_usd numeric(20,8) [check: `provider_cost_usd >= 0`]
+  connection_id uuid [not null]
+  measurement_status text [not null, check: `measurement_status IN ('unknown', 'estimated', 'measured')`]
+  cost_basis text [not null, check: `cost_basis IN ('unknown', 'estimated', 'provider_billed')`]
+  provider_operation_key text [not null]
+  pricing_evidence jsonb
+  provider_aggregate_evidence jsonb
+  meter text [not null, note: 'Disjoint priced units: uncached input, cached input, output, embedding tokens, audio seconds, etc.']
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (workspace_id, id) [unique]
+    (workspace_id, occurred_at)
+    (workspace_id, agent_id, occurred_at)
+    (workspace_id, connection_id, provider_operation_key, meter) [unique]
+  }
+
+  checks {
+    `num_nonnulls(run_id, ingestion_job_id) = 1`
+    `run_id IS NULL OR agent_id IS NOT NULL`
+    `(measurement_status = 'unknown') = (quantity IS NULL)`
+    `(cost_basis = 'unknown') = (provider_cost_usd IS NULL)`
+    `ingestion_job_id IS NULL OR agent_id IS NULL`
+  }
+
+  Note: '''SCOPE: LAUNCH. One immutable attributable provider operation/meter fact, scoped to actual credential account; unknown quantity/cost is NULL, never fabricated zero. Direct run has matching agent; ingestion is workspace/source cost once. Provider aggregate evidence is non-additive. Ingest only disjoint priced meters; a provider-billed operation total must not also count component estimates. Reconcile late evidence through append-only cost_reconciliations, not duplicate usage or hidden edits. No customer markup/training/billing tables at launch.'''
+}
+
+Table agentonic.budget_periods {
+  id uuid [pk, not null, default: `gen_random_uuid()`]
+  workspace_id uuid [not null]
+  agent_id uuid
+  period_start timestamptz [not null]
+  period_end timestamptz [not null]
+  hard_limit_usd numeric(20,8) [not null, check: `hard_limit_usd >= 0`]
+  spent_usd numeric(20,8) [not null, default: 0, check: `spent_usd >= 0`]
+  reserved_usd numeric(20,8) [not null, default: 0, check: `reserved_usd >= 0`]
+  version bigint [not null, default: 0]
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (workspace_id, id) [unique]
+    (workspace_id, agent_id, period_start)
+  }
+
+  checks {
+    `period_end > period_start`
+  }
+
+  Note: '''SCOPE: LAUNCH. Operational provider-cost cap for a workspace (agent_id null) or one agent. Atomically reserve estimated maximum cost before dispatch, settle actual usage afterward. Lock both workspace and agent budgets in consistent order. Counters are reconciled against usage/reservations; they are not accounting truth. SQL prevents overlapping periods per scope; actual provider overruns are recorded and block new work.'''
+}
+
+Table agentonic.budget_reservations {
+  id uuid [pk, not null, default: `gen_random_uuid()`]
+  workspace_id uuid [not null]
+  budget_period_id uuid [not null]
+  reservation_key text [not null]
+  run_id uuid
+  ingestion_job_id uuid
+  amount_usd numeric(20,8) [not null, check: `amount_usd >= 0`]
+  status text [not null, default: 'held', check: `status IN ('held', 'settled', 'released')`]
+  expires_at timestamptz [not null]
+  settled_at timestamptz
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (workspace_id, id) [unique]
+    (workspace_id, budget_period_id, reservation_key) [unique]
+  }
+
+  checks {
+    `num_nonnulls(run_id, ingestion_job_id) = 1`
+  }
+
+  Note: '''SCOPE: LAUNCH. Crash-recoverable reservation for each provider dispatch. A dispatch may reserve against workspace and agent caps, but is charged once in usage_events. Expiry is reconciled against worker/provider state before releasing funds; lease expiry alone is not proof work stopped. Tenant/agent scope of budget and subject must match.'''
+}
+
+Table agentonic.cost_reconciliations {
+  id uuid [pk, not null, default: `gen_random_uuid()`]
+  workspace_id uuid [not null]
+  usage_event_id uuid [not null]
+  revision integer [not null, check: `revision > 0`]
+  provider_evidence_key text [not null]
+  resolved_cost_usd numeric(20,8) [not null, check: `resolved_cost_usd >= 0`]
+  resolved_quantity numeric(24,8) [check: `resolved_quantity >= 0`]
+  cost_basis text [not null, check: `cost_basis IN ('estimated', 'provider_billed')`]
+  evidence jsonb [not null]
+  measured_at timestamptz [not null]
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (workspace_id, id) [unique]
+    (workspace_id, usage_event_id, revision) [unique]
+    (workspace_id, usage_event_id, provider_evidence_key) [unique]
+  }
+
+  Note: '''SCOPE: LAUNCH. Append-only correction evidence for one original fact. Reports use latest accepted resolved amount IN PLACE OF original amount, never add both. Revision allocation serialized. Aggregate provider reconciliation apportions disjoint fact amounts in one transaction or retains evidence only. No duplicate operation count.'''
+}
+
+Table agentonic.daily_cost_summaries {
+  id uuid [pk, not null, default: `gen_random_uuid()`]
+  workspace_id uuid [not null]
+  agent_id uuid
+  local_date date [not null]
+  reporting_timezone text [not null]
+  known_cost_usd numeric(20,8) [not null, check: `known_cost_usd >= 0`]
+  unknown_cost_operations integer [not null, check: `unknown_cost_operations >= 0`]
+  estimated_cost_operations integer [not null, check: `estimated_cost_operations >= 0`]
+  computed_at timestamptz [not null]
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (workspace_id, id) [unique]
+  }
+
+  Note: '''SCOPE: LAUNCH. Rebuildable cache from ledger plus latest reconciliation using explicit timezone. Null agent is whole-workspace total including shared ingestion once; agent rows are direct costs and must not be added to workspace total. SQL NULLS NOT DISTINCT uniqueness for scope/date/zone.'''
+}
+
+// QUALITY
+Table agentonic.datasets {
+  id uuid [pk, not null, default: `gen_random_uuid()`]
+  workspace_id uuid [not null]
+  name text [not null]
+  owner_member_id uuid [not null]
+  description text
+  archived_at timestamptz
+  purpose text [not null, default: 'evaluation', check: `purpose = 'evaluation'`]
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (workspace_id, id) [unique]
+    (workspace_id, name, purpose) [unique]
+  }
+
+  Note: '''SCOPE: LAUNCH. Curated evaluation datasets only at launch. Content is not automatically imported from private conversations. Provider model-weight training is LATER.'''
+}
+
+Table agentonic.dataset_versions {
+  id uuid [pk, not null, default: `gen_random_uuid()`]
+  workspace_id uuid [not null]
+  dataset_id uuid [not null]
+  version text [not null]
+  object_id uuid [not null]
+  content_sha256 text [not null]
+  schema_version text [not null]
+  record_count integer [not null, check: `record_count > 0`]
+  provenance jsonb [not null, note: 'Source commit/paths or authorized records, transformations, exclusions, consent/legal basis where applicable.']
+  approved_by_member_id uuid [not null]
+  revoked_at timestamptz
+  approved_usage text [not null, default: 'evaluation_only', check: `approved_usage = 'evaluation_only'`]
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (workspace_id, id) [unique]
+    (workspace_id, dataset_id, version) [unique]
+  }
+
+  Note: '''SCOPE: LAUNCH. Immutable authorized evaluation artifact, hash, source/transform provenance and schema. Grading uses exact version. Source-right revocation stops new usage even when a historical release is pinned. Retention and deletion apply to artifacts.'''
+}
+
+Table agentonic.evaluation_runs {
+  id uuid [pk, not null, default: `gen_random_uuid()`]
+  workspace_id uuid [not null]
+  agent_id uuid [not null]
+  code_release_id uuid [not null]
+  dataset_version_id uuid [not null]
+  grader_version text [not null]
+  configuration_sha256 text [not null]
+  configuration_snapshot jsonb [not null]
+  status text [not null, default: 'queued', check: `status IN ('queued', 'running', 'passed', 'failed', 'error', 'cancelled')`]
+  summary jsonb
+  started_at timestamptz
+  finished_at timestamptz
+  configuration_release_id uuid [not null]
+  grader_sha256 text [not null]
+  grader_snapshot jsonb [not null]
+  budget_usd numeric(20,8) [not null, check: `budget_usd >= 0`]
+  requested_by_member_id uuid
+  requested_by_staff_id uuid
+  support_access_grant_id uuid
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (workspace_id, id) [unique]
+    (workspace_id, agent_id, code_release_id, id) [unique]
+    (workspace_id, agent_id, code_release_id, configuration_release_id, id) [unique]
+  }
+
+  checks {
+    `num_nonnulls(requested_by_member_id, requested_by_staff_id) = 1`
+    `support_access_grant_id IS NULL OR requested_by_staff_id IS NOT NULL`
+    `requested_by_staff_id IS NULL OR support_access_grant_id IS NOT NULL`
+  }
+
+  Note: '''SCOPE: LAUNCH. Exact code/configuration, immutable dataset and frozen grader content/hash. Safe staging deployments, explicit paid budget, deterministic default checks. No prompt/config rereads mid-evaluation. Activation checks required successful evaluation evidence against the exact pair; candidate test deployment can exist before evaluation completes. Either customer or staff may request permitted evaluations; staff content access needs current scoped support grant. Evaluation uses frozen candidate regardless of production approval state, with staging-only execution and independent budget enforcement.'''
+}
+
+Table agentonic.evaluation_results {
+  id uuid [pk, not null, default: `gen_random_uuid()`]
+  workspace_id uuid [not null]
+  evaluation_run_id uuid [not null]
+  case_key text [not null]
+  attempt integer [not null, default: 1, check: `attempt > 0`]
+  agent_run_id uuid
+  outcome text [not null, check: `outcome IN ('passed', 'failed', 'error', 'skipped')`]
+  scores jsonb [not null, default: `'{}'::jsonb`]
+  feedback text
+  agent_id uuid [not null]
+  code_release_id uuid [not null]
+  configuration_release_id uuid [not null]
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (workspace_id, id) [unique]
+    (workspace_id, evaluation_run_id, case_key, attempt) [unique]
+  }
+
+  Note: '''SCOPE: LAUNCH. Per-case regression evidence; case key resolves into the pinned dataset. Runtime reference must match evaluation agent/release and staging configuration (cross-row validation). Include tool selection, policy violations, retrieval grounding, latency and cost, not only answer text similarity.'''
+}
+
+Table agentonic.agent_previews {
+  id uuid [pk, not null, default: `gen_random_uuid()`]
+  workspace_id uuid [not null]
+  agent_id uuid [not null]
+  code_release_id uuid [not null]
+  configuration_release_id uuid [not null]
+  deployment_id uuid [not null]
+  environment text [not null, default: 'staging', check: `environment = 'staging'`]
+  requested_by_member_id uuid
+  requested_by_staff_id uuid
+  support_access_grant_id uuid
+  status text [not null, default: 'queued', check: `status IN ('queued', 'running', 'completed', 'failed', 'expired', 'cancelled')`]
+  execution_policy jsonb [not null, note: 'Server-validated reduced envelope; read-only approved test sources by default, no production consumers, explicit test destinations for any permitted write.']
+  budget_usd numeric(20,8) [not null, check: `budget_usd >= 0`]
+  expires_at timestamptz [not null]
+  finished_at timestamptz
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (workspace_id, id) [unique]
+    (workspace_id, agent_id, code_release_id, configuration_release_id, id) [unique]
+    (workspace_id, agent_id, environment, code_release_id, configuration_release_id, deployment_id, id) [unique]
+  }
+
+  checks {
+    `num_nonnulls(requested_by_member_id, requested_by_staff_id) = 1`
+    `support_access_grant_id IS NULL OR requested_by_staff_id IS NOT NULL`
+    `expires_at > created_at`
+    `requested_by_staff_id IS NULL OR support_access_grant_id IS NOT NULL`
+  }
+
+  Note: '''SCOPE: LAUNCH. Bounded customer preview of an immutable candidate using a staging deployment. Does not grant production activation or approve requested_access_snapshot. Live verified actor/source permission, test credential scope, private conversation audience and workspace budget still apply. Production credentials cannot be copied into staging; use separately authorized read-only test connections or customer-selected test uploads. Expiry stops new turns/tools and reconciles unfinished provider work. Customer can edit a new draft while this exact snapshot runs; serialize staging slot switches and drain old preview sessions. Preview evidence retained only within stated review consent.'''
+}
+
+Ref: agentonic.platform_staff.user_id > agentonic.users.id [delete: restrict, update: restrict]
+Ref: agentonic.workspaces.personal_owner_user_id > agentonic.users.id [delete: restrict, update: restrict]
+Ref: agentonic.workspace_members.workspace_id > agentonic.workspaces.id [delete: restrict, update: restrict]
+Ref: agentonic.workspace_members.user_id > agentonic.users.id [delete: restrict, update: restrict]
+Ref: agentonic.workspace_invitations.workspace_id > agentonic.workspaces.id [delete: restrict, update: restrict]
+Ref: agentonic.workspace_invitations.(workspace_id, invited_by_member_id) > agentonic.workspace_members.(workspace_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.support_access_grants.workspace_id > agentonic.workspaces.id [delete: restrict, update: restrict]
+Ref: agentonic.support_access_grants.staff_id > agentonic.platform_staff.id [delete: restrict, update: restrict]
+Ref: agentonic.support_access_grants.(workspace_id, approved_by_member_id) > agentonic.workspace_members.(workspace_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.template_versions.template_id > agentonic.agent_templates.id [delete: restrict, update: restrict]
+Ref: agentonic.agents.workspace_id > agentonic.workspaces.id [delete: restrict, update: restrict]
+Ref: agentonic.agents.(workspace_id, owner_member_id) > agentonic.workspace_members.(workspace_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.agents.template_version_id > agentonic.template_versions.id [delete: restrict, update: restrict]
+Ref: agentonic.agent_member_grants.workspace_id > agentonic.workspaces.id [delete: restrict, update: restrict]
+Ref: agentonic.agent_member_grants.(workspace_id, agent_id) > agentonic.agents.(workspace_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.agent_member_grants.(workspace_id, member_id) > agentonic.workspace_members.(workspace_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.agent_member_grants.(workspace_id, granted_by_member_id) > agentonic.workspace_members.(workspace_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.connections.workspace_id > agentonic.workspaces.id [delete: restrict, update: restrict]
+Ref: agentonic.connections.(workspace_id, owner_member_id) > agentonic.workspace_members.(workspace_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.agent_connection_grants.workspace_id > agentonic.workspaces.id [delete: restrict, update: restrict]
+Ref: agentonic.agent_connection_grants.(workspace_id, agent_id) > agentonic.agents.(workspace_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.agent_connection_grants.(workspace_id, granted_by_member_id) > agentonic.workspace_members.(workspace_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.channel_endpoints.workspace_id > agentonic.workspaces.id [delete: restrict, update: restrict]
+Ref: agentonic.channel_endpoints.(workspace_id, agent_id) > agentonic.agents.(workspace_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.external_identities.workspace_id > agentonic.workspaces.id [delete: restrict, update: restrict]
+Ref: agentonic.external_identities.(workspace_id, connection_id) > agentonic.connections.(workspace_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.api_credentials.workspace_id > agentonic.workspaces.id [delete: restrict, update: restrict]
+Ref: agentonic.api_credentials.(workspace_id, agent_id) > agentonic.agents.(workspace_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.api_credentials.(workspace_id, acting_member_id) > agentonic.workspace_members.(workspace_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.runtime_hosts.dedicated_workspace_id > agentonic.workspaces.id [delete: restrict, update: restrict]
+Ref: agentonic.stored_objects.workspace_id > agentonic.workspaces.id [delete: restrict, update: restrict]
+Ref: agentonic.knowledge_collections.workspace_id > agentonic.workspaces.id [delete: restrict, update: restrict]
+Ref: agentonic.knowledge_collections.(workspace_id, owner_member_id) > agentonic.workspace_members.(workspace_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.collection_member_grants.workspace_id > agentonic.workspaces.id [delete: restrict, update: restrict]
+Ref: agentonic.collection_member_grants.(workspace_id, collection_id) > agentonic.knowledge_collections.(workspace_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.collection_member_grants.(workspace_id, member_id) > agentonic.workspace_members.(workspace_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.collection_member_grants.(workspace_id, granted_by_member_id) > agentonic.workspace_members.(workspace_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.agent_collection_grants.workspace_id > agentonic.workspaces.id [delete: restrict, update: restrict]
+Ref: agentonic.agent_collection_grants.(workspace_id, collection_id) > agentonic.knowledge_collections.(workspace_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.agent_collection_grants.(workspace_id, agent_id) > agentonic.agents.(workspace_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.agent_collection_grants.(workspace_id, granted_by_member_id) > agentonic.workspace_members.(workspace_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.knowledge_sources.workspace_id > agentonic.workspaces.id [delete: restrict, update: restrict]
+Ref: agentonic.knowledge_sources.(workspace_id, collection_id) > agentonic.knowledge_collections.(workspace_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.knowledge_sources.(workspace_id, authorized_by_member_id) > agentonic.workspace_members.(workspace_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.ingestion_jobs.workspace_id > agentonic.workspaces.id [delete: restrict, update: restrict]
+Ref: agentonic.ingestion_jobs.(workspace_id, source_id) > agentonic.knowledge_sources.(workspace_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.documents.workspace_id > agentonic.workspaces.id [delete: restrict, update: restrict]
+Ref: agentonic.documents.(workspace_id, source_id) > agentonic.knowledge_sources.(workspace_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.documents.(workspace_id, id, active_version_id) > agentonic.document_versions.(workspace_id, document_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.document_contact_access.workspace_id > agentonic.workspaces.id [delete: restrict, update: restrict]
+Ref: agentonic.document_contact_access.(workspace_id, document_id) > agentonic.documents.(workspace_id, id) [delete: cascade, update: restrict]
+Ref: agentonic.document_versions.workspace_id > agentonic.workspaces.id [delete: restrict, update: restrict]
+Ref: agentonic.document_versions.(workspace_id, document_id) > agentonic.documents.(workspace_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.document_versions.(workspace_id, object_id) > agentonic.stored_objects.(workspace_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.document_chunks.workspace_id > agentonic.workspaces.id [delete: restrict, update: restrict]
+Ref: agentonic.document_chunks.(workspace_id, document_version_id) > agentonic.document_versions.(workspace_id, id) [delete: cascade, update: restrict]
+Ref: agentonic.conversations.workspace_id > agentonic.workspaces.id [delete: restrict, update: restrict]
+Ref: agentonic.conversations.(workspace_id, agent_id, environment, endpoint_id) > agentonic.channel_endpoints.(workspace_id, agent_id, environment, id) [delete: restrict, update: restrict]
+Ref: agentonic.conversation_participants.workspace_id > agentonic.workspaces.id [delete: restrict, update: restrict]
+Ref: agentonic.conversation_participants.(workspace_id, conversation_id) > agentonic.conversations.(workspace_id, id) [delete: cascade, update: restrict]
+Ref: agentonic.agent_sessions.workspace_id > agentonic.workspaces.id [delete: restrict, update: restrict]
+Ref: agentonic.agent_sessions.(workspace_id, agent_id, environment, conversation_id) > agentonic.conversations.(workspace_id, agent_id, environment, id) [delete: restrict, update: restrict]
+Ref: agentonic.agent_sessions.(workspace_id, checkpoint_object_id) > agentonic.stored_objects.(workspace_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.agent_runs.workspace_id > agentonic.workspaces.id [delete: restrict, update: restrict]
+Ref: agentonic.agent_runs.(workspace_id, agent_id, environment, conversation_id) > agentonic.conversations.(workspace_id, agent_id, environment, id) [delete: restrict, update: restrict]
+Ref: agentonic.agent_runs.(workspace_id, agent_id, environment, conversation_id, session_id) > agentonic.agent_sessions.(workspace_id, agent_id, environment, conversation_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.agent_runs.(workspace_id, request_object_id) > agentonic.stored_objects.(workspace_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.agent_runs.(workspace_id, result_object_id) > agentonic.stored_objects.(workspace_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.messages.workspace_id > agentonic.workspaces.id [delete: restrict, update: restrict]
+Ref: agentonic.messages.(workspace_id, conversation_id) > agentonic.conversations.(workspace_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.messages.(workspace_id, conversation_id, run_id) > agentonic.agent_runs.(workspace_id, conversation_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.tool_invocations.workspace_id > agentonic.workspaces.id [delete: restrict, update: restrict]
+Ref: agentonic.tool_approvals.workspace_id > agentonic.workspaces.id [delete: restrict, update: restrict]
+Ref: agentonic.memory_entries.workspace_id > agentonic.workspaces.id [delete: restrict, update: restrict]
+Ref: agentonic.memory_entries.(workspace_id, agent_id) > agentonic.agents.(workspace_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.memory_entries.(workspace_id, approved_by_member_id) > agentonic.workspace_members.(workspace_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.memory_entries.(workspace_id, agent_id, environment, conversation_id) > agentonic.conversations.(workspace_id, agent_id, environment, id) [delete: restrict, update: restrict]
+Ref: agentonic.memory_entries.(workspace_id, agent_id, source_run_id) > agentonic.agent_runs.(workspace_id, agent_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.agent_links.workspace_id > agentonic.workspaces.id [delete: restrict, update: restrict]
+Ref: agentonic.agent_links.(workspace_id, caller_agent_id) > agentonic.agents.(workspace_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.agent_links.(workspace_id, callee_agent_id) > agentonic.agents.(workspace_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.agent_links.(workspace_id, approved_by_member_id) > agentonic.workspace_members.(workspace_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.delegations.workspace_id > agentonic.workspaces.id [delete: restrict, update: restrict]
+Ref: agentonic.delegations.(workspace_id, caller_agent_id, callee_agent_id, link_id) > agentonic.agent_links.(workspace_id, caller_agent_id, callee_agent_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.delegations.(workspace_id, caller_agent_id, parent_run_id) > agentonic.agent_runs.(workspace_id, agent_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.delegations.(workspace_id, callee_agent_id, child_run_id) > agentonic.agent_runs.(workspace_id, agent_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.schedules.workspace_id > agentonic.workspaces.id [delete: restrict, update: restrict]
+Ref: agentonic.schedules.(workspace_id, agent_id) > agentonic.agents.(workspace_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.schedules.(workspace_id, created_by_member_id) > agentonic.workspace_members.(workspace_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.schedules.(workspace_id, agent_id, environment, endpoint_id) > agentonic.channel_endpoints.(workspace_id, agent_id, environment, id) [delete: restrict, update: restrict]
+Ref: agentonic.schedule_fires.workspace_id > agentonic.workspaces.id [delete: restrict, update: restrict]
+Ref: agentonic.background_jobs.workspace_id > agentonic.workspaces.id [delete: restrict, update: restrict]
+Ref: agentonic.audit_events.workspace_id > agentonic.workspaces.id [delete: restrict, update: restrict]
+Ref: agentonic.audit_events.actor_user_id > agentonic.users.id [delete: restrict, update: restrict]
+Ref: agentonic.audit_events.(workspace_id, actor_member_id) > agentonic.workspace_members.(workspace_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.audit_events.(workspace_id, actor_agent_id) > agentonic.agents.(workspace_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.audit_events.(workspace_id, support_access_grant_id) > agentonic.support_access_grants.(workspace_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.audit_events.(workspace_id, run_id) > agentonic.agent_runs.(workspace_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.usage_events.workspace_id > agentonic.workspaces.id [delete: restrict, update: restrict]
+Ref: agentonic.usage_events.(workspace_id, agent_id) > agentonic.agents.(workspace_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.usage_events.(workspace_id, agent_id, run_id) > agentonic.agent_runs.(workspace_id, agent_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.usage_events.(workspace_id, ingestion_job_id) > agentonic.ingestion_jobs.(workspace_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.budget_periods.workspace_id > agentonic.workspaces.id [delete: restrict, update: restrict]
+Ref: agentonic.budget_periods.(workspace_id, agent_id) > agentonic.agents.(workspace_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.budget_reservations.workspace_id > agentonic.workspaces.id [delete: restrict, update: restrict]
+Ref: agentonic.budget_reservations.(workspace_id, budget_period_id) > agentonic.budget_periods.(workspace_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.budget_reservations.(workspace_id, run_id) > agentonic.agent_runs.(workspace_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.budget_reservations.(workspace_id, ingestion_job_id) > agentonic.ingestion_jobs.(workspace_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.datasets.workspace_id > agentonic.workspaces.id [delete: restrict, update: restrict]
+Ref: agentonic.datasets.(workspace_id, owner_member_id) > agentonic.workspace_members.(workspace_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.dataset_versions.workspace_id > agentonic.workspaces.id [delete: restrict, update: restrict]
+Ref: agentonic.dataset_versions.(workspace_id, dataset_id) > agentonic.datasets.(workspace_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.dataset_versions.(workspace_id, object_id) > agentonic.stored_objects.(workspace_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.dataset_versions.(workspace_id, approved_by_member_id) > agentonic.workspace_members.(workspace_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.evaluation_runs.workspace_id > agentonic.workspaces.id [delete: restrict, update: restrict]
+Ref: agentonic.evaluation_runs.(workspace_id, dataset_version_id) > agentonic.dataset_versions.(workspace_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.evaluation_runs.(workspace_id, requested_by_member_id) > agentonic.workspace_members.(workspace_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.evaluation_results.workspace_id > agentonic.workspaces.id [delete: restrict, update: restrict]
+Ref: agentonic.contacts.workspace_id > agentonic.workspaces.id [delete: restrict, update: restrict]
+Ref: agentonic.contacts.linked_user_id > agentonic.users.id [delete: restrict, update: restrict]
+Ref: agentonic.external_identities.(workspace_id, contact_id) > agentonic.contacts.(workspace_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.agent_contact_grants.workspace_id > agentonic.workspaces.id [delete: restrict, update: restrict]
+Ref: agentonic.agent_contact_grants.(workspace_id, agent_id) > agentonic.agents.(workspace_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.agent_contact_grants.(workspace_id, contact_id) > agentonic.contacts.(workspace_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.agent_contact_grants.(workspace_id, granted_by_member_id) > agentonic.workspace_members.(workspace_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.agent_connection_grants.(workspace_id, environment, connection_id) > agentonic.connections.(workspace_id, environment, id) [delete: restrict, update: restrict]
+Ref: agentonic.channel_endpoints.(workspace_id, environment, connection_id) > agentonic.connections.(workspace_id, environment, id) [delete: restrict, update: restrict]
+Ref: agentonic.runtime_credentials.workspace_id > agentonic.workspaces.id [delete: restrict, update: restrict]
+Ref: agentonic.runtime_credentials.(workspace_id, agent_id) > agentonic.agents.(workspace_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.configuration_drafts.workspace_id > agentonic.workspaces.id [delete: restrict, update: restrict]
+Ref: agentonic.configuration_drafts.(workspace_id, agent_id) > agentonic.agents.(workspace_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.configuration_drafts.(workspace_id, created_by_member_id) > agentonic.workspace_members.(workspace_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.configuration_drafts.(workspace_id, agent_id, proposed_by_run_id) > agentonic.agent_runs.(workspace_id, agent_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.configuration_releases.workspace_id > agentonic.workspaces.id [delete: restrict, update: restrict]
+Ref: agentonic.configuration_releases.(workspace_id, code_release_id) > agentonic.workspace_code_release_grants.(workspace_id, code_release_id) [delete: restrict, update: restrict]
+Ref: agentonic.configuration_releases.(workspace_id, agent_id, source_draft_id) > agentonic.configuration_drafts.(workspace_id, agent_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.configuration_drafts.(workspace_id, agent_id, base_configuration_release_id) > agentonic.configuration_releases.(workspace_id, agent_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.configuration_tools.workspace_id > agentonic.workspaces.id [delete: restrict, update: restrict]
+Ref: agentonic.configuration_tools.(workspace_id, agent_id, code_release_id, configuration_release_id) > agentonic.configuration_releases.(workspace_id, agent_id, code_release_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.configuration_tools.(code_release_id, code_tool_id) > agentonic.code_tools.(code_release_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.agent_environments.workspace_id > agentonic.workspaces.id [delete: restrict, update: restrict]
+Ref: agentonic.agent_environments.(workspace_id, agent_id) > agentonic.agents.(workspace_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.agent_environments.host_id > agentonic.runtime_hosts.id [delete: restrict, update: restrict]
+Ref: agentonic.deployments.workspace_id > agentonic.workspaces.id [delete: restrict, update: restrict]
+Ref: agentonic.deployments.(workspace_id, agent_id, environment, host_id, agent_environment_id) > agentonic.agent_environments.(workspace_id, agent_id, environment, host_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.deployments.(workspace_id, agent_id, code_release_id, configuration_release_id) > agentonic.configuration_releases.(workspace_id, agent_id, code_release_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.deployments.(workspace_id, requested_by_member_id) > agentonic.workspace_members.(workspace_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.agent_environments.(workspace_id, agent_id, environment, host_id, desired_deployment_id) > agentonic.deployments.(workspace_id, agent_id, environment, host_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.agent_environments.(workspace_id, agent_id, environment, host_id, observed_deployment_id) > agentonic.deployments.(workspace_id, agent_id, environment, host_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.conversations.(workspace_id, owner_contact_id) > agentonic.contacts.(workspace_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.conversation_participants.(workspace_id, contact_id) > agentonic.contacts.(workspace_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.agent_runs.(workspace_id, acting_contact_id) > agentonic.contacts.(workspace_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.messages.(workspace_id, author_contact_id) > agentonic.contacts.(workspace_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.memory_entries.(workspace_id, subject_contact_id) > agentonic.contacts.(workspace_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.agent_runs.(workspace_id, agent_id, environment, code_release_id, configuration_release_id, deployment_id) > agentonic.deployments.(workspace_id, agent_id, environment, code_release_id, configuration_release_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.tool_invocations.(workspace_id, agent_id, code_release_id, configuration_release_id, run_id) > agentonic.agent_runs.(workspace_id, agent_id, code_release_id, configuration_release_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.tool_invocations.(workspace_id, agent_id, environment, run_id) > agentonic.agent_runs.(workspace_id, agent_id, environment, id) [delete: restrict, update: restrict]
+Ref: agentonic.tool_invocations.(workspace_id, environment, connection_id) > agentonic.connections.(workspace_id, environment, id) [delete: restrict, update: restrict]
+Ref: agentonic.tool_approvals.(workspace_id, requested_contact_id) > agentonic.contacts.(workspace_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.tool_approvals.(workspace_id, decided_by_contact_id) > agentonic.contacts.(workspace_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.tool_approvals.(workspace_id, tool_invocation_id, arguments_sha256) > agentonic.tool_invocations.(workspace_id, id, arguments_sha256) [delete: restrict, update: restrict]
+Ref: agentonic.agent_state.workspace_id > agentonic.workspaces.id [delete: restrict, update: restrict]
+Ref: agentonic.agent_state.(workspace_id, agent_id) > agentonic.agents.(workspace_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.agent_state.(workspace_id, agent_id, environment, source_run_id) > agentonic.agent_runs.(workspace_id, agent_id, environment, id) [delete: restrict, update: restrict]
+Ref: agentonic.schedule_fires.(workspace_id, agent_id, environment, schedule_id) > agentonic.schedules.(workspace_id, agent_id, environment, id) [delete: restrict, update: restrict]
+Ref: agentonic.schedule_fires.(workspace_id, agent_id, environment, run_id) > agentonic.agent_runs.(workspace_id, agent_id, environment, id) [delete: restrict, update: restrict]
+Ref: agentonic.agent_runs.(workspace_id, agent_id, environment, schedule_fire_id) > agentonic.schedule_fires.(workspace_id, agent_id, environment, id) [delete: restrict, update: restrict]
+Ref: agentonic.standing_authorizations.workspace_id > agentonic.workspaces.id [delete: restrict, update: restrict]
+Ref: agentonic.standing_authorizations.(workspace_id, agent_id, environment, schedule_id) > agentonic.schedules.(workspace_id, agent_id, environment, id) [delete: restrict, update: restrict]
+Ref: agentonic.standing_authorizations.(workspace_id, responsible_member_id) > agentonic.workspace_members.(workspace_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.standing_authorizations.(code_release_id, code_tool_id) > agentonic.code_tools.(code_release_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.standing_authorizations.(workspace_id, environment, connection_id) > agentonic.connections.(workspace_id, environment, id) [delete: restrict, update: restrict]
+Ref: agentonic.background_jobs.(workspace_id, agent_id) > agentonic.agents.(workspace_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.knowledge_sources.(workspace_id, environment, connection_id) > agentonic.connections.(workspace_id, environment, id) [delete: restrict, update: restrict]
+Ref: agentonic.collection_contact_grants.workspace_id > agentonic.workspaces.id [delete: restrict, update: restrict]
+Ref: agentonic.collection_contact_grants.(workspace_id, collection_id) > agentonic.knowledge_collections.(workspace_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.collection_contact_grants.(workspace_id, contact_id) > agentonic.contacts.(workspace_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.collection_contact_grants.(workspace_id, granted_by_member_id) > agentonic.workspace_members.(workspace_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.document_contact_access.(workspace_id, contact_id) > agentonic.contacts.(workspace_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.document_chunks.embedding_profile_id > agentonic.retrieval_profile.id [delete: restrict, update: restrict]
+Ref: agentonic.meeting_summaries.workspace_id > agentonic.workspaces.id [delete: restrict, update: restrict]
+Ref: agentonic.meeting_summaries.(workspace_id, document_version_id) > agentonic.document_versions.(workspace_id, id) [delete: cascade, update: restrict]
+Ref: agentonic.usage_events.(workspace_id, connection_id) > agentonic.connections.(workspace_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.cost_reconciliations.workspace_id > agentonic.workspaces.id [delete: restrict, update: restrict]
+Ref: agentonic.cost_reconciliations.(workspace_id, usage_event_id) > agentonic.usage_events.(workspace_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.daily_cost_summaries.workspace_id > agentonic.workspaces.id [delete: restrict, update: restrict]
+Ref: agentonic.daily_cost_summaries.(workspace_id, agent_id) > agentonic.agents.(workspace_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.evaluation_runs.(workspace_id, agent_id, code_release_id, configuration_release_id) > agentonic.configuration_releases.(workspace_id, agent_id, code_release_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.deployments.(workspace_id, agent_id, code_release_id, configuration_release_id, evaluation_run_id) > agentonic.evaluation_runs.(workspace_id, agent_id, code_release_id, configuration_release_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.audit_events.(workspace_id, actor_contact_id) > agentonic.contacts.(workspace_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.tool_invocations.(workspace_id, arguments_object_id) > agentonic.stored_objects.(workspace_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.tool_invocations.(workspace_id, agent_id, code_release_id, configuration_release_id, code_tool_id, configuration_tool_id) > agentonic.configuration_tools.(workspace_id, agent_id, code_release_id, configuration_release_id, code_tool_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.tool_invocations.(workspace_id, agent_id, environment, code_release_id, code_tool_id, standing_authorization_id) > agentonic.standing_authorizations.(workspace_id, agent_id, environment, code_release_id, code_tool_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.evaluation_results.(workspace_id, agent_id, code_release_id, configuration_release_id, evaluation_run_id) > agentonic.evaluation_runs.(workspace_id, agent_id, code_release_id, configuration_release_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.evaluation_results.(workspace_id, agent_id, code_release_id, configuration_release_id, agent_run_id) > agentonic.agent_runs.(workspace_id, agent_id, code_release_id, configuration_release_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.code_repositories.workspace_id > agentonic.workspaces.id [delete: restrict, update: restrict]
+Ref: agentonic.code_repositories.created_by_staff_id > agentonic.platform_staff.id [delete: restrict, update: restrict]
+Ref: agentonic.agent_templates.code_repository_id > agentonic.code_repositories.id [delete: restrict, update: restrict]
+Ref: agentonic.agents.(workspace_id, created_by_member_id) > agentonic.workspace_members.(workspace_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.agents.created_by_staff_id > agentonic.platform_staff.id [delete: restrict, update: restrict]
+Ref: agentonic.agents.(workspace_id, created_by_staff_id, creation_support_access_grant_id) > agentonic.support_access_grants.(workspace_id, staff_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.code_releases.code_repository_id > agentonic.code_repositories.id [delete: restrict, update: restrict]
+Ref: agentonic.code_releases.template_version_id > agentonic.template_versions.id [delete: restrict, update: restrict]
+Ref: agentonic.code_releases.published_by_staff_id > agentonic.platform_staff.id [delete: restrict, update: restrict]
+Ref: agentonic.code_tools.code_release_id > agentonic.code_releases.id [delete: restrict, update: restrict]
+Ref: agentonic.workspace_code_release_grants.workspace_id > agentonic.workspaces.id [delete: restrict, update: restrict]
+Ref: agentonic.workspace_code_release_grants.code_release_id > agentonic.code_releases.id [delete: restrict, update: restrict]
+Ref: agentonic.workspace_code_release_grants.granted_by_staff_id > agentonic.platform_staff.id [delete: restrict, update: restrict]
+Ref: agentonic.configuration_drafts.created_by_staff_id > agentonic.platform_staff.id [delete: restrict, update: restrict]
+Ref: agentonic.configuration_drafts.(workspace_id, created_by_staff_id, support_access_grant_id) > agentonic.support_access_grants.(workspace_id, staff_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.configuration_releases.(workspace_id, frozen_by_member_id) > agentonic.workspace_members.(workspace_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.configuration_releases.frozen_by_staff_id > agentonic.platform_staff.id [delete: restrict, update: restrict]
+Ref: agentonic.configuration_releases.(workspace_id, frozen_by_staff_id, support_access_grant_id) > agentonic.support_access_grants.(workspace_id, staff_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.agent_submissions.workspace_id > agentonic.workspaces.id [delete: restrict, update: restrict]
+Ref: agentonic.agent_submissions.(workspace_id, agent_id, code_release_id, configuration_release_id) > agentonic.configuration_releases.(workspace_id, agent_id, code_release_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.agent_submissions.(workspace_id, submitted_by_member_id) > agentonic.workspace_members.(workspace_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.agent_submissions.submitted_by_staff_id > agentonic.platform_staff.id [delete: restrict, update: restrict]
+Ref: agentonic.agent_submissions.(workspace_id, submitted_by_staff_id, support_access_grant_id) > agentonic.support_access_grants.(workspace_id, staff_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.submission_review_decisions.workspace_id > agentonic.workspaces.id [delete: restrict, update: restrict]
+Ref: agentonic.submission_review_decisions.(workspace_id, agent_id, submission_id) > agentonic.agent_submissions.(workspace_id, agent_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.submission_review_decisions.(workspace_id, actor_member_id) > agentonic.workspace_members.(workspace_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.submission_review_decisions.actor_staff_id > agentonic.platform_staff.id [delete: restrict, update: restrict]
+Ref: agentonic.submission_review_decisions.(workspace_id, actor_staff_id, support_access_grant_id) > agentonic.support_access_grants.(workspace_id, staff_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.deployments.requested_by_staff_id > agentonic.platform_staff.id [delete: restrict, update: restrict]
+Ref: agentonic.deployments.(workspace_id, requested_by_staff_id, support_access_grant_id) > agentonic.support_access_grants.(workspace_id, staff_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.evaluation_runs.requested_by_staff_id > agentonic.platform_staff.id [delete: restrict, update: restrict]
+Ref: agentonic.evaluation_runs.(workspace_id, requested_by_staff_id, support_access_grant_id) > agentonic.support_access_grants.(workspace_id, staff_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.deployments.(workspace_id, agent_id, code_release_id, configuration_release_id, submission_id) > agentonic.agent_submissions.(workspace_id, agent_id, code_release_id, configuration_release_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.deployments.(workspace_id, agent_id, submission_id, approval_decision_kind, approval_decision_id) > agentonic.submission_review_decisions.(workspace_id, agent_id, submission_id, decision, id) [delete: restrict, update: restrict]
+Ref: agentonic.agent_previews.workspace_id > agentonic.workspaces.id [delete: restrict, update: restrict]
+Ref: agentonic.agent_previews.(workspace_id, agent_id, environment, code_release_id, configuration_release_id, deployment_id) > agentonic.deployments.(workspace_id, agent_id, environment, code_release_id, configuration_release_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.agent_previews.(workspace_id, requested_by_member_id) > agentonic.workspace_members.(workspace_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.agent_previews.requested_by_staff_id > agentonic.platform_staff.id [delete: restrict, update: restrict]
+Ref: agentonic.agent_previews.(workspace_id, requested_by_staff_id, support_access_grant_id) > agentonic.support_access_grants.(workspace_id, staff_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.agent_connection_grants.activated_by_staff_id > agentonic.platform_staff.id [delete: restrict, update: restrict]
+Ref: agentonic.agent_collection_grants.activated_by_staff_id > agentonic.platform_staff.id [delete: restrict, update: restrict]
+Ref: agentonic.agent_connection_grants.(workspace_id, agent_id, approved_decision_kind, approved_review_decision_id) > agentonic.submission_review_decisions.(workspace_id, agent_id, decision, id) [delete: restrict, update: restrict]
+Ref: agentonic.agent_collection_grants.(workspace_id, agent_id, approved_decision_kind, approved_review_decision_id) > agentonic.submission_review_decisions.(workspace_id, agent_id, decision, id) [delete: restrict, update: restrict]
+Ref: agentonic.agent_runs.(workspace_id, agent_id, environment, code_release_id, configuration_release_id, deployment_id, preview_id) > agentonic.agent_previews.(workspace_id, agent_id, environment, code_release_id, configuration_release_id, deployment_id, id) [delete: restrict, update: restrict]
+
+TableGroup identity {
+  agentonic.users
+  agentonic.platform_staff
+  agentonic.workspaces
+  agentonic.workspace_members
+  agentonic.workspace_invitations
+  agentonic.support_access_grants
+  agentonic.contacts
+  agentonic.agent_contact_grants
+}
+
+TableGroup design {
+  agentonic.agent_templates
+  agentonic.template_versions
+  agentonic.agents
+  agentonic.agent_member_grants
+  agentonic.code_releases
+  agentonic.code_tools
+  agentonic.configuration_drafts
+  agentonic.configuration_releases
+  agentonic.configuration_tools
+  agentonic.code_repositories
+  agentonic.workspace_code_release_grants
+  agentonic.agent_submissions
+  agentonic.submission_review_decisions
+}
+
+TableGroup integrations {
+  agentonic.connections
+  agentonic.agent_connection_grants
+  agentonic.channel_endpoints
+  agentonic.external_identities
+  agentonic.api_credentials
+  agentonic.runtime_credentials
+}
+
+TableGroup operations {
+  agentonic.runtime_hosts
+  agentonic.schedules
+  agentonic.schedule_fires
+  agentonic.background_jobs
+  agentonic.audit_events
+  agentonic.agent_environments
+  agentonic.deployments
+  agentonic.standing_authorizations
+  agentonic.platform_jobs
+}
+
+TableGroup knowledge {
+  agentonic.stored_objects
+  agentonic.knowledge_collections
+  agentonic.collection_member_grants
+  agentonic.agent_collection_grants
+  agentonic.knowledge_sources
+  agentonic.ingestion_jobs
+  agentonic.documents
+  agentonic.document_contact_access
+  agentonic.document_versions
+  agentonic.document_chunks
+  agentonic.collection_contact_grants
+  agentonic.retrieval_profile
+  agentonic.meeting_summaries
+}
+
+TableGroup runtime {
+  agentonic.conversations
+  agentonic.conversation_participants
+  agentonic.agent_sessions
+  agentonic.agent_runs
+  agentonic.messages
+  agentonic.tool_invocations
+  agentonic.tool_approvals
+  agentonic.memory_entries
+  agentonic.agent_state
+}
+
+TableGroup collaboration {
+  agentonic.agent_links
+  agentonic.delegations
+}
+
+TableGroup commercial {
+  agentonic.usage_events
+  agentonic.budget_periods
+  agentonic.budget_reservations
+  agentonic.cost_reconciliations
+  agentonic.daily_cost_summaries
+}
+
+TableGroup quality {
+  agentonic.datasets
+  agentonic.dataset_versions
+  agentonic.evaluation_runs
+  agentonic.evaluation_results
+  agentonic.agent_previews
+}
