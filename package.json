@@ -1,0 +1,43 @@
+{
+  "name": "agentonic",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.21.0",
+  "engines": {
+    "node": ">=22.12.0 <23"
+  },
+  "scripts": {
+    "dev": "pnpm --parallel --filter @agentonic/admin --filter @agentonic/customer dev",
+    "dev:admin": "pnpm --filter @agentonic/admin dev",
+    "dev:customer": "pnpm --filter @agentonic/customer dev",
+    "typecheck": "pnpm -r typecheck && tsc --noEmit",
+    "lint": "pnpm -r lint && eslint scripts tests vitest.config.ts",
+    "test": "vitest run",
+    "db:generate": "pnpm --filter @agentonic/database generate",
+    "db:validate": "pnpm --filter @agentonic/database validate",
+    "db:migrate": "node scripts/migrate.mjs",
+    "setup:database": "node scripts/provision-database.mjs",
+    "setup:accounts": "node scripts/bootstrap-accounts.mjs",
+    "skeletons:check": "node scripts/skeleton-audit.mjs check",
+    "skeletons:update": "node scripts/skeleton-audit.mjs update",
+    "db:check": "node scripts/check-database.mjs",
+    "db:check-prisma": "tsx --conditions=react-server scripts/check-prisma.ts",
+    "version:check": "node scripts/versioning.mjs check"
+  },
+  "devDependencies": {
+    "@workspace/typescript-config": "workspace:*",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.0",
+    "@electric-sql/pglite": "^0.3.14",
+    "pg": "^8.16.3",
+    "dotenv": "^17.2.3",
+    "@types/pg": "^8.15.5",
+    "tsx": "^4.20.0",
+    "@types/node": "^22",
+    "prettier": "^3.8.3",
+    "prettier-plugin-tailwindcss": "^0.8.0",
+    "eslint": "^9",
+    "@workspace/eslint-config": "workspace:*"
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "name": "@agentonic/database",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "exports": {
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src",
+    "generate": "prisma generate",
+    "validate": "prisma validate"
+  },
+  "dependencies": {
+    "@prisma/client": "7.10.0",
+    "@prisma/adapter-pg": "7.10.0",
+    "pg": "^8.16.3",
+    "server-only": "^0.0.1"
+  },
+  "devDependencies": {
+    "@workspace/typescript-config": "workspace:*",
+    "@workspace/eslint-config": "workspace:*",
+    "typescript": "^5.9.3",
+    "eslint": "^9",
+    "@types/node": "^22",
+    "prisma": "7.10.0",
+    "@types/pg": "^8.15.5"
+  }
+}
