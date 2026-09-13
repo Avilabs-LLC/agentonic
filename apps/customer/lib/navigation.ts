@@ -1,0 +1,46 @@
+import type { NavigationItem } from "@agentonic/contracts/identity"
+export const navigation = [
+  {
+    href: "/",
+    title: "Mis espacios",
+    description:
+      "Espacios a los que tienes acceso para trabajar con tus agentes.",
+    group: "Principal",
+    enabled: true,
+    icon: "home",
+  },
+  {
+    href: "/agents",
+    title: "Agentes",
+    description: "Configuración y operación de agentes.",
+    group: "Mi espacio",
+    enabled: false,
+    icon: "agents",
+  },
+  {
+    href: "/knowledge",
+    title: "Conocimiento",
+    description: "Documentos y fuentes seleccionadas.",
+    group: "Mi espacio",
+    enabled: false,
+    icon: "knowledge",
+  },
+  {
+    href: "/connections",
+    title: "Conexiones",
+    description: "Servicios autorizados para tus agentes.",
+    group: "Mi espacio",
+    enabled: false,
+    icon: "connections",
+  },
+  {
+    href: "/account",
+    title: "Mi cuenta",
+    description: "Identidad y acceso a Agentonic.",
+    group: "Cuenta",
+    enabled: true,
+    icon: "home",
+  },
+] satisfies NavigationItem[]
+export const home = navigation[0]!
+export const account = navigation[navigation.length - 1]!

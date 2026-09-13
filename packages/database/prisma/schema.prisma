@@ -1,0 +1,75 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated"
+}
+
+datasource db {
+  provider = "postgresql"
+  schemas  = ["agentonic"]
+}
+
+model User {
+  id                     String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  displayName            String            @map("display_name")
+  avatarUrl              String?           @map("avatar_url")
+  deletedAt              DateTime?         @map("deleted_at") @db.Timestamptz
+  authUserId             String?           @unique @map("auth_user_id") @db.Uuid
+  createdAt              DateTime          @default(now()) @map("created_at") @db.Timestamptz
+  staff                  PlatformStaff?    @relation("PlatformStaffUser")
+  personalWorkspace      Workspace?        @relation("WorkspacePersonalOwnerUser")
+  memberships            WorkspaceMember[] @relation("WorkspaceMemberUser")
+
+  @@map("users")
+  @@schema("agentonic")
+}
+
+model PlatformStaff {
+  id                              String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId                          String               @unique @map("user_id") @db.Uuid
+  role                            String
+  disabledAt                      DateTime?            @map("disabled_at") @db.Timestamptz
+  createdAt                       DateTime             @default(now()) @map("created_at") @db.Timestamptz
+  user                            User                 @relation("PlatformStaffUser", fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "platform_staff_user_id_fkey")
+
+  @@map("platform_staff")
+  @@schema("agentonic")
+}
+
+model Workspace {
+  id                                String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  kind                              String
+  name                              String
+  slug                              String                  @unique
+  personalOwnerUserId               String?                 @unique @map("personal_owner_user_id") @db.Uuid
+  status                            String                  @default("active")
+  preferredRegion                   String?                 @map("preferred_region")
+  deletedAt                         DateTime?               @map("deleted_at") @db.Timestamptz
+  updatedAt                         DateTime                @default(now()) @map("updated_at") @db.Timestamptz
+  timezone                          String
+  retentionPolicy                   Json                    @map("retention_policy")
+  createdAt                         DateTime                @default(now()) @map("created_at") @db.Timestamptz
+  personalOwner                     User?                   @relation("WorkspacePersonalOwnerUser", fields: [personalOwnerUserId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "workspaces_personal_owner_user_id_fkey")
+  members                           WorkspaceMember[]       @relation("WorkspaceMemberWorkspace")
+
+  @@map("workspaces")
+  @@schema("agentonic")
+}
+
+model WorkspaceMember {
+  id                                      String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId                             String                  @map("workspace_id") @db.Uuid
+  userId                                  String                  @map("user_id") @db.Uuid
+  role                                    String                  @default("member")
+  status                                  String                  @default("active")
+  joinedAt                                DateTime                @default(now()) @map("joined_at") @db.Timestamptz
+  removedAt                               DateTime?               @map("removed_at") @db.Timestamptz
+  createdAt                               DateTime                @default(now()) @map("created_at") @db.Timestamptz
+  workspace                               Workspace               @relation("WorkspaceMemberWorkspace", fields: [workspaceId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "workspace_members_workspace_id_fkey")
+  user                                    User                    @relation("WorkspaceMemberUser", fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "workspace_members_user_id_fkey")
+
+  @@unique([workspaceId, id])
+  @@unique([workspaceId, userId])
+  @@index([userId])
+  @@map("workspace_members")
+  @@schema("agentonic")
+}
