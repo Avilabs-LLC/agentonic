@@ -32,6 +32,18 @@ try {
         "platform_staff",
         "workspaces",
         "workspace_members",
+        "workspace_invitations",
+        "support_access_grants",
+        "contacts",
+        "agent_contact_grants",
+        "code_repositories",
+        "agent_templates",
+        "template_versions",
+        "agents",
+        "agent_member_grants",
+        "knowledge_collections",
+        "collection_member_grants",
+        "audit_events",
       ]) {
         assert.equal(
           (await pool.query(`SELECT * FROM agentonic.${table}`)).rowCount,
@@ -86,6 +98,16 @@ try {
             c.release()
           }
         })
+      )
+      await assert.rejects(
+        pool.query("SELECT agentonic.assert_owners(gen_random_uuid())"),
+        { code: "42501" }
+      )
+      await assert.rejects(
+        pool.query(
+          "SELECT agentonic.can_contact_invoke(gen_random_uuid(),gen_random_uuid())"
+        ),
+        { code: "42501" }
       )
       // Reuse the same pooled connections after both committed transactions.
       for (let i = 0; i < 4; i++)
