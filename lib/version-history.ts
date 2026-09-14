@@ -1,5 +1,10 @@
 export const VERSION_HISTORY = [
   {
+    "version": "0.5.4",
+    "date": "2026-09-14",
+    "summary": "Simplify dialog submit buttons while retaining explicit action labels"
+  },
+  {
     "version": "0.5.3",
     "date": "2026-09-14",
     "summary": "Fix empty Knowledge keys and add confirmed collection deletion with durable cleanup"
