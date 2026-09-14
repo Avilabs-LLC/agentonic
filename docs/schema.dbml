@@ -1,13 +1,14 @@
-// Agentonic authoritative schema companion — 2026-09-13.
+// Agentonic authoritative schema companion — 2026-09-14.
 // Authority: agentonic-architecture.md. Supersedes both independent draft DBMLs.
-// FULL TARGET DESIGN: not a migration. Prisma migrations implement 28 identity/access/authoring tables;
-// remaining entities/safeguards are pending. See architecture sections 22–29.
+// FULL TARGET DESIGN: not a migration. Prisma migrations implement 34 identity/access/authoring/knowledge tables;
+// remaining entities/safeguards are pending. See architecture sections 22–30.
 // Delivery order: customer authoring (step 3), staff/runtime counterparts (3.5), integrated
 // preview/deployment (4). This order changes no relationships; see architecture section 19.
 // Migration 5 optimizes actor-scoped discovery and compatible read locks; no tables added.
 // Migration 6 adds permission-scoped agent listing summaries; no tables added.
 // Step 3 adds immutable candidates, private staging uploads and consented exact submission review.
-// No paid preview, ingestion, approval or deployment is enabled. Runtime audit actors
+// Migration 7 adds leased upload ingestion, hybrid retrieval, cited knowledge previews and hard purge.
+// Provider calls require configured worker keys and reserved budget. Approval/deployment remain disabled. Runtime audit actors
 // remain closed by SQL CHECKs until their later tables and execution boundaries are implemented.
 // Every table is labeled LAUNCH or CONDITIONAL. LATER features are intentionally omitted.
 // PostgreSQL / managed Supabase; private agentonic schema; app roles non-owner, non-BYPASSRLS.
@@ -718,35 +719,34 @@ Table agentonic.schedule_fires {
 Table agentonic.background_jobs {
   id uuid [pk, not null, default: `gen_random_uuid()`]
   workspace_id uuid [not null]
-  deduplication_key text [not null]
-  payload jsonb [not null, note: 'Validated versioned command with tenant-scoped IDs; no arbitrary executable code or secrets.']
-  status text [not null, default: 'queued', check: `status IN ('queued', 'leased', 'succeeded', 'retry', 'dead', 'cancelled')`]
+  kind text [not null, check: `kind IN ('run','ingest','retrieve','deploy','stop','restart','evaluate','deliver','purge','reconcile')`]
+  status text [not null, default: 'queued', check: `status IN ('queued','running','succeeded','failed','cancelled')`]
+  member_id uuid
+  object_id uuid [note: 'Opaque stored-object ID, deliberately not a retention-blocking FK. Purge validates the same-workspace tombstone.']
+  payload jsonb [not null, default: `'{}'::jsonb`, note: 'Validated command, no secrets. Retrieval query retained at most 10 minutes while worker cleanup runs.']
+  result jsonb [not null, default: `'{}'::jsonb`, note: 'Retrieval chunk IDs/scores and optional cited answer; reauthorized on read and scrubbed on document deletion.']
+  attempts integer [not null, default: 0]
+  lease_token uuid
+  lease_until timestamptz
   available_at timestamptz [not null, default: `now()`]
-  lease_owner text
-  lease_expires_at timestamptz
-  lease_generation bigint [not null, default: 0]
-  attempt_count integer [not null, default: 0, check: `attempt_count >= 0`]
-  max_attempts integer [not null, default: 5, check: `max_attempts > 0`]
-  last_error text
-  finished_at timestamptz
-  kind text [not null, check: `kind IN ('run', 'ingest', 'deploy', 'stop', 'restart', 'evaluate', 'deliver', 'purge', 'reconcile')`]
-  agent_id uuid
-  environment text [check: `environment IN ('development', 'staging', 'production')`]
-  conflict_key text
+  error_code text [note: 'Allowlisted code, never raw document/provider error.']
+  updated_at timestamptz [not null, default: `now()`]
   created_at timestamptz [not null, default: `now()`]
-
+  deduplication_key text [note: 'Future connector/runtime logical event identity. Upload jobs use a partial active-object/kind unique index.']
+  agent_id uuid
+  environment text [check: `environment IN ('development','staging','production')`]
+  conflict_key text
   indexes {
     (workspace_id, id) [unique]
     (workspace_id, kind, deduplication_key) [unique]
     (status, available_at)
-    (status, lease_expires_at)
+    (status, lease_until)
   }
-
   checks {
+    `(status='running')=(lease_token IS NOT NULL AND lease_until IS NOT NULL)`
     `kind NOT IN ('deploy','stop','restart') OR (agent_id IS NOT NULL AND environment IS NOT NULL AND conflict_key IS NOT NULL)`
   }
-
-  Note: '''SCOPE: LAUNCH. Initial PostgreSQL durable queue/outbox, claimed with FOR UPDATE SKIP LOCKED plus expiring leases, fencing generation, retry backoff and dead-letter state. Enqueue in same transaction as business state. Use a mature queue implementation with equivalent guarantees; this table describes the required logical record. Workers validate payload references against workspace. Idempotency and external reconciliation remain necessary. Conflicting service operations use the same agent_environment lease regardless of job kind. conflict_key is server-derived. Queued conflicts can coexist; only execution is serialized. Tenant maintenance never executes under global customer authority.'''
+  Note: '''SCOPE: LAUNCH. Migration 7 implements only ingest/retrieve/purge and core lease fields; later kinds and agent/environment/deduplication/conflict fields remain target work. Transactional enqueue; SKIP LOCKED claims; renewable 90-second UUID-fenced leases; five attempts for processing, indefinite idempotent purge retries. Workers recheck the initiating member and current collection rights. Purge derives authority from the tombstone and must survive member removal. No staff impersonation or runtime execution. Query records expire after ten minutes; claim maintenance deletes them. Broader job deduplication and deployment conflict serialization remain required before those consumers launch.'''
 }
 
 Table agentonic.audit_events {
@@ -1028,6 +1028,7 @@ Table agentonic.knowledge_sources {
 }
 
 Table agentonic.ingestion_jobs {
+  background_job_id uuid [not null, unique]
   id uuid [pk, not null, default: `gen_random_uuid()`]
   workspace_id uuid [not null]
   source_id uuid [not null]
@@ -1046,7 +1047,7 @@ Table agentonic.ingestion_jobs {
     (workspace_id, source_id, job_key) [unique]
   }
 
-  Note: '''SCOPE: LAUNCH. Logical ingestion operation, executed via background_jobs. Persist provider cursor only after documents, tombstones and ACL updates commit. Failures retain the old valid cursor and can retry. Unique job_key deduplicates connector events.'''
+  Note: '''SCOPE: LAUNCH. Logical ingestion operation, executed via background_jobs. Migration 7 stores the queue relationship and source/job key; status and attempt data live on the queue. Cursor/count/timing fields are future connector work. Persist provider cursor only after documents, tombstones and ACL updates commit. Failures retain the old valid cursor and can retry. Unique job_key deduplicates connector events.'''
 }
 
 Table agentonic.documents {
@@ -1135,7 +1136,7 @@ Table agentonic.document_chunks {
     `(embedding IS NULL) = (embedded_at IS NULL)`
   }
 
-  Note: '''SCOPE: LAUNCH. Retrieval units inherit all source/document/collection authorization. Filtering must happen before vector/text ranking, not after an unrestricted top-k. Stored text is untrusted reference material and cannot authorize tools. Initial fixed vector(1024) with singleton model/config provenance. Parser/chunker versions on document version. Partial HNSW and GIN indexes in SQL. Active document publication requires all intended chunks ready; no incompatible vectors.'''
+  Note: '''SCOPE: LAUNCH. Retrieval units inherit all source/document/collection authorization. Filtering must happen before vector/text ranking, not after an unrestricted top-k. Stored text is untrusted reference material and cannot authorize tools. Initial fixed vector(1024) with singleton Voyage voyage-4 model/config provenance. Migration 7 publishes all chunks atomically; hybrid Spanish/English/simple full-text and cosine ranks combine through reciprocal rank fusion. Authorized materialization deliberately uses exact vector search; the HNSW index is provisioned but not relied on to enforce access. Parser/chunker versions on document version. Partial HNSW and GIN indexes in SQL. Active document publication requires all intended chunks ready; no incompatible vectors.'''
 }
 
 Table agentonic.collection_contact_grants {
@@ -1165,7 +1166,7 @@ Table agentonic.retrieval_profile {
   profile_sha256 text [not null, unique]
   created_at timestamptz [not null, default: `now()`]
 
-  Note: '''SCOPE: LAUNCH. Exactly one verified configured profile before ingestion. Singleton uniqueness is at most one; onboarding enforces existence. Immutable while vectors exist. Explicit maintenance reindex clears old vectors before changing profile; incompatible model spaces never mix. Multiple simultaneous profiles are LATER.'''
+  Note: '''SCOPE: LAUNCH. Exactly one configured profile before ingestion: voyage-4, 1024 dimensions, document/query input types, sections-v1 chunking and text-v1/pdf-parse-2.4.5 parsing. Provider availability is verified separately before live use. Singleton uniqueness is at most one; onboarding enforces existence. Immutable while vectors exist. Explicit maintenance reindex clears old vectors before changing profile; incompatible model spaces never mix. Multiple simultaneous profiles are LATER.'''
 }
 
 Table agentonic.meeting_summaries {
@@ -2121,3 +2122,30 @@ TableGroup quality {
   agentonic.evaluation_results
   agentonic.agent_previews
 }
+
+
+Table agentonic.retrieval_provider_budgets {
+  provider text [pk, not null, check: `provider IN ('voyage','openai')`]
+  cap_microusd bigint [not null, default: 0, check: `cap_microusd >= 0`]
+  committed_microusd bigint [not null, default: 0, check: `committed_microusd >= 0`]
+  updated_at timestamptz [not null, default: `now()`]
+  Note: '''SCOPE: LAUNCH. Implemented operational development ceiling, global per provider. Lock before reserving each call. Includes known list-price estimates plus full uncertain reservations. Initial caps zero until explicitly configured. Not customer billing, not workspace/agent budget enforcement. Integrate with budget_periods before runtime launch, without resetting already consumed spend.'''
+}
+Table agentonic.retrieval_provider_operations {
+  id uuid [pk, not null]
+  job_id uuid [not null, note: 'Opaque operation provenance without FK so content-bearing jobs can be purged.']
+  workspace_id uuid [not null]
+  provider text [not null]
+  model text [not null]
+  reserved_microusd bigint [not null, check: `reserved_microusd > 0`]
+  actual_microusd bigint [check: `actual_microusd >= 0`]
+  input_tokens bigint [check: `input_tokens >= 0`]
+  output_tokens bigint [check: `output_tokens >= 0`]
+  status text [not null, default: 'reserved', check: `status IN ('reserved','settled')`]
+  created_at timestamptz [not null, default: `now()`]
+  Note: '''SCOPE: LAUNCH. One reservation per external attempt; successful usage settles once using verified list prices, not provider invoice evidence. Unknown calls retain full reserve until manually reconciled. No document titles, text, prompts or credentials. Retained after document purge. Future usage_events import must deduplicate by this operation ID, not count both ledgers.'''
+}
+Ref: agentonic.background_jobs.(workspace_id, member_id) > agentonic.workspace_members.(workspace_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.ingestion_jobs.(workspace_id, background_job_id) > agentonic.background_jobs.(workspace_id, id) [delete: cascade, update: restrict]
+Ref: agentonic.retrieval_provider_operations.workspace_id > agentonic.workspaces.id [delete: restrict, update: restrict]
+Ref: agentonic.retrieval_provider_operations.provider > agentonic.retrieval_provider_budgets.provider [delete: restrict, update: restrict]

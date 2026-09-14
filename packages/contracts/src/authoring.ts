@@ -150,6 +150,7 @@ export const workspaceView = z.object({
       codeVersion: z.string(),
     })
   ),
+  pendingDeletions: z.number().int().nonnegative().default(0),
   documents: z.array(
     z.object({
       id: uuid,
@@ -160,6 +161,9 @@ export const workspaceView = z.object({
       uploadStatus: z.string().nullable(),
       status: z.string(),
       canRemove: z.boolean(),
+      chunkCount: z.number().int().nonnegative().default(0),
+      processingError: z.string().nullable().optional(),
+      processingStatus: z.string().default("not_queued"),
     })
   ),
 })
