@@ -1,3 +1,6 @@
+import Link from "next/link"
+import { MessageSquareIcon } from "lucide-react"
+import { buttonVariants } from "@workspace/ui/components/button"
 import { notFound } from "next/navigation"
 import { loadWorkspace, loadAgent } from "@agentonic/server/authoring"
 import { submissionLabels } from "@agentonic/contracts/authoring"
@@ -46,7 +49,18 @@ export default async function Page({
           data.agent.description ??
           "Personaliza tu agente y prepara una propuesta."
         }
-        actions={<Badge variant="slate">Sin despliegue</Badge>}
+        actions={
+          <div className="flex items-center gap-3">
+            <Badge variant="slate">Sin despliegue</Badge>
+            <Link
+              className={buttonVariants({ variant: "outline" })}
+              href={`/agents/${id}/preview?workspace=${selected.id}`}
+            >
+              <MessageSquareIcon aria-hidden="true" />
+              Probar versión
+            </Link>
+          </div>
+        }
       />
       <AgentWorkflow
         key={data.draft.revision}

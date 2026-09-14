@@ -186,8 +186,8 @@ function FreezeStep({
             />
           </Field>
           <p className="text-sm text-muted-foreground">
-            Congelar no aprueba ni despliega el agente. Las pruebas de chat y
-            evaluaciones aún no están disponibles.
+            Congelar no aprueba ni despliega el agente. Usa Probar versión para
+            conversar con una versión congelada compatible.
           </p>
           <Requirements
             items={readiness.freeze}

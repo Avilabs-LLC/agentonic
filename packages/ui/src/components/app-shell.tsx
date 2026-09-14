@@ -241,7 +241,9 @@ export function AppShell({
                       {current?.title ??
                         (pathname.endsWith("/new")
                           ? "Crear agente"
-                          : undefined) ??
+                          : pathname.endsWith("/preview")
+                            ? "Probar versión"
+                            : undefined) ??
                         formatPathSegment(
                           pathname.split("/").filter(Boolean).at(-1) ?? ""
                         )}
