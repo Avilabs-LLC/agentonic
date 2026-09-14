@@ -102,7 +102,7 @@ Admin `/submissions` exposes consented proposals and audited configuration revie
 
 OpenAI is selected for the next execution milestone, with an authorized **US$25 total development cap**. Store the key in ignored `.env.runtime.local` as `OPENAI_API_KEY`. No current feature reads this credential or makes paid calls; runtime metering and cap enforcement must precede preview activation. See architecture §24 for the complete implemented boundary.
 
-## Branch releases
+## Releases
 
 The root package version identifies the platform release; private workspace package versions are not independently published. Before the release commit, run:
 
@@ -112,5 +112,7 @@ pnpm version:check
 ```
 
 This increments the minor version and resets the patch, recording the release in `lib/app-version.ts` and `lib/version-history.ts` and updating the shared UI label. Review that label and refresh the skeleton baseline with `pnpm skeletons:update` before committing. CI verifies that the package, application, history and UI versions agree. This command does not build or deploy either app.
+
+For an authorized release directly on `main`, use `node scripts/versioning.mjs bump direct --summary "Describe the completed changes"` instead. It increments only the patch version and updates the same metadata; run the same version and skeleton checks before committing and pushing.
 
 `pnpm db:check-page-reads` is an opt-in nonproduction concurrency check for both restricted app roles. It checks actor-scoped identity discovery, concurrent readers and conflicting writers; all temporary writes are rolled back. Page-load observations and limitations are recorded in architecture section 25.

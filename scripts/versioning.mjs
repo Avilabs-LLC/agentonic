@@ -40,11 +40,14 @@ if (args.length === 1 && args[0] === "check") {
 } else if (
   args.length === 4 &&
   args[0] === "bump" &&
-  args[1] === "branch" &&
+  ["branch", "direct"].includes(args[1]) &&
   args[2] === "--summary" &&
   args[3].trim()
 ) {
-  const next = `${Number(match[1])}.${Number(match[2]) + 1}.0`
+  const next =
+    args[1] === "direct"
+      ? `${Number(match[1])}.${Number(match[2])}.${Number(match[3]) + 1}`
+      : `${Number(match[1])}.${Number(match[2]) + 1}.0`
   packageJson.version = next
   history.unshift({
     version: next,
@@ -64,12 +67,14 @@ if (args.length === 1 && args[0] === "check") {
       `export const APP_VERSION_LABEL = "v${next}"`
     )
   )
-  console.log(`Branch release ${version} → ${next} in ${fileURLToPath(root)}`)
+  console.log(
+    `${args[1] === "direct" ? "Direct" : "Branch"} release ${version} → ${next} in ${fileURLToPath(root)}`
+  )
   console.log(
     "Review the changed version label, then refresh the skeleton baseline before committing."
   )
 } else {
   throw new Error(
-    'Usage: node scripts/versioning.mjs check | bump branch --summary "Release summary"'
+    'Usage: node scripts/versioning.mjs check | bump <branch|direct> --summary "Release summary"'
   )
 }
