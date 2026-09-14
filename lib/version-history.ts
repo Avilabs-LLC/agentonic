@@ -1,5 +1,10 @@
 export const VERSION_HISTORY = [
   {
+    "version": "0.5.1",
+    "date": "2026-09-14",
+    "summary": "Theme-aware badges across admin and customer, consistent creation icons and direct patch releases"
+  },
+  {
     "version": "0.5.0",
     "date": "2026-09-14",
     "summary": "Document RAG ingestion, cited knowledge previews, reliable erasure and customer knowledge UI"
