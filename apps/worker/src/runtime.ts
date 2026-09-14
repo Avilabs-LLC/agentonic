@@ -1,0 +1,249 @@
+import { readFileSync } from "node:fs"
+import { createHash, randomUUID } from "node:crypto"
+import { fork } from "node:child_process"
+import { resolve } from "node:path"
+import { z } from "zod"
+import type { Execute, Lease } from "./pipeline"
+const MODEL = "gpt-4.1-mini-2025-04-14"
+const hash = z.string().regex(/^[a-f0-9]{64}$/)
+const runtimeSchema = z
+  .object({
+    gitCommit: z.string().regex(/^[a-f0-9]{40}$/),
+    artifactSha256: hash,
+    manifest: z
+      .object({
+        previewContract: z.literal("1"),
+        model: z.literal(MODEL),
+        gitCommit: z.string(),
+        files: z
+          .object({
+            "src/surfaces/preview.mjs": hash,
+            "prompts/platform.md": hash,
+          })
+          .strict(),
+      })
+      .strict(),
+  })
+  .strict()
+const resultSchema = z
+  .object({
+    text: z.string().min(1).max(12000),
+    citations: z.array(z.uuid()).max(8),
+    insufficientEvidence: z.boolean(),
+    model: z.literal(MODEL),
+  })
+  .strict()
+const requestSchema = z
+  .object({
+    model: z.literal(MODEL),
+    store: z.literal(false),
+    temperature: z.literal(0),
+    max_output_tokens: z.literal(1000),
+    input: z
+      .array(
+        z
+          .object({
+            role: z.enum(["system", "developer", "user", "assistant"]),
+            content: z.string().max(500000),
+          })
+          .strict()
+      )
+      .min(1)
+      .max(24),
+    text: z.object({ format: z.unknown() }).strict(),
+  })
+  .strict()
+const format = {
+  type: "json_schema",
+  name: "agent_preview_answer",
+  strict: true,
+  schema: {
+    type: "object",
+    properties: {
+      text: { type: "string" },
+      citations: { type: "array", items: { type: "string" } },
+      insufficientEvidence: { type: "boolean" },
+    },
+    required: ["text", "citations", "insufficientEvidence"],
+    additionalProperties: false,
+  },
+}
+export function verifyRuntime(value: unknown, root: string) {
+  const runtime = runtimeSchema.parse(value)
+  const directory = resolve(root, runtime.artifactSha256)
+  const digest = (data: Buffer) =>
+    createHash("sha256").update(data).digest("hex")
+  const raw = readFileSync(resolve(directory, "manifest.json"))
+  if (
+    digest(raw) !== runtime.artifactSha256 ||
+    runtime.manifest.gitCommit !== runtime.gitCommit
+  )
+    throw new Error("runtime_mismatch")
+  const installed = runtimeSchema.shape.manifest.parse(
+    JSON.parse(raw.toString())
+  )
+  if (
+    installed.gitCommit !== runtime.gitCommit ||
+    Object.entries(runtime.manifest.files).some(
+      ([path, sha]) =>
+        installed.files[path as keyof typeof installed.files] !== sha ||
+        digest(readFileSync(resolve(directory, path))) !== sha
+    )
+  )
+    throw new Error("runtime_mismatch")
+  return resolve(directory, "src/surfaces/preview.mjs")
+}
+export async function generatePreview(
+  value: unknown,
+  job: Lease,
+  execute: Execute,
+  key: string,
+  signal: AbortSignal
+) {
+  if (!key) throw new Error("configuration_required")
+  const request = requestSchema.parse(value)
+  // The broker fixes all provider controls; child output cannot add tools, URLs or storage.
+  const body = JSON.stringify({ ...request, text: { format } })
+  if (Buffer.byteLength(body) > 750000) throw new Error("runtime_mismatch")
+  const id = randomUUID()
+  const reserved = await execute("reserve", job, {
+    id,
+    provider: "openai",
+    model: MODEL,
+    microusd: Math.ceil((Buffer.byteLength(body) + 4096) * 0.4 + 1600),
+  })
+  if (!reserved.ok) throw new Error("budget_exhausted")
+  await execute("heartbeat", job)
+  let response: Response
+  try {
+    response = await fetch("https://api.openai.com/v1/responses", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${key}`,
+        "Content-Type": "application/json",
+      },
+      body,
+      signal: AbortSignal.any([signal, AbortSignal.timeout(45000)]),
+    })
+  } catch {
+    throw new Error("provider_unavailable")
+  }
+  if (!response.ok) throw new Error("provider_unavailable")
+  const output = (await response.json()) as {
+    status?: string
+    usage?: { input_tokens: number; output_tokens: number }
+    output?: { type: string; content?: { type: string; text?: string }[] }[]
+  }
+  const usage = output.usage
+  if (
+    !usage ||
+    !Number.isSafeInteger(usage.input_tokens) ||
+    !Number.isSafeInteger(usage.output_tokens) ||
+    usage.input_tokens < 0 ||
+    usage.output_tokens < 0
+  )
+    throw new Error("provider_unavailable")
+  await execute("settle", job, {
+    id,
+    tokens: usage.input_tokens,
+    outputTokens: usage.output_tokens,
+    microusd: Math.ceil(usage.input_tokens * 0.4 + usage.output_tokens * 1.6),
+  })
+  if (output.status !== "completed") throw new Error("provider_unavailable")
+  try {
+    return JSON.parse(
+      output.output
+        ?.filter((x) => x.type === "message")
+        .flatMap((x) => x.content ?? [])
+        .filter((x) => x.type === "output_text")
+        .map((x) => x.text ?? "")
+        .join("") ?? ""
+    ) as unknown
+  } catch {
+    throw new Error("provider_unavailable")
+  }
+}
+export async function runPreview(
+  job: Lease,
+  execute: Execute,
+  value: unknown,
+  root: string,
+  key: string,
+  signal: AbortSignal
+) {
+  const entry = verifyRuntime(value, root)
+  const context = await execute("context", job)
+  await execute("heartbeat", job)
+  await new Promise<void>((resolvePromise, reject) => {
+    const child = fork(entry, [], {
+      execArgv: ["--max-old-space-size=192"],
+      env: { PATH: process.env.PATH },
+      stdio: ["ignore", "ignore", "ignore", "ipc"],
+    })
+    let finished = false,
+      requested = false,
+      generated = false
+    const controller = new AbortController()
+    const finish = (error?: string) => {
+      if (finished) return
+      finished = true
+      clearTimeout(timer)
+      signal.removeEventListener("abort", abort)
+      controller.abort()
+      child.kill("SIGKILL")
+      if (error) reject(new Error(error))
+      else resolvePromise()
+    }
+    const abort = () => finish("lease_lost")
+    const timer = setTimeout(() => finish("provider_unavailable"), 60000)
+    signal.addEventListener("abort", abort, { once: true })
+    child.on("error", () => finish("runtime_mismatch"))
+    child.on("exit", () => {
+      if (!finished) finish("runtime_mismatch")
+    })
+    child.on("message", (message: unknown) => {
+      void (async () => {
+        const event = z
+          .object({
+            type: z.enum(["generate", "result", "error"]),
+            request: z.unknown().optional(),
+            result: z.unknown().optional(),
+          })
+          .strict()
+          .parse(message)
+        if (event.type === "generate" && !requested) {
+          requested = true
+          const result = await generatePreview(
+            event.request,
+            job,
+            execute,
+            key,
+            AbortSignal.any([signal, controller.signal])
+          )
+          if (finished) return
+          generated = true
+          child.send({ ok: true, result })
+        } else if (event.type === "result" && generated) {
+          await execute("answer", job, resultSchema.parse(event.result))
+          finish()
+        } else finish("runtime_mismatch")
+      })().catch((error) =>
+        finish(
+          error instanceof Error &&
+            [
+              "budget_exhausted",
+              "configuration_required",
+              "provider_unavailable",
+            ].includes(error.message)
+            ? error.message
+            : "runtime_mismatch"
+        )
+      )
+    })
+    if (signal.aborted) {
+      abort()
+      return
+    }
+    child.send(context)
+  })
+}

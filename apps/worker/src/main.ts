@@ -38,6 +38,7 @@ const config = {
   storageKey: env.SUPABASE_SECRET_KEY ?? "",
   voyageKey: env.VOYAGE_API_KEY ?? "",
   openaiKey: env.OPENAI_API_KEY ?? "",
+  runtimeRoot: env.AGENTONIC_RUNTIME_ROOT,
 }
 const execute: Execute = async (operation, job, payload = {}) => {
   const result = await pool.query(

@@ -1,3 +1,5 @@
+import { runPreview, verifyRuntime } from "./runtime"
+import { fileURLToPath } from "node:url"
 import { answer } from "./answer"
 import { randomUUID, createHash } from "node:crypto"
 import { fork } from "node:child_process"
@@ -17,6 +19,7 @@ export type Configuration = {
   supabaseUrl: string
   storageKey: string
   voyageKey: string
+  runtimeRoot?: string
   openaiKey?: string
 }
 const microusd = (tokens: number) => Math.ceil(tokens * 0.06) // voyage-4: USD 0.06 / 1M tokens; 2026-09-14 list price, no free-credit assumption.
@@ -153,16 +156,36 @@ export async function processJob(
 ) {
   const data = await execute("read", job)
   if (job.kind === "retrieve") {
-    const vectors = await embed(
-      [String(data.query)],
-      "query",
-      job,
-      execute,
-      config.voyageKey,
-      signal
-    )
-    await execute("search", job, { embedding: vectors[0] })
-    if (data.generateAnswer)
+    if (data.preview)
+      verifyRuntime(
+        data.runtime,
+        config.runtimeRoot ??
+          fileURLToPath(new URL("../../../.local/runtime/", import.meta.url))
+      )
+    if (data.preview && !data.hasCollections) {
+      await execute("empty-search", job)
+    } else {
+      const vectors = await embed(
+        [String(data.retrievalQuery ?? data.query)],
+        "query",
+        job,
+        execute,
+        config.voyageKey,
+        signal
+      )
+      await execute("search", job, { embedding: vectors[0] })
+    }
+    if (data.preview)
+      await runPreview(
+        job,
+        execute,
+        data.runtime,
+        config.runtimeRoot ??
+          fileURLToPath(new URL("../../../.local/runtime/", import.meta.url)),
+        config.openaiKey ?? "",
+        signal
+      )
+    else if (data.generateAnswer)
       await answer(job, execute, config.openaiKey ?? "", signal)
     return
   }
