@@ -13,11 +13,6 @@ import {
   Trash2Icon,
 } from "lucide-react"
 import {
-  Tooltip,
-  TooltipTrigger,
-  TooltipContent,
-} from "@workspace/ui/components/tooltip"
-import {
   DropdownMenu,
   DropdownMenuTrigger,
   DropdownMenuContent,
@@ -155,23 +150,6 @@ export function AuthoringTable({
             </Link>
           ) : (
             <p className="font-medium">{row.original.name}</p>
-          )}
-          {row.original.description && (
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <span
-                    tabIndex={0}
-                    className="block w-56 truncate text-xs text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  />
-                }
-              >
-                {row.original.description}
-              </TooltipTrigger>
-              <TooltipContent className="max-w-sm break-words whitespace-normal">
-                {row.original.description}
-              </TooltipContent>
-            </Tooltip>
           )}
         </div>
       ),
