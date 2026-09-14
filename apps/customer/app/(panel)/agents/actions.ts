@@ -216,5 +216,9 @@ export async function removeDocument(
   })
   if (!r.ok) return failed
   revalidatePath("/knowledge")
-  return { ok: true, message: "Documento retirado del acceso activo." }
+  return {
+    ok: true,
+    message:
+      "Documento eliminado del conocimiento. La eliminación del archivo se completará en segundo plano.",
+  }
 }

@@ -1,6 +1,12 @@
 "use client"
 import { useState } from "react"
 import { Button } from "@workspace/ui/components/button"
+import { DownloadIcon, LoaderCircleIcon } from "lucide-react"
+import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+} from "@workspace/ui/components/tooltip"
 import { notify } from "@workspace/ui/lib/toast"
 export function DocumentDownload({
   objectId,
@@ -64,8 +70,27 @@ export function DocumentDownload({
     }
   }
   return (
-    <Button size="sm" variant="ghost" disabled={pending} onClick={download}>
-      {pending ? "Descargando…" : "Descargar"}
-    </Button>
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Button
+            type="button"
+            size="icon-sm"
+            variant="ghost"
+            disabled={pending}
+            aria-label={`${pending ? "Descargando" : "Descargar"} ${title}`}
+            aria-busy={pending}
+            onClick={() => void download()}
+          />
+        }
+      >
+        {pending ? (
+          <LoaderCircleIcon className="animate-spin" />
+        ) : (
+          <DownloadIcon />
+        )}
+      </TooltipTrigger>
+      <TooltipContent>{pending ? "Descargando…" : "Descargar"}</TooltipContent>
+    </Tooltip>
   )
 }

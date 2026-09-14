@@ -1,5 +1,10 @@
 export const VERSION_HISTORY = [
   {
+    "version": "0.5.0",
+    "date": "2026-09-14",
+    "summary": "Document RAG ingestion, cited knowledge previews, reliable erasure and customer knowledge UI"
+  },
+  {
     "version": "0.4.0",
     "date": "2026-09-14",
     "summary": "Self-service agent authoring, private knowledge documents, validated version submissions and staff review"

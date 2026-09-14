@@ -67,6 +67,23 @@ try {
         )
         assert.equal(rls.rows[0].relrowsecurity, true)
       }
+      for (const table of [
+        "retrieval_profile",
+        "document_chunks",
+        "background_jobs",
+        "ingestion_jobs",
+        "retrieval_provider_budgets",
+        "retrieval_provider_operations",
+      ]) {
+        await assert.rejects(pool.query(`SELECT * FROM agentonic.${table}`), {
+          code: "42501",
+        })
+        const rls = await pool.query(
+          "SELECT relrowsecurity FROM pg_class JOIN pg_namespace n ON n.oid=relnamespace WHERE n.nspname='agentonic' AND relname=$1",
+          [table]
+        )
+        assert.equal(rls.rows[0].relrowsecurity, true)
+      }
       await assert.rejects(
         pool.query("UPDATE agentonic.workspaces SET name='denied' WHERE false"),
         { code: "42501" }
@@ -145,7 +162,17 @@ try {
     await assert.rejects(worker.query("SELECT * FROM agentonic.workspaces"), {
       code: "42501",
     })
-    console.log("worker: no application data access.")
+    for (const table of [
+      "document_chunks",
+      "background_jobs",
+      "retrieval_provider_operations",
+    ])
+      await assert.rejects(worker.query(`SELECT * FROM agentonic.${table}`), {
+        code: "42501",
+      })
+    console.log(
+      "worker: no direct application data access; leased functions only."
+    )
   } finally {
     await worker.end()
   }

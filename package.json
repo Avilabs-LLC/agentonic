@@ -1,6 +1,6 @@
 {
   "name": "agentonic",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@11.21.0",
@@ -8,7 +8,7 @@
     "node": ">=22.12.0 <23"
   },
   "scripts": {
-    "dev": "pnpm --parallel --filter @agentonic/admin --filter @agentonic/customer dev",
+    "dev": "pnpm --parallel --filter @agentonic/admin --filter @agentonic/customer --filter @agentonic/worker dev",
     "dev:admin": "pnpm --filter @agentonic/admin dev",
     "dev:customer": "pnpm --filter @agentonic/customer dev",
     "typecheck": "pnpm -r typecheck && tsc --noEmit",
@@ -28,7 +28,10 @@
     "setup:storage": "node scripts/setup-storage.mjs",
     "setup:template": "node scripts/publish-authoring-template.mjs",
     "db:check-authoring": "node scripts/check-authoring.mjs",
-    "db:check-page-reads": "node scripts/check-page-reads.mjs"
+    "db:check-page-reads": "node scripts/check-page-reads.mjs",
+    "dev:worker": "pnpm --filter @agentonic/worker dev",
+    "setup:rag": "node scripts/setup-rag.mjs",
+    "rag:check-live": "node scripts/check-rag-live.mjs --live"
   },
   "devDependencies": {
     "@workspace/typescript-config": "workspace:*",

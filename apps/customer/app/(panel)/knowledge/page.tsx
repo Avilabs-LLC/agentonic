@@ -2,16 +2,15 @@ import { notFound } from "next/navigation"
 import { loadWorkspace } from "@agentonic/server/authoring"
 import { PageHeader } from "@workspace/ui/components/page-header"
 import { WorkspacePicker } from "@workspace/ui/components/workspace-picker"
-import {
-  Card,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-  CardContent,
-} from "@workspace/ui/components/card"
-import { ResourceCreateForm } from "@workspace/ui/components/resource-create-form"
+import { AgentSettingsCard } from "@workspace/ui/components/agent-settings-card"
+import { KnowledgeCollections } from "@workspace/ui/components/knowledge-collections"
 import { DocumentUpload } from "@workspace/ui/components/document-upload"
 import { DocumentTable } from "@workspace/ui/components/document-table"
+import {
+  KnowledgeSearch,
+  KnowledgeRefresh,
+} from "@workspace/ui/components/knowledge-search"
+import { processDocument } from "./actions"
 import { customerWorkspace } from "@/lib/workspace"
 import { createCollection, removeDocument } from "../agents/actions"
 export default async function Page({
@@ -24,7 +23,15 @@ export default async function Page({
   if (!data) notFound()
   const writable = data.collections.filter((c) => c.canCurate)
   return (
-    <>
+    <div className="mx-auto w-full max-w-4xl space-y-6">
+      <KnowledgeRefresh
+        active={
+          data.pendingDeletions > 0 ||
+          data.documents.some((d) =>
+            ["queued", "running"].includes(d.processingStatus)
+          )
+        }
+      />
       <PageHeader
         title="Conocimiento"
         description="Organiza documentos privados y elige qué colecciones propones para tus agentes."
@@ -35,45 +42,48 @@ export default async function Page({
         selected={selected.id}
         base="/knowledge"
       />
-      <div className="grid items-start gap-6 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Nueva colección</CardTitle>
-            <CardDescription>
-              Las colecciones tienen permisos independientes de los agentes.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ResourceCreateForm
-              key={selected.id}
-              action={createCollection.bind(null, selected.id)}
-              disabled={selected.role === "viewer"}
-            />
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Subir documento</CardTitle>
-            <CardDescription>
-              Subir un archivo no lo habilita para consultas del agente. El
-              procesamiento y la indexación se incorporarán después.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <DocumentUpload
-              key={selected.id}
-              workspaceId={selected.id}
-              collections={writable}
-            />
-          </CardContent>
-        </Card>
-      </div>
-      <DocumentTable
-        data={data.documents}
+      <KnowledgeCollections
+        key={selected.id}
         collections={data.collections}
-        workspaceId={selected.id}
-        remove={removeDocument.bind(null, selected.id)}
+        documents={data.documents}
+        create={createCollection.bind(null, selected.id)}
+        canCreate={selected.role !== "viewer"}
       />
-    </>
+      <AgentSettingsCard
+        title="Subir documento"
+        description="Selecciona una colección y añade un archivo a su biblioteca privada."
+      >
+        <DocumentUpload
+          key={selected.id}
+          workspaceId={selected.id}
+          collections={writable}
+        />
+      </AgentSettingsCard>
+      <AgentSettingsCard
+        title="Documentos"
+        description="Consulta los archivos de tus colecciones, descárgalos o retíralos cuando lo necesites."
+        footer={
+          <p>
+            Solo los documentos listos participan en la búsqueda de
+            conocimiento.
+            {data.pendingDeletions > 0 &&
+              ` ${data.pendingDeletions} archivo(s) fuera del conocimiento, pendientes de eliminación física.`}
+          </p>
+        }
+      >
+        <DocumentTable
+          data={data.documents}
+          collections={data.collections}
+          workspaceId={selected.id}
+          remove={removeDocument.bind(null, selected.id)}
+          process={processDocument.bind(null, selected.id)}
+        />
+      </AgentSettingsCard>
+      <KnowledgeSearch
+        key={selected.id + data.documents.map((d) => d.id + d.status).join("")}
+        workspaceId={selected.id}
+        collections={data.collections}
+      />
+    </div>
   )
 }

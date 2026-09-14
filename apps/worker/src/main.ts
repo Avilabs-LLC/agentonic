@@ -1,18 +1,134 @@
-import { workerConfiguration } from "@agentonic/contracts/worker"
-const configuration = workerConfiguration.parse({
-  name: "agentonic-platform-worker",
-  enabled: false,
-})
-process.stdout.write(
-  JSON.stringify({ name: configuration.name, status: "idle", consumers: 0 }) +
-    "\n"
-)
-const heartbeat = setInterval(() => {
-  /* Supervised shell; no queue authority or provider calls. */
-}, 30_000)
-function shutdown() {
-  clearInterval(heartbeat)
-  process.exitCode = 0
+import { existsSync, readFileSync } from "node:fs"
+import { parse } from "dotenv"
+import pg from "pg"
+import { processJob, type Lease, type Execute } from "./pipeline"
+const env = {
+  ...(existsSync(new URL("../.env.local", import.meta.url))
+    ? parse(readFileSync(new URL("../.env.local", import.meta.url)))
+    : {}),
+  ...process.env,
 }
-process.once("SIGTERM", shutdown)
-process.once("SIGINT", shutdown)
+if (!env.DATABASE_URL || !env.AGENTONIC_DATABASE_CA_FILE || !env.SUPABASE_URL)
+  throw new Error("Worker configuration required")
+const url = new URL(env.DATABASE_URL),
+  supabase = new URL(env.SUPABASE_URL)
+if (
+  decodeURIComponent(url.username).split(".")[0] !== "agentonic_worker" ||
+  supabase.protocol !== "https:" ||
+  !supabase.hostname.endsWith(".supabase.co")
+)
+  throw new Error("Restricted worker configuration required")
+const pool = new pg.Pool({
+  host: url.hostname,
+  port: Number(url.port || 5432),
+  user: decodeURIComponent(url.username),
+  password: decodeURIComponent(url.password),
+  database: decodeURIComponent(url.pathname.slice(1)),
+  ssl: {
+    rejectUnauthorized: true,
+    ca: readFileSync(env.AGENTONIC_DATABASE_CA_FILE, "utf8"),
+  },
+  max: 3,
+  connectionTimeoutMillis: 10000,
+  statement_timeout: 30000,
+  application_name: "agentonic_knowledge_worker",
+})
+const config = {
+  supabaseUrl: supabase.origin,
+  storageKey: env.SUPABASE_SECRET_KEY ?? "",
+  voyageKey: env.VOYAGE_API_KEY ?? "",
+  openaiKey: env.OPENAI_API_KEY ?? "",
+}
+const execute: Execute = async (operation, job, payload = {}) => {
+  const result = await pool.query(
+    "SELECT agentonic.rag_worker($1,$2::uuid,$3::uuid,$4::jsonb) result",
+    [operation, job.id, job.token, JSON.stringify(payload)]
+  )
+  return result.rows[0].result
+}
+let stopping = false,
+  active: AbortController | undefined
+process.once("SIGTERM", () => {
+  stopping = true
+  active?.abort()
+})
+process.once("SIGINT", () => {
+  stopping = true
+  active?.abort()
+})
+const allowedErrors = new Set([
+  "provider_unavailable",
+  "budget_exhausted",
+  "invalid_document",
+  "ocr_required",
+  "too_much_text",
+  "storage_unavailable",
+  "configuration_required",
+  "lease_lost",
+])
+async function run() {
+  console.log(
+    JSON.stringify({
+      event: "knowledge_worker_started",
+      providerConfigured: !!config.voyageKey,
+      storageConfigured: !!config.storageKey,
+    })
+  )
+  try {
+    while (!stopping) {
+      try {
+        const claimed = await pool.query(
+          "SELECT agentonic.rag_claim($1) result",
+          [!config.voyageKey]
+        )
+        const job = claimed.rows[0].result as Lease | null
+        if (!job) {
+          if (process.argv.includes("--once")) break
+          await new Promise((r) => setTimeout(r, 1500))
+          continue
+        }
+        active = new AbortController()
+        const controller = active
+        const signal = controller.signal
+        const heartbeat = setInterval(() => {
+          void execute("heartbeat", job).catch(() => controller.abort())
+        }, 20000)
+        try {
+          await processJob(job, execute, config, signal)
+          console.log(
+            JSON.stringify({
+              event: "knowledge_job_completed",
+              job: job.id,
+              kind: job.kind,
+            })
+          )
+        } catch (error) {
+          const code =
+            error instanceof Error && allowedErrors.has(error.message)
+              ? error.message
+              : "lease_lost"
+          await execute("fail", job, { code }).catch(() => {})
+          console.log(
+            JSON.stringify({
+              event: "knowledge_job_stopped",
+              job: job.id,
+              kind: job.kind,
+              code,
+            })
+          )
+        } finally {
+          clearInterval(heartbeat)
+          active = undefined
+        }
+      } catch {
+        console.error(JSON.stringify({ event: "knowledge_worker_unavailable" }))
+        if (!process.argv.includes("--once"))
+          await new Promise((r) => setTimeout(r, 5000))
+      }
+      if (process.argv.includes("--once")) break
+    }
+  } finally {
+    await pool.end()
+  }
+}
+void run()
