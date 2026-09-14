@@ -109,6 +109,9 @@ beforeEach(async () => {
     "202609130005_page_reads",
     "202609140006_agent_listing",
     "202609140007_rag",
+    "202609140008_previews",
+    "202609140009_preview_followups",
+    "202609140010_collection_deletion",
   ])
     await db.exec(
       readFileSync(
@@ -470,4 +473,229 @@ it("ranks only the selected collection even when another document matches the qu
   expect(result.matches).toHaveLength(1)
   expect(result.matches[0]!.text).toContain("three years")
   expect(JSON.stringify(result)).not.toContain("ninety")
+})
+
+it("removes empty collections without typing a name and retains only a tombstone", async () => {
+  expect(
+    (
+      await command("collection.remove", {
+        collectionId: collection,
+        confirmationName: "",
+      })
+    ).ok
+  ).toBe(true)
+  expect(JSON.stringify(await command("list"))).not.toContain(collection)
+  expect(
+    (
+      await command("upload.reserve", {
+        collectionId: collection,
+        title: "fixture.md",
+        sha256: "a".repeat(64),
+        size: 120,
+        contentType: "text/markdown",
+      })
+    ).ok
+  ).toBe(false)
+  const tombstone = (
+    await sql(
+      "SELECT name,slug,description,archived_at FROM agentonic.knowledge_collections WHERE id=$1",
+      [collection]
+    )
+  ).rows[0]!
+  expect(tombstone).toMatchObject({
+    name: "Colección eliminada",
+    description: null,
+    archived_at: expect.any(Date),
+  })
+  expect(
+    (await sql("SELECT * FROM agentonic.background_jobs")).rows
+  ).toHaveLength(0)
+})
+
+it("requires the current name server-side for pending or completed documents, including stale empty views", async () => {
+  const pending = await command("upload.reserve", {
+    collectionId: collection,
+    title: "fixture.md",
+    sha256: "a".repeat(64),
+    size: 120,
+    contentType: "text/markdown",
+  })
+  expect(pending.ok).toBe(true)
+  for (const confirmationName of ["", "knowledge", "Knowledge "]) {
+    expect(
+      await command("collection.remove", {
+        collectionId: collection,
+        confirmationName,
+      })
+    ).toEqual({ ok: false, code: "confirmation_required" })
+  }
+  expect(
+    (
+      await sql(
+        "SELECT * FROM agentonic.stored_objects WHERE deleted_at IS NULL"
+      )
+    ).rows
+  ).toHaveLength(1)
+  await actor()
+  expect(
+    (
+      await command("collection.remove", {
+        collectionId: collection,
+        confirmationName: "Knowledge",
+      })
+    ).ok
+  ).toBe(true)
+  const purge = await claim()
+  expect(purge.kind).toBe("purge")
+  await worker(purge, "purged")
+  expect(
+    (await sql("SELECT * FROM agentonic.stored_objects")).rows
+  ).toHaveLength(0)
+})
+
+it("deletes every collection document, cancels stale ingestion, preserves other collections and usage", async () => {
+  const first = await upload()
+  await publish(await claim())
+  await actor()
+  const query = await rag("search", {
+    query: "garantía",
+    collectionIds: [collection],
+  })
+  await worker(await claim(), "search", { embedding })
+  const second = await upload()
+  const stale = await claim()
+  await sql(
+    "INSERT INTO agentonic.knowledge_collections(id,workspace_id,name,slug,owner_member_id) VALUES($1,$2,'Other knowledge','other-knowledge',$3)",
+    [id(31), w, member]
+  )
+  const retained = await upload(id(31))
+  await publish(await claim())
+  await sql(
+    "UPDATE agentonic.retrieval_provider_budgets SET cap_microusd=10000000,committed_microusd=123 WHERE provider='voyage'"
+  )
+  await actor()
+  expect(
+    (
+      await command("collection.remove", {
+        collectionId: collection,
+        confirmationName: "Knowledge",
+      })
+    ).ok
+  ).toBe(true)
+  const view = JSON.stringify(await command("list"))
+  expect(view).not.toContain(first)
+  expect(view).not.toContain(second)
+  expect(view).toContain(retained)
+  expect(view).toContain('"pendingDeletions":2')
+  expect((await rag("result", { id: query.id })).status).not.toBe("succeeded")
+  expect((await command("document.download", { objectId: first })).ok).toBe(
+    false
+  )
+  await db.exec("SAVEPOINT stale_publish")
+  await expect(publish(stale)).rejects.toThrow()
+  await db.exec(
+    "ROLLBACK TO SAVEPOINT stale_publish; RELEASE SAVEPOINT stale_publish"
+  )
+  for (let i = 0; i < 2; i++) {
+    const purge = await claim()
+    expect(purge.kind).toBe("purge")
+    await worker(purge, "purged")
+  }
+  expect((await sql("SELECT id FROM agentonic.stored_objects")).rows).toEqual([
+    { id: retained },
+  ])
+  expect(
+    (await sql("SELECT * FROM agentonic.document_chunks")).rows
+  ).toHaveLength(1)
+  expect(
+    (
+      await sql(
+        "SELECT committed_microusd::int amount FROM agentonic.retrieval_provider_budgets WHERE provider='voyage'"
+      )
+    ).rows
+  ).toEqual([{ amount: 123 }])
+})
+
+it("denies cross-workspace, read-only, revoked and staff collection deletion, but allows a current curator", async () => {
+  await actor(other, otherW)
+  expect(
+    (
+      await command("collection.remove", {
+        collectionId: collection,
+        confirmationName: "",
+      })
+    ).ok
+  ).toBe(false)
+  await sql(
+    "INSERT INTO agentonic.workspace_members(id,workspace_id,user_id,role) VALUES($1,$2,$3,'member')",
+    [id(103), w, other]
+  )
+  await sql(
+    "INSERT INTO agentonic.collection_member_grants(workspace_id,collection_id,member_id,permission,granted_by_member_id) VALUES($1,$2,$3,'read',$4)",
+    [w, collection, id(103), member]
+  )
+  await actor(other, w)
+  expect(
+    (
+      await command("collection.remove", {
+        collectionId: collection,
+        confirmationName: "",
+      })
+    ).ok
+  ).toBe(false)
+  await sql(
+    "UPDATE agentonic.collection_member_grants SET permission='curate',revoked_at=now() WHERE collection_id=$1",
+    [collection]
+  )
+  await actor(other, w)
+  expect(
+    (
+      await command("collection.remove", {
+        collectionId: collection,
+        confirmationName: "",
+      })
+    ).ok
+  ).toBe(false)
+  await actor(staff, w, "agentonic_admin")
+  await expect(
+    command("collection.remove", {
+      collectionId: collection,
+      confirmationName: "",
+    })
+  ).rejects.toThrow()
+  await sql(
+    "UPDATE agentonic.collection_member_grants SET revoked_at=NULL WHERE collection_id=$1",
+    [collection]
+  )
+  await actor(other, w)
+  expect(
+    (
+      await command("collection.remove", {
+        collectionId: collection,
+        confirmationName: "",
+      })
+    ).ok
+  ).toBe(true)
+})
+
+it("deduplicates collection purge jobs for documents already removed individually", async () => {
+  const object = await upload()
+  await command("document.remove", { objectId: object })
+  expect(
+    (
+      await command("collection.remove", {
+        collectionId: collection,
+        confirmationName: "",
+      })
+    ).ok
+  ).toBe(true)
+  expect(
+    (await sql("SELECT * FROM agentonic.background_jobs WHERE kind='purge'"))
+      .rows
+  ).toHaveLength(1)
+  const purge = await claim()
+  await worker(purge, "purged")
+  expect(
+    (await sql("SELECT * FROM agentonic.stored_objects")).rows
+  ).toHaveLength(0)
 })

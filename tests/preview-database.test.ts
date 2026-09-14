@@ -97,6 +97,7 @@ beforeEach(async () => {
     "202609140007_rag",
     "202609140008_previews",
     "202609140009_preview_followups",
+    "202609140010_collection_deletion",
   ])
     await db.exec(
       readFileSync(
@@ -408,10 +409,16 @@ it("revokes collection access before provider work and scrubs expired conversati
     requestKey: id(200),
   })
   const job = await claim()
-  await sql(
-    "UPDATE agentonic.knowledge_collections SET archived_at=now() WHERE id=$1",
-    [collection]
-  )
+  await actor()
+  expect(
+    (
+      await command("collection.remove", {
+        collectionId: collection,
+        confirmationName: "",
+      })
+    ).ok
+  ).toBe(true)
+  expect((await preview("state", { previewId: p.id })).code).toBe("unavailable")
   await expect(worker(job, "context")).rejects.toThrow()
 })
 it("enforces ten turns and expires the whole preview instead of extending it", async () => {

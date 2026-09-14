@@ -86,6 +86,15 @@ export const authoringCommand = z.discriminatedUnion("operation", [
   ),
   cmd("submission.withdraw", z.object({ submissionId: uuid }).strict()),
   cmd(
+    "collection.remove",
+    z
+      .object({
+        collectionId: uuid,
+        confirmationName: z.string().max(120),
+      })
+      .strict()
+  ),
+  cmd(
     "upload.reserve",
     z
       .object({
@@ -123,7 +132,10 @@ export const authoringCommand = z.discriminatedUnion("operation", [
 export type AuthoringCommand = z.infer<typeof authoringCommand>
 export const authoringResult = z.discriminatedUnion("ok", [
   z.object({ ok: z.literal(true), id: uuid.nullable(), data: z.unknown() }),
-  z.object({ ok: z.literal(false), code: z.literal("conflict").optional() }),
+  z.object({
+    ok: z.literal(false),
+    code: z.enum(["conflict", "confirmation_required"]).optional(),
+  }),
 ])
 export type AuthoringResult = z.infer<typeof authoringResult>
 export const workspaceView = z.object({
@@ -251,7 +263,12 @@ export const reviewView = z.object({
   status: z.string(),
 })
 export type ReviewView = z.infer<typeof reviewView>
-export type FormResult = { ok: boolean; message: string; href?: string }
+export type FormResult = {
+  ok: boolean
+  message: string
+  href?: string
+  requiresConfirmationName?: boolean
+}
 export const submissionLabels: Record<string, string> = {
   submitted: "Enviada",
   in_review: "En revisión",
