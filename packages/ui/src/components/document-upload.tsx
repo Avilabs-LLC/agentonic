@@ -93,7 +93,7 @@ export function DocumentUpload({
         )
         return
       }
-      notify.success("Documento subido. Pendiente de procesamiento.")
+      notify.success("Documento subido y en cola de procesamiento.")
       resetField("file")
       router.refresh()
     } catch {
@@ -106,7 +106,7 @@ export function DocumentUpload({
     <form onSubmit={handleSubmit(upload)} noValidate className="space-y-4">
       <fieldset
         disabled={isSubmitting || !collections.length}
-        className="space-y-4"
+        className="grid items-start gap-5 sm:grid-cols-2"
       >
         <Field data-invalid={Boolean(errors.collectionId)}>
           <FieldLabel htmlFor={`${id}-collection`}>Colección</FieldLabel>
@@ -150,15 +150,15 @@ export function DocumentUpload({
             {...register("file")}
           />
           <FieldDescription id={`${id}-help`}>
-            PDF, texto UTF-8 o Markdown · Hasta 10 MB. El archivo permanecerá
-            privado y pendiente de procesamiento.
+            PDF, texto UTF-8 o Markdown · Hasta 10 MB. El texto se enviará a
+            Voyage AI para crear el índice de búsqueda.
           </FieldDescription>
           <FieldError id={`${id}-error`} errors={[errors.file]} />
         </Field>
       </fieldset>
       {!collections.length && (
         <p className="text-sm text-muted-foreground">
-          Crea una colección para poder subir documentos.
+          Crea una colección o solicita permiso para gestionar una existente.
         </p>
       )}
       {error && (
@@ -166,12 +166,17 @@ export function DocumentUpload({
           {error}
         </p>
       )}
-      <Button
-        type="submit"
-        disabled={isSubmitting || !isValid || !collections.length}
-      >
-        {isSubmitting ? "Subiendo…" : "Subir documento"}
-      </Button>
+      <div className="-mx-6 -mb-6 flex flex-wrap items-center justify-between gap-3 rounded-b-lg border-t bg-muted/30 px-6 py-4">
+        <p className="text-sm text-muted-foreground">
+          Solo las personas con acceso a la colección podrán descargarlo.
+        </p>
+        <Button
+          type="submit"
+          disabled={isSubmitting || !isValid || !collections.length}
+        >
+          {isSubmitting ? "Subiendo…" : "Subir documento"}
+        </Button>
+      </div>
     </form>
   )
 }

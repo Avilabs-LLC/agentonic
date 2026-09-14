@@ -55,7 +55,7 @@ export function AgentsSkeleton() {
       <PageHeaderSkeleton />
       <Skeleton className="h-8 w-48" />
       <Skeleton className="h-5 w-4/5" />
-      <TableSkeleton columns={10} />
+      <TableSkeleton columns={9} />
     </>
   )
 }
@@ -134,15 +134,84 @@ export function AgentEditorSkeleton() {
 }
 export function KnowledgeSkeleton() {
   return (
-    <>
+    <div className="mx-auto w-full max-w-4xl space-y-6">
       <PageHeaderSkeleton />
       <Skeleton className="h-8 w-48" />
-      <div className="grid gap-6 lg:grid-cols-2">
-        <FormCard fields={2} />
-        <FormCard fields={2} />
-      </div>
-      <TableSkeleton columns={5} />
-    </>
+      {["collections", "upload", "documents", "search"].map((section) => (
+        <Card
+          key={section}
+          className="gap-5 py-6 [--card-spacing:--spacing(6)]"
+        >
+          <CardHeader className="gap-2">
+            <Skeleton className="h-7 w-48" />
+            <Skeleton className="h-5 w-4/5" />
+          </CardHeader>
+          <CardContent>
+            {section === "upload" || section === "search" ? (
+              <div className="grid gap-5 sm:grid-cols-2">
+                {[0, 1].map((field) => (
+                  <div key={field} className="space-y-2">
+                    <Skeleton className="h-4 w-24" />
+                    <Skeleton className="h-9 w-full" />
+                    {field === 1 && <Skeleton className="h-4 w-4/5" />}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <Skeleton className="h-9 w-full max-w-sm" />
+                <div className="divide-y border-t">
+                  <div className="flex justify-between gap-4 py-3">
+                    {Array.from(
+                      { length: section === "documents" ? 4 : 3 },
+                      (_, column) => (
+                        <Skeleton key={column} className="h-4 w-20" />
+                      )
+                    )}
+                  </div>
+                  {[0, 1, 2].map((row) => (
+                    <div key={row} className="flex items-center gap-4 py-4">
+                      <Skeleton className="size-5 shrink-0" />
+                      <div className="flex-1 space-y-2">
+                        <Skeleton className="h-5 w-4/5" />
+                        {section === "documents" && (
+                          <Skeleton className="h-4 w-20" />
+                        )}
+                      </div>
+                      <Skeleton className="h-5 w-20" />
+                      <Skeleton className="h-5 w-20" />
+                      {section === "documents" && (
+                        <div className="flex gap-1">
+                          <Skeleton className="size-8" />
+                          <Skeleton className="size-8" />
+                          <Skeleton className="size-8" />
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <div className="flex flex-wrap justify-between gap-3">
+                  <Skeleton className="h-5 w-20" />
+                  <Skeleton className="h-8 w-64 max-w-full" />
+                </div>
+              </div>
+            )}
+            {section === "search" && (
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-4">
+                <Skeleton className="h-5 w-56" />
+                <Skeleton className="h-9 w-40" />
+              </div>
+            )}
+          </CardContent>
+          <div className="-mb-6 flex flex-wrap items-center justify-between gap-3 border-t bg-muted/30 px-6 py-4">
+            <Skeleton className="h-5 w-1/2" />
+            {section !== "documents" && section !== "search" && (
+              <Skeleton className="h-9 w-36" />
+            )}
+          </div>
+        </Card>
+      ))}
+    </div>
   )
 }
 export function ReviewsSkeleton() {

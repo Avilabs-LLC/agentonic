@@ -71,10 +71,16 @@ export function DataTable<T>({
   data,
   columns,
   searchKeys,
+  variant = "default",
+  searchLabel = "Buscar registros",
+  emptyDescription = "Prueba con otros términos de búsqueda.",
 }: {
   data: T[]
   columns: ColumnDef<T>[]
   searchKeys: (keyof T)[]
+  variant?: "default" | "integrated"
+  searchLabel?: string
+  emptyDescription?: string
 }) {
   const [sorting, setSorting] = useState<SortingState>([])
   const [search, setSearch] = useState("")
@@ -107,16 +113,37 @@ export function DataTable<T>({
   return (
     <div className="space-y-4">
       <Input
-        aria-label="Buscar registros"
-        placeholder="Buscar…"
+        aria-label={searchLabel}
+        placeholder={
+          searchLabel === "Buscar registros" ? "Buscar…" : `${searchLabel}…`
+        }
         value={search}
         onChange={(e) => setSearch(e.target.value)}
         className="max-w-sm"
       />
-      <div className="overflow-hidden rounded-xl border">
+      <div
+        className={
+          variant === "integrated"
+            ? "border-t"
+            : "overflow-hidden rounded-xl border"
+        }
+      >
         <div>
-          <Table containerClassName="max-h-[32rem]">
-            <TableHeader className="sticky top-0 z-10 bg-muted">
+          <Table
+            containerClassName="max-h-[32rem]"
+            className={
+              variant === "integrated"
+                ? "text-sm [&_td]:py-4 [&_td:first-child]:pl-0 [&_td:last-child]:pr-0 [&_th:first-child]:pl-0 [&_th:last-child]:pr-0"
+                : undefined
+            }
+          >
+            <TableHeader
+              className={
+                variant === "integrated"
+                  ? "sticky top-0 z-10 bg-card"
+                  : "sticky top-0 z-10 bg-muted"
+              }
+            >
               {table.getHeaderGroups().map((group) => (
                 <TableRow key={group.id}>
                   {group.headers.map((header) => (
@@ -160,7 +187,9 @@ export function DataTable<T>({
                       <EmptyHeader>
                         <EmptyTitle>Sin resultados</EmptyTitle>
                         <EmptyDescription>
-                          Prueba con otros términos de búsqueda.
+                          {search
+                            ? "Prueba con otros términos de búsqueda."
+                            : emptyDescription}
                         </EmptyDescription>
                       </EmptyHeader>
                     </Empty>
@@ -173,7 +202,7 @@ export function DataTable<T>({
       </div>
       <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
         <span>{table.getFilteredRowModel().rows.length} registros</span>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <span>Filas</span>
           <Select
             value={String(table.getState().pagination.pageSize)}

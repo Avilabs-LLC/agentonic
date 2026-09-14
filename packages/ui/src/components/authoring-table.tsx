@@ -35,7 +35,6 @@ import {
   DataTable,
   DataTableColumnHeader,
 } from "@workspace/ui/components/data-table"
-import { IdLink } from "@workspace/ui/components/id-link"
 import { Button } from "@workspace/ui/components/button"
 import { Badge } from "@workspace/ui/components/badge"
 export function AuthoringTable({
@@ -77,21 +76,64 @@ export function AuthoringTable({
   })
   const columns: ColumnDef<AgentListing[number]>[] = [
     {
-      accessorKey: "id",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="ID" />
+      id: "actions",
+      header: "",
+      cell: ({ row }) => (
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                aria-label={`Acciones de ${row.original.name}`}
+              />
+            }
+          >
+            <EllipsisIcon />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-56">
+            {row.original.canEdit ? (
+              <DropdownMenuItem
+                render={
+                  <Link
+                    href={`/agents/${row.original.id}?workspace=${workspaceId}`}
+                  />
+                }
+              >
+                <PencilIcon />
+                Editar agente
+              </DropdownMenuItem>
+            ) : (
+              <DropdownMenuItem disabled>
+                <PencilIcon />
+                Editar · Sin permiso
+              </DropdownMenuItem>
+            )}
+            <DropdownMenuSeparator />
+            <DropdownMenuGroup>
+              <DropdownMenuLabel>Próximamente</DropdownMenuLabel>
+              <DropdownMenuItem disabled>
+                <ChartNoAxesCombinedIcon />
+                Ver costos y consumo
+              </DropdownMenuItem>
+              <DropdownMenuItem disabled>
+                <ScrollTextIcon />
+                Ver registros
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem disabled variant="destructive">
+                <SquareIcon />
+                Detener agente
+              </DropdownMenuItem>
+              <DropdownMenuItem disabled variant="destructive">
+                <Trash2Icon />
+                Eliminar agente
+              </DropdownMenuItem>
+            </DropdownMenuGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
       ),
-      cell: ({ row }) =>
-        row.original.canEdit ? (
-          <IdLink
-            id={row.original.id}
-            href={`/agents/${row.original.id}?workspace=${workspaceId}`}
-          />
-        ) : (
-          <span className="font-mono text-xs">
-            {row.original.id.slice(0, 8)}
-          </span>
-        ),
     },
     {
       accessorKey: "name",
@@ -100,7 +142,16 @@ export function AuthoringTable({
       ),
       cell: ({ row }) => (
         <div className="max-w-56 min-w-48 whitespace-normal">
-          <p className="font-medium">{row.original.name}</p>
+          {row.original.canEdit ? (
+            <Link
+              href={`/agents/${row.original.id}?workspace=${workspaceId}`}
+              className="font-medium text-blue-600 underline underline-offset-4 outline-none hover:text-blue-800 focus-visible:ring-2 focus-visible:ring-ring dark:text-blue-400 dark:hover:text-blue-300"
+            >
+              {row.original.name}
+            </Link>
+          ) : (
+            <p className="font-medium">{row.original.name}</p>
+          )}
           {row.original.description && (
             <Tooltip>
               <TooltipTrigger
@@ -119,17 +170,6 @@ export function AuthoringTable({
             </Tooltip>
           )}
         </div>
-      ),
-    },
-    {
-      accessorKey: "status",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Estado" />
-      ),
-      cell: ({ row }) => (
-        <Badge variant="outline" className="rounded-full">
-          {row.original.status === "draft" ? "Borrador" : row.original.status}
-        </Badge>
       ),
     },
     {
@@ -221,63 +261,14 @@ export function AuthoringTable({
       },
     },
     {
-      id: "actions",
-      header: "",
+      accessorKey: "status",
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title="Estado" />
+      ),
       cell: ({ row }) => (
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            render={
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                aria-label={`Acciones de ${row.original.name}`}
-              />
-            }
-          >
-            <EllipsisIcon />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-56">
-            {row.original.canEdit ? (
-              <DropdownMenuItem
-                render={
-                  <Link
-                    href={`/agents/${row.original.id}?workspace=${workspaceId}`}
-                  />
-                }
-              >
-                <PencilIcon />
-                Editar agente
-              </DropdownMenuItem>
-            ) : (
-              <DropdownMenuItem disabled>
-                <PencilIcon />
-                Editar · Sin permiso
-              </DropdownMenuItem>
-            )}
-            <DropdownMenuSeparator />
-            <DropdownMenuGroup>
-              <DropdownMenuLabel>Próximamente</DropdownMenuLabel>
-              <DropdownMenuItem disabled>
-                <ChartNoAxesCombinedIcon />
-                Ver costos y consumo
-              </DropdownMenuItem>
-              <DropdownMenuItem disabled>
-                <ScrollTextIcon />
-                Ver registros
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem disabled variant="destructive">
-                <SquareIcon />
-                Detener agente
-              </DropdownMenuItem>
-              <DropdownMenuItem disabled variant="destructive">
-                <Trash2Icon />
-                Eliminar agente
-              </DropdownMenuItem>
-            </DropdownMenuGroup>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <Badge variant="outline" className="rounded-full">
+          {row.original.status === "draft" ? "Borrador" : row.original.status}
+        </Badge>
       ),
     },
   ]

@@ -36,7 +36,7 @@ export function AgentSettingsCard({
       </CardHeader>
       <CardContent>{children}</CardContent>
       {footer && (
-        <CardFooter className="-mb-6 justify-between gap-3 border-t bg-muted/30 py-4 text-sm text-muted-foreground">
+        <CardFooter className="-mb-6 flex-wrap justify-between gap-3 border-t bg-muted/30 py-4 text-sm text-muted-foreground">
           {footer}
         </CardFooter>
       )}
