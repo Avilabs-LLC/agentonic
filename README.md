@@ -2,7 +2,7 @@
 
 Platform monorepo for the staff admin app, customer app and platform workers. Agent execution code belongs in the separate `Avilabs-LLC/agentonic-runtime` repository.
 
-The authoritative design is in [docs/agentonic-architecture.md](docs/agentonic-architecture.md), including the UI contract (§21) and implementation status (§§22–23). [docs/schema.dbml](docs/schema.dbml) describes the complete target model. Sixteen identity/access tables and their server services are implemented; agent lifecycle screens and execution are not enabled.
+The authoritative design is in [docs/agentonic-architecture.md](docs/agentonic-architecture.md), including the UI contract (§21) and implementation status (§§22–29). [docs/schema.dbml](docs/schema.dbml) describes the complete target model. Twenty-eight tables support identity/access, customer authoring, private uploads and consented staff review. Paid preview, ingestion, approval and deployment remain unavailable.
 
 ## Local development
 
@@ -17,17 +17,23 @@ pnpm dev
 - Admin: <http://127.0.0.1:3100>
 - Customer: <http://127.0.0.1:3101>
 
+Local dev commands allow up to 64 KiB of request headers, because browsers share host-only cookies across every `localhost` port. This avoids HTTP 431 when other local apps leave large session cookies. The setting applies only to the loopback development servers; production startup is unchanged.
+
 Both apps use the same Base UI/shadcn Mira preset (`b1GfVg2Oe`), Figtree font and shared UI package. Authentication cookies are separate per app, host-only and HTTP-only. Customer membership never grants staff access.
 
-The local bootstrap has already provisioned dedicated roles and applied the first two migrations to the configured nonproduction Supabase project. The three confirmed Auth users are now linked: one staff administrator and two customer owners, each with a separate test workspace. Their actual access boundaries have been verified; interactive sign-in uses the private passwords chosen in Supabase. App `.env.local` files contain only their restricted database credentials and public Supabase configuration. No bootstrap or migration URL belongs in either app's environment.
+The local bootstrap has already provisioned dedicated roles and applied the first six migrations to the configured nonproduction Supabase project. The three confirmed Auth users are now linked: one staff administrator and two customer owners, each with a separate test workspace. Their actual access boundaries have been verified; interactive sign-in uses the private passwords chosen in Supabase. App `.env.local` files contain only their restricted database credentials and public Supabase configuration. No bootstrap or migration URL belongs in either app's environment.
 
 For a fresh authorized nonproduction setup, fill `.env.bootstrap.local` from its example, provide the verified Supabase CA, and run:
 
 ```sh
 pnpm setup:database
+pnpm setup:storage
 pnpm db:migrate
 pnpm setup:accounts
+pnpm setup:template
 ```
+
+Create the private `agentonic-documents` Storage bucket (10 MB maximum) before migration. The authoring-template command also requires the clean adjacent runtime checkout at the published authoring tag and GitHub CLI read access to its private release.
 
 These are explicit remote setup commands. `setup:accounts` only links the three configured, already-confirmed Supabase Auth users. It sends no emails and creates no Auth users. It creates two clearly named nonproduction workspaces with finite test retention and a separate staff role; it does not grant staff customer membership. Keep passwords private and create/confirm the Auth users in the Supabase dashboard before running it. Re-running does not restore disabled staff or overwrite an existing workspace's owner.
 
@@ -75,17 +81,26 @@ The VM has been inspected only. No Azure packages, services, firewall rules or d
 
 ## Identity and resource access services
 
-`packages/server/src/access.ts` is the server-only entry point for workspace membership, draft-agent creation, explicit agent/collection sharing, contacts, scoped staff support and invitation services. It derives identity and confirmed email from Supabase, validates strict contracts and invokes the database's fixed-operation permission boundary. It is not a public API route or an invitation-delivery service. The corresponding UI arrives with the next workflow milestones; existing disabled navigation remains accurate.
+`packages/server/src/access.ts` is the server-only entry point for workspace membership, draft-agent creation, explicit agent/collection sharing, contacts, scoped staff support and invitation services. It derives identity and confirmed email from Supabase, validates strict contracts and invokes the database's fixed-operation permission boundary. It is not a public API route or an invitation-delivery service. Agent authoring and collections now have customer screens; invitation, member-sharing and contact management screens follow their feature milestones.
 
-There is no seeded runtime template yet. Agent drafts require a real, ready template published in the next milestone. Collection permissions are independent of agent permissions. Only resource owners can delegate private content access; staff must use exact, expiring support grants and audited reads. Customers cannot publish or deploy.
+The real private `v0.1.0-authoring` runtime artifact is registered for the two test workspaces. It supports configuration authoring only and refuses execution. Collection permissions are independent of agent permissions. Only resource owners can delegate private content access; staff must use exact, expiring support grants and audited reads. Customers cannot publish or deploy.
 
 To verify the actual configured test accounts and permission commands:
 
 ```sh
 pnpm db:check-access
+pnpm db:check-authoring
 ```
 
-This explicit nonproduction check temporarily exercises resource creation, invitation acceptance, sharing, support reads and offboarding through restricted app credentials. All test transactions are rolled back, including their audit events. It sends no emails, changes no Auth users and prints no account addresses or credentials. The bootstrap credential is used only for read-only lookup of the configured test identities.
+This explicit nonproduction check temporarily exercises resource creation, invitation acceptance, sharing, support reads and offboarding through restricted app credentials. Deferred constraints are forced before rollback so commit-time ownership checks are tested. All test transactions are rolled back, including their audit events. It sends no emails, changes no Auth users and prints no account addresses or credentials. The bootstrap credential is used only for read-only lookup of the configured test identities.
+
+## Customer authoring and staff review
+
+Customer `/agents` supports creation, revisioned prompts/skills, exact candidate freezing, consented submission and feedback history. `/knowledge` supports private PDF/text/Markdown uploads, up to 10 MB each. Documents are pending processing; removal revokes access, while physical cleanup awaits the retention worker. A 500 MB workspace inventory ceiling includes retained and failed reservations.
+
+Admin `/submissions` exposes consented proposals and audited configuration review. Staff may return comments, request changes or reject. Approval, chat previews and deployment remain unavailable.
+
+OpenAI is selected for the next execution milestone, with an authorized **US$25 total development cap**. Store the key in ignored `.env.runtime.local` as `OPENAI_API_KEY`. No current feature reads this credential or makes paid calls; runtime metering and cap enforcement must precede preview activation. See architecture §24 for the complete implemented boundary.
 
 ## Branch releases
 
@@ -97,3 +112,5 @@ pnpm version:check
 ```
 
 This increments the minor version and resets the patch, recording the release in `lib/app-version.ts` and `lib/version-history.ts` and updating the shared UI label. Review that label and refresh the skeleton baseline with `pnpm skeletons:update` before committing. CI verifies that the package, application, history and UI versions agree. This command does not build or deploy either app.
+
+`pnpm db:check-page-reads` is an opt-in nonproduction concurrency check for both restricted app roles. It checks actor-scoped identity discovery, concurrent readers and conflicting writers; all temporary writes are rolled back. Page-load observations and limitations are recorded in architecture section 25.

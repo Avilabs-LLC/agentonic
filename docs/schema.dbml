@@ -1,8 +1,13 @@
 // Agentonic authoritative schema companion — 2026-09-13.
 // Authority: agentonic-architecture.md. Supersedes both independent draft DBMLs.
-// FULL TARGET DESIGN: not a migration. Prisma migrations implement 16 identity/access tables;
-// remaining entities/safeguards are pending. See architecture sections 22–23.
-// Step 2 support scopes permit exact agent/collection metadata reads only. Runtime audit actors
+// FULL TARGET DESIGN: not a migration. Prisma migrations implement 28 identity/access/authoring tables;
+// remaining entities/safeguards are pending. See architecture sections 22–29.
+// Delivery order: customer authoring (step 3), staff/runtime counterparts (3.5), integrated
+// preview/deployment (4). This order changes no relationships; see architecture section 19.
+// Migration 5 optimizes actor-scoped discovery and compatible read locks; no tables added.
+// Migration 6 adds permission-scoped agent listing summaries; no tables added.
+// Step 3 adds immutable candidates, private staging uploads and consented exact submission review.
+// No paid preview, ingestion, approval or deployment is enabled. Runtime audit actors
 // remain closed by SQL CHECKs until their later tables and execution boundaries are implemented.
 // Every table is labeled LAUNCH or CONDITIONAL. LATER features are intentionally omitted.
 // PostgreSQL / managed Supabase; private agentonic schema; app roles non-owner, non-BYPASSRLS.

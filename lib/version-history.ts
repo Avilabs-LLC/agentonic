@@ -1,5 +1,10 @@
 export const VERSION_HISTORY = [
   {
+    "version": "0.4.0",
+    "date": "2026-09-14",
+    "summary": "Self-service agent authoring, private knowledge documents, validated version submissions and staff review"
+  },
+  {
     "version": "0.3.0",
     "date": "2026-09-13",
     "summary": "Identity and resource access, invitations, scoped support, offboarding and audit"

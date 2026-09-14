@@ -1,6 +1,6 @@
 {
   "name": "agentonic",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@11.21.0",
@@ -24,7 +24,11 @@
     "db:check": "node scripts/check-database.mjs",
     "db:check-prisma": "tsx --conditions=react-server scripts/check-prisma.ts",
     "version:check": "node scripts/versioning.mjs check",
-    "db:check-access": "node scripts/check-access.mjs"
+    "db:check-access": "node scripts/check-access.mjs",
+    "setup:storage": "node scripts/setup-storage.mjs",
+    "setup:template": "node scripts/publish-authoring-template.mjs",
+    "db:check-authoring": "node scripts/check-authoring.mjs",
+    "db:check-page-reads": "node scripts/check-page-reads.mjs"
   },
   "devDependencies": {
     "@workspace/typescript-config": "workspace:*",
