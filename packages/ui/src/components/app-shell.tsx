@@ -83,6 +83,9 @@ export function AppShell({
   const { setTheme } = useTheme()
   const [busy, setBusy] = useState(false)
   const current = navigation.find((n) => n.href === pathname)
+  const parent = navigation.find(
+    (n) => n.href !== "/" && pathname.startsWith(`${n.href}/`)
+  )
   async function exit() {
     setBusy(true)
     try {
@@ -204,7 +207,7 @@ export function AppShell({
           </DropdownMenu>
         </SidebarFooter>
       </Sidebar>
-      <SidebarInset>
+      <SidebarInset className="min-w-0">
         <header className="flex h-16 items-center gap-3 border-b px-4 md:px-6">
           <SidebarTrigger />
           <Breadcrumb>
@@ -223,9 +226,22 @@ export function AppShell({
               {pathname !== "/" && (
                 <>
                   <BreadcrumbSeparator />
+                  {parent && (
+                    <>
+                      <BreadcrumbItem>
+                        <BreadcrumbLink render={<Link href={parent.href} />}>
+                          {parent.title}
+                        </BreadcrumbLink>
+                      </BreadcrumbItem>
+                      <BreadcrumbSeparator />
+                    </>
+                  )}
                   <BreadcrumbItem>
                     <BreadcrumbPage>
                       {current?.title ??
+                        (pathname.endsWith("/new")
+                          ? "Crear agente"
+                          : undefined) ??
                         formatPathSegment(
                           pathname.split("/").filter(Boolean).at(-1) ?? ""
                         )}

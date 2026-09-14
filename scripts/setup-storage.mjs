@@ -1,0 +1,23 @@
+import { readFileSync } from "node:fs"
+import { bootstrapConfig, connect, fail } from "./local-config.mjs"
+let client
+try {
+  const { e } = bootstrapConfig()
+  client = await connect(
+    e.AGENTONIC_BOOTSTRAP_DATABASE_URL,
+    e.AGENTONIC_DATABASE_CA_FILE
+  )
+  await client.query("BEGIN")
+  await client.query(
+    readFileSync(new URL("./sql/storage-boundary.sql", import.meta.url), "utf8")
+  )
+  await client.query("COMMIT")
+  console.log(
+    "Migration-only Storage privilege bridge prepared. Prisma installs the policies."
+  )
+} catch (error) {
+  await client?.query("ROLLBACK")
+  fail(error)
+} finally {
+  await client?.end()
+}

@@ -14,7 +14,7 @@ export const navigation = [
     title: "Agentes",
     description: "Configuración y operación de agentes.",
     group: "Mi espacio",
-    enabled: false,
+    enabled: true,
     icon: "agents",
   },
   {
@@ -22,7 +22,7 @@ export const navigation = [
     title: "Conocimiento",
     description: "Documentos y fuentes seleccionadas.",
     group: "Mi espacio",
-    enabled: false,
+    enabled: true,
     icon: "knowledge",
   },
   {

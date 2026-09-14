@@ -1,4 +1,4 @@
-import { requireIdentity } from "@agentonic/server/auth"
+import { requireVerifiedUser } from "@agentonic/server/auth"
 import { AppShell } from "@workspace/ui/components/app-shell"
 import { navigation } from "@/lib/navigation"
 import { logout } from "../actions"
@@ -7,7 +7,7 @@ export default async function Layout({
 }: {
   children: React.ReactNode
 }) {
-  const identity = await requireIdentity("customer")
+  const identity = await requireVerifiedUser("customer")
   return (
     <AppShell
       app="customer"

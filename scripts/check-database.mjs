@@ -44,6 +44,18 @@ try {
         "knowledge_collections",
         "collection_member_grants",
         "audit_events",
+        "code_releases",
+        "workspace_code_release_grants",
+        "code_tools",
+        "configuration_drafts",
+        "configuration_releases",
+        "configuration_tools",
+        "agent_submissions",
+        "submission_review_decisions",
+        "stored_objects",
+        "knowledge_sources",
+        "documents",
+        "document_versions",
       ]) {
         assert.equal(
           (await pool.query(`SELECT * FROM agentonic.${table}`)).rowCount,

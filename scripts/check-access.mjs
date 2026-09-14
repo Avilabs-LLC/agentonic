@@ -215,6 +215,7 @@ try {
           0
         )
       }
+      await client.query("SET CONSTRAINTS ALL IMMEDIATE")
       await client.query("ROLLBACK")
       const clean = await client.query(
         "SELECT nullif(current_setting('agentonic.auth_user_id',true),'') AS actor,nullif(current_setting('agentonic.workspace_id',true),'') AS workspace,nullif(current_setting('agentonic.verified_email',true),'') AS email"

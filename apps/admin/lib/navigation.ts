@@ -21,7 +21,7 @@ export const navigation = [
     title: "Revisiones",
     description: "Propuestas pendientes de revisión.",
     group: "Operación",
-    enabled: false,
+    enabled: true,
     icon: "review",
   },
   {
