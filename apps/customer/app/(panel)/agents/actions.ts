@@ -222,3 +222,36 @@ export async function removeDocument(
       "Documento eliminado del conocimiento. La eliminación del archivo se completará en segundo plano.",
   }
 }
+
+export async function removeCollection(
+  workspaceId: string,
+  collectionId: string,
+  confirmationName: string
+): Promise<FormResult> {
+  const r = await runAuthoringCommand("customer", {
+    workspaceId,
+    operation: "collection.remove",
+    payload: { collectionId, confirmationName },
+  })
+  if (!r.ok) {
+    if (r.code === "confirmation_required")
+      return {
+        ok: false,
+        requiresConfirmationName: true,
+        message:
+          "La colección contiene documentos. Escribe su nombre exacto para confirmar la eliminación.",
+      }
+    return {
+      ok: false,
+      message:
+        "No se pudo eliminar la colección. Comprueba tus permisos e inténtalo de nuevo.",
+    }
+  }
+  revalidatePath("/knowledge")
+  revalidatePath("/agents", "layout")
+  return {
+    ok: true,
+    message:
+      "Colección eliminada del conocimiento. Los archivos pendientes se eliminarán en segundo plano.",
+  }
+}

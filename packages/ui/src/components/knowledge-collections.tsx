@@ -19,9 +19,11 @@ import {
   DialogDescription,
 } from "@workspace/ui/components/dialog"
 import { ResourceCreateForm } from "@workspace/ui/components/resource-create-form"
+import { CollectionDeleteDialog } from "@workspace/ui/components/collection-delete-dialog"
 
 type CollectionRow = WorkspaceView["collections"][number] & {
   documentCount: number
+  remove: (id: string, confirmationName: string) => Promise<FormResult>
 }
 
 const columns: ColumnDef<CollectionRow>[] = [
@@ -64,17 +66,32 @@ const columns: ColumnDef<CollectionRow>[] = [
       </Badge>
     ),
   },
+  {
+    id: "actions",
+    header: "",
+    cell: ({ row }) =>
+      row.original.canCurate ? (
+        <div className="flex justify-end">
+          <CollectionDeleteDialog
+            collection={row.original}
+            remove={row.original.remove}
+          />
+        </div>
+      ) : null,
+  },
 ]
 
 export function KnowledgeCollections({
   collections,
   documents,
   create,
+  remove,
   canCreate,
 }: {
   collections: WorkspaceView["collections"]
   documents: WorkspaceView["documents"]
   create: (data: FormData) => Promise<FormResult>
+  remove: (id: string, confirmationName: string) => Promise<FormResult>
   canCreate: boolean
 }) {
   const [open, setOpen] = useState(false)
@@ -127,8 +144,10 @@ export function KnowledgeCollections({
         data={collections.map((collection) => ({
           ...collection,
           documentCount: counts.get(collection.id) ?? 0,
+          remove,
         }))}
         columns={columns}
+        getRowId={(collection) => collection.id}
         searchKeys={["name"]}
         variant="integrated"
         searchLabel="Buscar colecciones"

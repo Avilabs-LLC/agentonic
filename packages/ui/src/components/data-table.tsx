@@ -74,6 +74,7 @@ export function DataTable<T>({
   variant = "default",
   searchLabel = "Buscar registros",
   emptyDescription = "Prueba con otros términos de búsqueda.",
+  getRowId,
 }: {
   data: T[]
   columns: ColumnDef<T>[]
@@ -81,6 +82,7 @@ export function DataTable<T>({
   variant?: "default" | "integrated"
   searchLabel?: string
   emptyDescription?: string
+  getRowId?: (row: T) => string
 }) {
   const [sorting, setSorting] = useState<SortingState>([])
   const [search, setSearch] = useState("")
@@ -89,6 +91,7 @@ export function DataTable<T>({
   const table = useReactTable({
     data,
     columns,
+    getRowId,
     state: { sorting, globalFilter: search },
     onSortingChange: setSorting,
     onGlobalFilterChange: setSearch,

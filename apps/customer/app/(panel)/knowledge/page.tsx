@@ -12,7 +12,11 @@ import {
 } from "@workspace/ui/components/knowledge-search"
 import { processDocument } from "./actions"
 import { customerWorkspace } from "@/lib/workspace"
-import { createCollection, removeDocument } from "../agents/actions"
+import {
+  createCollection,
+  removeCollection,
+  removeDocument,
+} from "../agents/actions"
 export default async function Page({
   searchParams,
 }: {
@@ -43,10 +47,11 @@ export default async function Page({
         base="/knowledge"
       />
       <KnowledgeCollections
-        key={selected.id}
+        key={`collections:${selected.id}`}
         collections={data.collections}
         documents={data.documents}
         create={createCollection.bind(null, selected.id)}
+        remove={removeCollection.bind(null, selected.id)}
         canCreate={selected.role !== "viewer"}
       />
       <AgentSettingsCard
@@ -80,7 +85,7 @@ export default async function Page({
         />
       </AgentSettingsCard>
       <KnowledgeSearch
-        key={selected.id + data.documents.map((d) => d.id + d.status).join("")}
+        key={`search:${selected.id}:${data.collections.map((c) => c.id).join(",")}:${data.documents.map((d) => `${d.id}:${d.status}`).join(",")}`}
         workspaceId={selected.id}
         collections={data.collections}
       />

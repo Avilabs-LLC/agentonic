@@ -162,12 +162,9 @@ export function KnowledgeSkeleton() {
                 <Skeleton className="h-9 w-full max-w-sm" />
                 <div className="divide-y border-t">
                   <div className="flex justify-between gap-4 py-3">
-                    {Array.from(
-                      { length: section === "documents" ? 4 : 3 },
-                      (_, column) => (
-                        <Skeleton key={column} className="h-4 w-20" />
-                      )
-                    )}
+                    {Array.from({ length: 4 }, (_, column) => (
+                      <Skeleton key={column} className="h-4 w-20" />
+                    ))}
                   </div>
                   {[0, 1, 2].map((row) => (
                     <div key={row} className="flex items-center gap-4 py-4">
@@ -180,6 +177,9 @@ export function KnowledgeSkeleton() {
                       </div>
                       <Skeleton className="h-5 w-20" />
                       <Skeleton className="h-5 w-20" />
+                      {section === "collections" && (
+                        <Skeleton className="size-8" />
+                      )}
                       {section === "documents" && (
                         <div className="flex gap-1">
                           <Skeleton className="size-8" />
