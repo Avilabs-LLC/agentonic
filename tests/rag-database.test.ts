@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs"
 import { PGlite } from "@electric-sql/pglite"
 import { beforeEach, afterEach, expect, it } from "vitest"
-import { vector } from "@electric-sql/pglite/vector"
+import { vector } from "@electric-sql/pglite-pgvector"
 let db: PGlite
 const id = (n: number) =>
   `10000000-0000-4000-8000-${String(n).padStart(12, "0")}`

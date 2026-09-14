@@ -48,6 +48,7 @@ model PlatformStaff {
 }
 
 model Workspace {
+  previews                          AgentPreview[]
   ragChunks                         DocumentChunk[]
   ragJobs                           BackgroundJob[]
   ragIngestions                     IngestionJob[]
@@ -93,6 +94,7 @@ model Workspace {
 }
 
 model WorkspaceMember {
+  previews                                           AgentPreview[]
   ragJobs                                            BackgroundJob[]
   id                                                 String                     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   workspaceId                                        String                     @map("workspace_id") @db.Uuid
@@ -391,6 +393,7 @@ model AuditEvent {
 }
 
 model CodeRelease {
+  executionManifest                        Json                        @default("{}") @map("execution_manifest")
   id                                       String                      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   version                                  String
   templateVersionId                        String                      @map("template_version_id") @db.Uuid
@@ -489,6 +492,7 @@ model ConfigurationDraft {
 }
 
 model ConfigurationRelease {
+  previews                                                                 AgentPreview[]
   id                                                                       String                    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   workspaceId                                                              String                    @map("workspace_id") @db.Uuid
   agentId                                                                  String                    @map("agent_id") @db.Uuid
@@ -747,6 +751,10 @@ model DocumentChunk {
 }
 
 model BackgroundJob {
+  previewId   String?          @map("preview_id") @db.Uuid
+  turnNumber  Int?             @map("turn_number")
+  requestKey  String?          @map("request_key") @db.Uuid
+  preview     AgentPreview?    @relation(fields: [workspaceId, previewId], references: [workspaceId, id], onDelete: NoAction, onUpdate: NoAction)
   id          String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   workspaceId String           @map("workspace_id") @db.Uuid
   kind        String
@@ -767,6 +775,8 @@ model BackgroundJob {
   ingestion   IngestionJob?
 
   @@unique([workspaceId, id])
+  @@unique([previewId, turnNumber], map: "preview_turn_order")
+  @@unique([previewId, requestKey], map: "preview_turn_request")
   @@map("background_jobs")
   @@schema("agentonic")
 }
@@ -801,6 +811,8 @@ model RetrievalProviderBudget {
 }
 
 model RetrievalProviderOperation {
+  previewId        String?                 @map("preview_id") @db.Uuid
+  agentId          String?                 @map("agent_id") @db.Uuid
   jobId            String                  @map("job_id") @db.Uuid
   id               String                  @id @db.Uuid
   workspaceId      String                  @map("workspace_id") @db.Uuid
@@ -816,5 +828,29 @@ model RetrievalProviderOperation {
   budget           RetrievalProviderBudget @relation(fields: [provider], references: [provider], onDelete: Restrict, onUpdate: NoAction)
 
   @@map("retrieval_provider_operations")
+  @@schema("agentonic")
+}
+
+model AgentPreview {
+  id                     String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId            String               @map("workspace_id") @db.Uuid
+  agentId                String               @map("agent_id") @db.Uuid
+  codeReleaseId          String               @map("code_release_id") @db.Uuid
+  configurationReleaseId String               @map("configuration_release_id") @db.Uuid
+  environment            String               @default("staging")
+  requestedByMemberId    String               @map("requested_by_member_id") @db.Uuid
+  status                 String               @default("running")
+  executionPolicy        Json                 @map("execution_policy")
+  budgetUsd              Decimal              @default(0.25) @map("budget_usd") @db.Decimal(20, 8)
+  committedMicrousd      BigInt               @default(0) @map("committed_microusd")
+  expiresAt              DateTime             @default(dbgenerated("(now() + '00:10:00'::interval)")) @map("expires_at") @db.Timestamptz
+  createdAt              DateTime             @default(now()) @map("created_at") @db.Timestamptz
+  workspace              Workspace            @relation(fields: [workspaceId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  member                 WorkspaceMember      @relation(fields: [workspaceId, requestedByMemberId], references: [workspaceId, id], onDelete: NoAction, onUpdate: NoAction)
+  candidate              ConfigurationRelease @relation(fields: [workspaceId, agentId, codeReleaseId, configurationReleaseId], references: [workspaceId, agentId, codeReleaseId, id], onDelete: NoAction, onUpdate: NoAction)
+  jobs                   BackgroundJob[]
+
+  @@unique([workspaceId, id])
+  @@map("agent_previews")
   @@schema("agentonic")
 }

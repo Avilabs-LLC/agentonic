@@ -210,6 +210,7 @@ export const agentView = z.object({
       hash: z.string(),
       codeReleaseId: uuid.nullable().default(null),
       canSubmit: z.boolean().default(false),
+      canPreview: z.boolean().default(false),
     })
   ),
   submissions: z.array(

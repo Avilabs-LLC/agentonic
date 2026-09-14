@@ -23,6 +23,7 @@ const candidate: AgentView["candidates"][number] = {
   hash: "hash",
   codeReleaseId: code,
   canSubmit: true,
+  canPreview: false,
 }
 function state(
   overrides: Partial<Parameters<typeof workflowRequirements>[0]> = {}
