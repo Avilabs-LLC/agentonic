@@ -33,9 +33,11 @@ export default async function Page() {
                 <CardTitle>Operación</CardTitle>
               </CardHeader>
               <CardContent className="space-y-2">
-                <p className="font-semibold">Preparación inicial</p>
+                <p className="font-semibold">Revisión de propuestas</p>
                 <p className="text-sm text-muted-foreground">
-                  Los despliegues y las revisiones todavía no están habilitados.
+                  Revisa configuraciones enviadas por clientes y devuelve
+                  comentarios. Las evaluaciones y los despliegues aún no están
+                  habilitados.
                 </p>
               </CardContent>
             </Card>

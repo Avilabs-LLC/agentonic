@@ -1,0 +1,173 @@
+import { Skeleton } from "@workspace/ui/components/skeleton"
+import {
+  PageHeaderSkeleton,
+  BackRowSkeleton,
+  TableSkeleton,
+} from "@workspace/ui/components/foundation-skeletons"
+import { Card, CardHeader, CardContent } from "@workspace/ui/components/card"
+function FormCard({
+  fields = 3,
+  textareaAt = -1,
+  step = false,
+  requirements = 0,
+}: {
+  fields?: number
+  textareaAt?: number
+  step?: boolean
+  requirements?: number
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        {step && <Skeleton className="mb-1 h-5 w-32" />}
+        <Skeleton className="h-5 w-48" />
+        <Skeleton className="h-4 w-4/5" />
+      </CardHeader>
+      <CardContent
+        className={step ? "flex flex-1 flex-col gap-4" : "space-y-4"}
+      >
+        {Array.from({ length: fields }, (_, i) => (
+          <div key={i} className="space-y-2">
+            <Skeleton className="h-4 w-28" />
+            <Skeleton
+              className={i === textareaAt ? "h-40 w-full" : "h-9 w-full"}
+            />
+          </div>
+        ))}
+        {requirements > 0 && (
+          <div className="space-y-3 border-t pt-4">
+            {Array.from({ length: requirements }, (_, index) => (
+              <div key={index} className="flex items-center gap-2">
+                <Skeleton className="size-3.5 shrink-0" />
+                <Skeleton className="h-4 w-4/5" />
+              </div>
+            ))}
+          </div>
+        )}
+        <Skeleton className={step ? "mt-auto h-9 w-36" : "h-9 w-36"} />
+      </CardContent>
+    </Card>
+  )
+}
+export function AgentsSkeleton() {
+  return (
+    <>
+      <PageHeaderSkeleton />
+      <Skeleton className="h-8 w-48" />
+      <Skeleton className="h-5 w-4/5" />
+      <TableSkeleton columns={10} />
+    </>
+  )
+}
+export function AgentEditorSkeleton() {
+  return (
+    <div className="mx-auto w-full max-w-4xl space-y-6">
+      <BackRowSkeleton />
+      <PageHeaderSkeleton />
+      <div className="space-y-6">
+        {["prompt", "skills", "knowledge", "tools", "connections"].map(
+          (section) => (
+            <Card
+              key={section}
+              className="gap-5 py-6 [--card-spacing:--spacing(6)]"
+            >
+              <CardHeader className="gap-2">
+                <Skeleton className="h-7 w-56" />
+                <Skeleton className="h-5 w-4/5" />
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {section === "prompt" ? (
+                  <div className="space-y-3">
+                    <Skeleton className="h-60 w-full" />
+                    <Skeleton className="h-4 w-2/3" />
+                  </div>
+                ) : section === "knowledge" ? (
+                  <div className="space-y-3">
+                    <Skeleton className="h-5 w-40" />
+                    <div className="divide-y border-t">
+                      {[0, 1, 2].map((row) => (
+                        <div key={row} className="flex items-center gap-3 py-4">
+                          <Skeleton className="size-4" />
+                          <Skeleton className="h-5 w-2/3" />
+                        </div>
+                      ))}
+                    </div>
+                    <Skeleton className="h-4 w-3/4" />
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-4 border-t py-5">
+                    <div className="min-w-0 flex-1 space-y-3">
+                      <Skeleton className="h-5 w-1/2" />
+                      <Skeleton className="h-4 w-4/5" />
+                    </div>
+                    <Skeleton className="size-8" />
+                  </div>
+                )}
+              </CardContent>
+              <div className="border-t px-6 pt-4">
+                <Skeleton className="h-5 w-3/4" />
+              </div>
+            </Card>
+          )
+        )}
+        <div className="flex justify-between gap-4 rounded-lg border p-4">
+          <div className="space-y-2">
+            <Skeleton className="h-5 w-40" />
+            <Skeleton className="h-4 w-64" />
+          </div>
+          <Skeleton className="h-9 w-36" />
+        </div>
+      </div>
+      <div className="space-y-5">
+        <div className="space-y-2">
+          <Skeleton className="h-8 w-2/3" />
+          <Skeleton className="h-5 w-full" />
+        </div>
+        <div className="grid auto-rows-fr items-stretch gap-6 lg:grid-cols-2">
+          <FormCard step fields={1} requirements={5} />
+          <FormCard step fields={3} textareaAt={1} requirements={6} />
+        </div>
+      </div>
+      <FormCard fields={1} />
+    </div>
+  )
+}
+export function KnowledgeSkeleton() {
+  return (
+    <>
+      <PageHeaderSkeleton />
+      <Skeleton className="h-8 w-48" />
+      <div className="grid gap-6 lg:grid-cols-2">
+        <FormCard fields={2} />
+        <FormCard fields={2} />
+      </div>
+      <TableSkeleton columns={5} />
+    </>
+  )
+}
+export function ReviewsSkeleton() {
+  return (
+    <>
+      <PageHeaderSkeleton />
+      <Skeleton className="h-8 w-48" />
+      <FormCard fields={1} />
+      <FormCard fields={1} />
+    </>
+  )
+}
+export function ReviewDetailSkeleton() {
+  return (
+    <>
+      <BackRowSkeleton />
+      <PageHeaderSkeleton />
+      <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(18rem,1fr)]">
+        <div className="space-y-6">
+          <FormCard fields={1} textareaAt={0} />
+          <FormCard fields={1} textareaAt={0} />
+          <FormCard fields={1} />
+        </div>
+        <FormCard fields={2} textareaAt={1} />
+      </div>
+    </>
+  )
+}

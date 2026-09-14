@@ -13,17 +13,20 @@ import {
   ItemSeparator,
   ItemActions,
 } from "@workspace/ui/components/item"
+import Link from "next/link"
 import { Badge } from "@workspace/ui/components/badge"
 export function FoundationRoadmap({ customer }: { customer: boolean }) {
   const steps = customer
     ? [
         [
           "Personaliza tu agente",
-          "Instrucciones, documentos y conexiones seleccionadas.",
+          "Instrucciones, habilidades escritas y documentos privados.",
+          "/agents",
         ],
         [
-          "Prueba y envía a revisión",
-          "Una versión concreta para que nuestro equipo la revise.",
+          "Envía a revisión",
+          "Congela una versión y recibe comentarios del equipo.",
+          "/agents",
         ],
         [
           "Usa tu agente",
@@ -33,7 +36,8 @@ export function FoundationRoadmap({ customer }: { customer: boolean }) {
     : [
         [
           "Revisar propuestas",
-          "Versiones de agentes y permisos solicitados por cada cliente.",
+          "Versiones exactas enviadas con consentimiento del cliente.",
+          "/submissions",
         ],
         [
           "Evaluar y desplegar",
@@ -47,24 +51,32 @@ export function FoundationRoadmap({ customer }: { customer: boolean }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Próximas funciones</CardTitle>
+        <CardTitle>Tu flujo de trabajo</CardTitle>
         <CardDescription>
-          La base de acceso está disponible. Estas funciones aún están en
-          desarrollo.
+          La personalización y la revisión están disponibles. La ejecución del
+          agente se habilitará en la siguiente etapa.
         </CardDescription>
       </CardHeader>
       <CardContent>
-        {steps.map(([title, description], i) => (
+        {steps.map(([title, description, href], i) => (
           <div key={title}>
             {i > 0 && <ItemSeparator />}
             <Item>
               <ItemContent>
-                <ItemTitle>{title}</ItemTitle>
+                <ItemTitle>
+                  {href ? (
+                    <Link href={href} className="hover:underline">
+                      {title}
+                    </Link>
+                  ) : (
+                    title
+                  )}
+                </ItemTitle>
                 <ItemDescription>{description}</ItemDescription>
               </ItemContent>
               <ItemActions>
                 <Badge variant="outline" className="rounded-full">
-                  Pronto
+                  {href ? "Disponible" : "Pronto"}
                 </Badge>
               </ItemActions>
             </Item>

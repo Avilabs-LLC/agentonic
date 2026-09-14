@@ -4,7 +4,7 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "dev": "next dev --hostname 127.0.0.1 --port 3101",
+    "dev": "node --max-http-header-size=65536 node_modules/next/dist/bin/next dev --hostname 127.0.0.1 --port 3101",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
