@@ -59,7 +59,7 @@ const columns: ColumnDef<CollectionRow>[] = [
       <DataTableColumnHeader column={column} title="Tu acceso" />
     ),
     cell: ({ row }) => (
-      <Badge variant="outline" className="rounded-full">
+      <Badge variant={row.original.canCurate ? "emerald" : "sky"}>
         {row.original.canCurate ? "Gestionar" : "Solo lectura"}
       </Badge>
     ),
@@ -103,7 +103,7 @@ export function KnowledgeCollections({
             <DialogTrigger
               render={<Button disabled={!canCreate} className="shrink-0" />}
             >
-              <PlusIcon />
+              <PlusIcon aria-hidden="true" />
               Crear colección
             </DialogTrigger>
             <DialogContent showCloseButton={!pending}>

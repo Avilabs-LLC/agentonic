@@ -462,6 +462,8 @@ Carry over the source's Spanish (`es-VE`) interface and centralized `Intl` forma
 
 Collection pages render a shared `PageHeader`: bold `text-3xl` title, formatted count appended as `Título: 1.811`, one-line muted description and right-aligned page actions. Optional statistics and filters precede the main content. Do not invent counts before data exists.
 
+Every “Crear…” button, including dialog launchers and form submit buttons, includes a leading decorative Lucide plus icon. Keep the Spanish text as its accessible name and preserve pending/disabled behavior.
+
 Each app has one typed navigation registry providing its sidebar, breadcrumb and page-header labels. Share the registry contract and rendering helpers, not staff navigation entries with customers. Unbuilt sections appear disabled with a `Pronto` badge. Keep routes, labels and permissions explicit.
 
 ### 21.3. Tables
@@ -473,6 +475,7 @@ Use pinned TanStack Table v8 and a shared `DataTable` for entity tables. Prefer 
 - Provide Spanish pagination, page-size selection, a sticky header in a bounded scroll area, and a shadcn `Empty` state.
 - When an entity has a working detail route, its first column is an eight-character ID rendered by the shared blue underlined `IdLink`. Omit that column until the detail route exists. **Customer agent list override (owner direction, 2026-09-14):** the ellipsis action column comes first; the agent name is the blue underlined detail link, the ID column is omitted, and Estado is the last column. Existing edit permission checks also govern the name link.
 - Statuses use pill badges with the source palette: `success`, `warning`, `error`, `orange`, `sky`, `violet`, `emerald`, `slate`, and the appropriate `inverse*` variants on colored surfaces. Light mode uses tinted surfaces/dark text; dark mode uses page-background surfaces/luminous text. Never use the solid primary `default` badge for statuses. Text communicates status as well as color.
+- Shared `status-badge` components and `lib/badge-status` maps assign the same labels/colors in both apps: ready/active/approved/available → success; queued/submitted/paused/unevaluated → warning; processing/in review/read access/selected knowledge → sky; requested changes/examples → orange; drafts/development → violet; collection management → emerald; failure/rejection/revocation → error; withdrawn/archived/unprocessed/undeployed/upcoming → slate. Unknown statuses use a slate “Estado desconocido” badge. The Acachuchazo palette remains centralized in `badge.tsx`; inverse variants are reserved for colored surfaces.
 
 ### 21.4. Filters and row actions
 

@@ -1,6 +1,7 @@
 "use client"
 import { useState } from "react"
 import { useRouter } from "next/navigation"
+import { PlusIcon } from "lucide-react"
 import type { FormResult } from "@agentonic/contracts/authoring"
 import {
   Dialog,
@@ -38,7 +39,10 @@ export function AgentCreateDialog({
   }
   return (
     <Dialog open={open} onOpenChange={changeOpen}>
-      <DialogTrigger render={<Button />}>Crear agente</DialogTrigger>
+      <DialogTrigger render={<Button />}>
+        <PlusIcon aria-hidden="true" />
+        Crear agente
+      </DialogTrigger>
       <DialogContent showCloseButton={!pending}>
         <DialogTitle>Crear agente</DialogTitle>
         <DialogDescription>

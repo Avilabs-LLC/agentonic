@@ -12,6 +12,7 @@ import {
 import { AgentWorkflow } from "@workspace/ui/components/agent-workflow"
 import { ConfirmMutation } from "@workspace/ui/components/confirm-mutation"
 import { Badge } from "@workspace/ui/components/badge"
+import { SubmissionStatusBadge } from "@workspace/ui/components/status-badge"
 import { customerWorkspace } from "@/lib/workspace"
 import {
   saveDraft,
@@ -45,11 +46,7 @@ export default async function Page({
           data.agent.description ??
           "Personaliza tu agente y prepara una propuesta."
         }
-        actions={
-          <Badge variant="outline" className="rounded-full">
-            Sin despliegue
-          </Badge>
-        }
+        actions={<Badge variant="slate">Sin despliegue</Badge>}
       />
       <AgentWorkflow
         key={data.draft.revision}
@@ -82,9 +79,7 @@ export default async function Page({
             <div key={s.id} className="space-y-3 rounded-lg border p-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <p className="font-medium">Propuesta {s.number}</p>
-                <Badge variant="outline" className="rounded-full">
-                  {submissionLabels[s.status] ?? s.status}
-                </Badge>
+                <SubmissionStatusBadge status={s.status} />
               </div>
               {s.note && (
                 <p className="text-sm whitespace-pre-wrap">{s.note}</p>

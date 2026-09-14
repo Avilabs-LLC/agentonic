@@ -56,7 +56,7 @@ export function AgentCapabilityPlaceholder({
     <AgentSettingsCard
       title={example.title}
       description={example.description}
-      action={<Badge variant="outline">Próximamente</Badge>}
+      action={<Badge variant="slate">Próximamente</Badge>}
       footer={
         <>
           <span>Vista de ejemplo. No forma parte del borrador.</span>

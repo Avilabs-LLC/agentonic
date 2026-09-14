@@ -154,8 +154,8 @@ export function AppShell({
                             <Icon />
                             <span>{item.title}</span>
                             <Badge
-                              variant="outline"
-                              className="ml-auto rounded-full text-[10px]"
+                              variant="slate"
+                              className="ml-auto text-[10px]"
                             >
                               Pronto
                             </Badge>
@@ -251,7 +251,7 @@ export function AppShell({
               )}
             </BreadcrumbList>
           </Breadcrumb>
-          <Badge variant="outline" className="ml-auto rounded-full">
+          <Badge variant="violet" className="ml-auto">
             Desarrollo
           </Badge>
         </header>

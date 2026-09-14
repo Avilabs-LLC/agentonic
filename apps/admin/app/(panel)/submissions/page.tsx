@@ -11,8 +11,7 @@ import {
   CardContent,
 } from "@workspace/ui/components/card"
 import { MutationForm } from "@workspace/ui/components/mutation-form"
-import { Badge } from "@workspace/ui/components/badge"
-import { submissionLabels } from "@agentonic/contracts/authoring"
+import { SubmissionStatusBadge } from "@workspace/ui/components/status-badge"
 import { beginReview } from "./actions"
 export default async function Page({
   searchParams,
@@ -61,9 +60,7 @@ export default async function Page({
                   <CardTitle>
                     {s.agentName} · Propuesta {s.number}
                   </CardTitle>
-                  <Badge variant="outline" className="rounded-full">
-                    {submissionLabels[s.status] ?? s.status}
-                  </Badge>
+                  <SubmissionStatusBadge status={s.status} />
                 </div>
                 <CardDescription>
                   Versión sin evaluación de ejecución.

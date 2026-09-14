@@ -75,7 +75,7 @@ export function FoundationRoadmap({ customer }: { customer: boolean }) {
                 <ItemDescription>{description}</ItemDescription>
               </ItemContent>
               <ItemActions>
-                <Badge variant="outline" className="rounded-full">
+                <Badge variant={href ? "success" : "slate"}>
                   {href ? "Disponible" : "Pronto"}
                 </Badge>
               </ItemActions>

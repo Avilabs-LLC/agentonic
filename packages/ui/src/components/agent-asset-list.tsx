@@ -73,7 +73,7 @@ export function AgentAssetList({
                 >
                   {row.name}
                 </p>
-                <Badge variant="outline">
+                <Badge variant={row.example ? "orange" : "violet"}>
                   {row.example ? "Ejemplo" : "Borrador"}
                 </Badge>
               </div>

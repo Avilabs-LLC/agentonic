@@ -18,6 +18,9 @@ const badgeVariants = cva(
         ghost:
           "hover:bg-muted hover:text-muted-foreground dark:hover:bg-muted/50",
         link: "text-primary underline-offset-4 hover:underline",
+        // Acachuchazo status palette: tinted surfaces in light mode;
+        // page-background surfaces with luminous text/borders in dark mode.
+        // Workflow labels and colors are shared through status-badge.tsx.
         success:
           "border-emerald-200 bg-emerald-100 text-emerald-900 dark:border-emerald-300 dark:bg-background dark:text-emerald-300",
         warning:

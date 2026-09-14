@@ -179,7 +179,7 @@ export function DraftEditor({
             title="Conocimiento"
             description="Selecciona las colecciones de documentos que tu agente necesitará consultar."
             action={
-              <Badge variant="outline">
+              <Badge variant={collectionIds.length ? "sky" : "slate"}>
                 {collectionIds.length} seleccionadas
               </Badge>
             }

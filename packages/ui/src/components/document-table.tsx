@@ -9,7 +9,7 @@ import {
   DataTableColumnHeader,
 } from "@workspace/ui/components/data-table"
 import { processingErrors } from "@agentonic/contracts/rag"
-import { Badge } from "@workspace/ui/components/badge"
+import { DocumentStatusBadge } from "@workspace/ui/components/status-badge"
 import { DocumentDownload } from "@workspace/ui/components/document-download"
 import { Button } from "@workspace/ui/components/button"
 import {
@@ -233,18 +233,7 @@ export function DocumentTable({
       ),
       cell: ({ row }) => (
         <div className="space-y-1">
-          <Badge variant="outline" className="rounded-full">
-            {row.original.status === "ready"
-              ? "Listo"
-              : row.original.processingStatus === "running"
-                ? "Procesando"
-                : row.original.processingStatus === "queued"
-                  ? "En cola"
-                  : row.original.status === "failed" ||
-                      row.original.processingStatus === "failed"
-                    ? "Error"
-                    : "Sin procesar"}
-          </Badge>
+          <DocumentStatusBadge document={row.original} />
           <p className="max-w-48 text-xs whitespace-normal text-muted-foreground">
             {row.original.status === "ready"
               ? `${row.original.chunkCount} fragmentos`

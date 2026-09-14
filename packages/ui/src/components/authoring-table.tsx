@@ -37,6 +37,10 @@ import {
 } from "@workspace/ui/components/data-table"
 import { Button } from "@workspace/ui/components/button"
 import { Badge } from "@workspace/ui/components/badge"
+import {
+  AgentStatusBadge,
+  SubmissionStatusBadge,
+} from "@workspace/ui/components/status-badge"
 export function AuthoringTable({
   agents,
   workspaceId,
@@ -243,11 +247,7 @@ export function AuthoringTable({
                     aria-hidden="true"
                   />
                   <span>{version.version}</span>
-                  <Badge
-                    variant={version.status === "in_review" ? "sky" : "warning"}
-                  >
-                    {version.status === "in_review" ? "En revisión" : "Enviada"}
-                  </Badge>
+                  <SubmissionStatusBadge status={version.status} />
                 </div>
               ))
             ) : (
@@ -265,11 +265,7 @@ export function AuthoringTable({
       header: ({ column }) => (
         <DataTableColumnHeader column={column} title="Estado" />
       ),
-      cell: ({ row }) => (
-        <Badge variant="outline" className="rounded-full">
-          {row.original.status === "draft" ? "Borrador" : row.original.status}
-        </Badge>
-      ),
+      cell: ({ row }) => <AgentStatusBadge status={row.original.status} />,
     },
   ]
   return (

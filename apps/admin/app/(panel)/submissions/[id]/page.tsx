@@ -44,7 +44,7 @@ export default async function Page({
         title={`${review.agentName} · Propuesta ${review.number}`}
         description="Solo esta versión y el alcance autorizado por el cliente."
         actions={
-          <Badge variant="outline" className="rounded-full">
+          <Badge variant="warning">
             Sin evaluar
           </Badge>
         }
