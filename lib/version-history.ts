@@ -1,5 +1,10 @@
 export const VERSION_HISTORY = [
   {
+    "version": "0.5.3",
+    "date": "2026-09-14",
+    "summary": "Fix empty Knowledge keys and add confirmed collection deletion with durable cleanup"
+  },
+  {
     "version": "0.5.2",
     "date": "2026-09-14",
     "summary": "Private frozen-version chat previews with verified runtime artifacts, scoped retrieval and shared development budgets"

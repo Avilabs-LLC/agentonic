@@ -1,7 +1,7 @@
 // Agentonic authoritative schema companion — 2026-09-14.
 // Authority: agentonic-architecture.md. Supersedes both independent draft DBMLs.
 // FULL TARGET DESIGN: not a migration. Prisma migrations implement 35 identity/access/authoring/knowledge/preview tables;
-// remaining entities/safeguards are pending. See architecture sections 22–30.
+// remaining entities/safeguards are pending. See architecture sections 22–32.
 // Delivery order: customer authoring (step 3), staff/runtime counterparts (3.5), integrated
 // preview/deployment (4). This order changes no relationships; see architecture section 19.
 // Migration 5 optimizes actor-scoped discovery and compatible read locks; no tables added.
@@ -10,6 +10,7 @@
 // Migration 7 adds leased upload ingestion, hybrid retrieval, cited knowledge previews and hard purge.
 // Migration 8 adds private, bounded local frozen-candidate previews; formal deployment records remain pending.
 // Migration 9 corrects prior-question retrieval context without adding tables.
+// Migration 10 adds authorized collection deletion and durable document cleanup; no tables added.
 // Provider calls require configured worker keys and reserved budget. Approval/deployment remain disabled. Runtime audit actors
 // remain closed by SQL CHECKs until their later tables and execution boundaries are implemented.
 // Every table is labeled LAUNCH or CONDITIONAL. LATER features are intentionally omitted.
@@ -961,7 +962,7 @@ Table agentonic.knowledge_collections {
     (workspace_id, slug) [unique]
   }
 
-  Note: '''SCOPE: LAUNCH. Sharing boundary for reference knowledge: e.g. company handbook, engineering repos or one owner private library. No shared-by-default workspace flag. Agent and human grants must both permit retrieval. Membership in the organization is insufficient.'''
+  Note: '''SCOPE: LAUNCH. Sharing boundary for reference knowledge: e.g. company handbook, engineering repos or one owner private library. No shared-by-default workspace flag. Agent and human grants must both permit retrieval. Membership in the organization is insufficient. Implemented deletion requires current curate access and the exact collection name when undeleted document objects exist. It sets archived_at and removes the original name/description/slug, retaining a non-content tombstone for provenance; archived collections fail live authorization. Document content is removed immediately and Storage cleanup follows the durable purge path. Frozen snapshots remain immutable and cannot restore access to a deleted collection.'''
 }
 
 Table agentonic.collection_member_grants {
