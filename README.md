@@ -67,7 +67,7 @@ Every page has a matching loading skeleton. After reviewing any affected visual 
 ```text
 apps/admin/             Staff Next.js app
 apps/customer/          Customer Next.js app
-apps/worker/            Idle supervised shell; no queue consumers yet
+apps/worker/            Knowledge processing and private preview broker
 packages/ui/            Shared preset, primitives, forms, tables and shell
 packages/contracts/     Validation, formatting and domain contracts
 packages/server/        Server-only authentication and application access
@@ -75,7 +75,7 @@ packages/database/      Prisma model, generated client and SQL migrations
 scripts/                Explicit setup, verification and skeleton tooling
 ```
 
-App roles are non-owner and non-BYPASSRLS. Tables remain SELECT-only; validated command functions handle authorized writes and audit them atomically. Tenant queries require a verified actor, transaction-local workspace and current resource authority as well as active membership. A restricted discovery function returns only the caller's active workspace IDs. Workers have no application data grants yet.
+App roles are non-owner and non-BYPASSRLS. Tables remain SELECT-only; validated command functions handle authorized writes and audit them atomically. Tenant queries require a verified actor, transaction-local workspace and current resource authority as well as active membership. A restricted discovery function returns only the caller's active workspace IDs. The restricted worker uses leased command functions for knowledge and private previews.
 
 The VM has been inspected only. No Azure packages, services, firewall rules or deployment files have been installed. Future releases use systemd and fixed release directories as described in the architecture.
 
@@ -96,11 +96,11 @@ This explicit nonproduction check temporarily exercises resource creation, invit
 
 ## Customer authoring and staff review
 
-Customer `/agents` supports creation, revisioned prompts/skills, exact candidate freezing, consented submission and feedback history. `/knowledge` supports private PDF/text/Markdown uploads, up to 10 MB each. Documents are pending processing; removal revokes access, while physical cleanup awaits the retention worker. A 500 MB workspace inventory ceiling includes retained and failed reservations.
+Customer `/agents` supports creation, revisioned prompts/skills, exact candidate freezing, consented submission and feedback history. `/knowledge` supports private PDF/text/Markdown uploads, up to 10 MB each. Documents are processed locally; removal immediately removes derived knowledge and queues physical cleanup. A 500 MB workspace inventory ceiling includes retained and failed reservations.
 
-Admin `/submissions` exposes consented proposals and audited configuration review. Staff may return comments, request changes or reject. Approval, chat previews and deployment remain unavailable.
+Admin `/submissions` exposes consented proposals and audited configuration review. Staff may return comments, request changes or reject. Private frozen-version previews are available locally; production approval and deployment remain unavailable.
 
-OpenAI is selected for the next execution milestone, with an authorized **US$25 total development cap**. Store the key in ignored `.env.runtime.local` as `OPENAI_API_KEY`. No current feature reads this credential or makes paid calls; runtime metering and cap enforcement must precede preview activation. See architecture §24 for the complete implemented boundary.
+OpenAI is selected for the next execution milestone, with an authorized **US$25 total development cap**. Store the key in ignored `apps/worker/.env.local` as `OPENAI_API_KEY`. The worker uses its ignored environment file and reserves paid calls against the shared accumulated ledger. See architecture §§30–31 for the implemented boundary.
 
 ## Releases
 
@@ -116,3 +116,9 @@ This increments the minor version and resets the patch, recording the release in
 For an authorized release directly on `main`, use `node scripts/versioning.mjs bump direct --summary "Describe the completed changes"` instead. It increments only the patch version and updates the same metadata; run the same version and skeleton checks before committing and pushing.
 
 `pnpm db:check-page-reads` is an opt-in nonproduction concurrency check for both restricted app roles. It checks actor-scoped identity discovery, concurrent readers and conflicting writers; all temporary writes are rolled back. Page-load observations and limitations are recorded in architecture section 25.
+
+## Local frozen-version preview
+
+After reviewing and committing the sibling runtime checkout, run `pnpm setup:preview` to package and register its exact executable artifact for the configured nonproduction workspaces. Select that code release when freezing a new candidate, then open **Probar versión** from the agent. Existing candidates keep their original code. `pnpm dev` starts the apps and broker; do not start a duplicate worker.
+
+Previews are private, last ten minutes, accept ten messages and cap spending at US$0.25 within the accumulated Voyage/OpenAI development allowances. They use frozen instructions/skills and authorized staging sources; tools and production actions remain disabled. `pnpm preview:check-live` makes paid synthetic calls and is excluded from routine CI. Its `--keep-fixture` option retains a labeled synthetic agent for browser QA; `node scripts/check-preview-live.mjs --cleanup` removes it while preserving usage. The architecture records VM staging, recovery and production gates still pending.

@@ -1,5 +1,10 @@
 export const VERSION_HISTORY = [
   {
+    "version": "0.5.2",
+    "date": "2026-09-14",
+    "summary": "Private frozen-version chat previews with verified runtime artifacts, scoped retrieval and shared development budgets"
+  },
+  {
     "version": "0.5.1",
     "date": "2026-09-14",
     "summary": "Theme-aware badges across admin and customer, consistent creation icons and direct patch releases"

@@ -1,6 +1,6 @@
 // Agentonic authoritative schema companion — 2026-09-14.
 // Authority: agentonic-architecture.md. Supersedes both independent draft DBMLs.
-// FULL TARGET DESIGN: not a migration. Prisma migrations implement 34 identity/access/authoring/knowledge tables;
+// FULL TARGET DESIGN: not a migration. Prisma migrations implement 35 identity/access/authoring/knowledge/preview tables;
 // remaining entities/safeguards are pending. See architecture sections 22–30.
 // Delivery order: customer authoring (step 3), staff/runtime counterparts (3.5), integrated
 // preview/deployment (4). This order changes no relationships; see architecture section 19.
@@ -8,6 +8,8 @@
 // Migration 6 adds permission-scoped agent listing summaries; no tables added.
 // Step 3 adds immutable candidates, private staging uploads and consented exact submission review.
 // Migration 7 adds leased upload ingestion, hybrid retrieval, cited knowledge previews and hard purge.
+// Migration 8 adds private, bounded local frozen-candidate previews; formal deployment records remain pending.
+// Migration 9 corrects prior-question retrieval context without adding tables.
 // Provider calls require configured worker keys and reserved budget. Approval/deployment remain disabled. Runtime audit actors
 // remain closed by SQL CHECKs until their later tables and execution boundaries are implemented.
 // Every table is labeled LAUNCH or CONDITIONAL. LATER features are intentionally omitted.
@@ -257,6 +259,7 @@ Table agentonic.agent_member_grants {
 }
 
 Table agentonic.code_releases {
+  execution_manifest jsonb [not null, default: `'{}'::jsonb`, note: 'Immutable opt-in execution protocol, model, Git identity and artifact file digests; empty means authoring only.']
   id uuid [pk, not null, default: `gen_random_uuid()`]
   version text [not null]
   template_version_id uuid [not null]
@@ -717,6 +720,9 @@ Table agentonic.schedule_fires {
 }
 
 Table agentonic.background_jobs {
+  preview_id uuid
+  turn_number integer [check: `turn_number BETWEEN 1 AND 10`]
+  request_key uuid
   id uuid [pk, not null, default: `gen_random_uuid()`]
   workspace_id uuid [not null]
   kind text [not null, check: `kind IN ('run','ingest','retrieve','deploy','stop','restart','evaluate','deliver','purge','reconcile')`]
@@ -738,6 +744,8 @@ Table agentonic.background_jobs {
   conflict_key text
   indexes {
     (workspace_id, id) [unique]
+    (preview_id, turn_number) [unique]
+    (preview_id, request_key) [unique]
     (workspace_id, kind, deduplication_key) [unique]
     (status, available_at)
     (status, lease_until)
@@ -746,7 +754,7 @@ Table agentonic.background_jobs {
     `(status='running')=(lease_token IS NOT NULL AND lease_until IS NOT NULL)`
     `kind NOT IN ('deploy','stop','restart') OR (agent_id IS NOT NULL AND environment IS NOT NULL AND conflict_key IS NOT NULL)`
   }
-  Note: '''SCOPE: LAUNCH. Migration 7 implements only ingest/retrieve/purge and core lease fields; later kinds and agent/environment/deduplication/conflict fields remain target work. Transactional enqueue; SKIP LOCKED claims; renewable 90-second UUID-fenced leases; five attempts for processing, indefinite idempotent purge retries. Workers recheck the initiating member and current collection rights. Purge derives authority from the tombstone and must survive member removal. No staff impersonation or runtime execution. Query records expire after ten minutes; claim maintenance deletes them. Broader job deduplication and deployment conflict serialization remain required before those consumers launch.'''
+  Note: '''SCOPE: LAUNCH. Migration 8 binds local preview turns to preview_id with unique turn number/request key and a partial one-in-flight index; these are retrieve jobs with current agent/source/audience checks and no automatic retry. Migration 7 implements ingest/retrieve/purge and core lease fields; later kinds and agent/environment/deduplication/conflict fields remain target work. Transactional enqueue; SKIP LOCKED claims; renewable 90-second UUID-fenced leases; five attempts for processing, indefinite idempotent purge retries. Workers recheck the initiating member and current collection rights. Purge derives authority from the tombstone and must survive member removal. No staff impersonation. Query records expire after ten minutes; claim maintenance deletes them. Broader job deduplication and deployment conflict serialization remain required before those consumers launch.'''
 }
 
 Table agentonic.audit_events {
@@ -1753,6 +1761,7 @@ Table agentonic.evaluation_results {
 }
 
 Table agentonic.agent_previews {
+  committed_microusd bigint [not null, default: 0, check: `committed_microusd >= 0`]
   id uuid [pk, not null, default: `gen_random_uuid()`]
   workspace_id uuid [not null]
   agent_id uuid [not null]
@@ -1783,7 +1792,7 @@ Table agentonic.agent_previews {
     `requested_by_staff_id IS NULL OR support_access_grant_id IS NOT NULL`
   }
 
-  Note: '''SCOPE: LAUNCH. Bounded customer preview of an immutable candidate using a staging deployment. Does not grant production activation or approve requested_access_snapshot. Live verified actor/source permission, test credential scope, private conversation audience and workspace budget still apply. Production credentials cannot be copied into staging; use separately authorized read-only test connections or customer-selected test uploads. Expiry stops new turns/tools and reconciles unfinished provider work. Customer can edit a new draft while this exact snapshot runs; serialize staging slot switches and drain old preview sessions. Preview evidence retained only within stated review consent.'''
+  Note: '''SCOPE: LAUNCH. Migration 8 implements the local member-only subset: ten-minute lifetime, ten turns, US$0.25 ceiling under existing development caps, private read-only authority and exact code/configuration hashes. deployment_id and staff/support/finished_at fields remain target work; the local IPC adapter does not claim a systemd deployment. Full target: bounded customer preview of an immutable candidate using a staging deployment. Does not grant production activation or approve requested_access_snapshot. Live verified actor/source permission, test credential scope, private conversation audience and workspace budget still apply. Production credentials cannot be copied into staging; use separately authorized read-only test connections or customer-selected test uploads. Expiry stops new turns/tools and reconciles unfinished provider work. Customer can edit a new draft while this exact snapshot runs; serialize staging slot switches and drain old preview sessions. Preview evidence retained only within stated review consent.'''
 }
 
 Ref: agentonic.platform_staff.user_id > agentonic.users.id [delete: restrict, update: restrict]
@@ -2129,9 +2138,11 @@ Table agentonic.retrieval_provider_budgets {
   cap_microusd bigint [not null, default: 0, check: `cap_microusd >= 0`]
   committed_microusd bigint [not null, default: 0, check: `committed_microusd >= 0`]
   updated_at timestamptz [not null, default: `now()`]
-  Note: '''SCOPE: LAUNCH. Implemented operational development ceiling, global per provider. Lock before reserving each call. Includes known list-price estimates plus full uncertain reservations. Initial caps zero until explicitly configured. Not customer billing, not workspace/agent budget enforcement. Integrate with budget_periods before runtime launch, without resetting already consumed spend.'''
+  Note: '''SCOPE: LAUNCH. Implemented operational development ceiling, global per provider. Lock before reserving each call. Includes known list-price estimates plus full uncertain reservations. Initial caps zero until explicitly configured. Not customer billing, not workspace/agent budget enforcement. Local previews add a per-preview ceiling under these existing totals. Integrate with budget_periods before hosted customer runtime launch, without resetting already consumed spend.'''
 }
 Table agentonic.retrieval_provider_operations {
+  preview_id uuid [note: 'Opaque attribution retained after ephemeral preview erasure.']
+  agent_id uuid [note: 'Opaque attribution, set only for agent preview operations.']
   id uuid [pk, not null]
   job_id uuid [not null, note: 'Opaque operation provenance without FK so content-bearing jobs can be purged.']
   workspace_id uuid [not null]
@@ -2149,3 +2160,5 @@ Ref: agentonic.background_jobs.(workspace_id, member_id) > agentonic.workspace_m
 Ref: agentonic.ingestion_jobs.(workspace_id, background_job_id) > agentonic.background_jobs.(workspace_id, id) [delete: cascade, update: restrict]
 Ref: agentonic.retrieval_provider_operations.workspace_id > agentonic.workspaces.id [delete: restrict, update: restrict]
 Ref: agentonic.retrieval_provider_operations.provider > agentonic.retrieval_provider_budgets.provider [delete: restrict, update: restrict]
+
+Ref: agentonic.background_jobs.(workspace_id, preview_id) > agentonic.agent_previews.(workspace_id, id) [delete: restrict, update: restrict]
