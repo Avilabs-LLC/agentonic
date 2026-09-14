@@ -487,6 +487,8 @@ Row actions use a final-column ellipsis menu with icons. Destructive actions are
 
 Forms use react-hook-form, Zod, `zodResolver`, `mode: "onChange"`, and shadcn `Field`, `FieldLabel`, and `FieldError`. Submit is disabled while required inputs are invalid or submission is in progress: `disabled={!isValid || isSubmitting}`. Validate again on the server and preserve actionable field errors.
 
+Creation entry buttons use a `+` icon. Inside dialogs, submit buttons omit that icon and retain a specific action label such as `Crear agente`, `Crear colección` or `Eliminar colección`, rather than generic `Confirmar`. Repeating the dialog's action makes the result of submitting explicit. Use `Cancelar` for dismissal and the appropriate progress label while submitting.
+
 Use Sonner at the bottom right with centralized `notify` helpers and distinct success, warning and destructive styles. Components do not call `toast` directly. Every completed submission or row action produces exactly one notification, including failures; cancellation produces no success claim. Inline field errors complement that notification. Pending asynchronous work must be described as queued/submitted, not deployed or completed.
 
 ### 21.6. Loading states and verification

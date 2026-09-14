@@ -1,7 +1,6 @@
 "use client"
 import { useId, useState } from "react"
 import { useRouter } from "next/navigation"
-import { PlusIcon } from "lucide-react"
 import { Controller, useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
@@ -213,7 +212,6 @@ export function ResourceCreateForm({
             (isAgent && !templates.length)
           }
         >
-          <PlusIcon aria-hidden="true" />
           {isSubmitting
             ? "Creando…"
             : isAgent
