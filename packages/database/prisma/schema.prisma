@@ -36,6 +36,12 @@ model PlatformStaff {
   codeRepositorysByCreatedByStaff CodeRepository[]     @relation("CodeRepositoryCreatedByStaff")
   agentsByCreatedByStaff          Agent[]              @relation("AgentCreatedByStaff")
 
+ CodeReleaseByPublishedbystaffid CodeRelease[] @relation("CodeReleasePublishedbystaffidStep3")
+ WorkspaceCodeReleaseGrantByGrantedbystaffid WorkspaceCodeReleaseGrant[] @relation("WorkspaceCodeReleaseGrantGrantedbystaffidStep3")
+ ConfigurationDraftByCreatedbystaffid ConfigurationDraft[] @relation("ConfigurationDraftCreatedbystaffidStep3")
+ ConfigurationReleaseByFrozenbystaffid ConfigurationRelease[] @relation("ConfigurationReleaseFrozenbystaffidStep3")
+ AgentSubmissionBySubmittedbystaffid AgentSubmission[] @relation("AgentSubmissionSubmittedbystaffidStep3")
+ SubmissionReviewDecisionByActorstaffid SubmissionReviewDecision[] @relation("SubmissionReviewDecisionActorstaffidStep3")
   @@map("platform_staff")
   @@schema("agentonic")
 }
@@ -66,6 +72,16 @@ model Workspace {
   agentContactGrantsByWorkspace     AgentContactGrant[]     @relation("AgentContactGrantWorkspace")
   codeRepositorysByWorkspace        CodeRepository[]        @relation("CodeRepositoryWorkspace")
 
+ StoredObjectByWorkspaceid StoredObject[] @relation("StoredObjectWorkspaceidStep3")
+ KnowledgeSourceByWorkspaceid KnowledgeSource[] @relation("KnowledgeSourceWorkspaceidStep3")
+ DocumentByWorkspaceid Document[] @relation("DocumentWorkspaceidStep3")
+ DocumentVersionByWorkspaceid DocumentVersion[] @relation("DocumentVersionWorkspaceidStep3")
+ ConfigurationDraftByWorkspaceid ConfigurationDraft[] @relation("ConfigurationDraftWorkspaceidStep3")
+ ConfigurationReleaseByWorkspaceid ConfigurationRelease[] @relation("ConfigurationReleaseWorkspaceidStep3")
+ ConfigurationToolByWorkspaceid ConfigurationTool[] @relation("ConfigurationToolWorkspaceidStep3")
+ WorkspaceCodeReleaseGrantByWorkspaceid WorkspaceCodeReleaseGrant[] @relation("WorkspaceCodeReleaseGrantWorkspaceidStep3")
+ AgentSubmissionByWorkspaceid AgentSubmission[] @relation("AgentSubmissionWorkspaceidStep3")
+ SubmissionReviewDecisionByWorkspaceid SubmissionReviewDecision[] @relation("SubmissionReviewDecisionWorkspaceidStep3")
   @@map("workspaces")
   @@schema("agentonic")
 }
@@ -96,6 +112,11 @@ model WorkspaceMember {
   @@unique([workspaceId, id])
   @@unique([workspaceId, userId])
   @@index([userId])
+ KnowledgeSourceByWorkspaceidAuthorizedbymemberid KnowledgeSource[] @relation("KnowledgeSourceWorkspaceidAuthorizedbymemberidStep3")
+ ConfigurationDraftByWorkspaceidCreatedbymemberid ConfigurationDraft[] @relation("ConfigurationDraftWorkspaceidCreatedbymemberidStep3")
+ ConfigurationReleaseByWorkspaceidFrozenbymemberid ConfigurationRelease[] @relation("ConfigurationReleaseWorkspaceidFrozenbymemberidStep3")
+ AgentSubmissionByWorkspaceidSubmittedbymemberid AgentSubmission[] @relation("AgentSubmissionWorkspaceidSubmittedbymemberidStep3")
+ SubmissionReviewDecisionByWorkspaceidActormemberid SubmissionReviewDecision[] @relation("SubmissionReviewDecisionWorkspaceidActormemberidStep3")
   @@map("workspace_members")
   @@schema("agentonic")
 }
@@ -138,6 +159,10 @@ model SupportAccessGrant {
 
   @@unique([workspaceId, id])
   @@unique([workspaceId, staffId, id])
+ ConfigurationDraftByWorkspaceidCreatedbystaffidSupportaccessgrantid ConfigurationDraft[] @relation("ConfigurationDraftWorkspaceidCreatedbystaffidSupportaccessgrantidStep3")
+ ConfigurationReleaseByWorkspaceidFrozenbystaffidSupportaccessgrantid ConfigurationRelease[] @relation("ConfigurationReleaseWorkspaceidFrozenbystaffidSupportaccessgrantidStep3")
+ AgentSubmissionByWorkspaceidSubmittedbystaffidSupportaccessgrantid AgentSubmission[] @relation("AgentSubmissionWorkspaceidSubmittedbystaffidSupportaccessgrantidStep3")
+ SubmissionReviewDecisionByWorkspaceidActorstaffidSupportaccessgrantid SubmissionReviewDecision[] @relation("SubmissionReviewDecisionWorkspaceidActorstaffidSupportaccessgrantidStep3")
   @@map("support_access_grants")
   @@schema("agentonic")
 }
@@ -198,6 +223,7 @@ model CodeRepository {
   createdByStaff                 PlatformStaff   @relation("CodeRepositoryCreatedByStaff", fields: [createdByStaffId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "code_repositories_relation_36_fk")
   agentTemplatesByCodeRepository AgentTemplate[] @relation("AgentTemplateCodeRepository")
 
+ CodeReleaseByCoderepositoryid CodeRelease[] @relation("CodeReleaseCoderepositoryidStep3")
   @@map("code_repositories")
   @@schema("agentonic")
 }
@@ -229,6 +255,7 @@ model TemplateVersion {
   agentsByTemplateVersion Agent[]       @relation("AgentTemplateVersion")
 
   @@unique([templateId, version])
+ CodeReleaseByTemplateversionid CodeRelease[] @relation("CodeReleaseTemplateversionidStep3")
   @@map("template_versions")
   @@schema("agentonic")
 }
@@ -260,6 +287,7 @@ model Agent {
 
   @@unique([workspaceId, id])
   @@unique([workspaceId, slug])
+ ConfigurationDraftByWorkspaceidAgentid ConfigurationDraft[] @relation("ConfigurationDraftWorkspaceidAgentidStep3")
   @@map("agents")
   @@schema("agentonic")
 }
@@ -299,6 +327,7 @@ model KnowledgeCollection {
 
   @@unique([workspaceId, id])
   @@unique([workspaceId, slug])
+ KnowledgeSourceByWorkspaceidCollectionid KnowledgeSource[] @relation("KnowledgeSourceWorkspaceidCollectionidStep3")
   @@map("knowledge_collections")
   @@schema("agentonic")
 }
@@ -351,4 +380,308 @@ model AuditEvent {
   @@index([workspaceId, resourceType, resourceId])
   @@map("audit_events")
   @@schema("agentonic")
+}
+
+model CodeRelease {
+ id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+ version String
+ templateVersionId String @map("template_version_id") @db.Uuid
+ gitCommitSha String @map("git_commit_sha")
+ artifactSha256 String @map("artifact_sha256")
+ registrySha256 String @map("registry_sha256")
+ runtimeContractVersion String @map("runtime_contract_version")
+ retiredAt DateTime? @map("retired_at") @db.Timestamptz
+ codeRepositoryId String @map("code_repository_id") @db.Uuid
+ artifactBucket String @map("artifact_bucket")
+ artifactKey String @map("artifact_key")
+ artifactSizeBytes BigInt @map("artifact_size_bytes")
+ publishedByStaffId String @map("published_by_staff_id") @db.Uuid
+ revokedAt DateTime? @map("revoked_at") @db.Timestamptz
+ createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+ @@unique([codeRepositoryId, version])
+ @@unique([artifactBucket, artifactKey])
+ codeRepositoryRef CodeRepository @relation("CodeReleaseCoderepositoryidStep3", fields: [codeRepositoryId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "code_releases_code_repository_id_step3_fk")
+ templateVersionRef TemplateVersion @relation("CodeReleaseTemplateversionidStep3", fields: [templateVersionId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "code_releases_template_version_id_step3_fk")
+ publishedByStaffRef PlatformStaff @relation("CodeReleasePublishedbystaffidStep3", fields: [publishedByStaffId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "code_releases_published_by_staff_id_step3_fk")
+ CodeToolByCodereleaseid CodeTool[] @relation("CodeToolCodereleaseidStep3")
+ WorkspaceCodeReleaseGrantByCodereleaseid WorkspaceCodeReleaseGrant[] @relation("WorkspaceCodeReleaseGrantCodereleaseidStep3")
+ @@map("code_releases")
+ @@schema("agentonic")
+}
+
+model WorkspaceCodeReleaseGrant {
+ id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+ workspaceId String @map("workspace_id") @db.Uuid
+ codeReleaseId String @map("code_release_id") @db.Uuid
+ grantedByStaffId String @map("granted_by_staff_id") @db.Uuid
+ revokedAt DateTime? @map("revoked_at") @db.Timestamptz
+ createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+ @@unique([workspaceId, id])
+ @@unique([workspaceId, codeReleaseId])
+ ConfigurationReleaseByWorkspaceidCodereleaseid ConfigurationRelease[] @relation("ConfigurationReleaseWorkspaceidCodereleaseidStep3")
+ workspaceRef Workspace @relation("WorkspaceCodeReleaseGrantWorkspaceidStep3", fields: [workspaceId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "workspace_code_release_grants_workspace_id_step3_fk")
+ codeReleaseRef CodeRelease @relation("WorkspaceCodeReleaseGrantCodereleaseidStep3", fields: [codeReleaseId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "workspace_code_release_grants_code_release_id_step3_fk")
+ grantedByStaffRef PlatformStaff @relation("WorkspaceCodeReleaseGrantGrantedbystaffidStep3", fields: [grantedByStaffId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "workspace_code_release_grants_granted_by_staff_id_step3_fk")
+ @@map("workspace_code_release_grants")
+ @@schema("agentonic")
+}
+
+model CodeTool {
+ id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+ codeReleaseId String @map("code_release_id") @db.Uuid
+ packageKey String @map("package_key")
+ name String
+ implementationPath String @map("implementation_path")
+ inputSchema Json @map("input_schema")
+ readOnly Boolean @map("read_only")
+ requiresConfirmation Boolean @map("requires_confirmation")
+ standingAuthorizationAllowed Boolean @default(false) @map("standing_authorization_allowed")
+ exposeOverHttp Boolean @map("expose_over_http")
+ policyContract Json @map("policy_contract")
+ createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+ @@unique([codeReleaseId, id])
+ @@unique([codeReleaseId, packageKey, name])
+ ConfigurationToolByCodereleaseidCodetoolid ConfigurationTool[] @relation("ConfigurationToolCodereleaseidCodetoolidStep3")
+ codeReleaseRef CodeRelease @relation("CodeToolCodereleaseidStep3", fields: [codeReleaseId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "code_tools_code_release_id_step3_fk")
+ @@map("code_tools")
+ @@schema("agentonic")
+}
+
+model ConfigurationDraft {
+ id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+ workspaceId String @map("workspace_id") @db.Uuid
+ agentId String @map("agent_id") @db.Uuid
+ baseConfigurationReleaseId String? @map("base_configuration_release_id") @db.Uuid
+ title String
+ revision BigInt @default(1)
+ content Json
+ createdByMemberId String? @map("created_by_member_id") @db.Uuid
+ proposedByRunId String? @map("proposed_by_run_id") @db.Uuid
+ updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz
+ status String @default("draft")
+ requestedAccess Json @default("{}") @map("requested_access")
+ createdByStaffId String? @map("created_by_staff_id") @db.Uuid
+ supportAccessGrantId String? @map("support_access_grant_id") @db.Uuid
+ createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+ @@unique([workspaceId, id])
+ @@unique([workspaceId, agentId, id])
+ workspaceRef Workspace @relation("ConfigurationDraftWorkspaceidStep3", fields: [workspaceId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "configuration_drafts_workspace_id_step3_fk")
+ agentRef Agent @relation("ConfigurationDraftWorkspaceidAgentidStep3", fields: [workspaceId, agentId], references: [workspaceId, id], onDelete: Restrict, onUpdate: Restrict, map: "configuration_drafts_workspace_id_agent_id_step3_fk")
+ createdByMemberRef WorkspaceMember? @relation("ConfigurationDraftWorkspaceidCreatedbymemberidStep3", fields: [workspaceId, createdByMemberId], references: [workspaceId, id], onDelete: Restrict, onUpdate: Restrict, map: "configuration_drafts_workspace_id_created_by_member__7ce4692d")
+ ConfigurationReleaseByWorkspaceidAgentidSourcedraftid ConfigurationRelease[] @relation("ConfigurationReleaseWorkspaceidAgentidSourcedraftidStep3")
+ baseConfigurationReleaseRef ConfigurationRelease? @relation("ConfigurationDraftWorkspaceidAgentidBaseconfigurationreleaseidStep3", fields: [workspaceId, agentId, baseConfigurationReleaseId], references: [workspaceId, agentId, id], onDelete: Restrict, onUpdate: Restrict, map: "configuration_drafts_workspace_id_agent_id_base_conf_16f9ef1f")
+ createdByStaffRef PlatformStaff? @relation("ConfigurationDraftCreatedbystaffidStep3", fields: [createdByStaffId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "configuration_drafts_created_by_staff_id_step3_fk")
+ supportAccessGrantRef SupportAccessGrant? @relation("ConfigurationDraftWorkspaceidCreatedbystaffidSupportaccessgrantidStep3", fields: [workspaceId, createdByStaffId, supportAccessGrantId], references: [workspaceId, staffId, id], onDelete: Restrict, onUpdate: Restrict, map: "configuration_drafts_workspace_id_created_by_staff_i_cadd8fb4")
+ @@map("configuration_drafts")
+ @@schema("agentonic")
+}
+
+model ConfigurationRelease {
+ id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+ workspaceId String @map("workspace_id") @db.Uuid
+ agentId String @map("agent_id") @db.Uuid
+ codeReleaseId String @map("code_release_id") @db.Uuid
+ sourceDraftId String @map("source_draft_id") @db.Uuid
+ sourceDraftRevision BigInt @map("source_draft_revision")
+ version String
+ content Json
+ contentSha256 String @map("content_sha256")
+ composedPromptSha256 String @map("composed_prompt_sha256")
+ assetManifestSha256 String @map("asset_manifest_sha256")
+ retiredAt DateTime? @map("retired_at") @db.Timestamptz
+ frozenByMemberId String? @map("frozen_by_member_id") @db.Uuid
+ frozenByStaffId String? @map("frozen_by_staff_id") @db.Uuid
+ supportAccessGrantId String? @map("support_access_grant_id") @db.Uuid
+ requestedAccessSnapshot Json @map("requested_access_snapshot")
+ requestedAccessSha256 String @map("requested_access_sha256")
+ createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+ @@unique([workspaceId, id])
+ @@unique([workspaceId, agentId, id])
+ @@unique([workspaceId, agentId, codeReleaseId, id])
+ @@unique([workspaceId, agentId, version])
+ workspaceRef Workspace @relation("ConfigurationReleaseWorkspaceidStep3", fields: [workspaceId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "configuration_releases_workspace_id_step3_fk")
+ codeReleaseRef WorkspaceCodeReleaseGrant @relation("ConfigurationReleaseWorkspaceidCodereleaseidStep3", fields: [workspaceId, codeReleaseId], references: [workspaceId, codeReleaseId], onDelete: Restrict, onUpdate: Restrict, map: "configuration_releases_workspace_id_code_release_id_step3_fk")
+ sourceDraftRef ConfigurationDraft @relation("ConfigurationReleaseWorkspaceidAgentidSourcedraftidStep3", fields: [workspaceId, agentId, sourceDraftId], references: [workspaceId, agentId, id], onDelete: Restrict, onUpdate: Restrict, map: "configuration_releases_workspace_id_agent_id_source__6866e502")
+ ConfigurationDraftByWorkspaceidAgentidBaseconfigurationreleaseid ConfigurationDraft[] @relation("ConfigurationDraftWorkspaceidAgentidBaseconfigurationreleaseidStep3")
+ ConfigurationToolByWorkspaceidAgentidCodereleaseidConfigurationreleaseid ConfigurationTool[] @relation("ConfigurationToolWorkspaceidAgentidCodereleaseidConfigurationreleaseidStep3")
+ frozenByMemberRef WorkspaceMember? @relation("ConfigurationReleaseWorkspaceidFrozenbymemberidStep3", fields: [workspaceId, frozenByMemberId], references: [workspaceId, id], onDelete: Restrict, onUpdate: Restrict, map: "configuration_releases_workspace_id_frozen_by_member_9d625951")
+ frozenByStaffRef PlatformStaff? @relation("ConfigurationReleaseFrozenbystaffidStep3", fields: [frozenByStaffId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "configuration_releases_frozen_by_staff_id_step3_fk")
+ supportAccessGrantRef SupportAccessGrant? @relation("ConfigurationReleaseWorkspaceidFrozenbystaffidSupportaccessgrantidStep3", fields: [workspaceId, frozenByStaffId, supportAccessGrantId], references: [workspaceId, staffId, id], onDelete: Restrict, onUpdate: Restrict, map: "configuration_releases_workspace_id_frozen_by_staff__718ad3be")
+ AgentSubmissionByWorkspaceidAgentidCodereleaseidConfigurationreleaseid AgentSubmission[] @relation("AgentSubmissionWorkspaceidAgentidCodereleaseidConfigurationreleaseidStep3")
+ @@map("configuration_releases")
+ @@schema("agentonic")
+}
+
+model ConfigurationTool {
+ id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+ workspaceId String @map("workspace_id") @db.Uuid
+ agentId String @map("agent_id") @db.Uuid
+ codeReleaseId String @map("code_release_id") @db.Uuid
+ configurationReleaseId String @map("configuration_release_id") @db.Uuid
+ codeToolId String @map("code_tool_id") @db.Uuid
+ enabled Boolean @default(false)
+ effectivePolicy Json @map("effective_policy")
+ createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+ @@unique([workspaceId, id])
+ @@unique([workspaceId, configurationReleaseId, codeToolId])
+ @@unique([workspaceId, agentId, codeReleaseId, configurationReleaseId, id], map: "configuration_tools_candidate_key")
+ @@unique([workspaceId, agentId, codeReleaseId, configurationReleaseId, codeToolId, id], map: "configuration_tools_candidate_tool_key")
+ workspaceRef Workspace @relation("ConfigurationToolWorkspaceidStep3", fields: [workspaceId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "configuration_tools_workspace_id_step3_fk")
+ configurationReleaseRef ConfigurationRelease @relation("ConfigurationToolWorkspaceidAgentidCodereleaseidConfigurationreleaseidStep3", fields: [workspaceId, agentId, codeReleaseId, configurationReleaseId], references: [workspaceId, agentId, codeReleaseId, id], onDelete: Restrict, onUpdate: Restrict, map: "configuration_tools_workspace_id_agent_id_code_relea_be30e344")
+ codeToolRef CodeTool @relation("ConfigurationToolCodereleaseidCodetoolidStep3", fields: [codeReleaseId, codeToolId], references: [codeReleaseId, id], onDelete: Restrict, onUpdate: Restrict, map: "configuration_tools_code_release_id_code_tool_id_step3_fk")
+ @@map("configuration_tools")
+ @@schema("agentonic")
+}
+
+model AgentSubmission {
+ id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+ workspaceId String @map("workspace_id") @db.Uuid
+ agentId String @map("agent_id") @db.Uuid
+ codeReleaseId String @map("code_release_id") @db.Uuid
+ configurationReleaseId String @map("configuration_release_id") @db.Uuid
+ submissionNumber BigInt @map("submission_number")
+ submittedByMemberId String? @map("submitted_by_member_id") @db.Uuid
+ submittedByStaffId String? @map("submitted_by_staff_id") @db.Uuid
+ supportAccessGrantId String? @map("support_access_grant_id") @db.Uuid
+ customerNote String? @map("customer_note")
+ reviewConsent Json @map("review_consent")
+ status String @default("submitted")
+ submittedAt DateTime @default(now()) @map("submitted_at") @db.Timestamptz
+ createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+ @@unique([workspaceId, id])
+ @@unique([workspaceId, agentId, submissionNumber])
+ @@unique([workspaceId, agentId, codeReleaseId, configurationReleaseId, id], map: "agent_submissions_candidate_key")
+ @@unique([workspaceId, agentId, id])
+ workspaceRef Workspace @relation("AgentSubmissionWorkspaceidStep3", fields: [workspaceId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "agent_submissions_workspace_id_step3_fk")
+ configurationReleaseRef ConfigurationRelease @relation("AgentSubmissionWorkspaceidAgentidCodereleaseidConfigurationreleaseidStep3", fields: [workspaceId, agentId, codeReleaseId, configurationReleaseId], references: [workspaceId, agentId, codeReleaseId, id], onDelete: Restrict, onUpdate: Restrict, map: "agent_submissions_workspace_id_agent_id_code_release_cfab25eb")
+ submittedByMemberRef WorkspaceMember? @relation("AgentSubmissionWorkspaceidSubmittedbymemberidStep3", fields: [workspaceId, submittedByMemberId], references: [workspaceId, id], onDelete: Restrict, onUpdate: Restrict, map: "agent_submissions_workspace_id_submitted_by_member_id_step3_fk")
+ submittedByStaffRef PlatformStaff? @relation("AgentSubmissionSubmittedbystaffidStep3", fields: [submittedByStaffId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "agent_submissions_submitted_by_staff_id_step3_fk")
+ supportAccessGrantRef SupportAccessGrant? @relation("AgentSubmissionWorkspaceidSubmittedbystaffidSupportaccessgrantidStep3", fields: [workspaceId, submittedByStaffId, supportAccessGrantId], references: [workspaceId, staffId, id], onDelete: Restrict, onUpdate: Restrict, map: "agent_submissions_workspace_id_submitted_by_staff_id_5a15597d")
+ SubmissionReviewDecisionByWorkspaceidAgentidSubmissionid SubmissionReviewDecision[] @relation("SubmissionReviewDecisionWorkspaceidAgentidSubmissionidStep3")
+ @@map("agent_submissions")
+ @@schema("agentonic")
+}
+
+model SubmissionReviewDecision {
+ id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+ workspaceId String @map("workspace_id") @db.Uuid
+ agentId String @map("agent_id") @db.Uuid
+ submissionId String @map("submission_id") @db.Uuid
+ decisionNumber BigInt @map("decision_number")
+ decision String
+ actorMemberId String? @map("actor_member_id") @db.Uuid
+ actorStaffId String? @map("actor_staff_id") @db.Uuid
+ supportAccessGrantId String? @map("support_access_grant_id") @db.Uuid
+ feedback String?
+ approvalExpiresAt DateTime? @map("approval_expires_at") @db.Timestamptz
+ approvedAccessSha256 String? @map("approved_access_sha256")
+ assessmentSnapshot Json @map("assessment_snapshot")
+ createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+ @@unique([workspaceId, id])
+ @@unique([workspaceId, submissionId, decisionNumber])
+ @@unique([workspaceId, agentId, id])
+ @@unique([workspaceId, agentId, submissionId, decision, id])
+ @@unique([workspaceId, agentId, decision, id])
+ workspaceRef Workspace @relation("SubmissionReviewDecisionWorkspaceidStep3", fields: [workspaceId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "submission_review_decisions_workspace_id_step3_fk")
+ submissionRef AgentSubmission @relation("SubmissionReviewDecisionWorkspaceidAgentidSubmissionidStep3", fields: [workspaceId, agentId, submissionId], references: [workspaceId, agentId, id], onDelete: Restrict, onUpdate: Restrict, map: "submission_review_decisions_workspace_id_agent_id_su_0408b1d8")
+ actorMemberRef WorkspaceMember? @relation("SubmissionReviewDecisionWorkspaceidActormemberidStep3", fields: [workspaceId, actorMemberId], references: [workspaceId, id], onDelete: Restrict, onUpdate: Restrict, map: "submission_review_decisions_workspace_id_actor_membe_45b36ba1")
+ actorStaffRef PlatformStaff? @relation("SubmissionReviewDecisionActorstaffidStep3", fields: [actorStaffId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "submission_review_decisions_actor_staff_id_step3_fk")
+ supportAccessGrantRef SupportAccessGrant? @relation("SubmissionReviewDecisionWorkspaceidActorstaffidSupportaccessgrantidStep3", fields: [workspaceId, actorStaffId, supportAccessGrantId], references: [workspaceId, staffId, id], onDelete: Restrict, onUpdate: Restrict, map: "submission_review_decisions_workspace_id_actor_staff_22bfe57e")
+ @@map("submission_review_decisions")
+ @@schema("agentonic")
+}
+
+model StoredObject {
+ id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+ workspaceId String @map("workspace_id") @db.Uuid
+ provider String
+ bucket String
+ objectKey String @map("object_key")
+ contentSha256 String @map("content_sha256")
+ contentType String @map("content_type")
+ sizeBytes BigInt @map("size_bytes")
+ classification String @default("confidential")
+ expiresAt DateTime? @map("expires_at") @db.Timestamptz
+ deletedAt DateTime? @map("deleted_at") @db.Timestamptz
+ createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+ @@unique([workspaceId, id])
+ @@unique([provider, bucket, objectKey])
+ workspaceRef Workspace @relation("StoredObjectWorkspaceidStep3", fields: [workspaceId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "stored_objects_workspace_id_step3_fk")
+ DocumentVersionByWorkspaceidObjectid DocumentVersion[] @relation("DocumentVersionWorkspaceidObjectidStep3")
+ @@map("stored_objects")
+ @@schema("agentonic")
+}
+
+model KnowledgeSource {
+ id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+ workspaceId String @map("workspace_id") @db.Uuid
+ collectionId String @map("collection_id") @db.Uuid
+ connectionId String? @map("connection_id") @db.Uuid
+ kind String
+ locator String
+ configuration Json @default("{}")
+ authorizedByMemberId String @map("authorized_by_member_id") @db.Uuid
+ syncCursor Json? @map("sync_cursor")
+ syncIntervalSeconds Int? @map("sync_interval_seconds")
+ lastSuccessAt DateTime? @map("last_success_at") @db.Timestamptz
+ accessMode String @default("collection") @map("access_mode")
+ enabled Boolean @default(false)
+ environment String
+ definitionRevision BigInt @default(1) @map("definition_revision")
+ definitionSha256 String @map("definition_sha256")
+ createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+ @@unique([workspaceId, id])
+ @@unique([workspaceId, collectionId, kind, locator])
+ workspaceRef Workspace @relation("KnowledgeSourceWorkspaceidStep3", fields: [workspaceId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "knowledge_sources_workspace_id_step3_fk")
+ collectionRef KnowledgeCollection @relation("KnowledgeSourceWorkspaceidCollectionidStep3", fields: [workspaceId, collectionId], references: [workspaceId, id], onDelete: Restrict, onUpdate: Restrict, map: "knowledge_sources_workspace_id_collection_id_step3_fk")
+ authorizedByMemberRef WorkspaceMember @relation("KnowledgeSourceWorkspaceidAuthorizedbymemberidStep3", fields: [workspaceId, authorizedByMemberId], references: [workspaceId, id], onDelete: Restrict, onUpdate: Restrict, map: "knowledge_sources_workspace_id_authorized_by_member__7529269f")
+ DocumentByWorkspaceidSourceid Document[] @relation("DocumentWorkspaceidSourceidStep3")
+ @@map("knowledge_sources")
+ @@schema("agentonic")
+}
+
+model Document {
+ id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+ workspaceId String @map("workspace_id") @db.Uuid
+ sourceId String @map("source_id") @db.Uuid
+ externalDocumentId String @map("external_document_id")
+ title String
+ sourceUrl String? @map("source_url")
+ activeVersionId String? @map("active_version_id") @db.Uuid
+ aclValidUntil DateTime? @map("acl_valid_until") @db.Timestamptz
+ sourceModifiedAt DateTime? @map("source_modified_at") @db.Timestamptz
+ deletedAt DateTime? @map("deleted_at") @db.Timestamptz
+ createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+ @@unique([workspaceId, id])
+ @@unique([workspaceId, sourceId, externalDocumentId])
+ workspaceRef Workspace @relation("DocumentWorkspaceidStep3", fields: [workspaceId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "documents_workspace_id_step3_fk")
+ sourceRef KnowledgeSource @relation("DocumentWorkspaceidSourceidStep3", fields: [workspaceId, sourceId], references: [workspaceId, id], onDelete: Restrict, onUpdate: Restrict, map: "documents_workspace_id_source_id_step3_fk")
+ activeVersionRef DocumentVersion? @relation("DocumentWorkspaceidIdActiveversionidStep3", fields: [workspaceId, id, activeVersionId], references: [workspaceId, documentId, id], onDelete: Restrict, onUpdate: Restrict, map: "documents_workspace_id_id_active_version_id_step3_fk")
+ DocumentVersionByWorkspaceidDocumentid DocumentVersion[] @relation("DocumentVersionWorkspaceidDocumentidStep3")
+ @@map("documents")
+ @@schema("agentonic")
+}
+
+model DocumentVersion {
+ id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+ workspaceId String @map("workspace_id") @db.Uuid
+ documentId String @map("document_id") @db.Uuid
+ versionKey String @map("version_key")
+ contentSha256 String @map("content_sha256")
+ objectId String? @map("object_id") @db.Uuid
+ parserVersion String @map("parser_version")
+ chunkerVersion String @map("chunker_version")
+ language String @default("und")
+ status String @default("processing")
+ metadata Json @default("{}")
+ createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+ @@unique([workspaceId, id])
+ @@unique([workspaceId, documentId, versionKey])
+ @@unique([workspaceId, documentId, id])
+ DocumentByWorkspaceidIdActiveversionid Document[] @relation("DocumentWorkspaceidIdActiveversionidStep3")
+ workspaceRef Workspace @relation("DocumentVersionWorkspaceidStep3", fields: [workspaceId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "document_versions_workspace_id_step3_fk")
+ documentRef Document @relation("DocumentVersionWorkspaceidDocumentidStep3", fields: [workspaceId, documentId], references: [workspaceId, id], onDelete: Restrict, onUpdate: Restrict, map: "document_versions_workspace_id_document_id_step3_fk")
+ objectRef StoredObject? @relation("DocumentVersionWorkspaceidObjectidStep3", fields: [workspaceId, objectId], references: [workspaceId, id], onDelete: Restrict, onUpdate: Restrict, map: "document_versions_workspace_id_object_id_step3_fk")
+ @@map("document_versions")
+ @@schema("agentonic")
 }

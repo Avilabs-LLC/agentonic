@@ -59,37 +59,25 @@ export async function withIdentity<T>(
     { maxWait: 5_000, timeout: 10_000 }
   )
 }
-export async function identityOverview(authUserId: string) {
-  const identity = await withIdentity(authUserId, null, async (tx) => {
-    const user = await tx.user.findFirst()
-    const staff = await tx.platformStaff.findFirst()
-    const ids = await tx.$queryRaw<
-      { id: string }[]
-    >`SELECT agentonic.authorized_workspace_ids() AS id`
-    return { user, staff, ids }
+export type IdentityOverview = {
+  user: { id: string; displayName: string } | null
+  staff: { id: string; role: string } | null
+  workspaces: {
+    id: string
+    name: string
+    kind: string
+    timezone: string
+    role: string
+  }[]
+}
+export async function identityOverview(
+  authUserId: string
+): Promise<IdentityOverview> {
+  return withIdentity(authUserId, null, async (tx) => {
+    const rows = await tx.$queryRaw<
+      { overview: IdentityOverview }[]
+    >`SELECT agentonic.identity_overview() AS overview`
+    if (!rows[0]) throw new Error("Identity discovery failed.")
+    return rows[0].overview
   })
-  const workspaces = await Promise.all(
-    identity.ids.map(({ id }) =>
-      withIdentity(authUserId, id, async (tx) => {
-        const workspace = await tx.workspace.findUnique({ where: { id } })
-        const membership = await tx.workspaceMember.findFirst({
-          where: { workspaceId: id },
-        })
-        return workspace && membership
-          ? {
-              id,
-              name: workspace.name,
-              kind: workspace.kind,
-              timezone: workspace.timezone,
-              role: membership.role,
-            }
-          : null
-      })
-    )
-  )
-  return {
-    user: identity.user,
-    staff: identity.staff,
-    workspaces: workspaces.filter((w) => w !== null),
-  }
 }
