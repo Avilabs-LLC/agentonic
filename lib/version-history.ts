@@ -1,5 +1,10 @@
 export const VERSION_HISTORY = [
   {
+    "version": "0.5.5",
+    "date": "2026-09-14",
+    "summary": "Simplify the agent name column by removing description previews"
+  },
+  {
     "version": "0.5.4",
     "date": "2026-09-14",
     "summary": "Simplify dialog submit buttons while retaining explicit action labels"
