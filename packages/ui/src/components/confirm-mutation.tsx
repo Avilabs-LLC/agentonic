@@ -1,5 +1,5 @@
 "use client"
-import { useState } from "react"
+import { useState, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
 import type { FormResult } from "@agentonic/contracts/authoring"
 import { Button } from "@workspace/ui/components/button"
@@ -19,10 +19,12 @@ export function ConfirmMutation({
   action,
   label,
   description,
+  icon,
 }: {
   action: () => Promise<FormResult>
   label: string
   description: string
+  icon?: ReactNode
 }) {
   const [pending, setPending] = useState(false)
   const router = useRouter()
@@ -48,13 +50,15 @@ export function ConfirmMutation({
         render={
           <Button
             type="button"
-            variant="outline"
-            size="sm"
+            variant={icon ? "ghost" : "outline"}
+            size={icon ? "icon-sm" : "sm"}
             disabled={pending}
+            aria-label={icon ? label : undefined}
+            title={icon ? label : undefined}
           />
         }
       >
-        {pending ? "Procesando…" : label}
+        {icon ?? (pending ? "Procesando…" : label)}
       </AlertDialogTrigger>
       <AlertDialogContent>
         <AlertDialogHeader>

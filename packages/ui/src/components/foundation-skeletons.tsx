@@ -3,6 +3,7 @@ import {
   Card,
   CardContent,
   CardHeader,
+  CardAction,
   CardFooter,
 } from "@workspace/ui/components/card"
 export function PageHeaderSkeleton() {
@@ -41,9 +42,16 @@ export function FiltersCardSkeleton() {
     <Card>
       <CardHeader>
         <Skeleton className="h-5 w-24" />
+        <Skeleton className="h-4 w-64 max-w-full" />
+        <CardAction>
+          <Skeleton className="h-6 w-20" />
+        </CardAction>
       </CardHeader>
-      <CardContent>
-        <Skeleton className="h-9 w-full" />
+      <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="space-y-2">
+          <Skeleton className="h-4 w-28" />
+          <Skeleton className="h-8 w-full" />
+        </div>
       </CardContent>
     </Card>
   )

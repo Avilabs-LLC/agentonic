@@ -11,6 +11,10 @@ import {
   ScrollTextIcon,
   SquareIcon,
   Trash2Icon,
+  ListChecksIcon,
+  LibraryBigIcon,
+  WrenchIcon,
+  PlugIcon,
 } from "lucide-react"
 import {
   DropdownMenu,
@@ -31,6 +35,11 @@ import {
   DataTableColumnHeader,
 } from "@workspace/ui/components/data-table"
 import { Button } from "@workspace/ui/components/button"
+import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+} from "@workspace/ui/components/tooltip"
 import { Badge } from "@workspace/ui/components/badge"
 import {
   AgentStatusBadge,
@@ -51,28 +60,22 @@ export function AuthoringTable({
       Sin acceso
     </span>
   )
-  const counts = (
-    key: "skillsCount" | "collectionsCount" | "toolsCount" | "connectionsCount",
-    title: string,
-    upcoming = false
-  ): ColumnDef<AgentListing[number]> => ({
-    id: key,
-    accessorFn: (agent) => agent.configuration?.[key] ?? -1,
-    header: ({ column }) => (
-      <DataTableColumnHeader column={column} title={title} />
-    ),
-    cell: ({ row }) =>
-      row.original.configuration ? (
-        <div className="space-y-1">
-          <p className="tabular-nums">{row.original.configuration[key]}</p>
-          {upcoming && (
-            <p className="text-xs text-muted-foreground">Próximamente</p>
-          )}
-        </div>
-      ) : (
-        unavailable
-      ),
-  })
+  const resources = [
+    { key: "skillsCount", label: "Habilidades", icon: ListChecksIcon },
+    { key: "collectionsCount", label: "Colecciones", icon: LibraryBigIcon },
+    {
+      key: "toolsCount",
+      label: "Herramientas",
+      icon: WrenchIcon,
+      upcoming: true,
+    },
+    {
+      key: "connectionsCount",
+      label: "Conexiones",
+      icon: PlugIcon,
+      upcoming: true,
+    },
+  ] as const
   const columns: ColumnDef<AgentListing[number]>[] = [
     {
       id: "actions",
@@ -140,7 +143,7 @@ export function AuthoringTable({
         <DataTableColumnHeader column={column} title="Agente" />
       ),
       cell: ({ row }) => (
-        <div className="max-w-56 min-w-48 whitespace-normal">
+        <div className="max-w-56 min-w-32 whitespace-normal">
           {row.original.canEdit ? (
             <Link
               href={`/agents/${row.original.id}?workspace=${workspaceId}`}
@@ -187,32 +190,51 @@ export function AuthoringTable({
         )
       },
     },
-    counts("skillsCount", "Habilidades"),
-    counts("collectionsCount", "Colecciones"),
-    counts("toolsCount", "Herramientas", true),
-    counts("connectionsCount", "Conexiones", true),
     {
-      id: "versions",
+      id: "resources",
+      header: "Recursos",
+      cell: ({ row }) => {
+        const configuration = row.original.configuration
+        if (!configuration) return unavailable
+        return (
+          <div className="flex items-center gap-4">
+            {resources.map(({ key, label, icon: Icon, ...resource }) => {
+              const description = `${label}: ${configuration[key]}${"upcoming" in resource ? " · Próximamente" : ""}`
+              return (
+                <Tooltip key={key}>
+                  <TooltipTrigger
+                    render={<span tabIndex={0} />}
+                    aria-label={description}
+                    className="inline-flex items-center gap-1.5 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    <Icon
+                      className="size-4 shrink-0 text-muted-foreground"
+                      aria-hidden="true"
+                    />
+                    <span className="tabular-nums" aria-hidden="true">
+                      {configuration[key]}
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>{description}</TooltipContent>
+                </Tooltip>
+              )
+            })}
+          </div>
+        )
+      },
+    },
+    {
+      id: "reviewVersions",
       accessorFn: (agent) =>
         agent.configuration?.reviewVersions[0]?.revision ?? -1,
       header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Versiones" />
+        <DataTableColumnHeader column={column} title="En revisión" />
       ),
       cell: ({ row }) => {
         const configuration = row.original.configuration
         if (!configuration) return unavailable
         return (
           <div className="space-y-2 text-xs">
-            <div
-              className="flex items-center gap-2"
-              aria-label={`Desplegada: ${configuration.liveVersion ?? "ninguna"}`}
-            >
-              <RocketIcon
-                className="size-4 shrink-0 text-muted-foreground"
-                aria-hidden="true"
-              />
-              <span>{configuration.liveVersion ?? "Sin desplegar"}</span>
-            </div>
             {configuration.reviewVersions.length ? (
               configuration.reviewVersions.map((version, index) => (
                 <div
@@ -234,6 +256,29 @@ export function AuthoringTable({
                 <span>Sin envíos activos</span>
               </div>
             )}
+          </div>
+        )
+      },
+    },
+    {
+      id: "liveVersion",
+      accessorFn: (agent) => agent.configuration?.liveVersion ?? "",
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title="Actual" />
+      ),
+      cell: ({ row }) => {
+        const configuration = row.original.configuration
+        if (!configuration) return unavailable
+        return (
+          <div
+            className="flex items-center gap-2"
+            aria-label={`Versión desplegada: ${configuration.liveVersion ?? "ninguna"}`}
+          >
+            <RocketIcon
+              className="size-4 shrink-0 text-muted-foreground"
+              aria-hidden="true"
+            />
+            <span>{configuration.liveVersion ?? "Sin desplegar"}</span>
           </div>
         )
       },

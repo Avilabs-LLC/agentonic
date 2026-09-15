@@ -1,61 +1,19 @@
+import { AgentPageTabs } from "@workspace/ui/components/agent-page-tabs"
 import { Skeleton } from "@workspace/ui/components/skeleton"
 import {
   PageHeaderSkeleton,
   BackRowSkeleton,
   TableSkeleton,
+  FiltersCardSkeleton,
 } from "@workspace/ui/components/foundation-skeletons"
 import { Card, CardHeader, CardContent } from "@workspace/ui/components/card"
-function FormCard({
-  fields = 3,
-  textareaAt = -1,
-  step = false,
-  requirements = 0,
-}: {
-  fields?: number
-  textareaAt?: number
-  step?: boolean
-  requirements?: number
-}) {
-  return (
-    <Card>
-      <CardHeader>
-        {step && <Skeleton className="mb-1 h-5 w-32" />}
-        <Skeleton className="h-5 w-48" />
-        <Skeleton className="h-4 w-4/5" />
-      </CardHeader>
-      <CardContent
-        className={step ? "flex flex-1 flex-col gap-4" : "space-y-4"}
-      >
-        {Array.from({ length: fields }, (_, i) => (
-          <div key={i} className="space-y-2">
-            <Skeleton className="h-4 w-28" />
-            <Skeleton
-              className={i === textareaAt ? "h-40 w-full" : "h-9 w-full"}
-            />
-          </div>
-        ))}
-        {requirements > 0 && (
-          <div className="space-y-3 border-t pt-4">
-            {Array.from({ length: requirements }, (_, index) => (
-              <div key={index} className="flex items-center gap-2">
-                <Skeleton className="size-3.5 shrink-0" />
-                <Skeleton className="h-4 w-4/5" />
-              </div>
-            ))}
-          </div>
-        )}
-        <Skeleton className={step ? "mt-auto h-9 w-36" : "h-9 w-36"} />
-      </CardContent>
-    </Card>
-  )
-}
 export function AgentsSkeleton() {
   return (
     <>
       <PageHeaderSkeleton />
       <Skeleton className="h-8 w-48" />
       <Skeleton className="h-5 w-4/5" />
-      <TableSkeleton columns={9} />
+      <TableSkeleton columns={7} />
     </>
   )
 }
@@ -64,81 +22,158 @@ export function AgentEditorSkeleton() {
     <div className="mx-auto w-full max-w-4xl space-y-6">
       <BackRowSkeleton />
       <PageHeaderSkeleton />
-      <div className="space-y-6">
-        {["prompt", "skills", "knowledge", "tools", "connections"].map(
-          (section) => (
-            <Card
-              key={section}
-              className="gap-5 py-6 [--card-spacing:--spacing(6)]"
-            >
+      <AgentPageTabs
+        configuration={
+          <>
+            <div className="space-y-6">
+              {["prompt", "skills", "knowledge", "tools", "connections"].map(
+                (section) => (
+                  <Card
+                    key={section}
+                    className="gap-5 py-6 [--card-spacing:--spacing(6)]"
+                  >
+                    <CardHeader className="gap-2">
+                      <div className="flex items-center gap-2.5">
+                        <Skeleton className="size-5 shrink-0" />
+                        <Skeleton className="h-7 w-56" />
+                      </div>
+                      <Skeleton className="h-5 w-4/5" />
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      {section === "prompt" ? (
+                        <div className="space-y-3">
+                          <Skeleton className="h-60 w-full" />
+                          <Skeleton className="h-4 w-2/3" />
+                        </div>
+                      ) : section === "knowledge" ? (
+                        <div className="space-y-3">
+                          <Skeleton className="h-5 w-40" />
+                          <div className="divide-y border-t">
+                            {[0, 1, 2].map((row) => (
+                              <div
+                                key={row}
+                                className="flex items-center gap-3 py-4"
+                              >
+                                <Skeleton className="size-4" />
+                                <Skeleton className="h-5 w-2/3" />
+                              </div>
+                            ))}
+                          </div>
+                          <Skeleton className="h-4 w-3/4" />
+                        </div>
+                      ) : section === "tools" || section === "connections" ? (
+                        <Skeleton className="h-5 w-4/5" />
+                      ) : (
+                        <div className="flex items-center gap-4 border-t py-5">
+                          <div className="min-w-0 flex-1 space-y-3">
+                            <Skeleton className="h-5 w-1/2" />
+                            <Skeleton className="h-4 w-4/5" />
+                          </div>
+                          <Skeleton className="size-8" />
+                        </div>
+                      )}
+                    </CardContent>
+                    {section !== "tools" && section !== "connections" && (
+                      <div className="border-t px-6 pt-4">
+                        <Skeleton className="h-5 w-3/4" />
+                      </div>
+                    )}
+                  </Card>
+                )
+              )}
+              <div className="flex justify-between gap-4 rounded-lg border p-4">
+                <div className="space-y-2">
+                  <Skeleton className="h-5 w-40" />
+                  <Skeleton className="h-4 w-64" />
+                </div>
+                <Skeleton className="h-9 w-36" />
+              </div>
+            </div>
+            <div className="grid items-stretch gap-6 lg:grid-cols-2">
+              {["new", "current"].map((kind) => (
+                <Card
+                  key={kind}
+                  className="gap-5 py-6 [--card-spacing:--spacing(6)]"
+                >
+                  <CardHeader className="gap-2">
+                    <Skeleton className="h-7 w-44" />
+                    <Skeleton className="h-5 w-4/5" />
+                  </CardHeader>
+                  <CardContent className="flex flex-1 flex-col gap-5">
+                    <div className="overflow-hidden rounded-lg border bg-muted/20">
+                      <div className="flex flex-wrap items-center justify-between gap-3 border-b p-4">
+                        <div className="flex items-center gap-3">
+                          <Skeleton className="size-10 shrink-0 rounded-md" />
+                          <div className="space-y-1">
+                            <Skeleton className="h-5 w-20" />
+                            <Skeleton className="h-4 w-24" />
+                          </div>
+                        </div>
+                        <Skeleton className="h-5 w-24" />
+                      </div>
+                      <div className="space-y-2 p-4">
+                        {kind === "current" && (
+                          <Skeleton className="h-4 w-44" />
+                        )}
+                        <Skeleton className="h-4 w-full" />
+                        {kind === "new" && (
+                          <>
+                            <Skeleton className="h-4 w-full" />
+                            <Skeleton className="h-4 w-3/4" />
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    <div className="mt-auto space-y-3 border-t pt-5">
+                      <div className="flex flex-wrap gap-3">
+                        <Skeleton className="h-9 w-36" />
+                        {kind === "current" && (
+                          <Skeleton className="h-9 w-36" />
+                        )}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </>
+        }
+        proposals={
+          <>
+            <Card className="gap-5 py-6 [--card-spacing:--spacing(6)]">
               <CardHeader className="gap-2">
-                <Skeleton className="h-7 w-56" />
+                <Skeleton className="h-7 w-60" />
                 <Skeleton className="h-5 w-4/5" />
               </CardHeader>
-              <CardContent className="space-y-3">
-                {section === "prompt" ? (
-                  <div className="space-y-3">
-                    <Skeleton className="h-60 w-full" />
-                    <Skeleton className="h-4 w-2/3" />
-                  </div>
-                ) : section === "knowledge" ? (
-                  <div className="space-y-3">
-                    <Skeleton className="h-5 w-40" />
-                    <div className="divide-y border-t">
-                      {[0, 1, 2].map((row) => (
-                        <div key={row} className="flex items-center gap-3 py-4">
-                          <Skeleton className="size-4" />
-                          <Skeleton className="h-5 w-2/3" />
-                        </div>
-                      ))}
+              <CardContent>
+                <div className="overflow-x-auto border-t">
+                  <div className="min-w-[700px]">
+                    <div className="grid grid-cols-[32px_repeat(4,minmax(0,1fr))] gap-4 border-b px-2 py-3">
+                      <span />
+                      <Skeleton className="h-4 w-20" />
+                      <Skeleton className="h-4 w-16" />
+                      <Skeleton className="h-4 w-24" />
+                      <Skeleton className="h-4 w-24" />
                     </div>
-                    <Skeleton className="h-4 w-3/4" />
+                    {[0, 1].map((row) => (
+                      <div
+                        key={row}
+                        className="grid grid-cols-[32px_repeat(4,minmax(0,1fr))] items-start gap-4 border-b px-2 py-4 last:border-0"
+                      >
+                        <Skeleton className="size-8" />
+                        <Skeleton className="h-4 w-20" />
+                        <Skeleton className="h-5 w-24 rounded-full" />
+                        <Skeleton className="h-4 w-4/5" />
+                        <Skeleton className="h-5 w-24" />
+                      </div>
+                    ))}
                   </div>
-                ) : (
-                  <div className="flex items-center gap-4 border-t py-5">
-                    <div className="min-w-0 flex-1 space-y-3">
-                      <Skeleton className="h-5 w-1/2" />
-                      <Skeleton className="h-4 w-4/5" />
-                    </div>
-                    <Skeleton className="size-8" />
-                  </div>
-                )}
+                </div>
               </CardContent>
-              <div className="border-t px-6 pt-4">
-                <Skeleton className="h-5 w-3/4" />
-              </div>
             </Card>
-          )
-        )}
-        <div className="flex justify-between gap-4 rounded-lg border p-4">
-          <div className="space-y-2">
-            <Skeleton className="h-5 w-40" />
-            <Skeleton className="h-4 w-64" />
-          </div>
-          <Skeleton className="h-9 w-36" />
-        </div>
-      </div>
-      <Card className="gap-5 py-6 [--card-spacing:--spacing(6)]">
-        <CardHeader className="gap-2">
-          <Skeleton className="h-7 w-56" />
-          <Skeleton className="h-5 w-4/5" />
-        </CardHeader>
-        <CardContent className="space-y-5">
-          <Skeleton className="h-6 w-28" />
-          <Skeleton className="h-10 w-full" />
-          <Skeleton className="h-4 w-40" />
-          <Skeleton className="h-9 w-44" />
-          <Skeleton className="h-10 w-full" />
-          <div className="space-y-4 border-t pt-5">
-            <Skeleton className="h-5 w-4/5" />
-            <Skeleton className="h-4 w-44" />
-            <Skeleton className="h-24 w-full" />
-            <Skeleton className="h-10 w-full" />
-            <Skeleton className="h-9 w-40" />
-          </div>
-        </CardContent>
-      </Card>
-      <FormCard fields={1} />
+          </>
+        }
+      />
     </div>
   )
 }
@@ -228,25 +263,151 @@ export function ReviewsSkeleton() {
   return (
     <>
       <PageHeaderSkeleton />
-      <Skeleton className="h-8 w-48" />
-      <FormCard fields={1} />
-      <FormCard fields={1} />
+      <FiltersCardSkeleton />
+      <div className="flex gap-3 overflow-hidden" aria-hidden="true">
+        {Array.from({ length: 5 }, (_, index) => (
+          <Skeleton key={index} className="h-8 w-28 shrink-0" />
+        ))}
+      </div>
+      <TableSkeleton columns={6} />
     </>
   )
 }
 export function ReviewDetailSkeleton() {
   return (
-    <>
+    <div className="mx-auto w-full max-w-4xl space-y-6">
       <BackRowSkeleton />
       <PageHeaderSkeleton />
-      <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(18rem,1fr)]">
-        <div className="space-y-6">
-          <FormCard fields={1} textareaAt={0} />
-          <FormCard fields={1} textareaAt={0} />
-          <FormCard fields={1} />
+      {["prompt", "skills", "knowledge"].map((section) => (
+        <Card
+          key={section}
+          className="gap-5 py-6 [--card-spacing:--spacing(6)]"
+        >
+          <CardHeader className="gap-2">
+            <div className="flex items-center gap-2.5">
+              <Skeleton className="size-5 shrink-0" />
+              <Skeleton className="h-7 w-56 max-w-full" />
+            </div>
+            <Skeleton className="h-5 w-4/5" />
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {section === "prompt" ? (
+              <Skeleton className="h-40 w-full" />
+            ) : (
+              <>
+                <Skeleton className="h-5 w-2/3" />
+                <Skeleton className="h-4 w-4/5" />
+              </>
+            )}
+          </CardContent>
+          {section === "knowledge" && (
+            <div className="-mb-6 border-t bg-muted/30 px-6 py-4">
+              <Skeleton className="h-5 w-3/4" />
+            </div>
+          )}
+        </Card>
+      ))}
+      <EvaluationSkeleton />
+      <Card className="gap-5 py-6 [--card-spacing:--spacing(6)]">
+        <CardHeader className="gap-2">
+          <div className="flex items-center gap-2.5">
+            <Skeleton className="size-5 shrink-0" />
+            <Skeleton className="h-7 w-48" />
+          </div>
+          <Skeleton className="h-5 w-40" />
+        </CardHeader>
+        <CardContent className="space-y-5">
+          <Skeleton className="h-5 w-4/5" />
+          <div className="space-y-4 border-t pt-5">
+            <Skeleton className="h-4 w-32" />
+            <Skeleton className="h-9 w-full sm:max-w-sm" />
+            <Skeleton className="h-4 w-40" />
+            <Skeleton className="h-40 w-full" />
+            <Skeleton className="h-7 w-36" />
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
+
+function EvaluationSkeleton({ customer = false }: { customer?: boolean }) {
+  return (
+    <Card className="gap-5 py-6 [--card-spacing:--spacing(6)]">
+      <CardHeader className="gap-2">
+        <div className="flex items-center gap-2.5">
+          <Skeleton className="size-5 shrink-0" />
+          <Skeleton className="h-7 w-48" />
         </div>
-        <FormCard fields={2} textareaAt={1} />
-      </div>
-    </>
+        <Skeleton className="h-5 w-4/5" />
+      </CardHeader>
+      <CardContent className="space-y-5">
+        {customer ? (
+          <>
+            <Skeleton className="h-5 w-72 max-w-full" />
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-9 w-48" />
+          </>
+        ) : (
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <Skeleton className="h-5 w-48" />
+            <Skeleton className="h-4 w-64 max-w-full" />
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+export function ReviewReceiptSkeleton() {
+  return (
+    <div className="mx-auto w-full max-w-4xl space-y-6">
+      <BackRowSkeleton />
+      <PageHeaderSkeleton />
+      {[
+        "summary",
+        "prompt",
+        "skills",
+        "knowledge",
+        "criteria",
+        "results",
+        "approval",
+      ].map((section) => (
+        <Card
+          key={section}
+          className="gap-5 py-6 [--card-spacing:--spacing(6)]"
+        >
+          <CardHeader className="gap-2">
+            <div className="flex items-center gap-2.5">
+              <Skeleton className="size-5" />
+              <Skeleton className="h-7 w-56 max-w-full" />
+            </div>
+            <Skeleton className="h-5 w-4/5" />
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {section === "summary" || section === "approval" ? (
+              <div className="grid gap-5 sm:grid-cols-2">
+                {Array.from(
+                  { length: section === "summary" ? 6 : 4 },
+                  (_, i) => (
+                    <div key={i} className="space-y-2">
+                      <Skeleton className="h-4 w-28" />
+                      <Skeleton className="h-5 w-40" />
+                    </div>
+                  )
+                )}
+              </div>
+            ) : section === "prompt" ? (
+              <Skeleton className="h-40 w-full" />
+            ) : (
+              <>
+                <Skeleton className="h-5 w-full" />
+                <Skeleton className="h-5 w-3/4" />
+              </>
+            )}
+          </CardContent>
+        </Card>
+      ))}
+    </div>
   )
 }

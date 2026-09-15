@@ -2,7 +2,13 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { useWatch, type UseFormReturn } from "react-hook-form"
-import { CheckIcon, PlusIcon } from "lucide-react"
+import {
+  CheckIcon,
+  PlusIcon,
+  ScrollTextIcon,
+  ListChecksIcon,
+  LibraryBigIcon,
+} from "lucide-react"
 import {
   SYSTEM_PROMPT_MIN_CHARACTERS,
   systemPromptCharacterCount,
@@ -111,6 +117,7 @@ export function DraftEditor({
         >
           <AgentSettingsCard
             title="Instrucciones del sistema"
+            icon={<ScrollTextIcon />}
             description="Dale a tu agente un propósito, una voz y una forma de trabajar."
             footer="Estas instrucciones orientan al agente; no conceden permisos ni reemplazan las reglas de seguridad."
           >
@@ -134,6 +141,7 @@ export function DraftEditor({
           </AgentSettingsCard>
           <AgentSettingsCard
             title="Habilidades"
+            icon={<ListChecksIcon />}
             description="Enseña procedimientos específicos: resumir documentos, preparar informes o clasificar solicitudes."
             action={
               <Button
@@ -177,21 +185,26 @@ export function DraftEditor({
           </AgentSettingsCard>
           <AgentSettingsCard
             title="Conocimiento"
+            icon={<LibraryBigIcon />}
             description="Selecciona las colecciones de documentos que tu agente necesitará consultar."
             action={
               <Badge variant={collectionIds.length ? "sky" : "slate"}>
                 {collectionIds.length} seleccionadas
               </Badge>
             }
-            footer="Seleccionar una colección solicita acceso para esta configuración. El acceso de producción requiere aprobación."
+            footer="Las colecciones seleccionadas se incluyen al preparar una versión. El acceso de producción requiere aprobación."
           >
             <Field data-invalid={!!errors.collectionIds}>
               <fieldset
-                aria-describedby="agent-collections-help"
+                aria-describedby={
+                  collectionIds.length >= 20
+                    ? "agent-collections-help"
+                    : undefined
+                }
                 className="min-w-0"
               >
                 <legend className="mb-3 text-sm font-medium">
-                  Colecciones solicitadas
+                  Colecciones
                 </legend>
                 <div className="max-h-80 divide-y overflow-y-auto border-t">
                   {collections.map((collection) => {
@@ -233,32 +246,17 @@ export function DraftEditor({
                   })}
                 </div>
               </fieldset>
-              <FieldDescription id="agent-collections-help">
-                {collectionIds.length >= 20
-                  ? "Has alcanzado el límite de 20 colecciones. Desmarca una para elegir otra."
-                  : "Marca las colecciones que quieras solicitar. Puedes elegir hasta 20."}
-              </FieldDescription>
+              {collectionIds.length >= 20 && (
+                <FieldDescription id="agent-collections-help">
+                  Has alcanzado el límite de 20 colecciones. Desmarca una para
+                  elegir otra.
+                </FieldDescription>
+              )}
               {!collections.length && (
                 <FieldDescription>
                   Crea una colección y sube documentos desde Conocimiento para
                   poder seleccionarla aquí.
                 </FieldDescription>
-              )}
-              {!!collectionIds.length && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="self-start"
-                  onClick={() =>
-                    setValue("collectionIds", [], {
-                      shouldDirty: true,
-                      shouldValidate: true,
-                    })
-                  }
-                >
-                  Quitar selección
-                </Button>
               )}
               <FieldError errors={[errors.collectionIds]} />
             </Field>

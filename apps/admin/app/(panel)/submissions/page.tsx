@@ -1,85 +1,39 @@
 import { notFound } from "next/navigation"
 import { requireIdentity } from "@agentonic/server/auth"
-import { reviewWorkspaces, loadReviewQueue } from "@agentonic/server/authoring"
+import { loadReviewListing } from "@agentonic/server/authoring"
 import { PageHeader } from "@workspace/ui/components/page-header"
-import { WorkspacePicker } from "@workspace/ui/components/workspace-picker"
-import {
-  Card,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-  CardContent,
-} from "@workspace/ui/components/card"
-import { MutationForm } from "@workspace/ui/components/mutation-form"
-import { SubmissionStatusBadge } from "@workspace/ui/components/status-badge"
-import { beginReview } from "./actions"
+import { ReviewTable } from "@workspace/ui/components/review-table"
+import { beginReview, revokeApproval } from "./actions"
 export default async function Page({
   searchParams,
 }: {
-  searchParams: Promise<{ workspace?: string }>
+  searchParams: Promise<{ workspace?: string; state?: string }>
 }) {
   const identity = await requireIdentity("admin")
   if (!identity.hasAccess) notFound()
-  const workspaces = await reviewWorkspaces()
-  if (!workspaces) throw new Error("No se pudo cargar la cola de revisión.")
-  const q = await searchParams
-  const selected = workspaces.find((w) => w.id === q.workspace) ?? workspaces[0]
-  const queue = selected ? await loadReviewQueue(selected.id) : []
-  if (!queue) throw new Error("No se pudo cargar la cola de revisión.")
+  const { workspace, state } = await searchParams
+  const listing = await loadReviewListing(workspace)
+  if (!listing) throw new Error("No se pudo cargar la cola de revisión.")
   return (
     <>
       <PageHeader
         title="Revisiones"
-        description="Propuestas que los clientes han autorizado a revisar. Abrir una propuesta registra el acceso a su versión exacta."
-        count={queue?.length ?? 0}
+        description="Consulta las versiones enviadas por los clientes y sigue sus revisiones por estado."
+        count={listing.reviews.length}
       />
-      {selected && (
-        <WorkspacePicker
-          workspaces={workspaces}
-          selected={selected.id}
-          base="/submissions"
-        />
-      )}
-      <div className="space-y-4">
-        {!queue?.length && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Sin propuestas pendientes</CardTitle>
-              <CardDescription>
-                Las propuestas aparecen cuando un cliente las envía con
-                autorización vigente.
-              </CardDescription>
-            </CardHeader>
-          </Card>
-        )}
-        {selected &&
-          queue?.map((s) => (
-            <Card key={s.id}>
-              <CardHeader>
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <CardTitle>
-                    {s.agentName} · Propuesta {s.number}
-                  </CardTitle>
-                  <SubmissionStatusBadge status={s.status} />
-                </div>
-                <CardDescription>
-                  Versión sin evaluación de ejecución.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <MutationForm
-                  action={beginReview.bind(null, selected.id, s.id)}
-                  label="Abrir revisión"
-                >
-                  <p className="text-sm text-muted-foreground">
-                    El consentimiento permite revisar la configuración y los
-                    metadatos seleccionados, con vencimiento y auditoría.
-                  </p>
-                </MutationForm>
-              </CardContent>
-            </Card>
-          ))}
-      </div>
+      <ReviewTable
+        reviews={listing.reviews}
+        workspaces={listing.workspaces}
+        selectedWorkspace={workspace ?? "all"}
+        selectedState={state}
+        openReview={beginReview}
+        revokeApproval={
+          identity.staff &&
+          ["administrator", "operator"].includes(identity.staff.role)
+            ? revokeApproval
+            : undefined
+        }
+      />
     </>
   )
 }
