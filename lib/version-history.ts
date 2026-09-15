@@ -1,5 +1,10 @@
 export const VERSION_HISTORY = [
   {
+    "version": "0.5.7",
+    "date": "2026-09-15",
+    "summary": "Unify agent preparation, private testing and review in one card with automatic runtime selection"
+  },
+  {
     "version": "0.5.6",
     "date": "2026-09-15",
     "summary": "Clarify engine and frozen agent versions and preserve the last used engine when preparing a version"
