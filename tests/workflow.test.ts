@@ -3,6 +3,8 @@ import {
   submissionForm,
   workflowRequirements,
   defaultFreezeCode,
+  reviewPreparation,
+  preparedVersionLabel,
 } from "../packages/contracts/src/workflow"
 import type { AgentView } from "../packages/contracts/src/authoring"
 const id = "10000000-0000-4000-8000-000000000001"
@@ -198,5 +200,33 @@ describe("workflow button prerequisites", () => {
     )
     expect(result.canFreeze).toBe(false)
     expect(result.canSubmit).toBe(false)
+  })
+})
+
+describe("single review card states", () => {
+  const ready = { ...candidate, canPreview: true, number: 3 }
+  it("starts without a prepared version", () => {
+    expect(reviewPreparation(draft, [], code)).toEqual({
+      current: undefined,
+      previous: undefined,
+    })
+  })
+  it("offers the exact current prepared version", () => {
+    expect(reviewPreparation(draft, [ready], code).current?.id).toBe(id)
+    expect(preparedVersionLabel(ready)).toBe("Versión 3")
+  })
+  it("keeps the prior test separate after saving changes", () => {
+    const result = reviewPreparation({ ...draft, revision: 2 }, [ready], code)
+    expect(result.current).toBeUndefined()
+    expect(result.previous?.id).toBe(id)
+  })
+  it("does not offer an authoring-only or unavailable candidate for chat", () => {
+    expect(reviewPreparation(draft, [candidate], code)).toEqual({
+      current: undefined,
+      previous: undefined,
+    })
+  })
+  it("does not substitute a candidate on another engine for the assigned combination", () => {
+    expect(reviewPreparation(draft, [ready], id).current).toBeUndefined()
   })
 })

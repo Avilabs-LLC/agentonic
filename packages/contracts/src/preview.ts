@@ -1,6 +1,10 @@
 import { z } from "zod"
 import { retrievalResult } from "./rag"
 const identity = { agentId: z.uuid(), previewId: z.uuid() }
+export const previewStartResult = z.discriminatedUnion("ok", [
+  z.object({ ok: z.literal(true), id: z.uuid() }),
+  z.object({ ok: z.literal(false), code: z.string().optional() }),
+])
 export const previewCommand = z.discriminatedUnion("operation", [
   z
     .object({

@@ -203,6 +203,7 @@ export const agentListing = z.array(
 export type AgentListing = z.infer<typeof agentListing>
 export type WorkspaceView = z.infer<typeof workspaceView>
 export const agentView = z.object({
+  preparationCodeReleaseId: uuid.nullable().default(null),
   agent: z.object({
     id: uuid,
     name: z.string(),
@@ -223,6 +224,8 @@ export const agentView = z.object({
       codeReleaseId: uuid.nullable().default(null),
       canSubmit: z.boolean().default(false),
       canPreview: z.boolean().default(false),
+      number: z.number().int().positive().optional(),
+      createdAt: z.string().optional(),
     })
   ),
   submissions: z.array(

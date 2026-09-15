@@ -14,6 +14,7 @@ import {
 import { uuid, type AppKind } from "@agentonic/contracts/identity"
 import { withIdentity } from "@agentonic/database/client"
 import { requireVerifiedUser } from "./auth"
+import { defaultFreezeCode } from "@agentonic/contracts/workflow"
 export async function runAuthoringCommand(app: AppKind, input: unknown) {
   const parsed = authoringCommand.safeParse(input)
   if (
@@ -42,9 +43,13 @@ export async function runAuthoringCommand(app: AppKind, input: unknown) {
             eligible: boolean
             previewAvailable: boolean
             content: unknown
+            number: number
+            createdAt: string
           }[]
         >`
           SELECT r.id, r.code_release_id AS "codeReleaseId", r.content,
+            (row_number() OVER (ORDER BY r.created_at, r.id))::integer AS number,
+            r.created_at::text AS "createdAt",
             (r.retired_at IS NULL AND agentonic.can_use_code(r.code_release_id) AND EXISTS(SELECT 1 FROM agentonic.code_releases c WHERE c.id=r.code_release_id AND c.execution_manifest->>'previewContract'='1')) AS "previewAvailable",
             (r.retired_at IS NULL AND agentonic.can_use_code(r.code_release_id)
              AND NOT EXISTS (SELECT 1 FROM agentonic.agent_submissions s WHERE s.workspace_id=r.workspace_id AND s.configuration_release_id=r.id)
@@ -54,15 +59,32 @@ export async function runAuthoringCommand(app: AppKind, input: unknown) {
         const details = new Map(
           candidates.map((candidate) => [candidate.id, candidate])
         )
+        const codes = await tx.$queryRaw<{ id: string }[]>`
+          SELECT id FROM agentonic.code_releases
+          WHERE template_version_id=${view.agent.templateVersionId}::uuid
+            AND retired_at IS NULL AND agentonic.can_use_code(id)
+            AND execution_manifest->>'previewContract'='1'
+          ORDER BY created_at DESC, id DESC`
+        const enriched = view.candidates.map((candidate) => ({
+          ...candidate,
+          codeReleaseId: details.get(candidate.id)?.codeReleaseId ?? null,
+        }))
         return {
           ...response,
           data: {
             ...view,
+            preparationCodeReleaseId:
+              defaultFreezeCode(
+                enriched,
+                codes.map((code) => code.id)
+              ) || null,
             candidates: view.candidates.map((candidate) => {
               const detail = details.get(candidate.id)
               return {
                 ...candidate,
                 codeReleaseId: detail?.codeReleaseId ?? null,
+                number: detail?.number,
+                createdAt: detail?.createdAt,
                 canPreview: !!detail?.previewAvailable,
                 canSubmit:
                   !!detail?.eligible &&

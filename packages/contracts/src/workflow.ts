@@ -34,7 +34,32 @@ export function defaultFreezeCode(
     ""
   )
 }
-export const freezeForm = z.object({ codeReleaseId: uuid })
+export const preparationInput = z
+  .object({
+    revision: z.number().int().positive(),
+    candidateId: uuid.optional(),
+  })
+  .strict()
+export function preparedVersionLabel(
+  candidate: AgentView["candidates"][number]
+) {
+  return `Versión ${candidate.number ?? candidate.revision}`
+}
+export function reviewPreparation(
+  draft: AgentView["draft"],
+  candidates: AgentView["candidates"],
+  codeReleaseId: string | null
+) {
+  return {
+    current: candidates.find(
+      (c) =>
+        c.canPreview &&
+        c.revision === draft.revision &&
+        c.codeReleaseId === codeReleaseId
+    ),
+    previous: candidates.find((c) => c.canPreview),
+  }
+}
 export const submissionForm = z.object({
   candidateId: uuid,
   note: z.string().max(2000, "La nota no puede superar los 2000 caracteres."),
@@ -80,11 +105,11 @@ export function workflowRequirements(input: {
   const freeze = [
     ...draftRequirements,
     {
-      label: "Versión del motor disponible y seleccionada",
+      label: "Pruebas habilitadas por Agentonic para este agente",
       met: input.availableCodeIds.includes(input.codeReleaseId),
     },
     {
-      label: "Esta revisión aún no se ha congelado con ese motor",
+      label: "Esta revisión aún no tiene una versión preparada disponible",
       met: !alreadyFrozen,
     },
   ]
