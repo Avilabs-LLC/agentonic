@@ -425,99 +425,9 @@ Local database TLS verification uses Supabase’s published CA, downloaded from 
 
 ## 21. Shared UI contract — admin and customer apps
 
-**Owner direction, 2026-09-13:** follow the rulebook in `Dev/acachuchazo-admin/docs/ui/ui-contract.md`, with the new Agentonic shadcn preset below. That source was read in full, including its detail-page conventions. This section records the applicable rules locally so implementation does not depend on another checkout. Keep the two authoritative documents in `/docs`; this UI decision requires no schema change. These are the complete UI implementation requirements. Section 22 records the implemented foundation subset and checks; later screens must meet the same rules.
+The authoritative UI requirements now live in [docs/ui/ui-contract.md](ui/ui-contract.md), adapted from the Acachuchazo baseline and updated with the owner's 2026-09-15 badge rules. Read that contract before all UI work. It preserves Agentonic's preset, Base UI composition, navigation, forms, table/detail layouts and skeleton checks.
 
-### 21.1. Preset, primitives and styling
-
-Owner-supplied initialization command:
-
-```sh
-pnpm dlx shadcn@latest init --preset b1GfVg2Oe --template next
-```
-
-The official CLI's read-only `preset decode b1GfVg2Oe --json` resolved the base preset on 2026-09-13. The table below includes the subsequent owner override from large to default/medium radius:
-
-| Setting | Agentonic |
-|---|---|
-| Style | Mira |
-| Base color | Mist |
-| Theme | Sky |
-| Font | Figtree; headings inherit |
-| Icons | Lucide |
-| Radius | Default / medium (`--radius: 0.625rem`), owner override |
-| Chart color | Amber |
-| Menu color / accent | Default / subtle |
-
-Preset reference: [Agentonic preset](https://ui.shadcn.com/create?preset=b1GfVg2Oe). The [official CLI documentation](https://ui.shadcn.com/docs/cli) describes initialization and preset inspection. Preserve the generated token values except the explicit owner radius override: use `--radius: 0.625rem`, matching the [default shadcn radius](https://ui.shadcn.com/docs/theming), and retain the generated derived radius scale. The preset ID still encodes the original large radius; reinitializing it must reapply this override. Initialize within the planned monorepo layout, with shared primitives and theme; do not accidentally create a third app at the repository root. Pin the resulting dependencies in the workspace lockfile.
-
-Retain the source contract's **Base UI** component architecture. The decoded preset does not identify a primitive library: explicitly select Base UI during initialization (the CLI supports `--base base`) and verify the generated configuration. Compose with `render`, using Base UI's actual open-state hooks (`data-popup-open` / `data-open` as applicable). A `Button` rendered as a Next.js `Link` sets `nativeButton={false}`. A `Select` with machine-readable values supplies a value-to-label `items` mapping so the trigger displays a human label.
-
-Use shadcn components wherever an appropriate primitive exists, including buttons, fields, menus, dialogs, tables, empty states and tabs. Styling uses semantic tokens; no scattered palette classes. The new preset replaces Acachuchazo's Lyra geometry and green primary. Preserve its deliberate pill-shaped status badges, centralized status palette, blue underlined ID links and limited `text-highlight` token. The highlight remains a violet semantic token, used for at most one key value per card, never for status or a background surface; check its contrast against the new theme. Centralize these exceptions in shared components/tokens.
-
-Shared label maps, variants and formatting helpers live in modules without `"use client"`; server components must not import non-component values from client modules. Both apps consume a shared UI package, while navigation, customer/staff actions and server authorization remain app-specific.
-
-Carry over the source's Spanish (`es-VE`) interface and centralized `Intl` formatting as the initial language convention. All visible labels, pagination, errors and notifications use it consistently. Display operational times with an explicit applicable user/workspace timezone; do not inherit Acachuchazo's business timezone. Capitalize the word following separators such as `·` in metadata lines.
-
-### 21.2. Page anatomy and navigation
-
-Collection pages render a shared `PageHeader`: bold `text-3xl` title, formatted count appended as `Título: 1.811`, one-line muted description and right-aligned page actions. Optional statistics and filters precede the main content. Do not invent counts before data exists.
-
-Every “Crear…” button, including dialog launchers and form submit buttons, includes a leading decorative Lucide plus icon. Keep the Spanish text as its accessible name and preserve pending/disabled behavior.
-
-Each app has one typed navigation registry providing its sidebar, breadcrumb and page-header labels. Share the registry contract and rendering helpers, not staff navigation entries with customers. Unbuilt sections appear disabled with a `Pronto` badge. Keep routes, labels and permissions explicit.
-
-### 21.3. Tables
-
-Use pinned TanStack Table v8 and a shared `DataTable` for entity tables. Prefer a table over a card grid for collections larger than about six records; this does not turn chat transcripts or prompt editors into tables.
-
-- Every data column has a sortable `DataTableColumnHeader`. The row-action column has no meaningless sort control.
-- Search sits above the table and covers common-sense entity fields with multi-term AND matching. Server-backed search, sorting and pagination must cover the authorized result set, not only the current browser page.
-- Provide Spanish pagination, page-size selection, a sticky header in a bounded scroll area, and a shadcn `Empty` state.
-- When an entity has a working detail route, its first column is an eight-character ID rendered by the shared blue underlined `IdLink`. Omit that column until the detail route exists. **Customer agent list override (owner direction, 2026-09-14):** the ellipsis action column comes first; the Agente cell shows only the name as a blue underlined detail link, without a description or description tooltip. The ID column is omitted, and Estado is the last column. Existing edit permission checks also govern the name link.
-- Statuses use pill badges with the source palette: `success`, `warning`, `error`, `orange`, `sky`, `violet`, `emerald`, `slate`, and the appropriate `inverse*` variants on colored surfaces. Light mode uses tinted surfaces/dark text; dark mode uses page-background surfaces/luminous text. Never use the solid primary `default` badge for statuses. Text communicates status as well as color.
-- Shared `status-badge` components and `lib/badge-status` maps assign the same labels/colors in both apps: ready/active/approved/available → success; queued/submitted/paused/unevaluated → warning; processing/in review/read access/selected knowledge → sky; requested changes/examples → orange; drafts/development → violet; collection management → emerald; failure/rejection/revocation → error; withdrawn/archived/unprocessed/undeployed/upcoming → slate. Unknown statuses use a slate “Estado desconocido” badge. The Acachuchazo palette remains centralized in `badge.tsx`; inverse variants are reserved for colored surfaces.
-
-### 21.4. Filters and row actions
-
-Extra filters live in a shared `FiltersCard` titled `Filtros`, arranged in a responsive grid, with a `Limpiar` action resetting every filter. The page's table wrapper owns filter state.
-
-Row actions use a final-column ellipsis menu with icons. Destructive actions are red, separated at the bottom, and consequential operations require an `AlertDialog` with explicit title, consequence and confirmation label. A disabled or hidden control does not replace server-side authorization.
-
-### 21.5. Forms and feedback
-
-Forms use react-hook-form, Zod, `zodResolver`, `mode: "onChange"`, and shadcn `Field`, `FieldLabel`, and `FieldError`. Submit is disabled while required inputs are invalid or submission is in progress: `disabled={!isValid || isSubmitting}`. Validate again on the server and preserve actionable field errors.
-
-Creation entry buttons use a `+` icon. Inside dialogs, submit buttons omit that icon and retain a specific action label such as `Crear agente`, `Crear colección` or `Eliminar colección`, rather than generic `Confirmar`. Repeating the dialog's action makes the result of submitting explicit. Use `Cancelar` for dismissal and the appropriate progress label while submitting.
-
-Use Sonner at the bottom right with centralized `notify` helpers and distinct success, warning and destructive styles. Components do not call `toast` directly. Every completed submission or row action produces exactly one notification, including failures; cancellation produces no success claim. Inline field errors complement that notification. Pending asynchronous work must be described as queued/submitted, not deployed or completed.
-
-### 21.6. Loading states and verification
-
-Every rendered page route has a `loading.tsx` matching its actual structure: header, back row, cards, toolbar and table column count as applicable. Shared skeleton primitives include `PageHeaderSkeleton`, `RecordHeaderSkeleton`, `BackRowSkeleton`, `FiltersCardSkeleton`, `TableSkeleton` and `StatCardsSkeleton`; chat and editor routes receive matching specialized skeletons.
-
-Port the source's skeleton freshness audit concept to both apps. Fingerprint each route's page, colocated visual components and loading skeleton; include relevant shared visual dependencies so a shared component change cannot silently escape review. `pnpm skeletons:check` must fail for missing skeletons, stale manifests and unreviewed visual changes. After changing a skeleton or explicitly confirming unchanged geometry, `pnpm skeletons:update` records the reviewed baseline. Hash freshness supplements visual review; it does not prove visual equivalence.
-
-Foundation CI runs typecheck, lint, applicable tests and the skeleton audit. Verify responsive layouts, keyboard navigation, focus, validation feedback and light/dark/system themes as UI work lands. **Do not run `pnpm build` or `next build` for verification unless the owner explicitly requests a full build.**
-
-### 21.7. Shell and detail pages
-
-Use shadcn `Sidebar` with `variant="inset"`, an Agentonic brand mark placeholder, centralized application name/version, grouped navigation and bottom user menu. The menu provides theme selection (`Claro`, `Oscuro`, `Sistema` through next-themes with the `class` attribute), account and sign-out when those features work. Dynamic breadcrumbs use the navigation registry and shorten UUID segments to eight characters. Customer workspace selection and staff context must remain visibly distinct.
-
-Nested pages render a separate ghost `BackRow` with left arrow immediately above `RecordHeader`, linking one route level up. Wrap the pair in `space-y-3`. Header actions remain available for operations and cross-links. `RecordHeader` contains title, one muted metadata line, status badges and right-aligned actions; do not add an initials avatar there.
-
-For ordinary detail pages, use a responsive `lg:grid-cols-3` grid: operational content spans two columns, reference data occupies the side track. Use stat tiles with muted uppercase labels and tabular numeric values, shadcn `Item`/`ItemSeparator` for record lists and definition rows with `Separator` for attributes. Related records reuse `IdLink`; statuses reuse the shared maps.
-
-When an agent has independent facets, use tabs under its record header, such as configuration, knowledge, connections and activity, with counts where useful. Dense workflows can have dedicated pages. Preserve the shared shell, form, feedback and loading rules across the customer editor, upload journey and chat.
-
-Acachuchazo's credit-line meter, financial layouts, KYC tabs and single-customer mock overlay are domain-specific examples, not Agentonic features. Apply the underlying composition rules to agents, submissions and deployments. Synthetic fixtures must be clearly identified and isolated from real workflows; never display fabricated deployment health or costs as live data. Agentonic logo/favicon and custom login composition remain implementation work; the approved preset supplies the initial theme.
-
-### 21.8. Agentonic workflow clarity
-
-The customer app must distinguish an editable draft, a frozen submission awaiting review and the currently deployed version. Clearly label staging previews, selected source scopes and requested capabilities. Customer actions create, personalize, preview and submit; staff actions review and deploy through the established approval boundary. Shared visual components do not collapse those responsibilities.
-
-Keep chat access, configuration management, transcript access and knowledge sharing separate in the interface. Explain what is being shared before granting it. A connection's knowledge-import scope and live tool permissions are separate choices. Display unknown cost as unknown, and show deployment progress from observed status rather than treating a queued command as a successful release.
-
-
+Primary record states may use a badge; nested outcomes use unboxed icons and text; metadata and counts use ordinary text. Current approval validity takes precedence over historical success in receipt headers. Domain descriptors centrally define status labels, tones and icons. These current rules supersede earlier badge-specific implementation notes below (including type, selection-count and prompt-readiness pills).
 
 ## 22. Shared foundation implementation — 2026-09-13
 
@@ -964,3 +874,11 @@ Operations: apply the migration; deploy the new fixed evaluator bundle with `--r
 Migration 18 accepts properly grounded abstention in customer-defined cases without fabricated citations, while retaining semantic/expectation/safety checks. Outcome reads reflect current manual or policy approval validity and show revocation/expiry explicitly. Routine classification distinguishes informational retrieval (including documented delivery/warranty facts) from professional advice or execution; rejecting a synthetic platform attack does not itself make the agent’s purpose sensitive.
 
 **Verification checkpoint:** 264 tests pass, including exact policy approval, manual exceptions, missing customer input, optimistic edit conflicts, uneditable provenance/platform cases, cancellation/retention, combined spending caps, stale-source denial and uncertainty routing. Prisma generation/validation, typecheck, lint and 13 skeleton baselines pass. A browser fixture verified customer notes, exclusion reasons, confirmation controls and the corresponding loading layout; the temporary route was removed. The actual staff revision's new state was read through its scoped admin role. The updated measured Azure worker completed a synthetic five-case review with persisted customer notes, automatic policy approval (`humanReviewed: false`), validity checks and immediate revocation; its document was purged and workspace retired. The prior synthetic run that required attention retains its recorded result and usage. No customer agent is part of these fixtures.
+
+## 36. Badge hierarchy and local UI contract — 2026-09-15
+
+Following the cross-app badge audit, the owner requested implementation and a local UI contract based on Acachuchazo. The authoritative [UI contract](ui/ui-contract.md) now contains the applicable baseline, Agentonic's existing preset/layout adaptations and explicit rules for primary states, inline nested outcomes, metadata and accessible icons. Section 21 and `AGENTS.md` point to it; earlier notes prescribing metadata/count pills are historical.
+
+The 40 audited application badge placements are reduced to eight primary-state placements. Both apps share domain descriptors for labels, tones and icons, with neutral unknown handling. Counts, permissions, environment, draft feedback and preview context use plain text or unboxed icons. Criterion acceptance stays distinct from evaluation success; expected/actual answer panels use neutral surfaces. Approval receipts prioritize current validity while preserving historical decisions, and customer receipts retain expiry/revocation from the authoritative read model. Document readiness retains usable-version/reprocessing precedence. No state machine, authorization, schema or live service behavior was changed by this UI work.
+
+Verification: Prisma generation/validation, typecheck, lint and all 280 tests passed, including seven new status meaning/precedence tests. All 14 route skeleton baselines passed after source/layout review. Temporary synthetic browser fixtures in both apps verified primary receipt badges, inline child outcomes, light/dark styling, 390px wrapping without page overflow, keyboard disclosure expansion, unknown states, historical success with invalid approval, and unavailable-evidence messages without a success count. The fixtures were removed; no customer records or provider operations were used. No production build was run.
