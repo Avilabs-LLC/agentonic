@@ -1,5 +1,10 @@
 export const VERSION_HISTORY = [
   {
+    "version": "0.5.6",
+    "date": "2026-09-15",
+    "summary": "Clarify engine and frozen agent versions and preserve the last used engine when preparing a version"
+  },
+  {
     "version": "0.5.5",
     "date": "2026-09-14",
     "summary": "Simplify the agent name column by removing description previews"
