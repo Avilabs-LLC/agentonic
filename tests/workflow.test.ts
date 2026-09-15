@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import {
   submissionForm,
   workflowRequirements,
+  defaultFreezeCode,
 } from "../packages/contracts/src/workflow"
 import type { AgentView } from "../packages/contracts/src/authoring"
 const id = "10000000-0000-4000-8000-000000000001"
@@ -44,6 +45,53 @@ function state(
   }
 }
 describe("workflow button prerequisites", () => {
+  it("reopens an already-frozen revision with its engine, regardless of catalog order", () => {
+    const olderCode = "10000000-0000-4000-8000-000000000003"
+    const availableCodeIds = [olderCode, code]
+    const candidates = [candidate]
+    const codeReleaseId = defaultFreezeCode(candidates, availableCodeIds)
+    expect(codeReleaseId).toBe(code)
+    expect(
+      workflowRequirements(
+        state({ candidates, availableCodeIds, codeReleaseId })
+      ).canFreeze
+    ).toBe(false)
+    // Deliberately choosing another engine creates a different combination.
+    expect(
+      workflowRequirements(
+        state({ candidates, availableCodeIds, codeReleaseId: olderCode })
+      ).canFreeze
+    ).toBe(true)
+  })
+  it("keeps the last engine after a new draft revision is saved", () => {
+    const candidates = [candidate]
+    const codeReleaseId = defaultFreezeCode(candidates, [id, code])
+    expect(codeReleaseId).toBe(code)
+    expect(
+      workflowRequirements(
+        state({ candidates, codeReleaseId, draft: { ...draft, revision: 2 } })
+      ).canFreeze
+    ).toBe(true)
+  })
+  it("prefers the newest available frozen engine even after submission", () => {
+    expect(
+      defaultFreezeCode(
+        [{ ...candidate, codeReleaseId: id, canSubmit: false }, candidate],
+        [code, id]
+      )
+    ).toBe(id)
+  })
+  it("skips unavailable engines and handles agents without frozen versions", () => {
+    expect(
+      defaultFreezeCode(
+        [{ ...candidate, codeReleaseId: id }, candidate],
+        [code]
+      )
+    ).toBe(code)
+    expect(defaultFreezeCode([candidate], [id])).toBe(id)
+    expect(defaultFreezeCode([], [code])).toBe(code)
+    expect(defaultFreezeCode([candidate], [])).toBe("")
+  })
   it("permits a valid saved prompt without optional skills or knowledge", () =>
     expect(workflowRequirements(state()).canFreeze).toBe(true))
   it.each(["dirty", "pending", "editingSkill"] as const)(

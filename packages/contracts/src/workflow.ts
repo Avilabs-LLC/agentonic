@@ -18,6 +18,22 @@ export type DraftEditorStatus = {
   editingSkill: boolean
 }
 export type Requirement = { label: string; met: boolean }
+// Agent detail returns candidates newest first. Keep the agent's last used
+// available engine across reloads and draft saves instead of resetting to the catalog.
+export function defaultFreezeCode(
+  candidates: AgentView["candidates"],
+  availableCodeIds: string[]
+) {
+  return (
+    candidates.find(
+      (candidate) =>
+        candidate.codeReleaseId &&
+        availableCodeIds.includes(candidate.codeReleaseId)
+    )?.codeReleaseId ??
+    availableCodeIds[0] ??
+    ""
+  )
+}
 export const freezeForm = z.object({ codeReleaseId: uuid })
 export const submissionForm = z.object({
   candidateId: uuid,
@@ -57,19 +73,19 @@ export function workflowRequirements(input: {
       ),
     },
   ]
+  const alreadyFrozen = input.candidates.some(
+    (c) =>
+      c.revision === draft.revision && c.codeReleaseId === input.codeReleaseId
+  )
   const freeze = [
     ...draftRequirements,
     {
-      label: "Versión base disponible y seleccionada",
+      label: "Versión del motor disponible y seleccionada",
       met: input.availableCodeIds.includes(input.codeReleaseId),
     },
     {
-      label: "Esta revisión aún no se ha congelado con esa versión base",
-      met: !input.candidates.some(
-        (c) =>
-          c.revision === draft.revision &&
-          c.codeReleaseId === input.codeReleaseId
-      ),
+      label: "Esta revisión aún no se ha congelado con ese motor",
+      met: !alreadyFrozen,
     },
   ]
   const candidate = input.candidates.find((c) => c.id === input.candidateId)
@@ -92,6 +108,7 @@ export function workflowRequirements(input: {
   ]
   const busy = input.busy || editor.pending
   return {
+    alreadyFrozen,
     freeze,
     submit,
     canFreeze: !busy && freeze.every((r) => r.met),

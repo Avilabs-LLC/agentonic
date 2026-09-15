@@ -14,6 +14,7 @@ import {
   freezeForm,
   submissionForm,
   workflowRequirements,
+  defaultFreezeCode,
   draftEditorForm,
   type DraftFormValues,
   type DraftEditorStatus,
@@ -125,7 +126,9 @@ function FreezeStep({
   } = useForm<z.infer<typeof freezeForm>>({
     resolver: zodResolver(freezeForm),
     mode: "onChange",
-    defaultValues: { codeReleaseId: codes[0]?.codeReleaseId ?? "" },
+    defaultValues: {
+      codeReleaseId: defaultFreezeCode(base.candidates, base.availableCodeIds),
+    },
   })
   const codeReleaseId = useWatch({ control, name: "codeReleaseId" })
   const readiness = workflowRequirements({
@@ -140,7 +143,7 @@ function FreezeStep({
     <StepCard
       step="Paso 1 · Congelar"
       title="Preparar versión"
-      description="Congela el borrador guardado."
+      description="Combina el borrador guardado con una versión del motor."
     >
       <form
         noValidate
@@ -158,7 +161,7 @@ function FreezeStep({
           className="flex-1 space-y-4"
         >
           <Field>
-            <FieldLabel htmlFor="freeze-code">Versión disponible</FieldLabel>
+            <FieldLabel htmlFor="freeze-code">Versión del motor</FieldLabel>
             <Controller
               control={control}
               name="codeReleaseId"
@@ -186,8 +189,9 @@ function FreezeStep({
             />
           </Field>
           <p className="text-sm text-muted-foreground">
-            Congelar no aprueba ni despliega el agente. Usa Probar versión para
-            conversar con una versión congelada compatible.
+            {readiness.alreadyFrozen
+              ? "Esta revisión ya está congelada con este motor. Selecciónala en el paso 2 o guarda nuevos cambios."
+              : "La versión congelada fija tus instrucciones, habilidades, conocimiento y motor. Congelar no aprueba ni despliega el agente."}
           </p>
           <Requirements
             items={readiness.freeze}
@@ -201,7 +205,21 @@ function FreezeStep({
     </StepCard>
   )
 }
-function ReviewStep({ base, run }: { base: Base; run: Run }) {
+function ReviewStep({
+  base,
+  codes,
+  run,
+}: {
+  base: Base
+  codes: WorkspaceView["templates"]
+  run: Run
+}) {
+  const candidateLabel = (candidate: AgentView["candidates"][number]) => {
+    const engine = codes.find(
+      (c) => c.codeReleaseId === candidate.codeReleaseId
+    )
+    return `Revisión ${candidate.revision} · ${engine ? `Motor ${engine.codeVersion}` : candidate.version}`
+  }
   const candidates = base.candidates.filter(
     (c) =>
       c.canSubmit &&
@@ -258,7 +276,7 @@ function ReviewStep({ base, run }: { base: Base; run: Run }) {
         >
           <Field>
             <FieldLabel htmlFor="review-candidate">
-              Versión congelada
+              Versión congelada del agente
             </FieldLabel>
             <Controller
               control={control}
@@ -269,7 +287,7 @@ function ReviewStep({ base, run }: { base: Base; run: Run }) {
                   onValueChange={field.onChange}
                   items={candidates.map((c) => ({
                     value: c.id,
-                    label: `Revisión ${c.revision}`,
+                    label: candidateLabel(c),
                   }))}
                 >
                   <SelectTrigger
@@ -282,7 +300,7 @@ function ReviewStep({ base, run }: { base: Base; run: Run }) {
                   <SelectContent>
                     {candidates.map((c) => (
                       <SelectItem key={c.id} value={c.id}>
-                        Revisión {c.revision}
+                        {candidateLabel(c)}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -449,7 +467,7 @@ export function AgentWorkflow({
         )}
         <div className="grid auto-rows-fr items-stretch gap-6 lg:grid-cols-2">
           <FreezeStep base={base} codes={codes} run={run} />
-          <ReviewStep key={candidateKey} base={base} run={run} />
+          <ReviewStep key={candidateKey} base={base} codes={codes} run={run} />
         </div>
       </section>
     </>
