@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs"
+import { reviewQueue } from "../packages/contracts/src/authoring"
 import { PGlite } from "@electric-sql/pglite"
 import { beforeAll, afterAll, beforeEach, afterEach, expect, it } from "vitest"
 const db = new PGlite()
@@ -106,6 +107,8 @@ beforeAll(async () => {
     "202609130004_deferred_owner_checks",
     "202609130005_page_reads",
     "202609140006_agent_listing",
+    "202609150012_review_queue",
+    "202609150016_candidate_creation_clock",
   ])
     await db.exec(
       readFileSync(
@@ -113,7 +116,13 @@ beforeAll(async () => {
         "utf8"
       )
     )
-  await db.exec(`INSERT INTO auth.users VALUES('${owner}'),('${other}'),('${staff}');
+  await db.exec(
+    "ALTER TABLE auth.users ADD COLUMN email text, ADD COLUMN email_confirmed_at timestamptz, ADD COLUMN deleted_at timestamptz"
+  )
+  await db.exec(
+    readFileSync("scripts/sql/review-identity-boundary.sql", "utf8")
+  )
+  await db.exec(`INSERT INTO auth.users(id) VALUES('${owner}'),('${other}'),('${staff}');
  INSERT INTO agentonic.users(id,auth_user_id,display_name) VALUES('${owner}','${owner}','Owner'),('${other}','${other}','Other'),('${staff}','${staff}','Staff');
  BEGIN;
  INSERT INTO agentonic.workspaces(id,kind,name,slug,timezone,retention_policy) VALUES('${w}','organization','A','a','UTC','{"conversationsDays":7,"checkpointsDays":7,"memoryDays":7,"sourcesDays":7,"logsDays":7,"auditDays":30,"backupsDays":7}'),('${otherW}','organization','B','b','UTC','{"conversationsDays":7,"checkpointsDays":7,"memoryDays":7,"sourcesDays":7,"logsDays":7,"auditDays":30,"backupsDays":7}');
@@ -635,4 +644,111 @@ it("counts Unicode characters consistently and treats an unsaved agent as empty"
     requestedAccess: requested,
   })
   expect((await listing()).promptCharacters).toBe(4)
+})
+
+async function queue() {
+  const result = await db.query<{ result: unknown }>(
+    "SELECT agentonic.review_queue() result"
+  )
+  return reviewQueue.parse(result.rows[0]!.result)
+}
+it("returns submitter metadata and the prepared version number without exposing content or opening a grant", async () => {
+  await sql(
+    "UPDATE auth.users SET email='submitter@example.invalid',email_confirmed_at=now() WHERE id=$1",
+    [owner]
+  )
+  await actor()
+  await save()
+  await command("candidate.freeze", {
+    agentId: a,
+    revision: 1,
+    codeReleaseId: code,
+  })
+  await save(1)
+  const frozen = await command("candidate.freeze", {
+    agentId: a,
+    revision: 2,
+    codeReleaseId: code,
+  })
+  const submission = await command("submission.send", {
+    candidateId: frozen.id,
+    consent: true,
+    note: "Synthetic note",
+  })
+  await actor(staff, w, "agentonic_admin")
+  const rows = await queue()
+  expect(rows).toEqual([
+    {
+      id: submission.id,
+      agentName: "Synthetic agent",
+      number: 1,
+      versionNumber: 2,
+      status: "submitted",
+      userId: owner,
+      userName: "Owner",
+      userEmail: "submitter@example.invalid",
+      canOpen: true,
+    },
+  ])
+  const grants = await sql(
+    "SELECT count(*)::int n FROM agentonic.support_access_grants"
+  )
+  expect(grants.rows[0]).toEqual({ n: 0 })
+})
+it("retains closed review metadata and workspace discovery without reopening private content", async () => {
+  const submission = await submit()
+  await command("submission.withdraw", { submissionId: submission.id })
+  await actor(staff, w, "agentonic_admin")
+  expect(await queue()).toMatchObject([{ status: "withdrawn", canOpen: false }])
+  const workspaces = await db.query(
+    "SELECT * FROM agentonic.review_workspaces()"
+  )
+  expect(workspaces.rows).toEqual([{ id: w, name: "A" }])
+  expect(
+    (await command("review.open", { submissionId: submission.id })).ok
+  ).toBe(false)
+})
+it("keeps metadata scoped to the selected workspace and denies non-staff", async () => {
+  await submit()
+  await actor(staff, otherW, "agentonic_admin")
+  expect(await queue()).toEqual([])
+  await actor(owner, w, "agentonic_admin")
+  await expect(queue()).rejects.toMatchObject({ code: "42501" })
+})
+it("denies customer and worker execution and direct identity-bridge access", async () => {
+  const privileges = await sql(`SELECT
+    has_function_privilege('agentonic_customer','agentonic.review_queue()','EXECUTE') customer,
+    has_function_privilege('agentonic_worker','agentonic.review_queue()','EXECUTE') worker,
+    has_function_privilege('agentonic_admin','agentonic_bootstrap.review_user_email(uuid)','EXECUTE') bridge`)
+  expect(privileges.rows[0]).toEqual({
+    customer: false,
+    worker: false,
+    bridge: false,
+  })
+})
+it("revocation disables opening while retaining operational history", async () => {
+  await submit()
+  await sql("UPDATE agentonic.agents SET archived_at=now() WHERE id=$1", [a])
+  await actor(staff, w, "agentonic_admin")
+  expect(await queue()).toMatchObject([{ canOpen: false }])
+})
+
+it("denies disabled staff even with an admin connection", async () => {
+  await submit()
+  await sql(
+    "UPDATE agentonic.platform_staff SET disabled_at=now() WHERE id=$1",
+    [staff]
+  )
+  await actor(staff, w, "agentonic_admin")
+  await expect(queue()).rejects.toMatchObject({ code: "42501" })
+})
+it("does not return an unconfirmed Auth email", async () => {
+  await sql(
+    "UPDATE auth.users SET email='pending@example.invalid' WHERE id=$1",
+    [owner]
+  )
+  await actor()
+  await submit()
+  await actor(staff, w, "agentonic_admin")
+  expect(await queue()).toMatchObject([{ userEmail: null }])
 })

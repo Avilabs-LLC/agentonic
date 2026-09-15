@@ -6,6 +6,7 @@
 // preview/deployment (4). This order changes no relationships; see architecture section 19.
 // Migration 5 optimizes actor-scoped discovery and compatible read locks; no tables added.
 // Migration 6 adds permission-scoped agent listing summaries; no tables added.
+// Migration 21 adds audited, admin-only approved receipts with exact-submission version-3 receipt grants; no tables added.
 // Step 3 adds immutable candidates, private staging uploads and consented exact submission review.
 // Migration 7 adds leased upload ingestion, hybrid retrieval, cited knowledge previews and hard purge.
 // Migration 8 adds private, bounded local frozen-candidate previews; formal deployment records remain pending.
@@ -49,7 +50,7 @@ Table agentonic.users {
     `auth_user_id IS NOT NULL OR deleted_at IS NOT NULL`
   }
 
-  Note: '''SCOPE: LAUNCH. Global panel identity only. Supabase Auth owns authentication. Contacts and pending workspace invitations are separate. Controlled erasure may unlink Auth while retaining a pseudonymized historical actor.'''
+  Note: '''SCOPE: LAUNCH. Global panel identity only. Supabase Auth owns authentication and confirmed email; staff review metadata reads the submitter email through a migration-only Auth bridge without storing it here. Contacts and pending workspace invitations are separate. Controlled erasure may unlink Auth while retaining a pseudonymized historical actor.'''
 }
 
 Table agentonic.platform_staff {
@@ -128,7 +129,7 @@ Table agentonic.support_access_grants {
   staff_id uuid [not null]
   approved_by_member_id uuid [not null]
   reason text [not null]
-  scope jsonb [not null, note: 'Versioned allowlist of operations and resource IDs; no wildcard content access by default.']
+  scope jsonb [not null, note: 'Versioned allowlist of operations and resource IDs; no wildcard content access by default. Version 3 scopes receipt-only reads to one approved submission within original customer consent; it never authorizes active review.']
   expires_at timestamptz [not null]
   revoked_at timestamptz
   created_at timestamptz [not null, default: `now()`]
@@ -282,7 +283,7 @@ Table agentonic.code_releases {
     (artifact_bucket, artifact_key) [unique]
   }
 
-  Note: '''SCOPE: LAUNCH. Immutable reviewed code artifact shared across authorized agents/workspaces; custom code inherits repository workspace restriction. Platform-controlled private artifact store, separate from tenant stored_objects; no customer prompts, documents or secrets in shared artifacts. Publisher verifies repository/template compatibility and digest. Download requires deployment-worker authority or explicitly scoped staff access, never generic tenant storage access. One code build can serve many configurations. Customer preparation selects an eligible runtime server-side from the staff-published catalog and workspace grants; no customer engine selection. New releases do not silently upgrade agents. Retirement blocks new activation; security revocation also stops unsafe execution through live policy. Retain artifacts referenced by deployments/configurations; no customer cascade can delete shared code.'''
+  Note: '''SCOPE: LAUNCH. Immutable reviewed code artifact shared across authorized agents/workspaces; custom code inherits repository workspace restriction. Platform-controlled private artifact store, separate from tenant stored_objects; no customer prompts, documents or secrets in shared artifacts. Publisher verifies repository/template compatibility and digest. Download requires deployment-worker authority or explicitly scoped staff access, never generic tenant storage access. One code build can serve many configurations. Customer preparation selects an eligible runtime server-side from the staff-published catalog and workspace grants; no customer engine selection. New-agent creation automatically uses the template of the latest authorized preview-capable published release; no customer template selector. New releases do not silently upgrade agents. Retirement blocks new activation; security revocation also stops unsafe execution through live policy. Retain artifacts referenced by deployments/configurations; no customer cascade can delete shared code.'''
 }
 
 Table agentonic.code_tools {
@@ -360,7 +361,7 @@ Table agentonic.configuration_releases {
   support_access_grant_id uuid
   requested_access_snapshot jsonb [not null]
   requested_access_sha256 text [not null]
-  created_at timestamptz [not null, default: `now()`]
+  created_at timestamptz [not null, default: `clock_timestamp()`]
 
   indexes {
     (workspace_id, id) [unique]
@@ -467,6 +468,7 @@ Table agentonic.agent_submissions {
 }
 
 Table agentonic.submission_review_decisions {
+  actor_policy_version text [note: 'Explicit automatic approval actor; mutually exclusive with member/staff. readonly-review-v1 only.']
   id uuid [pk, not null, default: `gen_random_uuid()`]
   workspace_id uuid [not null]
   agent_id uuid [not null]
@@ -491,12 +493,12 @@ Table agentonic.submission_review_decisions {
   }
 
   checks {
-    `num_nonnulls(actor_member_id, actor_staff_id) = 1`
+    `num_nonnulls(actor_member_id, actor_staff_id, actor_policy_version) = 1`
     `actor_member_id IS NULL OR decision = 'withdrawn'`
     `decision <> 'approved' OR (approval_expires_at IS NOT NULL AND approved_access_sha256 IS NOT NULL)`
     `approval_expires_at IS NULL OR approval_expires_at > created_at`
     `support_access_grant_id IS NULL OR actor_staff_id IS NOT NULL`
-    `actor_staff_id IS NULL OR support_access_grant_id IS NOT NULL`
+    `actor_staff_id IS NULL OR support_access_grant_id IS NOT NULL OR decision = 'revoked'`
   }
 
   Note: '''SCOPE: LAUNCH. Append-only customer-visible decision history. Customers can withdraw their own authorized submission; staff review/approve/reject/revoke with scoped current content access. Approval is for exact unchanged submission and requested access, cannot silently broaden it; changes require another candidate/submission. Transaction validates evidence matches code/config and source-definition fingerprints, freezes assessment and allocates decision_number. Latest effective status and expiry govern activation; prior approval cannot override a later revocation. Staff decision and customer authorization are distinct.'''
@@ -1701,16 +1703,50 @@ Table agentonic.dataset_versions {
   Note: '''SCOPE: LAUNCH. Immutable authorized evaluation artifact, hash, source/transform provenance and schema. Grading uses exact version. Source-right revocation stops new usage even when a historical release is pinned. Retention and deletion apply to artifacts.'''
 }
 
+// Implemented in migration 13. Separate credentials distinguish local development
+// from measured Azure staging evidence; registration is migration-authority-only.
+Table agentonic.evaluation_workers {
+ id uuid [pk, not null, default: `gen_random_uuid()`]
+ database_role text [not null]
+ environment text [not null, check: `environment IN ('local','azure_staging')`]
+ worker_sha256 text [not null]
+ runtime_sha256 text [not null]
+ verified_at timestamptz [not null]
+ verification jsonb [not null]
+ revoked_at timestamptz
+ created_at timestamptz [not null, default: `now()`]
+ Note: 'Immutable measured worker identity; only irrevocable revocation can change. One unrevoked registration per database role, enforced by a partial index in Prisma SQL.'
+}
+
 Table agentonic.evaluation_runs {
+  preparation_id uuid [note: 'Implemented v2 customer preparation; NULL for legacy staff plans.']
   id uuid [pk, not null, default: `gen_random_uuid()`]
   workspace_id uuid [not null]
   agent_id uuid [not null]
   code_release_id uuid [not null]
-  dataset_version_id uuid [not null]
+  dataset_version_id uuid [note: 'Reusable dataset registry is the fuller target; migrations 13–15 freeze cases directly on each run.']
+  submission_id uuid
+  dataset_snapshot jsonb
+  dataset_sha256 text
+  requested_access_sha256 text
+  environment text [not null, default: 'azure_staging', check: `environment IN ('local','azure_staging')`]
+  authorized_by_member_id uuid
+  authorized_at timestamptz
+  consent_revoked_at timestamptz
+  committed_microusd bigint [not null, default: 0]
+  worker_id uuid
+  lease_token uuid
+  lease_until timestamptz
+  next_case integer [not null, default: 0]
+  current_matches jsonb [not null, default: `'[]'::jsonb`]
+  evidence_sha256 text
+  error_code text
+  expires_at timestamptz
+  scrubbed_at timestamptz
   grader_version text [not null]
   configuration_sha256 text [not null]
   configuration_snapshot jsonb [not null]
-  status text [not null, default: 'queued', check: `status IN ('queued', 'running', 'passed', 'failed', 'error', 'cancelled')`]
+  status text [not null, default: 'queued', check: `status IN ('awaiting_consent', 'queued', 'running', 'passed', 'failed', 'error', 'cancelled')`]
   summary jsonb
   started_at timestamptz
   finished_at timestamptz
@@ -1730,15 +1766,16 @@ Table agentonic.evaluation_runs {
   }
 
   checks {
-    `num_nonnulls(requested_by_member_id, requested_by_staff_id) = 1`
+    `(preparation_id IS NULL AND num_nonnulls(requested_by_member_id, requested_by_staff_id) = 1) OR (preparation_id IS NOT NULL AND requested_by_member_id IS NULL AND requested_by_staff_id IS NULL AND support_access_grant_id IS NULL)`
     `support_access_grant_id IS NULL OR requested_by_staff_id IS NOT NULL`
     `requested_by_staff_id IS NULL OR support_access_grant_id IS NOT NULL`
   }
 
-  Note: '''SCOPE: LAUNCH. Exact code/configuration, immutable dataset and frozen grader content/hash. Safe staging deployments, explicit paid budget, deterministic default checks. No prompt/config rereads mid-evaluation. Activation checks required successful evaluation evidence against the exact pair; candidate test deployment can exist before evaluation completes. Either customer or staff may request permitted evaluations; staff content access needs current scoped support grant. Evaluation uses frozen candidate regardless of production approval state, with staging-only execution and independent budget enforcement.'''
+  Note: '''IMPLEMENTED SUBSET: migrations 13–18 provide legacy staff plans plus customer-led AI preparation, confirmed versioned criteria/notes, semantic and fixed platform checks, shared spending ceilings, immutable results, measured Azure workers and exact policy/staff approval. Reusable dataset versions, SDK run links and full deployment records remain target work. SCOPE: LAUNCH. Exact code/configuration, immutable dataset and frozen grader content/hash. Safe staging deployments, explicit paid budget, deterministic default checks. No prompt/config rereads mid-evaluation. Activation checks required successful evaluation evidence against the exact pair; candidate test deployment can exist before evaluation completes. Either customer or staff may request permitted evaluations; staff content access needs current scoped support grant. Evaluation uses frozen candidate regardless of production approval state, with staging-only execution and independent budget enforcement.'''
 }
 
 Table agentonic.evaluation_results {
+  assessment jsonb [note: 'Structured semantic assessment for grounded-review-v2; erased with expired/cancelled content.']
   id uuid [pk, not null, default: `gen_random_uuid()`]
   workspace_id uuid [not null]
   evaluation_run_id uuid [not null]
@@ -1748,6 +1785,10 @@ Table agentonic.evaluation_results {
   outcome text [not null, check: `outcome IN ('passed', 'failed', 'error', 'skipped')`]
   scores jsonb [not null, default: `'{}'::jsonb`]
   feedback text
+  answer text
+  citations jsonb
+  evidence_sources jsonb
+  checks jsonb
   agent_id uuid [not null]
   code_release_id uuid [not null]
   configuration_release_id uuid [not null]
@@ -1776,7 +1817,7 @@ Table agentonic.agent_previews {
   status text [not null, default: 'queued', check: `status IN ('queued', 'running', 'completed', 'failed', 'expired', 'cancelled')`]
   execution_policy jsonb [not null, note: 'Server-validated reduced envelope; read-only approved test sources by default, no production consumers, explicit test destinations for any permitted write.']
   budget_usd numeric(20,8) [not null, check: `budget_usd >= 0`]
-  expires_at timestamptz [not null]
+  expires_at timestamptz [not null, note: 'Active private-test discovery exposes only IDs and expiry to the verified requesting member after current authoring and preview authorization. Preparation does not start a test; expired/cancelled/revoked tests are not resumable.']
   finished_at timestamptz
   created_at timestamptz [not null, default: `now()`]
 
@@ -2126,6 +2167,9 @@ TableGroup commercial {
 }
 
 TableGroup quality {
+  agentonic.evaluation_preparations
+  agentonic.evaluation_criteria_revisions
+  agentonic.evaluation_workers
   agentonic.datasets
   agentonic.dataset_versions
   agentonic.evaluation_runs
@@ -2163,3 +2207,65 @@ Ref: agentonic.retrieval_provider_operations.workspace_id > agentonic.workspaces
 Ref: agentonic.retrieval_provider_operations.provider > agentonic.retrieval_provider_budgets.provider [delete: restrict, update: restrict]
 
 Ref: agentonic.background_jobs.(workspace_id, preview_id) > agentonic.agent_previews.(workspace_id, id) [delete: restrict, update: restrict]
+
+Ref: agentonic.evaluation_runs.worker_id > agentonic.evaluation_workers.id [delete: restrict, update: restrict]
+Ref: agentonic.evaluation_runs.(workspace_id, authorized_by_member_id) > agentonic.workspace_members.(workspace_id, id) [delete: restrict, update: restrict]
+Ref: agentonic.evaluation_runs.(workspace_id, agent_id, code_release_id, configuration_release_id, submission_id) > agentonic.agent_submissions.(workspace_id, agent_id, code_release_id, configuration_release_id, id) [delete: restrict, update: restrict]
+
+
+Table agentonic.evaluation_preparations {
+ id uuid [pk, not null]
+ workspace_id uuid [not null]
+ agent_id uuid [not null]
+ submission_id uuid [not null]
+ code_release_id uuid [not null]
+ configuration_release_id uuid [not null]
+ authorized_by_member_id uuid [not null]
+ request_id uuid [not null]
+ configuration_sha256 text [not null]
+ requested_access_sha256 text [not null]
+ budget_usd numeric(20,8) [not null]
+ committed_microusd bigint [not null, default: 0]
+ status text [not null, default: 'queued']
+ generated_criteria jsonb [not null, note: 'Immutable AI proposal. Migration 20 exposes key/question/expectedAnswer for summary edit comparison only while review authorization and sources remain live.']
+ criteria jsonb [not null, note: 'Migration 19 adds per-situation reviewDecision: pending, approved or not_applicable. Customer confirmation requires every situation decided and at least one approved.']
+ revision integer [not null, default: 0]
+ source_snapshot jsonb [not null]
+ risk text [not null, default: 'uncertain']
+ evaluation_id uuid
+ worker_id uuid
+ lease_token uuid
+ lease_until timestamptz
+ confirmed_at timestamptz
+ consent_revoked_at timestamptz
+ scrubbed_at timestamptz
+ expires_at timestamptz [not null]
+ created_at timestamptz [not null]
+ started_at timestamptz
+ finished_at timestamptz
+ indexes {
+  (workspace_id,id) [unique]
+  (workspace_id,authorized_by_member_id,request_id) [unique]
+ }
+ Note: 'Implemented migration 17. Customer consent precedes AI preparation. Shared total budget covers generation, execution and grading. Confirmation freezes criteria. Scoped SECURITY DEFINER APIs only; no direct app/worker grants. Automatic approval requires exact passing Azure evidence, routine read-only scope and no exclusions.'
+}
+Table agentonic.evaluation_criteria_revisions {
+ id uuid [pk, not null]
+ workspace_id uuid [not null]
+ preparation_id uuid [not null]
+ revision integer [not null]
+ criteria jsonb [not null]
+ content_sha256 text [not null]
+ edited_by_member_id uuid [not null]
+ created_at timestamptz [not null]
+ scrubbed_at timestamptz
+ indexes { (preparation_id,revision) [unique] }
+ Note: 'Immutable customer edits, per-situation decisions and generation revision 0. Narrow content erasure after cancellation/expiry preserves hashes and editor provenance. Existing confirmed evidence is not rewritten by migration 19.'
+}
+Ref: agentonic.evaluation_preparations.(workspace_id,agent_id,code_release_id,configuration_release_id,submission_id) > agentonic.agent_submissions.(workspace_id,agent_id,code_release_id,configuration_release_id,id)
+Ref: agentonic.evaluation_preparations.(workspace_id,authorized_by_member_id) > agentonic.workspace_members.(workspace_id,id)
+Ref: agentonic.evaluation_preparations.worker_id > agentonic.evaluation_workers.id
+Ref: agentonic.evaluation_preparations.(workspace_id,evaluation_id) > agentonic.evaluation_runs.(workspace_id,id)
+Ref: agentonic.evaluation_runs.(workspace_id,preparation_id) > agentonic.evaluation_preparations.(workspace_id,id)
+Ref: agentonic.evaluation_criteria_revisions.(workspace_id,preparation_id) > agentonic.evaluation_preparations.(workspace_id,id)
+Ref: agentonic.evaluation_criteria_revisions.(workspace_id,edited_by_member_id) > agentonic.workspace_members.(workspace_id,id)

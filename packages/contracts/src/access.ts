@@ -8,6 +8,9 @@ const slug = z
   .max(100)
   .regex(/^[a-z0-9]+(-[a-z0-9]+)*$/)
 const description = z.string().trim().max(2000).optional()
+export const customerAgentCreation = z
+  .object({ name, slug, description })
+  .strict()
 const expiresAt = z.iso.datetime({ offset: true })
 export const supportScope = z
   .object({

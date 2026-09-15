@@ -139,6 +139,7 @@ export const authoringResult = z.discriminatedUnion("ok", [
 ])
 export type AuthoringResult = z.infer<typeof authoringResult>
 export const workspaceView = z.object({
+  creationAvailable: z.boolean().default(false),
   canCreate: z.boolean(),
   agents: z.array(
     z.object({
@@ -224,6 +225,7 @@ export const agentView = z.object({
       codeReleaseId: uuid.nullable().default(null),
       canSubmit: z.boolean().default(false),
       canPreview: z.boolean().default(false),
+      previewExpiresAt: z.string().nullable().optional(),
       number: z.number().int().positive().optional(),
       createdAt: z.string().optional(),
     })
@@ -250,10 +252,20 @@ export const reviewQueue = z.array(
   z.object({
     id: uuid,
     agentName: z.string(),
+    userId: uuid,
+    userName: z.string(),
+    userEmail: z.string().nullable(),
+    versionNumber: z.number().int().positive(),
+    canOpen: z.boolean(),
     number: z.number(),
     status: z.string(),
   })
 )
+export const reviewListing = z.array(
+  reviewQueue.element.extend({ workspaceId: uuid, workspaceName: z.string() })
+)
+export type ReviewListing = z.infer<typeof reviewListing>
+
 export const reviewView = z.object({
   id: uuid,
   grantId: uuid,

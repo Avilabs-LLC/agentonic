@@ -8,6 +8,7 @@ import {
   workspaceView,
   agentView,
   reviewQueue,
+  type ReviewListing,
   reviewView,
   type AuthoringCommand,
 } from "@agentonic/contracts/authoring"
@@ -15,6 +16,7 @@ import { uuid, type AppKind } from "@agentonic/contracts/identity"
 import { withIdentity } from "@agentonic/database/client"
 import { requireVerifiedUser } from "./auth"
 import { defaultFreezeCode } from "@agentonic/contracts/workflow"
+import { latestCreationTemplate } from "./catalog"
 export async function runAuthoringCommand(app: AppKind, input: unknown) {
   const parsed = authoringCommand.safeParse(input)
   if (
@@ -32,6 +34,16 @@ export async function runAuthoringCommand(app: AppKind, input: unknown) {
           { result: unknown }[]
         >`SELECT agentonic.authoring_command(${parsed.data.operation}::text,${JSON.stringify(parsed.data.payload)}::jsonb,${randomUUID()}::uuid) result`
         const response = authoringResult.parse(result[0]?.result)
+        if (parsed.data.operation === "list" && response.ok) {
+          const view = workspaceView.parse(response.data)
+          return {
+            ...response,
+            data: {
+              ...view,
+              creationAvailable: !!(await latestCreationTemplate(tx)),
+            },
+          }
+        }
         if (parsed.data.operation !== "detail" || !response.ok) return response
         const view = agentView.parse(response.data)
         // Reuse the detail transaction's workspace read lock and RLS context.
@@ -56,6 +68,12 @@ export async function runAuthoringCommand(app: AppKind, input: unknown) {
              AND NOT EXISTS (SELECT 1 FROM jsonb_array_elements_text(r.requested_access_snapshot->'collectionIds') c(id) WHERE NOT agentonic.can_collection(c.id::uuid,'read'))) AS eligible
           FROM agentonic.configuration_releases r
           WHERE r.workspace_id=${parsed.data.workspaceId}::uuid AND r.agent_id=${parsed.data.payload.agentId}::uuid`
+        const activePreviews =
+          app === "customer"
+            ? await tx.$queryRaw<{ candidateId: string; expiresAt: string }[]>`
+              SELECT candidate_id AS "candidateId", expires_at::text AS "expiresAt"
+              FROM agentonic.active_agent_previews(${parsed.data.payload.agentId}::uuid)`
+            : []
         const details = new Map(
           candidates.map((candidate) => [candidate.id, candidate])
         )
@@ -86,6 +104,9 @@ export async function runAuthoringCommand(app: AppKind, input: unknown) {
                 number: detail?.number,
                 createdAt: detail?.createdAt,
                 canPreview: !!detail?.previewAvailable,
+                previewExpiresAt:
+                  activePreviews.find((p) => p.candidateId === candidate.id)
+                    ?.expiresAt ?? null,
                 canSubmit:
                   !!detail?.eligible &&
                   editableDraftContent.safeParse(detail.content).success,
@@ -121,14 +142,17 @@ export async function loadAgent(workspaceId: string, agentId: string) {
   return result.success ? result.data : null
 }
 export async function loadReviewQueue(workspaceId: string) {
-  const r = await runAuthoringCommand("admin", {
-    operation: "review.queue",
-    workspaceId,
-    payload: {},
-  })
-  if (!r.ok) return null
-  const result = reviewQueue.safeParse(r.data)
-  return result.success ? result.data : null
+  if (!uuid.safeParse(workspaceId).success) return null
+  const actor = await requireVerifiedUser("admin")
+  try {
+    return await withIdentity(actor.authId, workspaceId, async (tx) => {
+      const rows = await tx.$queryRaw<{ result: unknown }[]>`
+        SELECT agentonic.review_queue() result`
+      return reviewQueue.parse(rows[0]?.result)
+    })
+  } catch {
+    return null
+  }
 }
 export async function openReview(
   workspaceId: string,
@@ -157,6 +181,36 @@ export async function reviewWorkspaces() {
     return null
   }
 }
+// Discover scope server-side, then retain an isolated verified transaction for
+// every workspace. A failed read must not silently produce a partial queue.
+export async function loadReviewListing(workspaceId?: string) {
+  if (workspaceId !== undefined && !uuid.safeParse(workspaceId).success)
+    return null
+  const workspaces = await reviewWorkspaces()
+  if (!workspaces) return null
+  if (
+    workspaceId &&
+    !workspaces.some((workspace) => workspace.id === workspaceId)
+  )
+    return null
+  const selected = workspaceId
+    ? workspaces.filter((workspace) => workspace.id === workspaceId)
+    : workspaces
+  const reviews: ReviewListing = []
+  for (const workspace of selected) {
+    const queue = await loadReviewQueue(workspace.id)
+    if (!queue) return null
+    reviews.push(
+      ...queue.map((review) => ({
+        ...review,
+        workspaceId: workspace.id,
+        workspaceName: workspace.name,
+      }))
+    )
+  }
+  return { workspaces, reviews }
+}
+
 export type CustomerAuthoringCommand = Exclude<
   AuthoringCommand,
   { operation: `review.${string}` }
