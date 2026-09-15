@@ -8,8 +8,7 @@ import type { ReviewReceipt } from "@agentonic/contracts/review-receipt"
 import { SubmissionVersionContent } from "@workspace/ui/components/submission-review-layout"
 import { AgentSettingsCard } from "@workspace/ui/components/agent-settings-card"
 import { BackRow, RecordHeader } from "@workspace/ui/components/record-header"
-import { Badge } from "@workspace/ui/components/badge"
-
+import { DomainStatus } from "@workspace/ui/components/status-badge"
 import {
   ReceiptTextFrame,
   ReceiptCriteria,
@@ -39,7 +38,13 @@ export function SubmissionReceipt({
       <RecordHeader
         title={r.agentName}
         description={`Versión ${r.versionNumber} · Revisión ${r.number} · Comprobante de aprobación.`}
-        actions={<Badge variant="success">Aprobada</Badge>}
+        actions={
+          <DomainStatus
+            domain="approval"
+            status={r.approval.valid ? "valid" : "invalid"}
+            appearance="badge"
+          />
+        }
       />
       <AgentSettingsCard
         title="Resumen de la versión"
@@ -116,11 +121,11 @@ export function SubmissionReceipt({
         icon={<ClipboardCheckIcon />}
         description="Respuestas y verificaciones de la evaluación que respaldó esta aprobación."
         action={
-          r.reportAvailable ? (
-            <Badge variant="success">
+          r.reportAvailable && r.results.length > 0 ? (
+            <span className="text-sm text-muted-foreground tabular-nums">
               {r.results.filter((result) => result.outcome === "passed").length}
               /{r.results.length} superadas
-            </Badge>
+            </span>
           ) : undefined
         }
       >
@@ -129,8 +134,12 @@ export function SubmissionReceipt({
             El detalle de las respuestas ya no está disponible por los límites
             de autorización o conservación de la evidencia.
           </p>
-        ) : (
+        ) : r.results.length ? (
           <ReceiptResults results={r.results} />
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            No hay resultados disponibles para esta evaluación.
+          </p>
         )}
       </AgentSettingsCard>
       <AgentSettingsCard
@@ -138,9 +147,9 @@ export function SubmissionReceipt({
         icon={<FileCheck2Icon />}
         description="Decisión vinculada a esta versión y a su evaluación."
         action={
-          <Badge variant={r.approval.valid ? "success" : "warning"}>
+          <span className="text-sm text-muted-foreground">
             {r.approval.valid ? "Vigente" : "No vigente"}
-          </Badge>
+          </span>
         }
       >
         <dl className="grid gap-5 text-sm sm:grid-cols-2">

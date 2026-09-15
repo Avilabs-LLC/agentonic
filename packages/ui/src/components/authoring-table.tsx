@@ -40,10 +40,9 @@ import {
   TooltipTrigger,
   TooltipContent,
 } from "@workspace/ui/components/tooltip"
-import { Badge } from "@workspace/ui/components/badge"
 import {
   AgentStatusBadge,
-  SubmissionStatusBadge,
+  DomainStatus,
 } from "@workspace/ui/components/status-badge"
 export function AuthoringTable({
   agents,
@@ -170,19 +169,22 @@ export function AuthoringTable({
           configuration.promptCharacters >= SYSTEM_PROMPT_MIN_CHARACTERS
         return (
           <div className="flex items-center gap-2">
-            <Badge
-              variant={ready ? "success" : "warning"}
-              className="size-6 justify-center p-0"
-            >
+            <span className="inline-flex items-center">
               {ready ? (
-                <CheckIcon className="size-3.5" aria-hidden="true" />
+                <CheckIcon
+                  className="size-4 text-muted-foreground"
+                  aria-hidden="true"
+                />
               ) : (
-                <XIcon className="size-3.5" aria-hidden="true" />
+                <XIcon
+                  className="size-4 text-muted-foreground"
+                  aria-hidden="true"
+                />
               )}
               <span className="sr-only">
                 {ready ? "Instrucciones listas" : "Instrucciones incompletas"}
               </span>
-            </Badge>
+            </span>
             <span className="text-xs text-muted-foreground tabular-nums">
               {configuration.promptCharacters} caracteres
             </span>
@@ -242,12 +244,12 @@ export function AuthoringTable({
                   className="flex items-center gap-2"
                   aria-label={`${version.status === "in_review" ? "En revisión" : "Enviada"}: ${version.version}`}
                 >
-                  <Clock3Icon
-                    className="size-4 shrink-0 text-muted-foreground"
-                    aria-hidden="true"
-                  />
                   <span>{version.version}</span>
-                  <SubmissionStatusBadge status={version.status} />
+                  <DomainStatus
+                    domain="submission"
+                    status={version.status}
+                    className="text-xs"
+                  />
                 </div>
               ))
             ) : (

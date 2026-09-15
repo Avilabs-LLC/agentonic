@@ -2,7 +2,6 @@
 import { LoaderCircleIcon } from "lucide-react"
 import {
   criterionWasEdited,
-  criterionDecisionLabel,
   type ReviewCriterion,
   type ReviewPreparation,
 } from "@agentonic/contracts/review-flow"
@@ -15,7 +14,7 @@ import {
   TableRow,
   TableCell,
 } from "@workspace/ui/components/table"
-import { Badge } from "@workspace/ui/components/badge"
+import { CriterionStatus } from "@workspace/ui/components/status-badge"
 import { Button } from "@workspace/ui/components/button"
 import { ConsentCheckbox } from "@workspace/ui/components/consent-checkbox"
 export function ReviewCriteriaSummary({
@@ -104,13 +103,7 @@ export function ReviewCriteriaSummary({
                   </TableCell>
                   <TableCell>{c.notes.trim() ? "Sí" : "No"}</TableCell>
                   <TableCell>
-                    <Badge
-                      variant={
-                        c.reviewDecision === "approved" ? "success" : "warning"
-                      }
-                    >
-                      {criterionDecisionLabel(c)}
-                    </Badge>
+                    <CriterionStatus criterion={c} />
                   </TableCell>
                 </TableRow>
               )

@@ -14,7 +14,7 @@ import {
   ItemActions,
 } from "@workspace/ui/components/item"
 import Link from "next/link"
-import { Badge } from "@workspace/ui/components/badge"
+import { ChevronRightIcon } from "lucide-react"
 export function FoundationRoadmap({ customer }: { customer: boolean }) {
   const steps = customer
     ? [
@@ -75,9 +75,13 @@ export function FoundationRoadmap({ customer }: { customer: boolean }) {
                 <ItemDescription>{description}</ItemDescription>
               </ItemContent>
               <ItemActions>
-                <Badge variant={href ? "success" : "slate"}>
-                  {href ? "Disponible" : "Pronto"}
-                </Badge>
+                <span className="text-xs text-muted-foreground">
+                  {href ? (
+                    <ChevronRightIcon aria-hidden="true" className="size-4" />
+                  ) : (
+                    "Pronto"
+                  )}
+                </span>
               </ItemActions>
             </Item>
           </div>

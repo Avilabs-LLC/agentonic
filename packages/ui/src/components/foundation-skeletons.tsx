@@ -14,8 +14,23 @@ export function PageHeaderSkeleton() {
     </div>
   )
 }
-export function RecordHeaderSkeleton() {
-  return <PageHeaderSkeleton />
+export function RecordHeaderSkeleton({
+  indicator,
+}: {
+  indicator?: "status" | "metadata"
+}) {
+  return (
+    <div className="flex flex-wrap items-start justify-between gap-4">
+      <PageHeaderSkeleton />
+      {indicator && (
+        <Skeleton
+          className={
+            indicator === "status" ? "h-5 w-40 rounded-full" : "h-5 w-32"
+          }
+        />
+      )}
+    </div>
+  )
 }
 export function BackRowSkeleton() {
   return <Skeleton className="h-7 w-28" />

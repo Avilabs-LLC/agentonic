@@ -5,7 +5,7 @@ import { notFound } from "next/navigation"
 import { loadWorkspace, loadAgent } from "@agentonic/server/authoring"
 import { RecordHeader, BackRow } from "@workspace/ui/components/record-header"
 import { AgentWorkflow } from "@workspace/ui/components/agent-workflow"
-import { Badge } from "@workspace/ui/components/badge"
+import { ServerIcon } from "lucide-react"
 import { AgentPageTabs } from "@workspace/ui/components/agent-page-tabs"
 import { AgentProposals } from "@workspace/ui/components/agent-proposals"
 import { customerWorkspace } from "@/lib/workspace"
@@ -45,7 +45,12 @@ export default async function Page({
           data.agent.description ??
           "Personaliza tu agente y prepara una propuesta."
         }
-        actions={<Badge variant="slate">Sin despliegue</Badge>}
+        actions={
+          <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
+            <ServerIcon aria-hidden="true" className="size-4" />
+            Sin despliegue
+          </span>
+        }
       />
       <AgentPageTabs
         configuration={

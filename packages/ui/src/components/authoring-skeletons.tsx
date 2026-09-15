@@ -2,6 +2,7 @@ import { AgentPageTabs } from "@workspace/ui/components/agent-page-tabs"
 import { Skeleton } from "@workspace/ui/components/skeleton"
 import {
   PageHeaderSkeleton,
+  RecordHeaderSkeleton,
   BackRowSkeleton,
   TableSkeleton,
   FiltersCardSkeleton,
@@ -21,7 +22,7 @@ export function AgentEditorSkeleton() {
   return (
     <div className="mx-auto w-full max-w-4xl space-y-6">
       <BackRowSkeleton />
-      <PageHeaderSkeleton />
+      <RecordHeaderSkeleton indicator="metadata" />
       <AgentPageTabs
         configuration={
           <>
@@ -103,7 +104,7 @@ export function AgentEditorSkeleton() {
                     <div className="overflow-hidden rounded-lg border bg-muted/20">
                       <div className="flex flex-wrap items-center justify-between gap-3 border-b p-4">
                         <div className="flex items-center gap-3">
-                          <Skeleton className="size-10 shrink-0 rounded-md" />
+                          <Skeleton className="size-5 shrink-0" />
                           <div className="space-y-1">
                             <Skeleton className="h-5 w-20" />
                             <Skeleton className="h-4 w-24" />
@@ -277,7 +278,8 @@ export function ReviewDetailSkeleton() {
   return (
     <div className="mx-auto w-full max-w-4xl space-y-6">
       <BackRowSkeleton />
-      <PageHeaderSkeleton />
+      <RecordHeaderSkeleton indicator="status" />
+      <Skeleton className="h-5 w-4/5" />
       {["prompt", "skills", "knowledge"].map((section) => (
         <Card
           key={section}
@@ -363,7 +365,7 @@ export function ReviewReceiptSkeleton() {
   return (
     <div className="mx-auto w-full max-w-4xl space-y-6">
       <BackRowSkeleton />
-      <PageHeaderSkeleton />
+      <RecordHeaderSkeleton indicator="status" />
       {[
         "summary",
         "prompt",
@@ -399,6 +401,22 @@ export function ReviewReceiptSkeleton() {
               </div>
             ) : section === "prompt" ? (
               <Skeleton className="h-40 w-full" />
+            ) : section === "criteria" || section === "results" ? (
+              <div className="divide-y border-y">
+                {[0, 1, 2].map((row) => (
+                  <div
+                    key={row}
+                    className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 py-4 sm:grid-cols-[minmax(0,1fr)_12rem_auto]"
+                  >
+                    <Skeleton className="h-5 w-4/5" />
+                    <div className="col-start-1 row-start-2 flex items-center gap-2 sm:col-start-2 sm:row-start-1">
+                      <Skeleton className="size-3.5 shrink-0" />
+                      <Skeleton className="h-4 w-28" />
+                    </div>
+                    <Skeleton className="col-start-2 row-start-1 size-4 sm:col-start-3" />
+                  </div>
+                ))}
+              </div>
             ) : (
               <>
                 <Skeleton className="h-5 w-full" />

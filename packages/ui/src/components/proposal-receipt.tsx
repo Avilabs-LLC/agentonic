@@ -4,19 +4,22 @@ import {
   ListChecksIcon,
   ReceiptTextIcon,
 } from "lucide-react"
-import type { AgentView } from "@agentonic/contracts/authoring"
 import {
-  reviewFlowLabels,
-  type ReviewPreparation,
-} from "@agentonic/contracts/review-flow"
+  submissionLabels,
+  type AgentView,
+} from "@agentonic/contracts/authoring"
+import { type ReviewPreparation } from "@agentonic/contracts/review-flow"
 import { AgentSettingsCard } from "@workspace/ui/components/agent-settings-card"
-import { Badge } from "@workspace/ui/components/badge"
-import { SubmissionStatusBadge } from "@workspace/ui/components/status-badge"
+import {
+  DomainStatus,
+  StatusIndicator,
+} from "@workspace/ui/components/status-badge"
 import {
   ReceiptCriteria,
   ReceiptResults,
   ReceiptTextFrame,
 } from "@workspace/ui/components/review-receipt-content"
+import { proposalStatus } from "@workspace/ui/lib/badge-status"
 
 const usd = (value: number) =>
   `USD ${value.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 4 })}`
@@ -32,15 +35,6 @@ export function ProposalReceipt({
   agentName: string
   versionNumber?: number
 }) {
-  const completed =
-    record &&
-    [
-      "approved",
-      "needs_changes",
-      "needs_attention",
-      "expired",
-      "revoked",
-    ].includes(record.status)
   const confirmed = Boolean(record?.evaluationId)
   const passed =
     record?.results.filter((r) => r.outcome === "passed").length ?? 0
@@ -50,11 +44,20 @@ export function ProposalReceipt({
         title="Resumen de la versión"
         icon={<ReceiptTextIcon />}
         description="Consulta el estado y lo registrado durante la revisión de tu propuesta."
-        action={<SubmissionStatusBadge status={submission.status} />}
+        action={
+          <StatusIndicator
+            state={proposalStatus(submission.status, record?.status)}
+            appearance="badge"
+          />
+        }
       >
         <dl className="grid gap-5 text-sm sm:grid-cols-2">
           {[
             ["Agente", agentName],
+            [
+              "Estado de la propuesta",
+              submissionLabels[submission.status] ?? "Estado desconocido",
+            ],
             [
               "Versión",
               versionNumber ?? record?.versionNumber ?? "No disponible",
@@ -122,15 +125,9 @@ export function ProposalReceipt({
             description="Consulta las respuestas del agente y los controles de la plataforma."
             action={
               record.results.length ? (
-                <Badge
-                  variant={
-                    completed && passed === record.results.length
-                      ? "success"
-                      : "sky"
-                  }
-                >
+                <span className="text-sm text-muted-foreground tabular-nums">
                   {passed}/{record.results.length} superadas
-                </Badge>
+                </span>
               ) : undefined
             }
           >
@@ -155,27 +152,6 @@ export function ProposalReceipt({
         title="Estado de la revisión"
         icon={<FileCheck2Icon />}
         description="Resultado de la revisión y comentarios registrados para esta propuesta."
-        action={
-          record ? (
-            <Badge
-              variant={
-                record.status === "approved"
-                  ? "success"
-                  : [
-                        "expired",
-                        "revoked",
-                        "cancelled",
-                        "error",
-                        "needs_changes",
-                      ].includes(record.status)
-                    ? "warning"
-                    : "sky"
-              }
-            >
-              {reviewFlowLabels[record.status]}
-            </Badge>
-          ) : undefined
-        }
       >
         <div className="space-y-4">
           {record?.summary && (
@@ -185,7 +161,12 @@ export function ProposalReceipt({
           )}
           {submission.decisions.map((decision) => (
             <div key={decision.number} className="space-y-3 border-t pt-4">
-              <SubmissionStatusBadge status={decision.decision} />
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-sm text-muted-foreground">
+                  Decisión {decision.number}:
+                </span>
+                <DomainStatus domain="submission" status={decision.decision} />
+              </div>
               {decision.feedback && (
                 <ReceiptTextFrame
                   title="Comentarios del equipo"

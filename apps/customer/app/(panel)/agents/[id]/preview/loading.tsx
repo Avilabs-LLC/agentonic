@@ -7,9 +7,12 @@ export default function Loading() {
       aria-label="Cargando prueba"
     >
       <Skeleton className="h-5 w-20" />
-      <div className="space-y-3">
-        <Skeleton className="h-8 w-64" />
-        <Skeleton className="h-5 w-96 max-w-full" />
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0 space-y-3">
+          <Skeleton className="h-8 w-64 max-w-full" />
+          <Skeleton className="h-5 w-96 max-w-full" />
+        </div>
+        <Skeleton className="h-5 w-32" />
       </div>
       <div className="space-y-5 rounded-lg border p-6">
         <Skeleton className="h-5 w-40" />
