@@ -118,16 +118,26 @@ export function AgentEditorSkeleton() {
           <Skeleton className="h-9 w-36" />
         </div>
       </div>
-      <div className="space-y-5">
-        <div className="space-y-2">
-          <Skeleton className="h-8 w-2/3" />
-          <Skeleton className="h-5 w-full" />
-        </div>
-        <div className="grid auto-rows-fr items-stretch gap-6 lg:grid-cols-2">
-          <FormCard step fields={1} requirements={5} />
-          <FormCard step fields={3} textareaAt={1} requirements={6} />
-        </div>
-      </div>
+      <Card className="gap-5 py-6 [--card-spacing:--spacing(6)]">
+        <CardHeader className="gap-2">
+          <Skeleton className="h-7 w-56" />
+          <Skeleton className="h-5 w-4/5" />
+        </CardHeader>
+        <CardContent className="space-y-5">
+          <Skeleton className="h-6 w-28" />
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-4 w-40" />
+          <Skeleton className="h-9 w-44" />
+          <Skeleton className="h-10 w-full" />
+          <div className="space-y-4 border-t pt-5">
+            <Skeleton className="h-5 w-4/5" />
+            <Skeleton className="h-4 w-44" />
+            <Skeleton className="h-24 w-full" />
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-9 w-40" />
+          </div>
+        </CardContent>
+      </Card>
       <FormCard fields={1} />
     </div>
   )

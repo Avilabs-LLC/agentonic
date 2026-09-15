@@ -1,6 +1,3 @@
-import Link from "next/link"
-import { MessageSquareIcon } from "lucide-react"
-import { buttonVariants } from "@workspace/ui/components/button"
 import { notFound } from "next/navigation"
 import { loadWorkspace, loadAgent } from "@agentonic/server/authoring"
 import { submissionLabels } from "@agentonic/contracts/authoring"
@@ -19,7 +16,7 @@ import { SubmissionStatusBadge } from "@workspace/ui/components/status-badge"
 import { customerWorkspace } from "@/lib/workspace"
 import {
   saveDraft,
-  freezeCandidate,
+  preparePreview,
   sendSubmission,
   withdrawSubmission,
 } from "../actions"
@@ -37,9 +34,6 @@ export default async function Page({
     loadWorkspace(selected.id),
   ])
   if (!data || !workspace) notFound()
-  const codes = workspace.templates.filter(
-    (t) => t.id === data.agent.templateVersionId
-  )
   return (
     <div className="mx-auto w-full max-w-4xl space-y-6">
       <BackRow href={`/agents?workspace=${selected.id}`} />
@@ -49,26 +43,14 @@ export default async function Page({
           data.agent.description ??
           "Personaliza tu agente y prepara una propuesta."
         }
-        actions={
-          <div className="flex items-center gap-3">
-            <Badge variant="slate">Sin despliegue</Badge>
-            <Link
-              className={buttonVariants({ variant: "outline" })}
-              href={`/agents/${id}/preview?workspace=${selected.id}`}
-            >
-              <MessageSquareIcon aria-hidden="true" />
-              Probar versión
-            </Link>
-          </div>
-        }
+        actions={<Badge variant="slate">Sin despliegue</Badge>}
       />
       <AgentWorkflow
         key={data.draft.revision}
         data={data}
         collections={workspace.collections}
-        codes={codes}
         save={saveDraft.bind(null, selected.id, id)}
-        freeze={freezeCandidate.bind(null, selected.id, id)}
+        prepare={preparePreview.bind(null, selected.id, id)}
         submit={sendSubmission.bind(null, selected.id, id)}
       />
       <Card className="gap-5 py-6 [--card-spacing:--spacing(6)]">

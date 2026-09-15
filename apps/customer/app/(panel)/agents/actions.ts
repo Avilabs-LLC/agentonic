@@ -1,5 +1,6 @@
 "use server"
 import { revalidatePath } from "next/cache"
+import { prepareAgentPreview } from "@agentonic/server/preparation"
 import { runAccessCommand } from "@agentonic/server/access"
 import { runAuthoringCommand, loadAgent } from "@agentonic/server/authoring"
 import {
@@ -77,54 +78,19 @@ export async function saveDraft(
   revalidatePath(`/agents/${agentId}`)
   return { ok: true, message: "Borrador guardado." }
 }
-export async function freezeCandidate(
+export async function preparePreview(
   workspaceId: string,
   agentId: string,
   data: FormData
 ): Promise<FormResult> {
-  const agent = await loadAgent(workspaceId, agentId)
-  if (!agent) return failed
-  if (
-    !editableDraftContent.safeParse(agent.draft.content).success ||
-    !requestedAccess.safeParse(agent.draft.requestedAccess).success
-  )
-    return {
-      ok: false,
-      message:
-        "Completa las instrucciones y corrige el borrador antes de congelarlo.",
-    }
-  if (
-    agent.candidates.some(
-      (candidate) =>
-        candidate.revision === agent.draft.revision &&
-        candidate.codeReleaseId === value(data, "codeReleaseId")
-    )
-  )
-    return {
-      ok: false,
-      message:
-        "Esta revisión ya está congelada. Selecciónala en el paso 2 o guarda nuevos cambios.",
-    }
-  const r = await runAuthoringCommand("customer", {
-    workspaceId,
-    operation: "candidate.freeze",
-    payload: {
-      agentId,
-      revision: Number(value(data, "revision")),
-      codeReleaseId: value(data, "codeReleaseId"),
-    },
+  const result = await prepareAgentPreview(workspaceId, agentId, {
+    revision: Number(value(data, "revision")),
+    ...(data.has("candidateId")
+      ? { candidateId: value(data, "candidateId") }
+      : {}),
   })
-  if (!r.ok)
-    return {
-      ok: false,
-      message:
-        "Guarda instrucciones válidas y comprueba que esta revisión siga vigente.",
-    }
   revalidatePath(`/agents/${agentId}`)
-  return {
-    ok: true,
-    message: "Versión congelada. Todavía no ha sido evaluada.",
-  }
+  return result
 }
 export async function sendSubmission(
   workspaceId: string,

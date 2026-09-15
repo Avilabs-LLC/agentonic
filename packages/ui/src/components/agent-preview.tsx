@@ -1,12 +1,13 @@
 "use client"
 import { useCallback, useEffect, useRef, useState } from "react"
+import Link from "next/link"
 import { PlayIcon, SendIcon, SquareIcon, MessageSquareIcon } from "lucide-react"
 import {
   previewState,
   previewErrors,
   type PreviewState,
 } from "@agentonic/contracts/preview"
-import { Button } from "@workspace/ui/components/button"
+import { Button, buttonVariants } from "@workspace/ui/components/button"
 import { Badge } from "@workspace/ui/components/badge"
 import { Textarea } from "@workspace/ui/components/textarea"
 import { Field, FieldLabel } from "@workspace/ui/components/field"
@@ -22,14 +23,24 @@ export function AgentPreview({
   workspaceId,
   agentId,
   candidates,
+  initialCandidateId,
+  initialState = null,
+  returnHref,
 }: {
   workspaceId: string
   agentId: string
   candidates: { id: string; version: string; hash: string }[]
+  initialCandidateId?: string
+  initialState?: PreviewState | null
+  returnHref?: string
 }) {
-  const [candidate, setCandidate] = useState(candidates[0]?.id ?? "")
-  const [previewId, setPreviewId] = useState<string | null>(null)
-  const [state, setState] = useState<PreviewState | null>(null)
+  const [candidate, setCandidate] = useState(
+    initialCandidateId ?? candidates[0]?.id ?? ""
+  )
+  const [previewId, setPreviewId] = useState<string | null>(
+    initialState?.id ?? null
+  )
+  const [state, setState] = useState<PreviewState | null>(initialState)
   const [query, setQuery] = useState("")
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState("")
@@ -149,7 +160,7 @@ export function AgentPreview({
         <div className="space-y-4">
           <Field>
             <FieldLabel htmlFor="preview-candidate">
-              Versión congelada
+              Versión preparada
             </FieldLabel>
             <Select
               value={candidate || null}
@@ -171,8 +182,8 @@ export function AgentPreview({
           </Field>
           {!candidates.length && (
             <p className="text-sm text-muted-foreground">
-              Guarda y congela una versión con el motor de pruebas desde la
-              configuración del agente.
+              Guarda el borrador y usa Preparar y probar desde la configuración
+              del agente.
             </p>
           )}
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -201,6 +212,20 @@ export function AgentPreview({
           </div>
         </div>
       </AgentSettingsCard>
+      {returnHref && (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm text-muted-foreground">
+            Cuando termines, vuelve al agente para enviar esta versión a
+            revisión.
+          </p>
+          <Link
+            href={returnHref}
+            className={buttonVariants({ variant: "outline" })}
+          >
+            Volver al agente
+          </Link>
+        </div>
+      )}
       <div className="overflow-hidden rounded-lg border bg-card">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b px-6 py-4">
           <h2 className="font-medium">Conversación de prueba</h2>

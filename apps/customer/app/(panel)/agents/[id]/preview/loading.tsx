@@ -17,6 +17,10 @@ export default function Loading() {
         <Skeleton className="h-5 w-3/4" />
         <Skeleton className="h-8 w-32" />
       </div>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <Skeleton className="h-5 w-96 max-w-full" />
+        <Skeleton className="h-9 w-36" />
+      </div>
       <div className="overflow-hidden rounded-lg border">
         <div className="flex items-center justify-between border-b px-6 py-4">
           <Skeleton className="h-5 w-44" />
