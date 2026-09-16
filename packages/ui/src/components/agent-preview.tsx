@@ -7,7 +7,6 @@ import {
   type PreviewState,
 } from "@agentonic/contracts/preview"
 import { Button } from "@workspace/ui/components/button"
-import { Badge } from "@workspace/ui/components/badge"
 import { Textarea } from "@workspace/ui/components/textarea"
 import { Field, FieldLabel } from "@workspace/ui/components/field"
 import {
@@ -211,11 +210,11 @@ export function AgentPreview({
       <div className="overflow-hidden rounded-lg border bg-card">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b px-6 py-4">
           <h2 className="font-medium">Conversación de prueba</h2>
-          <Badge variant={previewId ? "sky" : "slate"}>
+          <span className="text-sm text-muted-foreground tabular-nums">
             {previewId
               ? `${state?.turns.length ?? 0} de 10 mensajes`
               : "Sin iniciar"}
-          </Badge>
+          </span>
         </div>
         <div
           className="max-h-[55vh] min-h-64 space-y-6 overflow-y-auto p-6"

@@ -7,9 +7,7 @@ import { z } from "zod"
 import { Checkbox } from "@base-ui/react/checkbox"
 import { CheckIcon, ClipboardCheckIcon, ChevronRightIcon } from "lucide-react"
 import {
-  criterionDecisionLabel,
   criterionReviewed,
-  reviewFlowLabels,
   type ReviewPreparation,
   type ReviewFlowState,
 } from "@agentonic/contracts/review-flow"
@@ -19,7 +17,10 @@ import { Field, FieldLabel, FieldError } from "@workspace/ui/components/field"
 import { Input } from "@workspace/ui/components/input"
 import { Textarea } from "@workspace/ui/components/textarea"
 import { Button } from "@workspace/ui/components/button"
-import { Badge } from "@workspace/ui/components/badge"
+import {
+  DomainStatus,
+  CriterionStatus,
+} from "@workspace/ui/components/status-badge"
 import { ReviewCriteriaDialog } from "@workspace/ui/components/review-criteria-dialog"
 import {
   Table,
@@ -260,18 +261,11 @@ export function Preparation({
       {(record.status !== "criteria_ready" || !hasCriteriaDisclosure) && (
         <div className="flex flex-wrap items-center justify-between gap-3">
           {record.status !== "criteria_ready" && (
-            <Badge
-              variant={
-                record.status === "approved"
-                  ? "success"
-                  : record.status === "needs_changes" ||
-                      record.status === "error"
-                    ? "warning"
-                    : "sky"
-              }
-            >
-              {reviewFlowLabels[record.status]}
-            </Badge>
+            <DomainStatus
+              domain="review"
+              status={record.status}
+              appearance="badge"
+            />
           )}
           {!hasCriteriaDisclosure && costSummary}
         </div>
@@ -328,20 +322,10 @@ export function Preparation({
                       )}
                     </TableCell>
                     <TableCell className="py-4 text-right align-top">
-                      <Badge
-                        variant={
-                          c.reviewDecision === "approved"
-                            ? "success"
-                            : c.excluded
-                              ? "warning"
-                              : "slate"
-                        }
-                      >
-                        {criterionDecisionLabel(
-                          c,
-                          record.status !== "criteria_ready"
-                        )}
-                      </Badge>
+                      <CriterionStatus
+                        criterion={c}
+                        confirmed={record.status !== "criteria_ready"}
+                      />
                     </TableCell>
                   </TableRow>
                 ))}

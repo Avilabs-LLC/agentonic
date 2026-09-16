@@ -8,7 +8,6 @@ import { Checkbox } from "@base-ui/react/checkbox"
 import { CheckIcon, PlusIcon, Trash2Icon } from "lucide-react"
 import {
   evaluationCases,
-  evaluationStatus,
   type EvaluationRecord,
 } from "@agentonic/contracts/evaluation"
 import type { FormResult } from "@agentonic/contracts/authoring"
@@ -23,7 +22,7 @@ import { Field, FieldLabel, FieldError } from "@workspace/ui/components/field"
 import { Input } from "@workspace/ui/components/input"
 import { Textarea } from "@workspace/ui/components/textarea"
 import { Button } from "@workspace/ui/components/button"
-import { Badge } from "@workspace/ui/components/badge"
+import { DomainStatus } from "@workspace/ui/components/status-badge"
 import {
   Select,
   SelectTrigger,
@@ -436,17 +435,11 @@ export function EvaluationPanel({
               </h3>
             )}
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <Badge
-                variant={
-                  record.status === "passed"
-                    ? "success"
-                    : record.status === "failed" || record.status === "error"
-                      ? "error"
-                      : "sky"
-                }
-              >
-                {evaluationStatus[record.status]}
-              </Badge>
+              <DomainStatus
+                domain="evaluation"
+                status={record.status}
+                appearance="badge"
+              />
               <span className="text-xs text-muted-foreground">
                 {record.environment === "azure_staging"
                   ? "Azure · Staging"
@@ -497,15 +490,10 @@ export function EvaluationPanel({
                       </p>
                       {result && (
                         <>
-                          <Badge
-                            variant={
-                              result.outcome === "passed" ? "success" : "error"
-                            }
-                          >
-                            {result.outcome === "passed"
-                              ? "Superado"
-                              : "No superado"}
-                          </Badge>
+                          <DomainStatus
+                            domain="result"
+                            status={result.outcome}
+                          />
                           <p className="whitespace-pre-wrap">{result.answer}</p>
                           {result.sources.length > 0 && (
                             <details>

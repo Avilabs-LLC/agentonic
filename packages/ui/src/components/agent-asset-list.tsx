@@ -3,7 +3,6 @@
 import { useState } from "react"
 import { EllipsisIcon, EyeIcon, Trash2Icon } from "lucide-react"
 import { Button } from "@workspace/ui/components/button"
-import { Badge } from "@workspace/ui/components/badge"
 import {
   Item,
   ItemGroup,
@@ -72,7 +71,6 @@ export function AgentAssetList({
                 >
                   {row.name}
                 </p>
-                <Badge variant="violet">Borrador</Badge>
               </div>
               <ItemDescription className="text-sm break-words">
                 {row.description}

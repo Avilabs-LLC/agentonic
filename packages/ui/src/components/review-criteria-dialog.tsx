@@ -15,7 +15,6 @@ import {
 import {
   reviewCriteria,
   criterionReviewed,
-  criterionDecisionLabel,
   type ReviewCriterion,
   type ReviewPreparation,
 } from "@agentonic/contracts/review-flow"
@@ -28,7 +27,7 @@ import {
   DialogDescription,
 } from "@workspace/ui/components/dialog"
 import { Button } from "@workspace/ui/components/button"
-import { Badge } from "@workspace/ui/components/badge"
+import { CriterionStatus } from "@workspace/ui/components/status-badge"
 import { Field, FieldLabel } from "@workspace/ui/components/field"
 import { Textarea } from "@workspace/ui/components/textarea"
 import { ReviewCriteriaSummary } from "@workspace/ui/components/review-criteria-summary"
@@ -287,20 +286,10 @@ export function ReviewCriteriaDialog({
                 <span className="text-sm font-medium">
                   Situación {index + 1} de {criteria.length}
                 </span>
-                <Badge
-                  variant={
-                    current.reviewDecision === "not_applicable"
-                      ? "warning"
-                      : criterionReviewed(current)
-                        ? "success"
-                        : "slate"
-                  }
-                >
-                  {criterionDecisionLabel(
-                    current,
-                    record.status !== "criteria_ready"
-                  )}
-                </Badge>
+                <CriterionStatus
+                  criterion={current}
+                  confirmed={record.status !== "criteria_ready"}
+                />
               </div>
               <div className="flex gap-2">
                 <Button
@@ -334,7 +323,7 @@ export function ReviewCriteriaDialog({
               className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1"
             >
               <fieldset disabled={pending || !editable} className="grid gap-4">
-                <div className="rounded-lg border border-blue-200 bg-blue-50/60 p-4 dark:border-blue-400/25 dark:bg-blue-400/5">
+                <div className="rounded-lg border bg-muted/20 p-4">
                   <Field>
                     <FieldLabel htmlFor={`${id}-question`}>
                       Mensaje al agente
@@ -348,7 +337,7 @@ export function ReviewCriteriaDialog({
                     />
                   </Field>
                 </div>
-                <div className="rounded-lg border border-emerald-200 bg-emerald-50/60 p-4 dark:border-emerald-400/25 dark:bg-emerald-400/5">
+                <div className="rounded-lg border bg-muted/20 p-4">
                   <Field>
                     <FieldLabel htmlFor={`${id}-answer`}>
                       Respuesta o comportamiento esperado

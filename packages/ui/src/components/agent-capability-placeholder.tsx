@@ -1,5 +1,4 @@
 import { PlugIcon, WrenchIcon } from "lucide-react"
-import { Badge } from "@workspace/ui/components/badge"
 import { AgentSettingsCard } from "@workspace/ui/components/agent-settings-card"
 
 export function AgentCapabilityPlaceholder({
@@ -17,7 +16,6 @@ export function AgentCapabilityPlaceholder({
           ? "Acciones que podrá realizar tu agente."
           : "Cuentas y servicios externos que podrá utilizar tu agente."
       }
-      action={<Badge variant="slate">Próximamente</Badge>}
     >
       <p className="text-sm text-muted-foreground">
         {tools

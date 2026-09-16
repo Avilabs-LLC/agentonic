@@ -29,7 +29,6 @@ import {
   FieldError,
 } from "@workspace/ui/components/field"
 import { Button } from "@workspace/ui/components/button"
-import { Badge } from "@workspace/ui/components/badge"
 import { Checkbox } from "@base-ui/react/checkbox"
 import type { DraftFormValues as Values } from "@agentonic/contracts/workflow"
 import { notify } from "@workspace/ui/lib/toast"
@@ -188,9 +187,9 @@ export function DraftEditor({
             icon={<LibraryBigIcon />}
             description="Selecciona las colecciones de documentos que tu agente necesitará consultar."
             action={
-              <Badge variant={collectionIds.length ? "sky" : "slate"}>
+              <span className="text-sm text-muted-foreground tabular-nums">
                 {collectionIds.length} seleccionadas
-              </Badge>
+              </span>
             }
             footer="Las colecciones seleccionadas se incluyen al preparar una versión. El acceso de producción requiere aprobación."
           >

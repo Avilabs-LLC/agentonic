@@ -37,7 +37,6 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
 } from "@workspace/ui/components/dropdown-menu"
-import { Badge } from "@workspace/ui/components/badge"
 import { notify } from "@workspace/ui/lib/toast"
 import { RevokeApprovalDialog } from "@workspace/ui/components/revoke-approval-dialog"
 
@@ -153,9 +152,9 @@ export function ReviewTable({
             <DropdownMenuItem disabled>
               <UserRoundIcon />
               Ver usuario
-              <Badge variant="secondary" className="ml-auto">
+              <span className="ml-auto text-xs text-muted-foreground">
                 Pronto
-              </Badge>
+              </span>
             </DropdownMenuItem>
             <DropdownMenuItem
               disabled={
@@ -177,9 +176,9 @@ export function ReviewTable({
             <DropdownMenuItem disabled>
               <ArrowRightLeftIcon />
               Cambiar estado
-              <Badge variant="secondary" className="ml-auto">
+              <span className="ml-auto text-xs text-muted-foreground">
                 Pronto
-              </Badge>
+              </span>
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -314,12 +313,12 @@ export function ReviewTable({
               .map((state) => (
                 <TabsTrigger key={state.value} value={state.value}>
                   {state.label}
-                  <Badge variant="secondary" className="tabular-nums">
+                  <span className="text-xs text-muted-foreground tabular-nums">
                     {
                       reviews.filter((review) => review.status === state.value)
                         .length
                     }
-                  </Badge>
+                  </span>
                 </TabsTrigger>
               ))}
           </TabsList>

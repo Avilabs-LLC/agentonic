@@ -1,0 +1,151 @@
+# Agentonic UI contract
+
+**Owner-approved · 2026-09-15 · Applies to both admin and customer apps.**
+
+This is the authoritative presentation contract for Agentonic. Read it before changing UI, including shared components, page layouts and loading states. [Architecture](../agentonic-architecture.md) remains authoritative for domain behavior and authorization; this contract owns presentation. Historical implementation notes and the [badge audit](../badge-audit-2026-09-15.md) do not override these rules.
+
+## Baseline and local adaptations
+
+Adapted from `Dev/acachuchazo-admin/docs/ui/ui-contract.md` (read in full on 2026-09-15), carrying over its Base UI composition, semantic styling, Spanish interface, page/table conventions, forms, feedback and skeleton verification. The applicable baseline had already been accepted in architecture §21; it now lives here so new UI work has one local reference.
+
+Agentonic retains its **Mira / Mist / Sky / Figtree preset `b1GfVg2Oe` and medium radius**, separate apps, shared `packages/ui` components, per-app navigation and customer agent-list override. Acachuchazo's Lyra/green theme, financial widgets, KYC screens and preview overlay are not imported. The owner's badge hierarchy below supersedes the baseline's blanket status-badge and `Pronto`-badge conventions.
+
+## 1. Preset, primitives and styling
+
+Owner-supplied initialization command:
+
+```sh
+pnpm dlx shadcn@latest init --preset b1GfVg2Oe --template next
+```
+
+The official CLI's read-only `preset decode b1GfVg2Oe --json` resolved the base preset on 2026-09-13. The table below includes the subsequent owner override from large to default/medium radius:
+
+| Setting | Agentonic |
+|---|---|
+| Style | Mira |
+| Base color | Mist |
+| Theme | Sky |
+| Font | Figtree; headings inherit |
+| Icons | Lucide |
+| Radius | Default / medium (`--radius: 0.625rem`), owner override |
+| Chart color | Amber |
+| Menu color / accent | Default / subtle |
+
+Preset reference: [Agentonic preset](https://ui.shadcn.com/create?preset=b1GfVg2Oe). The [official CLI documentation](https://ui.shadcn.com/docs/cli) describes initialization and preset inspection. Preserve the generated token values except the explicit owner radius override: use `--radius: 0.625rem`, matching the [default shadcn radius](https://ui.shadcn.com/docs/theming), and retain the generated derived radius scale. The preset ID still encodes the original large radius; reinitializing it must reapply this override. Initialize within the planned monorepo layout, with shared primitives and theme; do not accidentally create a third app at the repository root. Pin the resulting dependencies in the workspace lockfile.
+
+Retain the source contract's **Base UI** component architecture. The decoded preset does not identify a primitive library: explicitly select Base UI during initialization (the CLI supports `--base base`) and verify the generated configuration. Compose with `render`, using Base UI's actual open-state hooks (`data-popup-open` / `data-open` as applicable). A `Button` rendered as a Next.js `Link` sets `nativeButton={false}`. A `Select` with machine-readable values supplies a value-to-label `items` mapping so the trigger displays a human label.
+
+Use shadcn components wherever an appropriate primitive exists, including buttons, fields, menus, dialogs, tables, empty states and tabs. Styling uses semantic tokens; no scattered palette classes. The new preset replaces Acachuchazo's Lyra geometry and green primary. Preserve its deliberate pill-shaped status badges, centralized status palette, blue underlined ID links and limited `text-highlight` token. The highlight remains a violet semantic token, used for at most one key value per card, never for status or a background surface; check its contrast against the new theme. Centralize these exceptions in shared components/tokens.
+
+Shared label maps, variants and formatting helpers live in modules without `"use client"`; server components must not import non-component values from client modules. Both apps consume a shared UI package, while navigation, customer/staff actions and server authorization remain app-specific.
+
+Carry over the source's Spanish (`es-VE`) interface and centralized `Intl` formatting as the initial language convention. All visible labels, pagination, errors and notifications use it consistently. Display operational times with an explicit applicable user/workspace timezone; do not inherit Acachuchazo's business timezone. Capitalize the word following separators such as `·` in metadata lines.
+
+## 2. Page anatomy and navigation
+
+Collection pages render a shared `PageHeader`: bold `text-3xl` title, formatted count appended as `Título: 1.811`, one-line muted description and right-aligned page actions. Optional statistics and filters precede the main content. Do not invent counts before data exists.
+
+Every “Crear…” launcher includes a leading decorative Lucide plus icon. Dialog submit buttons repeat the action label without that icon (§5). Keep the Spanish text as its accessible name and preserve pending/disabled behavior.
+
+Each app has one typed navigation registry providing its sidebar, breadcrumb and page-header labels. Share the registry contract and rendering helpers, not staff navigation entries with customers. Unbuilt sections appear disabled with a muted `Pronto` text suffix. Keep routes, labels and permissions explicit.
+
+## 3. Tables
+
+Use pinned TanStack Table v8 and a shared `DataTable` for entity tables. Prefer a table over a card grid for collections larger than about six records; this does not turn chat transcripts or prompt editors into tables.
+
+- Every data column has a sortable `DataTableColumnHeader`. The row-action column has no meaningless sort control.
+- Search sits above the table and covers common-sense entity fields with multi-term AND matching. Server-backed search, sorting and pagination must cover the authorized result set, not only the current browser page.
+- Provide Spanish pagination, page-size selection, a sticky header in a bounded scroll area, and a shadcn `Empty` state.
+- When an entity has a working detail route, its first column is an eight-character ID rendered by the shared blue underlined `IdLink`. Omit that column until the detail route exists. **Customer agent list override (owner direction, 2026-09-14):** the ellipsis action column comes first; the Agente cell shows only the name as a blue underlined detail link, without a description or description tooltip. The ID column is omitted, and Estado is the last column. Existing edit permission checks also govern the name link.
+- Primary record states may use pill badges under §9. Nested outcomes use inline icons and text. Badge tones use the source palette: `success`, `warning`, `error`, `orange`, `sky`, `violet`, `emerald`, `slate`, and the appropriate `inverse*` variants on colored surfaces. Light mode uses tinted surfaces/dark text; dark mode uses page-background surfaces/luminous text. Never use the solid primary `default` badge for statuses. Text communicates status as well as color.
+- Shared `status-badge` components and `lib/badge-status` descriptors assign the same labels, colors and icons in both apps. Primary and nested displays consume the same descriptor. See §9 for state semantics and exceptions; permissions, counts, environment and availability do not use badges. Unknown statuses use neutral “Estado desconocido” with a help icon. The palette remains centralized in `badge.tsx` and the inline status renderer; inverse variants are reserved for colored surfaces.
+
+## 4. Filters and row actions
+
+Extra filters live in a shared `FiltersCard` titled `Filtros`, arranged in a responsive grid, with a `Limpiar` action resetting every filter. The page's table wrapper owns filter state.
+
+Row actions use a final-column ellipsis menu with icons. Destructive actions are red, separated at the bottom, and consequential operations require an `AlertDialog` with explicit title, consequence and confirmation label. A disabled or hidden control does not replace server-side authorization.
+
+## 5. Forms and feedback
+
+Forms use react-hook-form, Zod, `zodResolver`, `mode: "onChange"`, and shadcn `Field`, `FieldLabel`, and `FieldError`. Submit is disabled while required inputs are invalid or submission is in progress: `disabled={!isValid || isSubmitting}`. Validate again on the server and preserve actionable field errors.
+
+Creation entry buttons use a `+` icon. Inside dialogs, submit buttons omit that icon and retain a specific action label such as `Crear agente`, `Crear colección` or `Eliminar colección`, rather than generic `Confirmar`. Repeating the dialog's action makes the result of submitting explicit. Use `Cancelar` for dismissal and the appropriate progress label while submitting.
+
+Use Sonner at the bottom right with centralized `notify` helpers and distinct success, warning and destructive styles. Components do not call `toast` directly. Every completed submission or row action produces exactly one notification, including failures; cancellation produces no success claim. Inline field errors complement that notification. Pending asynchronous work must be described as queued/submitted, not deployed or completed.
+
+## 6. Loading states and verification
+
+Every rendered page route has a `loading.tsx` matching its actual structure: header, back row, cards, toolbar and table column count as applicable. Shared skeleton primitives include `PageHeaderSkeleton`, `RecordHeaderSkeleton`, `BackRowSkeleton`, `FiltersCardSkeleton`, `TableSkeleton` and `StatCardsSkeleton`; chat and editor routes receive matching specialized skeletons.
+
+Port the source's skeleton freshness audit concept to both apps. Fingerprint each route's page, colocated visual components and loading skeleton; include relevant shared visual dependencies so a shared component change cannot silently escape review. `pnpm skeletons:check` must fail for missing skeletons, stale manifests and unreviewed visual changes. After changing a skeleton or explicitly confirming unchanged geometry, `pnpm skeletons:update` records the reviewed baseline. Hash freshness supplements visual review; it does not prove visual equivalence.
+
+Foundation CI runs typecheck, lint, applicable tests and the skeleton audit. Verify responsive layouts, keyboard navigation, focus, validation feedback and light/dark/system themes as UI work lands. **Do not run `pnpm build` or `next build` for verification unless the owner explicitly requests a full build.**
+
+## 7. Shell and detail pages
+
+Use shadcn `Sidebar` with `variant="inset"`, an Agentonic brand mark placeholder, centralized application name/version, grouped navigation and bottom user menu. The menu provides theme selection (`Claro`, `Oscuro`, `Sistema` through next-themes with the `class` attribute), account and sign-out when those features work. Dynamic breadcrumbs use the navigation registry and shorten UUID segments to eight characters. Customer workspace selection and staff context must remain visibly distinct.
+
+Nested pages render a separate ghost `BackRow` with left arrow immediately above `RecordHeader`, linking one route level up. Wrap the pair in `space-y-3`. Header actions remain available for operations and cross-links. `RecordHeader` contains title, one muted metadata line, the primary record state when useful and right-aligned actions; do not add an initials avatar there.
+
+For ordinary detail pages, use a responsive `lg:grid-cols-3` grid: operational content spans two columns, reference data occupies the side track. Use stat tiles with muted uppercase labels and tabular numeric values, shadcn `Item`/`ItemSeparator` for record lists and definition rows with `Separator` for attributes. Related records reuse `IdLink`; statuses reuse the shared maps.
+
+When an agent has independent facets, use tabs under its record header, such as configuration, knowledge, connections and activity, with counts where useful. Dense workflows can have dedicated pages. Preserve the shared shell, form, feedback and loading rules across the customer editor, upload journey and chat.
+
+Acachuchazo's credit-line meter, financial layouts, KYC tabs and single-customer mock overlay are domain-specific examples, not Agentonic features. Apply the underlying composition rules to agents, submissions and deployments. Synthetic fixtures must be clearly identified and isolated from real workflows; never display fabricated deployment health or costs as live data. Agentonic logo/favicon and custom login composition remain implementation work; the approved preset supplies the initial theme.
+
+## 8. Agentonic workflow clarity
+
+The customer app must distinguish an editable draft, a frozen submission awaiting review and the currently deployed version. Clearly label staging previews, selected source scopes and requested capabilities. Customer actions create, personalize, preview and submit; staff actions review and deploy through the established approval boundary. Shared visual components do not collapse those responsibilities.
+
+Keep chat access, configuration management, transcript access and knowledge sharing separate in the interface. Explain what is being shared before granting it. A connection's knowledge-import scope and live tool permissions are separate choices. Display unknown cost as unknown, and show deployment progress from observed status rather than treating a queued command as a successful release.
+
+
+
+## 9. States, badges, metadata and icons
+
+**Owner direction, 2026-09-15. Required across both apps.**
+
+### 9.1 Choose emphasis by meaning and hierarchy
+
+| Information | Required default | Example |
+|---|---|---|
+| Primary record state | Text badge, with a meaningful state icon when useful | Agent `Activo`, proposal `En revisión` |
+| Nested outcome or secondary state | Unboxed icon + text | `✓ Superada` beneath an evaluation |
+| Familiar binary indicator in a labeled compact context | Standalone accessible icon | Prompt readiness beside its character count |
+| Count or progress | Plain text with tabular numerals | `8/10 superadas`, `3 seleccionadas` |
+| Permission, environment, object type or preview context | Plain/muted text, optionally a type icon | `Solo lectura`, `Prueba privada` |
+| Editing feedback or unmet prerequisite | Inline text near its action | `Cambios sin guardar` |
+| Historical decision | Secondary text and available provenance | Approval decision and date |
+
+Badges primarily represent an existing domain state: a table status/outcome, a persisted decision (including JSON criteria), or an authoritative server-derived state such as approval validity. A boolean, count, existing link or local form condition does not become a domain state merely because a component can color it.
+
+Eligibility does not require rendering a pill everywhere. Use **one primary badge per focal row/header** as the default, not a page-wide quota. Independent records in a collection may each need a badge. When a parent has the primary badge, its child outcomes use inline indicators. Exceptions remain explicit and easy to find without surrounding every successful row with green.
+
+Do not use pills for counts, permission labels, selected knowledge, environment, route availability, static `Borrador` labels on every asset, or prompt-length validation. Do not replace pills with colored icon tiles/circles that preserve the same visual clutter. Repeated context belongs at the section level.
+
+### 9.2 Shared state vocabulary and truthful precedence
+
+- Use `packages/ui/src/lib/badge-status.ts` for descriptors and `components/status-badge.tsx` for rendering. Descriptors contain the label, tone and icon; they are safe to import in server and client code. Domain maps must cover every known state and default unknown strings to slate `Estado desconocido`.
+- Primary status wrappers and `DomainStatus appearance="badge"` render badges. `DomainStatus` defaults to inline; `CriterionStatus` renders the customer's decision inline. Application components must not build independent badge-color ternaries.
+- Actual success/readiness/approval uses success; waiting/required attention uses warning; processing/review uses sky; requested changes uses orange; failure/rejection/revocation uses error; cancellation, absence and unknown values use slate. Expired approval uses warning. Draft lifecycle uses violet. These meanings apply consistently across both apps and both renderings.
+- Customer acceptance of a criterion is **not** agent evaluation success. Use neutral `Aprobada por el cliente`, `Confirmada` for legacy confirmed evidence, `No aplica` for a valid exclusion and `Pendiente` for an undecided criterion. Do not turn exclusions into failed tests.
+- Receipt headers prioritize **current approval validity**. A historical approval can coexist with lost validity; show `Aprobación no vigente` prominently and retain the historical decision/date below. Preserve backend-derived expiry/revocation; never infer renewed validity from passing historical results or invent a reason from a boolean.
+- Submission state, review state, run state and case outcome remain separate concepts. An older passed run does not prove that the current review or deployment is approved.
+- Preserve document precedence: an available ready version remains usable during reprocessing; otherwise active processing takes precedence over an old failure. Do not classify unknown values as known unprocessed states.
+- Counts are descriptive, not success indicators. Missing/unavailable evidence must not become a green `0/0` success. Approval is never deployment.
+- Expected answers and actual agent responses use neutral content surfaces. Green belongs to the recorded result, not to the response merely because it exists.
+
+### 9.3 Icons and accessibility
+
+- Use Lucide: check for pass/readiness, clock for waiting, activity for processing, alert for attention, X for failure, ban for revocation, pause for paused and archive for archived. Reuse the domain descriptor instead of choosing a new symbol at each call site.
+- A badge may include one leading state icon when it improves recognition. Keep its visible label. Avoid adjacent duplicate icons that communicate the same state.
+- Unboxed indicators have no pill border, tinted background or decorative container. Use approximately 14–16px icons; badge icons must remain legible (the shared primitive uses 12px).
+- Visible text is required for ambiguous states and consequential outcomes. Icon-only presentation is limited to familiar compact indicators with an accessible name and sufficient surrounding context; add a keyboard-accessible explanation if visual meaning is unclear.
+- Icons next to a visible label use `aria-hidden`. Do not add tab stops to decorative icons. Preserve keyboard operation and focus styling of disclosures, menus and dialogs.
+- Long Spanish labels must wrap without pushing disclosure controls off-screen. Inspect mobile and both themes. Color must never be the only signal.
+- Animate only verified active work when useful, with reduced-motion support; static icons are sufficient. A spinner must not imply execution merely from a queued request.
+
+### 9.4 Review checklist
+
+Before accepting UI changes, identify each remaining badge's domain source and why it owns primary emphasis. Inspect parent/child repetition and compare the same state across apps. Review synthetic examples for all-pass, failure/attention, exclusions, legacy confirmation, cancelled/queued/running, expired validity with historical success, unknown state and unavailable evidence. Check skeleton geometry, responsive wrapping, keyboard access and theme contrast before updating the skeleton baseline. Run typecheck, lint, relevant tests and `pnpm skeletons:check`; never run a production build for routine verification.

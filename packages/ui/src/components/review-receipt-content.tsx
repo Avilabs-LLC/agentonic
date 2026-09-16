@@ -1,21 +1,19 @@
 import { ChevronDownIcon } from "lucide-react"
 import type { ReviewReceipt } from "@agentonic/contracts/review-receipt"
-import { criterionDecisionLabel } from "@agentonic/contracts/review-flow"
-import { Badge } from "@workspace/ui/components/badge"
+import {
+  CriterionStatus,
+  DomainStatus,
+} from "@workspace/ui/components/status-badge"
 
 export function ReceiptTextFrame({
   title,
   text,
-  tone = "muted",
 }: {
   title: string
   text: string
-  tone?: "blue" | "green" | "muted"
 }) {
   return (
-    <div
-      className={`space-y-2 rounded-lg border p-4 ${tone === "blue" ? "border-blue-200 bg-blue-50/60 dark:border-blue-400/25 dark:bg-blue-400/5" : tone === "green" ? "border-emerald-200 bg-emerald-50/60 dark:border-emerald-400/25 dark:bg-emerald-400/5" : "bg-muted/20"}`}
-    >
+    <div className="space-y-2 rounded-lg border bg-muted/20 p-4">
       <h3 className="text-sm font-medium">{title}</h3>
       <p className="text-sm leading-relaxed break-words whitespace-pre-wrap">
         {text}
@@ -34,37 +32,21 @@ export function ReceiptCriteria({
     <div className="divide-y border-y">
       {criteria.map((c, i) => (
         <details key={c.key} className="group py-4">
-          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-medium">
+          <summary className="grid cursor-pointer list-none grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 gap-y-2 text-sm font-medium sm:grid-cols-[minmax(0,1fr)_minmax(0,12rem)_auto] [&>span:nth-child(2)]:col-start-1 [&>span:nth-child(2)]:row-start-2 sm:[&>span:nth-child(2)]:col-start-2 sm:[&>span:nth-child(2)]:row-start-1">
             <span className="min-w-0 flex-1 break-words">
               Situación {i + 1}: {c.question}
             </span>
-            <Badge
-              className="shrink-0"
-              variant={
-                c.excluded
-                  ? "warning"
-                  : c.reviewDecision === "approved" || confirmed
-                    ? "success"
-                    : "slate"
-              }
-            >
-              {criterionDecisionLabel(c, confirmed)}
-            </Badge>
+            <CriterionStatus criterion={c} confirmed={confirmed} />
             <ChevronDownIcon
               aria-hidden="true"
-              className="size-4 shrink-0 transition-transform group-open:rotate-180"
+              className="col-start-2 row-start-1 size-4 shrink-0 transition-transform group-open:rotate-180 motion-reduce:transition-none sm:col-start-3"
             />
           </summary>
           <div className="mt-4 space-y-4">
-            <ReceiptTextFrame
-              title="Mensaje al agente"
-              text={c.question}
-              tone="blue"
-            />
+            <ReceiptTextFrame title="Mensaje al agente" text={c.question} />
             <ReceiptTextFrame
               title="Respuesta o comportamiento esperado"
               text={c.expectedAnswer || "Sin respuesta esperada."}
-              tone="green"
             />
             {c.notes && (
               <ReceiptTextFrame title="Aclaraciones" text={c.notes} />
@@ -101,26 +83,17 @@ export function ReceiptResults({
     <div className="divide-y border-y">
       {results.map((result, i) => (
         <details key={result.key} className="group py-4">
-          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-medium">
+          <summary className="grid cursor-pointer list-none grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 gap-y-2 text-sm font-medium sm:grid-cols-[minmax(0,1fr)_minmax(0,12rem)_auto] [&>span:nth-child(2)]:col-start-1 [&>span:nth-child(2)]:row-start-2 sm:[&>span:nth-child(2)]:col-start-2 sm:[&>span:nth-child(2)]:row-start-1">
             <span className="min-w-0 flex-1 break-words">
               {result.kind === "platform"
                 ? "Control de plataforma"
                 : "Situación"}{" "}
               {i + 1}: {result.question}
             </span>
-            <Badge
-              className="shrink-0"
-              variant={result.outcome === "passed" ? "success" : "warning"}
-            >
-              {result.outcome === "passed"
-                ? "Superada"
-                : result.outcome === "failed"
-                  ? "No superada"
-                  : "Requiere atención"}
-            </Badge>
+            <DomainStatus domain="result" status={result.outcome} />
             <ChevronDownIcon
               aria-hidden="true"
-              className="size-4 shrink-0 transition-transform group-open:rotate-180"
+              className="col-start-2 row-start-1 size-4 shrink-0 transition-transform group-open:rotate-180 motion-reduce:transition-none sm:col-start-3"
             />
           </summary>
           <div className="mt-4 space-y-4">
@@ -129,12 +102,10 @@ export function ReceiptResults({
               text={
                 result.expectedAnswer || "Sin respuesta esperada registrada."
               }
-              tone="blue"
             />
             <ReceiptTextFrame
               title="Respuesta del agente"
               text={result.answer || "Sin respuesta registrada."}
-              tone="green"
             />
             {result.explanation && (
               <ReceiptTextFrame

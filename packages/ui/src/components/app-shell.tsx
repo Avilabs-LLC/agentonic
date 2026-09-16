@@ -25,7 +25,6 @@ import type {
 import { formatPathSegment } from "@agentonic/contracts/format"
 import { APP_NAME, APP_VERSION_LABEL } from "@workspace/ui/lib/version"
 import { notify } from "@workspace/ui/lib/toast"
-import { Badge } from "@workspace/ui/components/badge"
 import {
   Sidebar,
   SidebarProvider,
@@ -153,12 +152,9 @@ export function AppShell({
                           <SidebarMenuButton disabled>
                             <Icon />
                             <span>{item.title}</span>
-                            <Badge
-                              variant="slate"
-                              className="ml-auto text-[10px]"
-                            >
+                            <span className="ml-auto text-xs text-muted-foreground">
                               Pronto
-                            </Badge>
+                            </span>
                           </SidebarMenuButton>
                         )}
                       </SidebarMenuItem>
@@ -253,9 +249,10 @@ export function AppShell({
               )}
             </BreadcrumbList>
           </Breadcrumb>
-          <Badge variant="violet" className="ml-auto">
+          <span className="ml-auto inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+            <MonitorIcon aria-hidden="true" className="size-3.5" />
             Desarrollo
-          </Badge>
+          </span>
         </header>
         <main
           id="main"

@@ -15,7 +15,6 @@ import {
 } from "@agentonic/contracts/authoring"
 import {
   criterionReviewed,
-  reviewFlowLabels,
   type ReviewFlowState,
 } from "@agentonic/contracts/review-flow"
 import { AgentSettingsCard } from "@workspace/ui/components/agent-settings-card"
@@ -48,8 +47,10 @@ import {
   DropdownMenuSeparator,
 } from "@workspace/ui/components/dropdown-menu"
 import { notify } from "@workspace/ui/lib/toast"
-import { SubmissionStatusBadge } from "@workspace/ui/components/status-badge"
-import { Badge } from "@workspace/ui/components/badge"
+import {
+  SubmissionStatusBadge,
+  DomainStatus,
+} from "@workspace/ui/components/status-badge"
 import { Button } from "@workspace/ui/components/button"
 import {
   Table,
@@ -335,20 +336,20 @@ export function AgentProposals({
                   </TableCell>
                   <TableCell className="py-4 align-top whitespace-normal">
                     <div className="space-y-2">
-                      <Badge
-                        variant={
-                          record?.status === "criteria_ready" &&
-                          count === record.criteria.length
-                            ? "success"
-                            : "slate"
-                        }
-                      >
-                        {record
-                          ? record.status === "criteria_ready"
-                            ? `${count}/${record.criteria.length} revisadas`
-                            : reviewFlowLabels[record.status]
-                          : "Sin iniciar"}
-                      </Badge>
+                      <span className="text-sm text-muted-foreground tabular-nums">
+                        {record ? (
+                          record.status === "criteria_ready" ? (
+                            `${count}/${record.criteria.length} revisadas`
+                          ) : (
+                            <DomainStatus
+                              domain="review"
+                              status={record.status}
+                            />
+                          )
+                        ) : (
+                          "Sin iniciar"
+                        )}
+                      </span>
                       {record?.status === "criteria_ready" && (
                         <p className="text-xs text-muted-foreground">
                           {count === record.criteria.length
