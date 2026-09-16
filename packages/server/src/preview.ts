@@ -22,10 +22,8 @@ export async function loadCandidatePreview(
       workspaceId,
       async (tx) => {
         const matches = await tx.$queryRaw<{ id: string }[]>`
-        SELECT id FROM agentonic.agent_previews
-        WHERE workspace_id=${workspaceId}::uuid AND agent_id=${agentId}::uuid
-          AND configuration_release_id=${candidateId}::uuid AND id=${previewId}::uuid
-          AND requested_by_member_id=agentonic.current_member()`
+        SELECT id FROM agentonic.active_agent_previews(${agentId}::uuid)
+        WHERE candidate_id=${candidateId}::uuid AND id=${previewId}::uuid`
         if (!matches.length) return null
         const rows = await tx.$queryRaw<{ result: unknown }[]>`
         SELECT agentonic.preview_command('state',${JSON.stringify({ agentId, previewId })}::jsonb) result`

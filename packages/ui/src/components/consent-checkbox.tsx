@@ -5,10 +5,12 @@ export function ConsentCheckbox({
   checked,
   onCheckedChange,
   disabled = false,
+  children,
 }: {
   checked?: boolean
   onCheckedChange?: (checked: boolean) => void
   disabled?: boolean
+  children?: React.ReactNode
 }) {
   return (
     <label className="flex items-start gap-3 text-sm">
@@ -25,9 +27,14 @@ export function ConsentCheckbox({
         </Checkbox.Indicator>
       </Checkbox.Root>
       <span>
-        Autorizo al equipo de Agentonic a revisar las instrucciones, habilidades
-        y metadatos del conocimiento seleccionado de esta versión durante 7
-        días. Puedo retirar la propuesta para revocar ese acceso.
+        {children ?? (
+          <>
+            Autorizo al equipo de Agentonic a revisar las instrucciones,
+            habilidades y metadatos del conocimiento seleccionado de esta
+            versión durante 7 días. Puedo retirar la propuesta para revocar ese
+            acceso.
+          </>
+        )}
       </span>
     </label>
   )

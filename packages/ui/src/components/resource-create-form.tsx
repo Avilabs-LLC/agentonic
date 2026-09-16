@@ -1,7 +1,7 @@
 "use client"
 import { useId, useState } from "react"
 import { useRouter } from "next/navigation"
-import { Controller, useForm } from "react-hook-form"
+import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import type { FormResult } from "@agentonic/contracts/authoring"
@@ -14,13 +14,6 @@ import {
   FieldError,
   FieldDescription,
 } from "@workspace/ui/components/field"
-import {
-  Select,
-  SelectTrigger,
-  SelectValue,
-  SelectContent,
-  SelectItem,
-} from "@workspace/ui/components/select"
 import { notify } from "@workspace/ui/lib/toast"
 const schema = z.object({
   name: z
@@ -37,19 +30,17 @@ const schema = z.object({
       "Usa letras minúsculas, números y guiones, sin espacios."
     ),
   description: z.string().trim().max(2000, "Usa hasta 2000 caracteres."),
-  templateVersionId: z.string(),
 })
-export type CreationTemplate = { id: string; name: string; version: string }
 export function ResourceCreateForm({
   action,
-  templates,
+  kind = "collection",
   disabled = false,
   onSuccess,
   onPendingChange,
   onCancel,
 }: {
   action: (data: FormData) => Promise<FormResult>
-  templates?: CreationTemplate[]
+  kind?: "agent" | "collection"
   disabled?: boolean
   onSuccess?: () => void
   onPendingChange?: (pending: boolean) => void
@@ -61,7 +52,6 @@ export function ResourceCreateForm({
   const [interrupted, setInterrupted] = useState(false)
   const {
     register,
-    control,
     handleSubmit,
     reset,
     formState: { errors, isValid, isSubmitting },
@@ -72,10 +62,9 @@ export function ResourceCreateForm({
       name: "",
       slug: "",
       description: "",
-      templateVersionId: templates?.[0]?.id ?? "",
     },
   })
-  const isAgent = templates !== undefined
+  const isAgent = kind === "agent"
   async function submit(values: z.infer<typeof schema>) {
     setMessage("")
     setInterrupted(false)
@@ -146,35 +135,6 @@ export function ResourceCreateForm({
               />
               <FieldError errors={[errors.description]} />
             </Field>
-            <Field>
-              <FieldLabel htmlFor={`${id}-template`}>Plantilla</FieldLabel>
-              <Controller
-                name="templateVersionId"
-                control={control}
-                render={({ field }) => (
-                  <Select
-                    name={field.name}
-                    value={field.value}
-                    onValueChange={(value) => field.onChange(value ?? "")}
-                    items={templates.map((t) => ({
-                      value: t.id,
-                      label: `${t.name} · ${t.version}`,
-                    }))}
-                  >
-                    <SelectTrigger id={`${id}-template`} className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {templates.map((t) => (
-                        <SelectItem key={t.id} value={t.id}>
-                          {t.name} · {t.version}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-              />
-            </Field>
           </>
         )}
       </fieldset>
@@ -203,15 +163,7 @@ export function ResourceCreateForm({
             Cancelar
           </Button>
         )}
-        <Button
-          type="submit"
-          disabled={
-            disabled ||
-            !isValid ||
-            isSubmitting ||
-            (isAgent && !templates.length)
-          }
-        >
+        <Button type="submit" disabled={disabled || !isValid || isSubmitting}>
           {isSubmitting
             ? "Creando…"
             : isAgent

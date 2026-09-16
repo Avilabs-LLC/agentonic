@@ -37,9 +37,11 @@ export function defaultFreezeCode(
 export const preparationInput = z
   .object({
     revision: z.number().int().positive(),
-    candidateId: uuid.optional(),
   })
   .strict()
+export const previewOpeningInput = preparationInput.extend({
+  candidateId: uuid,
+})
 export function preparedVersionLabel(
   candidate: AgentView["candidates"][number]
 ) {

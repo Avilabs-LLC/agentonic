@@ -5,13 +5,16 @@ import {
   type FormResult,
 } from "@agentonic/contracts/authoring"
 import { previewErrors, previewStartResult } from "@agentonic/contracts/preview"
-import { preparationInput } from "@agentonic/contracts/workflow"
+import {
+  preparationInput,
+  previewOpeningInput,
+} from "@agentonic/contracts/workflow"
 import { loadAgent, runAuthoringCommand } from "./authoring"
 import { runPreviewCommand } from "./preview"
 
-// Engine selection is server-owned. Opening a previous version never freezes
-// the current draft or substitutes another candidate if that version is unavailable.
-export async function prepareAgentPreview(
+// Preparing only freezes configuration. Opening a test always requires an
+// explicit candidate and never freezes or substitutes another version.
+export async function prepareAgentVersion(
   workspaceId: string,
   agentId: string,
   input: unknown
@@ -24,58 +27,78 @@ export async function prepareAgentPreview(
     return {
       ok: false,
       message:
-        "El borrador cambió. Recarga la página antes de preparar o probar una versión.",
+        "El borrador cambió. Recarga la página antes de preparar una versión.",
     }
-  let candidateId = parsed.data.candidateId
-  if (candidateId) {
-    if (!agent.candidates.some((c) => c.id === candidateId && c.canPreview))
-      return {
-        ok: false,
-        message: "Esta versión ya no está disponible para probar.",
-      }
-  } else {
-    if (
-      !editableDraftContent.safeParse(agent.draft.content).success ||
-      !requestedAccess.safeParse(agent.draft.requestedAccess).success
-    )
+  if (
+    !editableDraftContent.safeParse(agent.draft.content).success ||
+    !requestedAccess.safeParse(agent.draft.requestedAccess).success
+  )
+    return {
+      ok: false,
+      message:
+        "Completa las instrucciones y guarda el borrador antes de preparar una versión.",
+    }
+  const codeReleaseId = agent.preparationCodeReleaseId
+  if (!codeReleaseId)
+    return {
+      ok: false,
+      message:
+        "Agentonic todavía no ha habilitado las pruebas para este agente.",
+    }
+  const existing = agent.candidates.find(
+    (c) =>
+      c.revision === agent.draft.revision && c.codeReleaseId === codeReleaseId
+  )
+  if (existing && !existing.canPreview)
+    return {
+      ok: false,
+      message: "Esta versión ya no está disponible para probar.",
+    }
+  if (!existing) {
+    const frozen = await runAuthoringCommand("customer", {
+      workspaceId,
+      operation: "candidate.freeze",
+      payload: { agentId, revision: parsed.data.revision, codeReleaseId },
+    })
+    if (!frozen.ok || !frozen.id)
       return {
         ok: false,
         message:
-          "Completa las instrucciones y guarda el borrador antes de preparar una versión.",
+          "No se pudo preparar la versión. Comprueba el borrador guardado y tus permisos.",
       }
-    const codeReleaseId = agent.preparationCodeReleaseId
-    if (!codeReleaseId)
-      return {
-        ok: false,
-        message:
-          "Agentonic todavía no ha habilitado las pruebas para este agente.",
-      }
-    const existing = agent.candidates.find(
-      (c) =>
-        c.revision === agent.draft.revision && c.codeReleaseId === codeReleaseId
-    )
-    if (existing) {
-      if (!existing.canPreview)
-        return {
-          ok: false,
-          message: "Esta versión ya no está disponible para probar.",
-        }
-      candidateId = existing.id
-    } else {
-      const frozen = await runAuthoringCommand("customer", {
-        workspaceId,
-        operation: "candidate.freeze",
-        payload: { agentId, revision: parsed.data.revision, codeReleaseId },
-      })
-      if (!frozen.ok || !frozen.id)
-        return {
-          ok: false,
-          message:
-            "No se pudo preparar la versión. Comprueba el borrador guardado y tus permisos.",
-        }
-      candidateId = frozen.id
-    }
   }
+  return {
+    ok: true,
+    message: existing
+      ? "Esta versión ya está preparada."
+      : "Versión preparada.",
+  }
+}
+
+export async function openAgentPreview(
+  workspaceId: string,
+  agentId: string,
+  input: unknown
+): Promise<FormResult> {
+  const parsed = previewOpeningInput.safeParse(input)
+  if (!parsed.success)
+    return {
+      ok: false,
+      message: "Selecciona una versión preparada para probar.",
+    }
+  const agent = await loadAgent(workspaceId, agentId)
+  const { candidateId } = parsed.data
+  if (!agent || agent.draft.revision !== parsed.data.revision)
+    return {
+      ok: false,
+      message:
+        "El borrador cambió. Recarga la página antes de probar una versión.",
+    }
+  if (!agent.candidates.some((c) => c.id === candidateId && c.canPreview))
+    return {
+      ok: false,
+      message: "Esta versión ya no está disponible para probar.",
+    }
   const result = await runPreviewCommand(workspaceId, {
     operation: "start",
     payload: { agentId, candidateId },
@@ -91,7 +114,7 @@ export async function prepareAgentPreview(
   }
   return {
     ok: true,
-    message: "Versión lista para probar. Todavía no ha sido evaluada.",
+    message: "Prueba lista.",
     href: `/agents/${agentId}/preview?workspace=${workspaceId}&candidate=${candidateId}&preview=${started.data.id}`,
   }
 }

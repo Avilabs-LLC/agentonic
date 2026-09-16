@@ -1,5 +1,5 @@
 "use client"
-import { useRef, useState, useTransition } from "react"
+import { useEffect, useRef, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { Controller, useForm, useWatch } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -7,8 +7,9 @@ import type { z } from "zod"
 import {
   CheckIcon,
   CircleIcon,
-  PlayIcon,
-  MessageSquareIcon,
+  SendIcon,
+  PackageIcon,
+  PackageOpenIcon,
 } from "lucide-react"
 import type {
   AgentView,
@@ -37,6 +38,13 @@ import { Field, FieldLabel, FieldError } from "@workspace/ui/components/field"
 import { Button } from "@workspace/ui/components/button"
 import { Textarea } from "@workspace/ui/components/textarea"
 import { Badge } from "@workspace/ui/components/badge"
+import {
+  Dialog,
+  DialogTrigger,
+  DialogContent,
+  DialogTitle,
+  DialogDescription,
+} from "@workspace/ui/components/dialog"
 import { ConsentCheckbox } from "@workspace/ui/components/consent-checkbox"
 import { notify } from "@workspace/ui/lib/toast"
 
@@ -85,14 +93,40 @@ function Requirements({
     </ul>
   )
 }
-function ReviewVersionCard({ base, run }: { base: Base; run: Run }) {
-  const { current, previous } = reviewPreparation(
+function VersionCards({
+  base,
+  run,
+  message,
+  pendingAction,
+}: {
+  base: Base
+  run: Run
+  message: string
+  pendingAction: "prepare" | "preview" | "submit" | null
+}) {
+  const [reviewOpen, setReviewOpen] = useState(false)
+  const { current } = reviewPreparation(
     base.draft,
     base.candidates,
     base.availableCodeIds[0] ?? null
   )
-  const candidate = current ?? previous
-  const submitted = !!current && base.submittedCandidateIds.includes(current.id)
+  const candidate = current ?? base.candidates[0]
+  const [expiredPreview, setExpiredPreview] = useState<string | null>(null)
+  const hasActivePreview =
+    !!candidate?.previewExpiresAt &&
+    expiredPreview !== candidate.previewExpiresAt
+  useEffect(() => {
+    const expiresAt = candidate?.previewExpiresAt
+    if (!expiresAt) return
+    const remaining = new Date(expiresAt).getTime() - Date.now()
+    const timer = setTimeout(
+      () => setExpiredPreview(expiresAt),
+      Math.max(0, remaining)
+    )
+    return () => clearTimeout(timer)
+  }, [candidate?.previewExpiresAt])
+  const submitted =
+    !!candidate && base.submittedCandidateIds.includes(candidate.id)
   const reviewAvailable = !!current?.canSubmit && !submitted
   const {
     control,
@@ -125,172 +159,276 @@ function ReviewVersionCard({ base, run }: { base: Base; run: Run }) {
     await run("prepare", form)
   }
   const preview = async () => {
-    if (!candidate || locked || !clean) return
+    if (!candidate?.canPreview || locked || !clean) return
     const form = new FormData()
     form.set("revision", String(base.draft.revision))
     form.set("candidateId", candidate.id)
     await run("preview", form)
   }
   return (
-    <Card className="min-w-0 gap-5 py-6 [--card-spacing:--spacing(6)]">
-      <CardHeader className="gap-2">
-        <CardTitle>
-          <h2 className="text-xl font-semibold tracking-tight">
-            Versión para revisión
-          </h2>
-        </CardTitle>
-        <CardDescription className="text-sm leading-relaxed">
-          Prepara una versión de tu agente, pruébala y envíala a nuestro equipo
-          cuando esté lista.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-5">
-        <div className="space-y-2">
-          <Badge variant={current ? "sky" : "slate"}>{label}</Badge>
-          <p className="text-sm text-muted-foreground">
-            {current
-              ? `${label} conserva la revisión ${current.revision} del borrador. Probarla no modifica sus instrucciones, habilidades ni conocimiento.`
-              : previous
-                ? `La prueba anterior usa ${preparedVersionLabel(previous)}, preparada desde la revisión ${previous.revision}. Los cambios guardados todavía no forman parte de esa versión.`
-                : "Guarda el borrador y prepara una versión fija de sus instrucciones, habilidades y conocimiento. Agentonic se encarga de la configuración técnica."}
-          </p>
-          {candidate?.createdAt && (
-            <p className="text-xs text-muted-foreground">
-              Preparada el{" "}
-              {new Intl.DateTimeFormat("es-VE", {
-                dateStyle: "medium",
-                timeZone: "UTC",
-              }).format(new Date(candidate.createdAt))}
+    <div className="grid items-stretch gap-6 lg:grid-cols-2">
+      <Card className="min-w-0 gap-5 py-6 [--card-spacing:--spacing(6)]">
+        <CardHeader className="gap-2">
+          <CardTitle>
+            <h2 className="text-xl font-semibold tracking-tight">
+              Nueva versión
+            </h2>
+          </CardTitle>
+          <CardDescription>
+            Genera una versión a partir del borrador guardado.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-1 flex-col gap-5">
+          <div className="overflow-hidden rounded-lg border bg-muted/20">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b p-4">
+              <div className="flex items-center gap-3">
+                <div className="flex size-10 shrink-0 items-center justify-center rounded-md border border-amber-200 bg-amber-100 text-amber-800 shadow-xs dark:border-amber-400/25 dark:bg-amber-400/15 dark:text-amber-300">
+                  <PackageIcon className="size-5" aria-hidden="true" />
+                </div>
+                <div className="space-y-0.5">
+                  <p className="text-sm font-medium">Borrador</p>
+                  <p className="font-mono text-xs text-muted-foreground">
+                    Revisión {base.draft.revision}
+                  </p>
+                </div>
+              </div>
+              <Badge variant={!clean ? "warning" : current ? "slate" : "sky"}>
+                {!clean
+                  ? "Cambios sin guardar"
+                  : current
+                    ? "Sin cambios nuevos"
+                    : "Por preparar"}
+              </Badge>
+            </div>
+            <p className="p-4 text-sm leading-relaxed text-muted-foreground">
+              {!clean
+                ? "Guarda los cambios y cierra los diálogos antes de preparar una nueva versión."
+                : current
+                  ? "Los cambios guardados ya están en la versión actual. Edita y guarda el borrador para preparar otra."
+                  : "Se creará una versión fija de tus instrucciones, habilidades y conocimiento."}
             </p>
-          )}
-          {!clean && (
-            <p role="status" className="text-sm text-muted-foreground">
-              Guarda los cambios y cierra los diálogos antes de continuar. La
-              versión preparada conserva la configuración anterior.
-            </p>
-          )}
-        </div>
-        <div className="flex flex-wrap gap-3">
+          </div>
           {!current && (
+            <Requirements
+              label="Pendiente para preparar la versión"
+              items={readiness.freeze.filter((item) => !item.met)}
+            />
+          )}
+          <div className="mt-auto space-y-3 border-t pt-5">
             <Button
-              disabled={!readiness.canFreeze || locked}
+              disabled={!!current || !readiness.canFreeze || locked}
               onClick={() => void prepare()}
             >
-              <PlayIcon aria-hidden="true" />
-              {base.busy
-                ? "Preparando…"
-                : previous
-                  ? "Preparar y probar cambios"
-                  : "Preparar y probar"}
+              {pendingAction === "prepare" ? "Preparando…" : "Preparar versión"}
             </Button>
-          )}
-          {candidate && (
-            <Button
-              variant={current ? "default" : "outline"}
-              disabled={locked || !clean}
-              onClick={() => void preview()}
-            >
-              <MessageSquareIcon aria-hidden="true" />
-              {current ? "Continuar prueba" : "Probar versión anterior"}
-            </Button>
-          )}
-        </div>
-        {!current && (
-          <Requirements
-            label="Pendiente para preparar la versión"
-            items={readiness.freeze.filter((item) => !item.met)}
-          />
-        )}
-        <p className="text-xs leading-relaxed text-muted-foreground">
-          Prueba privada de hasta 10 minutos y 10 mensajes, con un máximo de
-          US$0,25. Si sigue activa, se retoma la misma conversación; si venció,
-          comienza otra. Preparar y probar no aprueba ni despliega el agente.
-        </p>
-        {reviewAvailable && (
-          <form
-            noValidate
-            className="space-y-4 border-t pt-5"
-            onSubmit={handleSubmit(async (values) => {
-              if (!readiness.canSubmit || !isValid || locked) return
-              const form = new FormData()
-              form.set("candidateId", values.candidateId)
-              form.set("revision", String(base.draft.revision))
-              form.set("note", values.note)
-              form.set("consent", "on")
-              await run("submit", form)
-            })}
-          >
-            <p className="text-sm">
-              Al enviar, el equipo revisará exactamente{" "}
-              {preparedVersionLabel(current)}. La prueba por sí sola no acredita
-              su calidad.
-            </p>
-            <Field data-invalid={!!errors.note}>
-              <FieldLabel htmlFor="review-note">
-                Nota para el equipo (opcional)
-              </FieldLabel>
-              <Textarea
-                id="review-note"
-                maxLength={2000}
-                aria-invalid={!!errors.note}
-                disabled={locked}
-                {...register("note")}
-              />
-              <FieldError errors={[errors.note]} />
-            </Field>
-            <Controller
-              control={control}
-              name="consent"
-              render={({ field }) => (
-                <ConsentCheckbox
-                  checked={field.value}
-                  onCheckedChange={field.onChange}
-                  disabled={locked || !clean}
-                />
+          </div>
+        </CardContent>
+      </Card>
+      <Card className="min-w-0 gap-5 py-6 [--card-spacing:--spacing(6)]">
+        <CardHeader className="gap-2">
+          <CardTitle>
+            <h2 className="text-xl font-semibold tracking-tight">
+              Versión actual
+            </h2>
+          </CardTitle>
+          <CardDescription>
+            La última versión preparada de tu agente.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-1 flex-col gap-5">
+          {candidate ? (
+            <>
+              <div className="overflow-hidden rounded-lg border bg-muted/20">
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="flex size-10 shrink-0 items-center justify-center rounded-md border border-emerald-200 bg-emerald-100 text-emerald-800 shadow-xs dark:border-emerald-400/25 dark:bg-emerald-400/15 dark:text-emerald-300">
+                      <PackageIcon className="size-5" aria-hidden="true" />
+                    </div>
+                    <div className="space-y-0.5">
+                      <p className="text-sm font-medium">{label}</p>
+                      <p className="font-mono text-xs text-muted-foreground">
+                        Revisión {candidate.revision}
+                      </p>
+                    </div>
+                  </div>
+                  <Badge
+                    variant={
+                      submitted
+                        ? "violet"
+                        : candidate.canPreview
+                          ? "sky"
+                          : "slate"
+                    }
+                  >
+                    {submitted
+                      ? "Enviada a revisión"
+                      : candidate.canPreview
+                        ? "Preparada"
+                        : "Prueba no disponible"}
+                  </Badge>
+                </div>
+                <div className="p-4">
+                  {candidate.createdAt && (
+                    <p className="text-sm leading-relaxed text-muted-foreground">
+                      Preparada el{" "}
+                      <span className="font-medium text-foreground">
+                        {new Intl.DateTimeFormat("es-VE", {
+                          dateStyle: "medium",
+                          timeZone: "UTC",
+                        }).format(new Date(candidate.createdAt))}
+                      </span>
+                    </p>
+                  )}
+                  <p className="text-sm leading-relaxed text-muted-foreground">
+                    {current
+                      ? "Esta versión incluye los últimos cambios guardados."
+                      : "Los cambios del borrador todavía no forman parte de esta versión."}
+                  </p>
+                </div>
+              </div>
+              {!clean && (
+                <p role="status" className="text-sm text-muted-foreground">
+                  Guarda los cambios y cierra los diálogos antes de continuar.
+                </p>
               )}
-            />
-            <Button
-              type="submit"
-              disabled={!readiness.canSubmit || !isValid || locked}
-            >
-              {isSubmitting ? "Enviando…" : "Enviar a revisión"}
-            </Button>
-          </form>
-        )}
-        {submitted && (
-          <p
-            role="status"
-            className="border-t pt-5 text-sm text-muted-foreground"
-          >
-            Esta versión ya fue enviada. Consulta su estado en Propuestas y
-            comentarios. Para enviar otra propuesta, guarda cambios y prepara
-            una nueva versión.
-          </p>
-        )}
-        {current && !submitted && !reviewAvailable && (
-          <p
-            role="status"
-            className="border-t pt-5 text-sm text-muted-foreground"
-          >
-            Esta versión no está disponible para revisión. Comprueba tus
-            permisos sobre el conocimiento seleccionado.
-          </p>
-        )}
-      </CardContent>
-    </Card>
+              <div className="mt-auto flex flex-wrap gap-3 border-t pt-5">
+                <Button
+                  variant="outline"
+                  disabled={!candidate.canPreview || locked || !clean}
+                  onClick={() => void preview()}
+                >
+                  {pendingAction === "preview"
+                    ? "Abriendo…"
+                    : hasActivePreview
+                      ? "Continuar prueba"
+                      : "Probar agente"}
+                </Button>
+                {reviewAvailable && (
+                  <Dialog
+                    open={reviewOpen}
+                    onOpenChange={(open) => {
+                      if (!locked) setReviewOpen(open)
+                    }}
+                  >
+                    <DialogTrigger
+                      render={<Button disabled={locked || !clean} />}
+                    >
+                      <SendIcon aria-hidden="true" />
+                      Enviar a revisión
+                    </DialogTrigger>
+                    <DialogContent showCloseButton={!locked}>
+                      <DialogTitle>
+                        Enviar {label.toLowerCase()} a revisión
+                      </DialogTitle>
+                      <DialogDescription>
+                        El equipo revisará esta versión exacta. Autoriza el
+                        acceso y añade una nota si lo necesitas.
+                      </DialogDescription>
+                      <form
+                        noValidate
+                        className="space-y-4"
+                        onSubmit={handleSubmit(async (values) => {
+                          if (!readiness.canSubmit || !isValid || locked) return
+                          const form = new FormData()
+                          form.set("candidateId", values.candidateId)
+                          form.set("revision", String(base.draft.revision))
+                          form.set("note", values.note)
+                          form.set("consent", "on")
+                          await run("submit", form)
+                        })}
+                      >
+                        <Field data-invalid={!!errors.note}>
+                          <FieldLabel htmlFor="review-note">
+                            Nota para el equipo (opcional)
+                          </FieldLabel>
+                          <Textarea
+                            id="review-note"
+                            maxLength={2000}
+                            aria-invalid={!!errors.note}
+                            disabled={locked}
+                            {...register("note")}
+                          />
+                          <FieldError errors={[errors.note]} />
+                        </Field>
+                        <Controller
+                          control={control}
+                          name="consent"
+                          render={({ field }) => (
+                            <ConsentCheckbox
+                              checked={field.value}
+                              onCheckedChange={field.onChange}
+                              disabled={locked || !clean}
+                            />
+                          )}
+                        />
+                        {message && (
+                          <p role="alert" className="text-sm text-destructive">
+                            {message}
+                          </p>
+                        )}
+                        <div className="flex justify-end gap-3">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            disabled={locked}
+                            onClick={() => setReviewOpen(false)}
+                          >
+                            Cancelar
+                          </Button>
+                          <Button
+                            type="submit"
+                            disabled={
+                              !readiness.canSubmit || !isValid || locked
+                            }
+                          >
+                            <SendIcon aria-hidden="true" />
+                            {isSubmitting ? "Enviando…" : "Enviar a revisión"}
+                          </Button>
+                        </div>
+                      </form>
+                    </DialogContent>
+                  </Dialog>
+                )}
+              </div>
+              {current && !submitted && !reviewAvailable && (
+                <p role="status" className="text-sm text-muted-foreground">
+                  Esta versión no está disponible para revisión. Comprueba tus
+                  permisos sobre el conocimiento seleccionado.
+                </p>
+              )}
+            </>
+          ) : (
+            <div className="flex min-h-44 flex-1 flex-col items-center justify-center gap-3 py-6 text-center">
+              <PackageOpenIcon
+                className="size-12 text-muted-foreground/60"
+                strokeWidth={1.5}
+                aria-hidden="true"
+              />
+              <p className="font-medium">Aún no hay una versión preparada.</p>
+              <p className="max-w-64 text-sm text-muted-foreground">
+                Prepara la primera versión desde Nueva versión.
+              </p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
   )
 }
+
 export function AgentWorkflow({
   data,
   collections,
   save,
   prepare,
+  preview,
   submit,
 }: {
   data: AgentView
   collections: WorkspaceView["collections"]
   save: (values: FormData) => Promise<FormResult>
   prepare: (values: FormData) => Promise<FormResult>
+  preview: (values: FormData) => Promise<FormResult>
   submit: (values: FormData) => Promise<FormResult>
 }) {
   const router = useRouter()
@@ -310,10 +448,12 @@ export function AgentWorkflow({
     editingSkill,
   }
   const mutationLock = useRef(false)
-  const [working, setWorking] = useState(false)
+  const [working, setWorking] = useState<
+    "prepare" | "preview" | "submit" | null
+  >(null)
   const [refreshing, startRefresh] = useTransition()
   const [message, setMessage] = useState("")
-  const busy = working || refreshing
+  const busy = !!working || refreshing
   const base: Base = {
     draft: data.draft,
     editor,
@@ -338,10 +478,12 @@ export function AgentWorkflow({
     )
       return
     mutationLock.current = true
-    setWorking(true)
+    setWorking(kind)
     setMessage("")
     try {
-      const result = await (kind === "submit" ? submit : prepare)(values)
+      const action =
+        kind === "submit" ? submit : kind === "preview" ? preview : prepare
+      const result = await action(values)
       if (!result.ok) {
         setMessage(result.message)
         notify.destructive(result.message)
@@ -359,7 +501,7 @@ export function AgentWorkflow({
       notify.destructive(text)
     } finally {
       mutationLock.current = false
-      setWorking(false)
+      setWorking(null)
     }
   }
   const candidateKey = `${data.draft.revision}:${data.preparationCodeReleaseId}:${data.candidates.map((c) => `${c.id}:${c.canSubmit}:${c.canPreview}`).join(":")}:${base.submittedCandidateIds.join(":")}`
@@ -378,7 +520,13 @@ export function AgentWorkflow({
           {message}
         </p>
       )}
-      <ReviewVersionCard key={candidateKey} base={base} run={run} />
+      <VersionCards
+        key={candidateKey}
+        base={base}
+        run={run}
+        message={message}
+        pendingAction={working}
+      />
     </>
   )
 }

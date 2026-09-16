@@ -1,6 +1,6 @@
 {
   "name": "agentonic",
-  "version": "0.5.7",
+  "version": "0.6.0",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@11.21.0",
@@ -33,7 +33,11 @@
     "setup:rag": "node scripts/setup-rag.mjs",
     "rag:check-live": "node scripts/check-rag-live.mjs --live",
     "setup:preview": "node scripts/setup-preview.mjs",
-    "preview:check-live": "node scripts/check-preview-live.mjs --live"
+    "preview:check-live": "node scripts/check-preview-live.mjs --live",
+    "setup:evaluation": "node scripts/setup-evaluation.mjs",
+    "package:evaluation": "node scripts/package-evaluation.mjs",
+    "dev:evaluation": "pnpm --filter @agentonic/worker exec tsx src/evaluation-main.ts",
+    "evaluation:check-live": "node scripts/check-evaluation-live.mjs --live"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.8",
@@ -43,6 +47,7 @@
     "@workspace/eslint-config": "workspace:*",
     "@workspace/typescript-config": "workspace:*",
     "dotenv": "^17.2.3",
+    "esbuild": "0.28.2",
     "eslint": "^9",
     "pg": "^8.16.3",
     "prettier": "^3.8.3",

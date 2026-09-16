@@ -1,24 +1,22 @@
+import { loadReviewFlow } from "@agentonic/server/review-flow"
+import { loadEvaluations } from "@agentonic/server/evaluation"
+import { EvaluationPanel } from "@workspace/ui/components/evaluation-panel"
 import { notFound } from "next/navigation"
 import { loadWorkspace, loadAgent } from "@agentonic/server/authoring"
-import { submissionLabels } from "@agentonic/contracts/authoring"
 import { RecordHeader, BackRow } from "@workspace/ui/components/record-header"
-import {
-  Card,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-  CardContent,
-} from "@workspace/ui/components/card"
 import { AgentWorkflow } from "@workspace/ui/components/agent-workflow"
-import { ConfirmMutation } from "@workspace/ui/components/confirm-mutation"
 import { Badge } from "@workspace/ui/components/badge"
-import { SubmissionStatusBadge } from "@workspace/ui/components/status-badge"
+import { AgentPageTabs } from "@workspace/ui/components/agent-page-tabs"
+import { AgentProposals } from "@workspace/ui/components/agent-proposals"
 import { customerWorkspace } from "@/lib/workspace"
 import {
   saveDraft,
-  preparePreview,
+  prepareVersion,
+  openPreview,
   sendSubmission,
   withdrawSubmission,
+  evaluationAction,
+  reviewFlowAction,
 } from "../actions"
 export default async function Page({
   params,
@@ -29,11 +27,15 @@ export default async function Page({
 }) {
   const { selected } = await customerWorkspace(searchParams)
   const { id } = await params
-  const [data, workspace] = await Promise.all([
+  const [data, workspace, evaluations, reviewFlow] = await Promise.all([
     loadAgent(selected.id, id),
     loadWorkspace(selected.id),
+    loadEvaluations("customer", selected.id, id),
+    loadReviewFlow("customer", selected.id, id),
   ])
   if (!data || !workspace) notFound()
+  if (!evaluations || !reviewFlow)
+    throw new Error("No se pudieron cargar las evaluaciones.")
   return (
     <div className="mx-auto w-full max-w-4xl space-y-6">
       <BackRow href={`/agents?workspace=${selected.id}`} />
@@ -45,62 +47,56 @@ export default async function Page({
         }
         actions={<Badge variant="slate">Sin despliegue</Badge>}
       />
-      <AgentWorkflow
-        key={data.draft.revision}
-        data={data}
-        collections={workspace.collections}
-        save={saveDraft.bind(null, selected.id, id)}
-        prepare={preparePreview.bind(null, selected.id, id)}
-        submit={sendSubmission.bind(null, selected.id, id)}
-      />
-      <Card className="gap-5 py-6 [--card-spacing:--spacing(6)]">
-        <CardHeader className="gap-2">
-          <CardTitle>
-            <h2 className="text-xl font-semibold tracking-tight">
-              Propuestas y comentarios
-            </h2>
-          </CardTitle>
-          <CardDescription className="text-sm leading-relaxed">
-            Consulta el estado de tus envíos y las indicaciones de nuestro
-            equipo.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {!data.submissions.length && (
-            <p className="text-sm text-muted-foreground">
-              Aún no has enviado propuestas.
-            </p>
-          )}
-          {data.submissions.map((s) => (
-            <div key={s.id} className="space-y-3 rounded-lg border p-4">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <p className="font-medium">Propuesta {s.number}</p>
-                <SubmissionStatusBadge status={s.status} />
-              </div>
-              {s.note && (
-                <p className="text-sm whitespace-pre-wrap">{s.note}</p>
-              )}
-              {s.decisions.map((d) => (
-                <div key={d.number} className="border-l-2 pl-3 text-sm">
-                  <p className="font-medium">
-                    {submissionLabels[d.decision] ?? d.decision}
-                  </p>
-                  <p className="whitespace-pre-wrap text-muted-foreground">
-                    {d.feedback}
-                  </p>
+      <AgentPageTabs
+        configuration={
+          <AgentWorkflow
+            key={data.draft.revision}
+            data={data}
+            collections={workspace.collections}
+            save={saveDraft.bind(null, selected.id, id)}
+            prepare={prepareVersion.bind(null, selected.id, id)}
+            preview={openPreview.bind(null, selected.id, id)}
+            submit={sendSubmission.bind(null, selected.id, id)}
+          />
+        }
+        proposals={
+          <>
+            <AgentProposals
+              agentName={data.agent.name}
+              candidates={data.candidates}
+              submissions={data.submissions}
+              state={reviewFlow}
+              action={reviewFlowAction.bind(null, selected.id)}
+              withdraw={withdrawSubmission.bind(null, selected.id, id)}
+            />
+            {evaluations.length > 0 && (
+              <details>
+                <summary className="cursor-pointer text-sm font-medium">
+                  Evaluaciones anteriores
+                </summary>
+                <div className="mt-4">
+                  <EvaluationPanel
+                    records={evaluations}
+                    customer
+                    labels={Object.fromEntries(
+                      data.submissions.map((submission) => {
+                        const candidate = data.candidates.find(
+                          (item) => item.id === submission.candidateId
+                        )
+                        return [
+                          submission.id,
+                          `Propuesta ${submission.number}${candidate?.number ? ` · Versión ${candidate.number}` : ""}`,
+                        ]
+                      })
+                    )}
+                    action={evaluationAction.bind(null, selected.id)}
+                  />
                 </div>
-              ))}
-              {["submitted", "in_review"].includes(s.status) && (
-                <ConfirmMutation
-                  action={withdrawSubmission.bind(null, selected.id, id, s.id)}
-                  label="Retirar propuesta"
-                  description="Se detendrá la revisión y se revocará el acceso del equipo a esta propuesta. Para reenviar, guarda y congela otra revisión."
-                />
-              )}
-            </div>
-          ))}
-        </CardContent>
-      </Card>
+              </details>
+            )}
+          </>
+        }
+      />
     </div>
   )
 }

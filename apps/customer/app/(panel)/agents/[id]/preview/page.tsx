@@ -44,7 +44,6 @@ export default async function Page({
         agentId={id}
         initialCandidateId={candidate?.id}
         initialState={initialState}
-        returnHref={`/agents/${id}?workspace=${selected.id}`}
         candidates={data.candidates
           .filter((c) => c.canPreview)
           .map((c) => ({

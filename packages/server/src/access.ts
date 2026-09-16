@@ -5,10 +5,44 @@ import {
   accessResult,
   invitationAcceptance,
   invitationRequest,
+  customerAgentCreation,
 } from "@agentonic/contracts/access"
-import type { AppKind } from "@agentonic/contracts/identity"
+import { uuid, type AppKind } from "@agentonic/contracts/identity"
 import { withIdentity } from "@agentonic/database/client"
 import { requireVerifiedUser } from "./auth"
+import { latestCreationTemplate } from "./catalog"
+
+export async function createCustomerAgent(workspaceId: string, input: unknown) {
+  const parsed = customerAgentCreation.safeParse(input)
+  if (!uuid.safeParse(workspaceId).success || !parsed.success)
+    return { ok: false as const }
+  const actor = await requireVerifiedUser("customer")
+  try {
+    return await withIdentity(
+      actor.authId,
+      workspaceId,
+      async (tx) => {
+        // The command acquires the workspace lock and rechecks creation rights.
+        const templateVersionId = await latestCreationTemplate(tx)
+        if (!templateVersionId) return { ok: false as const }
+        const rows = await tx.$queryRaw<{ result: unknown }[]>`
+        SELECT agentonic.access_command('agent.create',${JSON.stringify({ ...parsed.data, templateVersionId })}::jsonb,${randomUUID()}::uuid) result`
+        const result = accessResult.parse(rows[0]?.result)
+        // Recheck the executable default after acquiring that lock. Throwing
+        // rolls back creation if publication/revocation changed the selection.
+        if (
+          result.ok &&
+          (await latestCreationTemplate(tx)) !== templateVersionId
+        )
+          throw new Error("Creation default changed")
+        return result
+      },
+      actor.email
+    )
+  } catch {
+    return { ok: false as const }
+  }
+}
 
 // Only trusted server modules call this service. Auth identity and email always
 // come from Supabase getUser; submitted workspace/resource IDs are requests, never authority.

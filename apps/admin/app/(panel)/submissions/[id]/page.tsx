@@ -1,25 +1,12 @@
-import { notFound } from "next/navigation"
-import { openReview } from "@agentonic/server/authoring"
+import { loadReviewFlow } from "@agentonic/server/review-flow"
+import { ReviewFlowPanel } from "@workspace/ui/components/review-flow-panel"
+import { notFound, redirect } from "next/navigation"
+import { loadEvaluations } from "@agentonic/server/evaluation"
+import { EvaluationPanel } from "@workspace/ui/components/evaluation-panel"
+import { openReview, loadReviewQueue } from "@agentonic/server/authoring"
 import { RecordHeader, BackRow } from "@workspace/ui/components/record-header"
-import {
-  Card,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-  CardContent,
-} from "@workspace/ui/components/card"
-import { MutationForm } from "@workspace/ui/components/mutation-form"
-import { Field, FieldLabel } from "@workspace/ui/components/field"
-import { Textarea } from "@workspace/ui/components/textarea"
-import {
-  Select,
-  SelectTrigger,
-  SelectContent,
-  SelectItem,
-  SelectValue,
-} from "@workspace/ui/components/select"
-import { Badge } from "@workspace/ui/components/badge"
-import { decideReview } from "../actions"
+import { SubmissionReviewLayout } from "@workspace/ui/components/submission-review-layout"
+import { decideReview, evaluationAction } from "../actions"
 export default async function Page({
   params,
   searchParams,
@@ -31,128 +18,76 @@ export default async function Page({
   const q = await searchParams
   if (!q.workspace || !q.grant) notFound()
   const review = await openReview(q.workspace, id, q.grant)
-  if (!review) notFound()
-  const decisions = [
-    { value: "in_review", label: "Mantener en revisión" },
-    { value: "changes_requested", label: "Solicitar cambios" },
-    { value: "rejected", label: "Rechazar propuesta" },
-  ]
+  if (!review) {
+    const queue = await loadReviewQueue(q.workspace)
+    const closed = queue?.find((row) => row.id === id)
+    if (
+      !closed ||
+      ![
+        "approved",
+        "revoked",
+        "changes_requested",
+        "rejected",
+        "withdrawn",
+      ].includes(closed.status)
+    )
+      notFound()
+    if (closed.status === "approved")
+      redirect(`/submissions/${id}/receipt?workspace=${q.workspace}`)
+    return (
+      <>
+        <BackRow href="/submissions" />
+        <RecordHeader
+          title={
+            closed.status === "approved"
+              ? "Versión aprobada"
+              : "Revisión cerrada"
+          }
+          description="Consulta el estado de esta propuesta en la tabla de revisiones. El acceso temporal al contenido privado terminó al cerrar la revisión."
+        />
+      </>
+    )
+  }
+  const evaluations = await loadEvaluations("admin", q.workspace, id, q.grant)
+  const reviewFlow = await loadReviewFlow("admin", q.workspace, id, q.grant)
+  if (!evaluations || !reviewFlow)
+    throw new Error("No se pudieron cargar las evaluaciones.")
   return (
-    <>
-      <BackRow href={`/submissions?workspace=${q.workspace}`} />
-      <RecordHeader
-        title={`${review.agentName} · Propuesta ${review.number}`}
-        description="Solo esta versión y el alcance autorizado por el cliente."
-        actions={
-          <Badge variant="warning">
-            Sin evaluar
-          </Badge>
-        }
-      />
-      <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(18rem,1fr)]">
-        <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Instrucciones del sistema</CardTitle>
-              <CardDescription>
-                Contenido del cliente; no constituye una autorización para
-                ejecutar herramientas.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm break-words whitespace-pre-wrap">
-                {review.content.systemPrompt}
-              </p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle>Habilidades</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {review.content.skills.length ? (
-                review.content.skills.map((s) => (
-                  <div key={s.name} className="space-y-2">
-                    <h3 className="font-medium">{s.name}</h3>
-                    <p className="text-sm break-words whitespace-pre-wrap">
-                      {s.instructions}
-                    </p>
-                  </div>
-                ))
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  Sin habilidades adicionales.
-                </p>
-              )}
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle>Conocimiento solicitado</CardTitle>
-              <CardDescription>
-                {review.requestedAccess.collectionIds.length} colecciones
-                propuestas. Su selección no activa acceso del agente.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground">
-                Esta revisión permite metadatos; no concede acceso al contenido
-                de los documentos.
-              </p>
-            </CardContent>
-          </Card>
-        </div>
-        <Card>
-          <CardHeader>
-            <CardTitle>Comentarios al cliente</CardTitle>
-            <CardDescription>
-              La aprobación y el despliegue se habilitarán con los controles de
-              evaluación y ejecución.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {review.note && (
-              <p className="mb-4 rounded-lg border p-3 text-sm whitespace-pre-wrap">
-                {review.note}
-              </p>
-            )}
-            <MutationForm
-              action={decideReview.bind(null, q.workspace, id, q.grant)}
-              label="Registrar decisión"
-            >
-              <Field>
-                <FieldLabel>Decisión</FieldLabel>
-                <Select
-                  name="decision"
-                  defaultValue="changes_requested"
-                  items={decisions}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {decisions.map((d) => (
-                      <SelectItem key={d.value} value={d.value}>
-                        {d.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </Field>
-              <Field>
-                <FieldLabel htmlFor="feedback">Comentarios</FieldLabel>
-                <Textarea
-                  id="feedback"
-                  name="feedback"
-                  required
-                  maxLength={2000}
-                  className="min-h-40"
-                />
-              </Field>
-            </MutationForm>
-          </CardContent>
-        </Card>
-      </div>
-    </>
+    <SubmissionReviewLayout
+      review={review}
+      canDecide={reviewFlow.canDecide === true}
+      backHref={`/submissions?workspace=${q.workspace}`}
+      needsAttention={reviewFlow.preparations.some((p) =>
+        ["needs_changes", "needs_attention", "error"].includes(p.status)
+      )}
+      testsPassed={
+        reviewFlow.preparations.some((p) => p.status === "approved") ||
+        evaluations.some((e) => e.status === "passed")
+      }
+      decideAction={decideReview.bind(null, q.workspace, id, q.grant)}
+      evaluation={
+        <ReviewFlowPanel
+          state={reviewFlow}
+          grantId={q.grant}
+          approveAction={evaluationAction.bind(null, q.workspace)}
+        />
+      }
+      history={
+        evaluations.length > 0 ? (
+          <details className="rounded-xl border bg-card p-6">
+            <summary className="cursor-pointer text-sm font-medium">
+              Evaluaciones anteriores
+            </summary>
+            <div className="mt-4">
+              <EvaluationPanel
+                records={evaluations}
+                grantId={q.grant}
+                action={evaluationAction.bind(null, q.workspace)}
+              />
+            </div>
+          </details>
+        ) : undefined
+      }
+    />
   )
 }

@@ -1,13 +1,12 @@
 "use client"
 import { useCallback, useEffect, useRef, useState } from "react"
-import Link from "next/link"
 import { PlayIcon, SendIcon, SquareIcon, MessageSquareIcon } from "lucide-react"
 import {
   previewState,
   previewErrors,
   type PreviewState,
 } from "@agentonic/contracts/preview"
-import { Button, buttonVariants } from "@workspace/ui/components/button"
+import { Button } from "@workspace/ui/components/button"
 import { Badge } from "@workspace/ui/components/badge"
 import { Textarea } from "@workspace/ui/components/textarea"
 import { Field, FieldLabel } from "@workspace/ui/components/field"
@@ -25,14 +24,12 @@ export function AgentPreview({
   candidates,
   initialCandidateId,
   initialState = null,
-  returnHref,
 }: {
   workspaceId: string
   agentId: string
   candidates: { id: string; version: string; hash: string }[]
   initialCandidateId?: string
   initialState?: PreviewState | null
-  returnHref?: string
 }) {
   const [candidate, setCandidate] = useState(
     initialCandidateId ?? candidates[0]?.id ?? ""
@@ -155,7 +152,6 @@ export function AgentPreview({
       <AgentSettingsCard
         title="Versión de prueba"
         description="Solo tú puedes ver esta conversación. Termina a los 10 minutos o al alcanzar 10 mensajes."
-        footer="OpenAI recibe las instrucciones, habilidades, conversación y fragmentos autorizados. Voyage procesa las consultas de búsqueda. La prueba consume el presupuesto de desarrollo; no aprueba ni despliega el agente."
       >
         <div className="space-y-4">
           <Field>
@@ -182,7 +178,7 @@ export function AgentPreview({
           </Field>
           {!candidates.length && (
             <p className="text-sm text-muted-foreground">
-              Guarda el borrador y usa Preparar y probar desde la configuración
+              Guarda el borrador y usa Preparar versión desde la configuración
               del agente.
             </p>
           )}
@@ -212,20 +208,6 @@ export function AgentPreview({
           </div>
         </div>
       </AgentSettingsCard>
-      {returnHref && (
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="text-sm text-muted-foreground">
-            Cuando termines, vuelve al agente para enviar esta versión a
-            revisión.
-          </p>
-          <Link
-            href={returnHref}
-            className={buttonVariants({ variant: "outline" })}
-          >
-            Volver al agente
-          </Link>
-        </div>
-      )}
       <div className="overflow-hidden rounded-lg border bg-card">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b px-6 py-4">
           <h2 className="font-medium">Conversación de prueba</h2>

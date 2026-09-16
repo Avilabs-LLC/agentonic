@@ -11,20 +11,17 @@ import {
   DialogDescription,
 } from "@workspace/ui/components/dialog"
 import { Button } from "@workspace/ui/components/button"
-import {
-  ResourceCreateForm,
-  type CreationTemplate,
-} from "@workspace/ui/components/resource-create-form"
+import { ResourceCreateForm } from "@workspace/ui/components/resource-create-form"
 export function AgentCreateDialog({
   workspaceId,
   workspaceName,
-  templates,
+  available,
   action,
   initiallyOpen = false,
 }: {
   workspaceId: string
   workspaceName: string
-  templates: CreationTemplate[]
+  available: boolean
   action: (data: FormData) => Promise<FormResult>
   initiallyOpen?: boolean
 }) {
@@ -49,9 +46,9 @@ export function AgentCreateDialog({
           Un nuevo borrador en {workspaceName}. Serás su propietario y después
           podrás personalizar sus instrucciones y conocimiento.
         </DialogDescription>
-        {templates.length ? (
+        {available ? (
           <ResourceCreateForm
-            templates={templates}
+            kind="agent"
             action={action}
             onPendingChange={setPending}
             onCancel={() => changeOpen(false)}
@@ -59,8 +56,8 @@ export function AgentCreateDialog({
           />
         ) : (
           <p className="text-sm text-muted-foreground">
-            Todavía no hay una plantilla disponible para este espacio. El equipo
-            de Agentonic debe publicarla antes de crear agentes.
+            La creación de agentes todavía no está habilitada para este espacio.
+            El equipo de Agentonic debe habilitarla antes de continuar.
           </p>
         )}
       </DialogContent>

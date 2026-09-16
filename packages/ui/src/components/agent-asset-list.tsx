@@ -33,7 +33,6 @@ export type AgentAsset = {
   id: string
   name: string
   description: string
-  example?: boolean
 }
 
 /** Compact configuration preview; actions edit the local draft, never permissions. */
@@ -73,9 +72,7 @@ export function AgentAssetList({
                 >
                   {row.name}
                 </p>
-                <Badge variant={row.example ? "orange" : "violet"}>
-                  {row.example ? "Ejemplo" : "Borrador"}
-                </Badge>
+                <Badge variant="violet">Borrador</Badge>
               </div>
               <ItemDescription className="text-sm break-words">
                 {row.description}
@@ -107,7 +104,7 @@ export function AgentAssetList({
                     onClick={() => setRemoving(row)}
                   >
                     <Trash2Icon />
-                    {row.example ? "Quitar ejemplo" : "Eliminar habilidad"}
+                    Eliminar habilidad
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -129,15 +126,11 @@ export function AgentAssetList({
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              {removing?.example
-                ? "¿Quitar este ejemplo?"
-                : "¿Eliminar esta habilidad del borrador?"}
+              ¿Eliminar esta habilidad del borrador?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              {removing?.name}.{" "}
-              {removing?.example
-                ? "Solo se oculta esta muestra de la interfaz. No se elimina ninguna herramienta ni conexión real."
-                : "El cambio se aplicará cuando guardes el borrador. Las versiones ya enviadas no cambian."}
+              {removing?.name}. El cambio se aplicará cuando guardes el
+              borrador. Las versiones ya enviadas no cambian.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -151,7 +144,7 @@ export function AgentAssetList({
                 setRemoving(null)
               }}
             >
-              {removing?.example ? "Quitar ejemplo" : "Eliminar habilidad"}
+              Eliminar habilidad
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

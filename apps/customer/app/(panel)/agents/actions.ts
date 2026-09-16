@@ -1,7 +1,12 @@
 "use server"
+import { runReviewFlow } from "@agentonic/server/review-flow"
+import { runEvaluationCommand } from "@agentonic/server/evaluation"
 import { revalidatePath } from "next/cache"
-import { prepareAgentPreview } from "@agentonic/server/preparation"
-import { runAccessCommand } from "@agentonic/server/access"
+import {
+  prepareAgentVersion,
+  openAgentPreview,
+} from "@agentonic/server/preparation"
+import { runAccessCommand, createCustomerAgent } from "@agentonic/server/access"
 import { runAuthoringCommand, loadAgent } from "@agentonic/server/authoring"
 import {
   systemPromptInput,
@@ -18,15 +23,10 @@ export async function createAgent(
   workspaceId: string,
   data: FormData
 ): Promise<FormResult> {
-  const r = await runAccessCommand("customer", {
-    workspaceId,
-    operation: "agent.create",
-    payload: {
-      name: value(data, "name"),
-      slug: value(data, "slug"),
-      description: value(data, "description"),
-      templateVersionId: value(data, "templateVersionId"),
-    },
+  const r = await createCustomerAgent(workspaceId, {
+    name: value(data, "name"),
+    slug: value(data, "slug"),
+    description: value(data, "description"),
   })
   if (!r.ok || !r.id) return failed
   revalidatePath("/agents")
@@ -78,16 +78,25 @@ export async function saveDraft(
   revalidatePath(`/agents/${agentId}`)
   return { ok: true, message: "Borrador guardado." }
 }
-export async function preparePreview(
+export async function prepareVersion(
   workspaceId: string,
   agentId: string,
   data: FormData
 ): Promise<FormResult> {
-  const result = await prepareAgentPreview(workspaceId, agentId, {
+  const result = await prepareAgentVersion(workspaceId, agentId, {
     revision: Number(value(data, "revision")),
-    ...(data.has("candidateId")
-      ? { candidateId: value(data, "candidateId") }
-      : {}),
+  })
+  revalidatePath(`/agents/${agentId}`)
+  return result
+}
+export async function openPreview(
+  workspaceId: string,
+  agentId: string,
+  data: FormData
+): Promise<FormResult> {
+  const result = await openAgentPreview(workspaceId, agentId, {
+    revision: Number(value(data, "revision")),
+    candidateId: value(data, "candidateId"),
   })
   revalidatePath(`/agents/${agentId}`)
   return result
@@ -220,4 +229,16 @@ export async function removeCollection(
     message:
       "Colección eliminada del conocimiento. Los archivos pendientes se eliminarán en segundo plano.",
   }
+}
+
+export async function evaluationAction(workspaceId: string, input: unknown) {
+  const result = await runEvaluationCommand("customer", workspaceId, input)
+  if (result.ok) revalidatePath("/agents", "layout")
+  return result
+}
+
+export async function reviewFlowAction(workspaceId: string, input: unknown) {
+  const result = await runReviewFlow(workspaceId, input)
+  if (result.ok) revalidatePath("/agents", "layout")
+  return result
 }

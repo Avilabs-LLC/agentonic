@@ -26,6 +26,7 @@ model User {
 }
 
 model PlatformStaff {
+  evaluations                     EvaluationRun[]      @relation("EvaluationRequester")
   id                              String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   userId                          String               @unique @map("user_id") @db.Uuid
   role                            String
@@ -48,6 +49,7 @@ model PlatformStaff {
 }
 
 model Workspace {
+  evaluations                       EvaluationRun[]              @relation("EvaluationWorkspace")
   previews                          AgentPreview[]
   ragChunks                         DocumentChunk[]
   ragJobs                           BackgroundJob[]
@@ -94,6 +96,9 @@ model Workspace {
 }
 
 model WorkspaceMember {
+  reviewPreparations EvaluationPreparation[] @relation("PreparationConsent")
+  criteriaRevisions EvaluationCriteriaRevision[]
+  evaluations                                        EvaluationRun[]            @relation("EvaluationConsent")
   previews                                           AgentPreview[]
   ragJobs                                            BackgroundJob[]
   id                                                 String                     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
@@ -151,6 +156,7 @@ model WorkspaceInvitation {
 }
 
 model SupportAccessGrant {
+  evaluations                                                           EvaluationRun[]            @relation("EvaluationSupportGrant")
   id                                                                    String                     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   workspaceId                                                           String                     @map("workspace_id") @db.Uuid
   staffId                                                               String                     @map("staff_id") @db.Uuid
@@ -510,7 +516,7 @@ model ConfigurationRelease {
   supportAccessGrantId                                                     String?                   @map("support_access_grant_id") @db.Uuid
   requestedAccessSnapshot                                                  Json                      @map("requested_access_snapshot")
   requestedAccessSha256                                                    String                    @map("requested_access_sha256")
-  createdAt                                                                DateTime                  @default(now()) @map("created_at") @db.Timestamptz
+  createdAt                                                                DateTime                  @default(dbgenerated("clock_timestamp()")) @map("created_at") @db.Timestamptz
   workspaceRef                                                             Workspace                 @relation("ConfigurationReleaseWorkspaceidStep3", fields: [workspaceId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "configuration_releases_workspace_id_step3_fk")
   codeReleaseRef                                                           WorkspaceCodeReleaseGrant @relation("ConfigurationReleaseWorkspaceidCodereleaseidStep3", fields: [workspaceId, codeReleaseId], references: [workspaceId, codeReleaseId], onDelete: Restrict, onUpdate: Restrict, map: "configuration_releases_workspace_id_code_release_id_step3_fk")
   sourceDraftRef                                                           ConfigurationDraft        @relation("ConfigurationReleaseWorkspaceidAgentidSourcedraftidStep3", fields: [workspaceId, agentId, sourceDraftId], references: [workspaceId, agentId, id], onDelete: Restrict, onUpdate: Restrict, map: "configuration_releases_workspace_id_agent_id_source__6866e502")
@@ -528,7 +534,6 @@ model ConfigurationRelease {
   @@map("configuration_releases")
   @@schema("agentonic")
 }
-
 model ConfigurationTool {
   id                      String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   workspaceId             String               @map("workspace_id") @db.Uuid
@@ -552,6 +557,8 @@ model ConfigurationTool {
 }
 
 model AgentSubmission {
+  reviewPreparations EvaluationPreparation[] @relation("PreparationSubmission")
+  evaluations                                              EvaluationRun[]            @relation("EvaluationSubmission")
   id                                                       String                     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   workspaceId                                              String                     @map("workspace_id") @db.Uuid
   agentId                                                  String                     @map("agent_id") @db.Uuid
@@ -582,6 +589,7 @@ model AgentSubmission {
 }
 
 model SubmissionReviewDecision {
+  actorPolicyVersion String? @map("actor_policy_version")
   id                    String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   workspaceId           String              @map("workspace_id") @db.Uuid
   agentId               String              @map("agent_id") @db.Uuid
@@ -853,4 +861,148 @@ model AgentPreview {
   @@unique([workspaceId, id])
   @@map("agent_previews")
   @@schema("agentonic")
+}
+
+model EvaluationWorker {
+  preparations EvaluationPreparation[]
+  id            String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  databaseRole  String          @map("database_role")
+  environment   String
+  workerSha256  String          @map("worker_sha256")
+  runtimeSha256 String          @map("runtime_sha256")
+  verifiedAt    DateTime        @map("verified_at") @db.Timestamptz
+  verification  Json
+  revokedAt     DateTime?       @map("revoked_at") @db.Timestamptz
+  createdAt     DateTime        @default(now()) @map("created_at") @db.Timestamptz
+  runs          EvaluationRun[]
+
+  @@map("evaluation_workers")
+  @@schema("agentonic")
+}
+
+model EvaluationRun {
+  id                     String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId            String             @map("workspace_id") @db.Uuid
+  agentId                String             @map("agent_id") @db.Uuid
+  submissionId           String             @map("submission_id") @db.Uuid
+  codeReleaseId          String             @map("code_release_id") @db.Uuid
+  configurationReleaseId String             @map("configuration_release_id") @db.Uuid
+  requestedByStaffId     String?            @map("requested_by_staff_id") @db.Uuid
+  supportAccessGrantId   String?            @map("support_access_grant_id") @db.Uuid
+  authorizedByMemberId   String?            @map("authorized_by_member_id") @db.Uuid
+  authorizedAt           DateTime?          @map("authorized_at") @db.Timestamptz
+  consentRevokedAt       DateTime?          @map("consent_revoked_at") @db.Timestamptz
+  environment            String
+  status                 String             @default("awaiting_consent")
+  datasetSnapshot        Json               @map("dataset_snapshot")
+  datasetSha256          String             @map("dataset_sha256")
+  graderSnapshot         Json               @default("{\"version\":\"phrases-citations-v1\",\"threshold\":1}") @map("grader_snapshot")
+  graderSha256           String             @map("grader_sha256")
+  configurationSha256    String             @map("configuration_sha256")
+  requestedAccessSha256  String             @map("requested_access_sha256")
+  budgetUsd              Decimal            @map("budget_usd") @db.Decimal(20, 8)
+  committedMicrousd      BigInt             @default(0) @map("committed_microusd")
+  workerId               String?            @map("worker_id") @db.Uuid
+  leaseToken             String?            @map("lease_token") @db.Uuid
+  leaseUntil             DateTime?          @map("lease_until") @db.Timestamptz
+  nextCase               Int                @default(0) @map("next_case")
+  currentMatches         Json               @default("[]") @map("current_matches")
+  evidenceSha256         String?            @map("evidence_sha256")
+  errorCode              String?            @map("error_code")
+  expiresAt              DateTime           @map("expires_at") @db.Timestamptz
+  startedAt              DateTime?          @map("started_at") @db.Timestamptz
+  finishedAt             DateTime?          @map("finished_at") @db.Timestamptz
+  createdAt              DateTime           @default(dbgenerated("clock_timestamp()")) @map("created_at") @db.Timestamptz
+  workspace              Workspace          @relation("EvaluationWorkspace", fields: [workspaceId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  requester              PlatformStaff?     @relation("EvaluationRequester", fields: [requestedByStaffId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  grant                  SupportAccessGrant?@relation("EvaluationSupportGrant", fields: [workspaceId, requestedByStaffId, supportAccessGrantId], references: [workspaceId, staffId, id], onDelete: NoAction, onUpdate: NoAction)
+  consent                WorkspaceMember?   @relation("EvaluationConsent", fields: [workspaceId, authorizedByMemberId], references: [workspaceId, id], onDelete: NoAction, onUpdate: NoAction)
+  submission             AgentSubmission    @relation("EvaluationSubmission", fields: [workspaceId, agentId, codeReleaseId, configurationReleaseId, submissionId], references: [workspaceId, agentId, codeReleaseId, configurationReleaseId, id], onDelete: NoAction, onUpdate: NoAction)
+  worker                 EvaluationWorker?  @relation(fields: [workerId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  results                EvaluationResult[]
+  preparationId String? @map("preparation_id") @db.Uuid
+  scrubbedAt DateTime? @map("scrubbed_at") @db.Timestamptz
+  preparation EvaluationPreparation? @relation("RunPreparation", fields:[workspaceId,preparationId],references:[workspaceId,id],onDelete:NoAction,onUpdate:NoAction)
+  confirmedPreparations EvaluationPreparation[] @relation("PreparationRun")
+
+  @@unique([workspaceId, id])
+  @@map("evaluation_runs")
+  @@schema("agentonic")
+}
+
+model EvaluationResult {
+  assessment Json?
+  id              String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId     String        @map("workspace_id") @db.Uuid
+  evaluationRunId String        @map("evaluation_run_id") @db.Uuid
+  caseKey         String        @map("case_key")
+  outcome         String
+  answer          String
+  citations       Json
+  evidenceSources Json          @map("evidence_sources")
+  checks          Json
+  createdAt       DateTime      @default(now()) @map("created_at") @db.Timestamptz
+  run             EvaluationRun @relation(fields: [workspaceId, evaluationRunId], references: [workspaceId, id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([workspaceId, evaluationRunId, caseKey])
+  @@map("evaluation_results")
+  @@schema("agentonic")
+}
+
+model EvaluationPreparation {
+ id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+ workspaceId String @map("workspace_id") @db.Uuid
+ agentId String @map("agent_id") @db.Uuid
+ submissionId String @map("submission_id") @db.Uuid
+ codeReleaseId String @map("code_release_id") @db.Uuid
+ configurationReleaseId String @map("configuration_release_id") @db.Uuid
+ authorizedByMemberId String @map("authorized_by_member_id") @db.Uuid
+ requestId String @map("request_id") @db.Uuid
+ configurationSha256 String @map("configuration_sha256")
+ requestedAccessSha256 String @map("requested_access_sha256")
+ budgetUsd Decimal @map("budget_usd") @db.Decimal(20,8)
+ committedMicrousd BigInt @default(0) @map("committed_microusd")
+ status String @default("queued")
+ generatedCriteria Json @default("[]") @map("generated_criteria")
+ criteria Json @default("[]")
+ revision Int @default(0)
+ sourceSnapshot Json @default("[]") @map("source_snapshot")
+ risk String @default("uncertain")
+ evaluationId String? @map("evaluation_id") @db.Uuid
+ workerId String? @map("worker_id") @db.Uuid
+ leaseToken String? @map("lease_token") @db.Uuid
+ leaseUntil DateTime? @map("lease_until") @db.Timestamptz
+ confirmedAt DateTime? @map("confirmed_at") @db.Timestamptz
+ consentRevokedAt DateTime? @map("consent_revoked_at") @db.Timestamptz
+ scrubbedAt DateTime? @map("scrubbed_at") @db.Timestamptz
+ expiresAt DateTime @map("expires_at") @db.Timestamptz
+ createdAt DateTime @default(dbgenerated("clock_timestamp()")) @map("created_at") @db.Timestamptz
+ startedAt DateTime? @map("started_at") @db.Timestamptz
+ finishedAt DateTime? @map("finished_at") @db.Timestamptz
+ worker EvaluationWorker? @relation(fields:[workerId],references:[id],onDelete:NoAction,onUpdate:NoAction)
+ submission AgentSubmission @relation("PreparationSubmission",fields:[workspaceId,agentId,codeReleaseId,configurationReleaseId,submissionId],references:[workspaceId,agentId,codeReleaseId,configurationReleaseId,id],onDelete:NoAction,onUpdate:NoAction)
+ consent WorkspaceMember @relation("PreparationConsent",fields:[workspaceId,authorizedByMemberId],references:[workspaceId,id],onDelete:NoAction,onUpdate:NoAction)
+ runs EvaluationRun[] @relation("RunPreparation")
+ evaluation EvaluationRun? @relation("PreparationRun",fields:[workspaceId,evaluationId],references:[workspaceId,id],onDelete:NoAction,onUpdate:NoAction)
+ revisions EvaluationCriteriaRevision[]
+ @@unique([workspaceId,id])
+ @@unique([workspaceId,authorizedByMemberId,requestId])
+ @@map("evaluation_preparations")
+ @@schema("agentonic")
+}
+model EvaluationCriteriaRevision {
+ id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+ workspaceId String @map("workspace_id") @db.Uuid
+ preparationId String @map("preparation_id") @db.Uuid
+ revision Int
+ criteria Json
+ contentSha256 String @map("content_sha256")
+ editedByMemberId String @map("edited_by_member_id") @db.Uuid
+ createdAt DateTime @default(dbgenerated("clock_timestamp()")) @map("created_at") @db.Timestamptz
+ scrubbedAt DateTime? @map("scrubbed_at") @db.Timestamptz
+ preparation EvaluationPreparation @relation(fields:[workspaceId,preparationId],references:[workspaceId,id],onDelete:NoAction,onUpdate:NoAction)
+ member WorkspaceMember @relation(fields:[workspaceId,editedByMemberId],references:[workspaceId,id],onDelete:NoAction,onUpdate:NoAction)
+ @@unique([preparationId,revision])
+ @@map("evaluation_criteria_revisions")
+ @@schema("agentonic")
 }

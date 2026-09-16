@@ -30,7 +30,7 @@ export default async function Page({
               key={selected.id}
               workspaceId={selected.id}
               workspaceName={selected.name}
-              templates={data.templates}
+              available={data.creationAvailable}
               action={createAgent.bind(null, selected.id)}
               initiallyOpen={create === "1"}
             />

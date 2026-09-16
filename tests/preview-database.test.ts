@@ -98,6 +98,7 @@ beforeEach(async () => {
     "202609140008_previews",
     "202609140009_preview_followups",
     "202609140010_collection_deletion",
+    "202609150011_preview_discovery",
   ])
     await db.exec(
       readFileSync(
@@ -458,4 +459,63 @@ it("enforces ten turns and expires the whole preview instead of extending it", a
     [p.id]
   )
   expect(result.rows[0]).toEqual({ count: 0 })
+})
+
+async function discovered(target = a) {
+  return (
+    await db.query<{ id: string; candidate_id: string; expires_at: string }>(
+      "SELECT * FROM agentonic.active_agent_previews($1)",
+      [target]
+    )
+  ).rows
+}
+it("discovers only active authorized tests without starting sessions or changing usage", async () => {
+  await actor()
+  expect(await discovered()).toEqual([])
+  const p = await start()
+  const before = await sql(
+    "SELECT id,expires_at,committed_microusd FROM agentonic.agent_previews"
+  )
+  await actor()
+  expect(await discovered()).toMatchObject([
+    { id: p.id, candidate_id: p.candidateId },
+  ])
+  expect(await discovered(id(999))).toEqual([])
+  const after = await sql(
+    "SELECT id,expires_at,committed_microusd FROM agentonic.agent_previews"
+  )
+  expect(after.rows).toEqual(before.rows)
+  await actor()
+  await preview("cancel", { previewId: p.id })
+  expect(await discovered()).toEqual([])
+})
+it("does not disclose another maintainer's test or another workspace's tests", async () => {
+  await start()
+  await sql(
+    "INSERT INTO agentonic.workspace_members(id,workspace_id,user_id,role) VALUES($1,$2,$3,'member')",
+    [id(103), w, other]
+  )
+  await sql(
+    "INSERT INTO agentonic.agent_member_grants(workspace_id,agent_id,member_id,role,granted_by_member_id) VALUES($1,$2,$3,'maintainer',$4)",
+    [w, a, id(103), member]
+  )
+  await actor(other, w)
+  expect(await discovered()).toEqual([])
+  await actor(other, otherW)
+  expect(await discovered()).toEqual([])
+})
+it("hides expired tests even before worker cleanup", async () => {
+  const p = await start()
+  await sql(
+    "UPDATE agentonic.agent_previews SET created_at=now()-interval '11 minutes',expires_at=now()-interval '1 minute' WHERE id=$1",
+    [p.id]
+  )
+  await actor()
+  expect(await discovered()).toEqual([])
+})
+it("hides tests after access revocation", async () => {
+  await start()
+  await sql("UPDATE agentonic.agents SET archived_at=now() WHERE id=$1", [a])
+  await actor()
+  expect(await discovered()).toEqual([])
 })

@@ -1,4 +1,6 @@
 "use server"
+import { runEvaluationCommand } from "@agentonic/server/evaluation"
+import { loadReviewFlow } from "@agentonic/server/review-flow"
 import { revalidatePath } from "next/cache"
 import { runAuthoringCommand } from "@agentonic/server/authoring"
 import { reviewView, type FormResult } from "@agentonic/contracts/authoring"
@@ -31,6 +33,13 @@ export async function decideReview(
   grantId: string,
   data: FormData
 ): Promise<FormResult> {
+  const flow = await loadReviewFlow("admin", workspaceId, submissionId, grantId)
+  if (!flow?.canDecide)
+    return {
+      ok: false,
+      message:
+        "El cliente debe confirmar los criterios y la evaluación debe terminar antes de registrar una decisión.",
+    }
   const r = await runAuthoringCommand("admin", {
     workspaceId,
     operation: "review.decide",
@@ -53,4 +62,21 @@ export async function decideReview(
     message: "Comentario y decisión registrados.",
     href: `/submissions?workspace=${workspaceId}`,
   }
+}
+
+export async function evaluationAction(workspaceId: string, input: unknown) {
+  const result = await runEvaluationCommand("admin", workspaceId, input)
+  if (result.ok) revalidatePath("/submissions", "layout")
+  return result
+}
+
+export async function revokeApproval(
+  workspaceId: string,
+  submissionId: string,
+  feedback: string
+) {
+  return evaluationAction(workspaceId, {
+    operation: "revoke",
+    payload: { submissionId, feedback },
+  })
 }
