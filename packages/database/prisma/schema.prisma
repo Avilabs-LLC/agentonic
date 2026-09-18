@@ -557,6 +557,9 @@ model ConfigurationTool {
 }
 
 model AgentSubmission {
+  renewedFromSubmissionId String? @map("renewed_from_submission_id") @db.Uuid
+  renewedFrom AgentSubmission? @relation("SubmissionRenewal",fields:[workspaceId,agentId,codeReleaseId,configurationReleaseId,renewedFromSubmissionId],references:[workspaceId,agentId,codeReleaseId,configurationReleaseId,id],onDelete:Restrict,onUpdate:NoAction)
+  renewals AgentSubmission[] @relation("SubmissionRenewal")
   reviewPreparations EvaluationPreparation[] @relation("PreparationSubmission")
   evaluations                                              EvaluationRun[]            @relation("EvaluationSubmission")
   id                                                       String                     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
@@ -819,6 +822,8 @@ model RetrievalProviderBudget {
 }
 
 model RetrievalProviderOperation {
+  deploymentId String? @map("deployment_id") @db.Uuid
+  conversationId String? @map("conversation_id") @db.Uuid
   previewId        String?                 @map("preview_id") @db.Uuid
   agentId          String?                 @map("agent_id") @db.Uuid
   jobId            String                  @map("job_id") @db.Uuid
@@ -1004,5 +1009,109 @@ model EvaluationCriteriaRevision {
  member WorkspaceMember @relation(fields:[workspaceId,editedByMemberId],references:[workspaceId,id],onDelete:NoAction,onUpdate:NoAction)
  @@unique([preparationId,revision])
  @@map("evaluation_criteria_revisions")
+ @@schema("agentonic")
+}
+
+// Private nonproduction installation/chat slice. Composite tenant FKs, immutable
+// provenance, partial unique indexes and role grants are enforced in migration 23.
+model RuntimeHost {
+ id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+ environment String @unique
+ databaseRole String @unique @map("database_role")
+ brokerSha256 String @map("broker_sha256")
+ runtimeSha256 String @map("runtime_sha256")
+ verifiedAt DateTime @map("verified_at") @db.Timestamptz
+ revokedAt DateTime? @map("revoked_at") @db.Timestamptz
+ heartbeatAt DateTime? @map("heartbeat_at") @db.Timestamptz
+ @@map("runtime_hosts")
+ @@schema("agentonic")
+}
+model Deployment {
+ id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+ workspaceId String @map("workspace_id") @db.Uuid
+ agentId String @map("agent_id") @db.Uuid
+ codeReleaseId String @map("code_release_id") @db.Uuid
+ configurationReleaseId String @map("configuration_release_id") @db.Uuid
+ submissionId String @map("submission_id") @db.Uuid
+ approvalId String @map("approval_id") @db.Uuid
+ hostId String @map("host_id") @db.Uuid
+ environment String
+ authorizedByMemberId String @map("authorized_by_member_id") @db.Uuid
+ requestedByStaffId String? @map("requested_by_staff_id") @db.Uuid
+ requestId String @map("request_id") @db.Uuid
+ status String @default("awaiting_activation")
+ desiredState String @default("stopped") @map("desired_state")
+ serviceTokenSha256 String? @map("service_token_sha256")
+ generation BigInt @default(0)
+ budgetUsd Decimal @map("budget_usd") @db.Decimal(20,8)
+ committedMicrousd BigInt @default(0) @map("committed_microusd")
+ evidenceSources Json @map("evidence_sources")
+ authorizedUntil DateTime @map("authorized_until") @db.Timestamptz
+ revokedAt DateTime? @map("revoked_at") @db.Timestamptz
+ createdAt DateTime @default(dbgenerated("clock_timestamp()")) @map("created_at") @db.Timestamptz
+ activatedAt DateTime? @map("activated_at") @db.Timestamptz
+ heartbeatAt DateTime? @map("heartbeat_at") @db.Timestamptz
+ errorCode String? @map("error_code")
+ manifestSha256 String? @map("manifest_sha256")
+ @@unique([workspaceId,id])
+ @@unique([workspaceId,agentId,id])
+ @@unique([workspaceId,authorizedByMemberId,requestId])
+ @@map("deployments")
+ @@schema("agentonic")
+}
+model AgentEnvironment {
+ workspaceId String @map("workspace_id") @db.Uuid
+ agentId String @map("agent_id") @db.Uuid
+ environment String
+ currentDeploymentId String? @map("current_deployment_id") @db.Uuid
+ @@id([workspaceId,agentId,environment])
+ @@map("agent_environments")
+ @@schema("agentonic")
+}
+model StagingConversation {
+ id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+ workspaceId String @map("workspace_id") @db.Uuid
+ agentId String @map("agent_id") @db.Uuid
+ deploymentId String @map("deployment_id") @db.Uuid
+ ownerMemberId String @map("owner_member_id") @db.Uuid
+ title String
+ createdAt DateTime @default(dbgenerated("clock_timestamp()")) @map("created_at") @db.Timestamptz
+ expiresAt DateTime @map("expires_at") @db.Timestamptz
+ closedAt DateTime? @map("closed_at") @db.Timestamptz
+ @@unique([workspaceId,id])
+ @@map("staging_conversations")
+ @@schema("agentonic")
+}
+model StagingTurn {
+ id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+ workspaceId String @map("workspace_id") @db.Uuid
+ conversationId String @map("conversation_id") @db.Uuid
+ requestId String @map("request_id") @db.Uuid
+ number Int
+ query String
+ answer String?
+ citations Json @default("[]")
+ matches Json @default("[]")
+ insufficientEvidence Boolean? @map("insufficient_evidence")
+ status String @default("queued")
+ leaseToken String? @map("lease_token") @db.Uuid
+ leaseUntil DateTime? @map("lease_until") @db.Timestamptz
+ startedAt DateTime? @map("started_at") @db.Timestamptz
+ createdAt DateTime @default(dbgenerated("clock_timestamp()")) @map("created_at") @db.Timestamptz
+ errorCode String? @map("error_code")
+ scrubbedAt DateTime? @map("scrubbed_at") @db.Timestamptz
+ @@unique([conversationId,requestId])
+ @@unique([conversationId,number])
+ @@map("staging_turns")
+ @@schema("agentonic")
+}
+model ApprovalRenewalRequest {
+ id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+ workspaceId String @map("workspace_id") @db.Uuid
+ submissionId String @map("submission_id") @db.Uuid
+ requestedByStaffId String @map("requested_by_staff_id") @db.Uuid
+ createdAt DateTime @default(dbgenerated("clock_timestamp()")) @map("created_at") @db.Timestamptz
+ @@unique([workspaceId,submissionId])
+ @@map("approval_renewal_requests")
  @@schema("agentonic")
 }

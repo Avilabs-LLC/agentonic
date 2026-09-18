@@ -257,6 +257,9 @@ export const reviewQueue = z.array(
     userEmail: z.string().nullable(),
     versionNumber: z.number().int().positive(),
     canOpen: z.boolean(),
+    approvalReason: z.string().optional(),
+    approvalExpiresAt: z.string().nullable().optional(),
+    deploymentStatus: z.string().optional(),
     number: z.number(),
     status: z.string(),
   })

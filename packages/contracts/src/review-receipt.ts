@@ -1,3 +1,4 @@
+import { approvalReason } from "./lifecycle"
 import { z } from "zod"
 import { draftContent } from "./authoring"
 import { reviewCriterion } from "./review-flow"
@@ -20,6 +21,7 @@ export const reviewReceipt = z.object({
     createdAt: z.string(),
     expiresAt: z.string(),
     valid: z.boolean(),
+    reason: approvalReason.optional(),
     automatic: z.boolean(),
     reviewerName: z.string().nullable(),
     feedback: z.string().nullable(),

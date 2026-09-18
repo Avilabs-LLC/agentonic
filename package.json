@@ -1,6 +1,6 @@
 {
   "name": "agentonic",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@11.21.0",
@@ -37,7 +37,10 @@
     "setup:evaluation": "node scripts/setup-evaluation.mjs",
     "package:evaluation": "node scripts/package-evaluation.mjs",
     "dev:evaluation": "pnpm --filter @agentonic/worker exec tsx src/evaluation-main.ts",
-    "evaluation:check-live": "node scripts/check-evaluation-live.mjs --live"
+    "evaluation:check-live": "node scripts/check-evaluation-live.mjs --live",
+    "setup:staging": "node scripts/setup-staging.mjs",
+    "package:staging": "node scripts/package-staging.mjs",
+    "dev:staging": "node scripts/start-staging.mjs"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.8",
