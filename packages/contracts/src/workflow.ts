@@ -21,17 +21,23 @@ export type DraftEditorStatus = {
 export type Requirement = { label: string; met: boolean }
 // Agent detail returns candidates newest first. Keep the agent's last used
 // available engine across reloads and draft saves instead of resetting to the catalog.
+// An explicit preferred capability family affects only the next preparation;
+// previously frozen versions and previews retain their original engine.
 export function defaultFreezeCode(
   candidates: AgentView["candidates"],
-  availableCodeIds: string[]
+  availableCodeIds: string[],
+  preferredCodeIds: string[] = []
 ) {
+  const preferred = preferredCodeIds.filter((id) =>
+    availableCodeIds.includes(id)
+  )
+  const eligible = preferred.length ? preferred : availableCodeIds
   return (
     candidates.find(
       (candidate) =>
-        candidate.codeReleaseId &&
-        availableCodeIds.includes(candidate.codeReleaseId)
+        candidate.codeReleaseId && eligible.includes(candidate.codeReleaseId)
     )?.codeReleaseId ??
-    availableCodeIds[0] ??
+    eligible[0] ??
     ""
   )
 }

@@ -1,3 +1,4 @@
+import { gmailGrants, hasWeb } from "@agentonic/contracts/tools"
 import "server-only"
 import { randomUUID } from "node:crypto"
 import {
@@ -77,12 +78,13 @@ export async function runAuthoringCommand(app: AppKind, input: unknown) {
         const details = new Map(
           candidates.map((candidate) => [candidate.id, candidate])
         )
-        const codes = await tx.$queryRaw<{ id: string }[]>`
-          SELECT id FROM agentonic.code_releases
+        const codes = await tx.$queryRaw<{ id: string; research: boolean }[]>`
+          SELECT id, coalesce(execution_manifest->>'webResearch'='1',false) AS research FROM agentonic.code_releases
           WHERE template_version_id=${view.agent.templateVersionId}::uuid
             AND retired_at IS NULL AND agentonic.can_use_code(id)
             AND execution_manifest->>'previewContract'='1'
-            AND (${view.draft.requestedAccess.tools.length === 0} OR execution_manifest->>'gmailContract'='1')
+            AND (${gmailGrants(view.draft.requestedAccess.tools).length === 0} OR execution_manifest->>'gmailContract'='1')
+            AND (${!hasWeb(view.draft.requestedAccess.tools)} OR execution_manifest->>'webContract'='1')
           ORDER BY created_at DESC, id DESC`
         const enriched = view.candidates.map((candidate) => ({
           ...candidate,
@@ -95,7 +97,10 @@ export async function runAuthoringCommand(app: AppKind, input: unknown) {
             preparationCodeReleaseId:
               defaultFreezeCode(
                 enriched,
-                codes.map((code) => code.id)
+                codes.map((code) => code.id),
+                hasWeb(view.draft.requestedAccess.tools)
+                  ? codes.filter((code) => code.research).map((code) => code.id)
+                  : []
               ) || null,
             candidates: view.candidates.map((candidate) => {
               const detail = details.get(candidate.id)

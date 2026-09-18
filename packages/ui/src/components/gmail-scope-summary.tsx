@@ -1,3 +1,4 @@
+import { gmailGrants, hasWeb } from "@agentonic/contracts/tools"
 import { WrenchIcon } from "lucide-react"
 import { gmailLabels } from "@agentonic/contracts/gmail"
 import type { AgentView } from "@agentonic/contracts/authoring"
@@ -9,12 +10,21 @@ export function GmailScopeSummary({
 }) {
   return (
     <AgentSettingsCard
-      title="Acceso a Gmail solicitado"
-      description="Operaciones incluidas en esta versión y sujetas a los permisos vigentes de la cuenta."
+      title="Herramientas solicitadas"
+      description="Capacidades incluidas en esta versión y sujetas a sus permisos vigentes."
       icon={<WrenchIcon />}
-      footer="Las evaluaciones automáticas no acceden al buzón. Esta versión requiere revisión del equipo; los cambios de correo siempre necesitan confirmación del titular."
+      footer="Las evaluaciones automáticas no utilizan estas herramientas. Las versiones con herramientas requieren revisión del equipo; los cambios de correo necesitan confirmación del titular."
     >
-      {tools.map((g) => (
+      {hasWeb(tools) && (
+        <div className="mb-4 space-y-2 rounded-lg border bg-muted/20 p-4">
+          <p className="text-sm font-medium">Acceso web</p>
+          <p className="text-sm text-muted-foreground">
+            Búsqueda y lectura de páginas públicas con fuentes. Sin inicio de
+            sesión, formularios ni cambios en sitios web.
+          </p>
+        </div>
+      )}
+      {gmailGrants(tools).map((g) => (
         <div
           key={g.connectionId}
           className="space-y-3 rounded-lg border bg-muted/20 p-4"

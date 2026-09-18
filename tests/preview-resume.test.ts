@@ -45,6 +45,7 @@ it("restores the exact existing state without starting or renewing a preview", a
     budgetUsd: 0.25,
     committedMicrousd: 7,
     toolsEnabled: true,
+    gmailEnabled: true,
     turns: [],
   }
   mocks.query

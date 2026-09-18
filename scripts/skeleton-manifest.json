@@ -2,64 +2,64 @@
   "version": 1,
   "routes": {
     "apps/admin/app/(panel)/account/page.tsx": {
-      "source": "878a9e92a8350cfd9af38a7ee08071592f4d72c854dc56a50b52a724d3b7daf8",
-      "skeleton": "931d0f224e8eed8d01c82db8bcea5feb5ba45adff7e37c36ed3813b68dcf8d4a"
+      "source": "9fb6f7b01c7b1386bfe1016b365bb19a4b91da9927ef417744950fc7ab0b90ba",
+      "skeleton": "0eef01173d26c059815f24094701c3e15c62dde4565ee51d1e2b1a0048f9e1bd"
     },
     "apps/admin/app/(panel)/page.tsx": {
-      "source": "878a9e92a8350cfd9af38a7ee08071592f4d72c854dc56a50b52a724d3b7daf8",
-      "skeleton": "0c0ab8b5fe5a68b13a6c177e33d7176f53e1e12734856bf82c127a85a4fa968a"
+      "source": "9fb6f7b01c7b1386bfe1016b365bb19a4b91da9927ef417744950fc7ab0b90ba",
+      "skeleton": "ee62ef9cea5fc8901658a831947c15095a0d6dd1380fbb142abd0d141e02f471"
     },
     "apps/admin/app/(panel)/submissions/[id]/page.tsx": {
-      "source": "878a9e92a8350cfd9af38a7ee08071592f4d72c854dc56a50b52a724d3b7daf8",
-      "skeleton": "2872bffcbb595f792d08fff5b0877468f1f61fd9d17c0ddd3034d9093513b866"
+      "source": "9fb6f7b01c7b1386bfe1016b365bb19a4b91da9927ef417744950fc7ab0b90ba",
+      "skeleton": "09c1df470b7bca5bce30c09f55cc11d7cd96df9dc1172f627d432b4c2e955bee"
     },
     "apps/admin/app/(panel)/submissions/[id]/receipt/page.tsx": {
-      "source": "878a9e92a8350cfd9af38a7ee08071592f4d72c854dc56a50b52a724d3b7daf8",
-      "skeleton": "69bc460f136a83280b58bfaf58b85f6e4ecc9dd2e763474f636e084c85d137b5"
+      "source": "9fb6f7b01c7b1386bfe1016b365bb19a4b91da9927ef417744950fc7ab0b90ba",
+      "skeleton": "90208107d8d284b32db72a13ffade5faec434d35744f7261c767475eff39225d"
     },
     "apps/admin/app/(panel)/submissions/page.tsx": {
-      "source": "878a9e92a8350cfd9af38a7ee08071592f4d72c854dc56a50b52a724d3b7daf8",
-      "skeleton": "888b54166740ba37e8018ce770ab874f991380dac1586edcdd3287b2d1bbaeb6"
+      "source": "9fb6f7b01c7b1386bfe1016b365bb19a4b91da9927ef417744950fc7ab0b90ba",
+      "skeleton": "d87359d610aef8a18c432fa1283dc23583a76906312276e773e4f8ce02e12550"
     },
     "apps/admin/app/login/page.tsx": {
-      "source": "878a9e92a8350cfd9af38a7ee08071592f4d72c854dc56a50b52a724d3b7daf8",
-      "skeleton": "ac0d43632bd2a431ed1968a5faf3f8d3efbb5d001bf0a980887edc2e3a295a11"
+      "source": "9fb6f7b01c7b1386bfe1016b365bb19a4b91da9927ef417744950fc7ab0b90ba",
+      "skeleton": "2f5d617c98f7029d51f62b620b7b49426855799dc2d59575854e92799462b5b6"
     },
     "apps/customer/app/(panel)/account/page.tsx": {
-      "source": "1418a731d7e95a766382a305d1d336c2f5a586c88b1c568acfa4358750643724",
-      "skeleton": "5613b70d9f6712dc820c6922387400f3c35dbe47bf66b8cc95a993fd6777a197"
+      "source": "f393d88bb886a6ac5a8c5bb493dbef8567f926271dda0e14dac7c3b41a3801c0",
+      "skeleton": "4eee939b0c5833e0bc3d2ed167884209b98f52f4e2816ed1e688c4d367236990"
     },
     "apps/customer/app/(panel)/agents/[id]/page.tsx": {
-      "source": "1418a731d7e95a766382a305d1d336c2f5a586c88b1c568acfa4358750643724",
-      "skeleton": "33579d92074ada9a8c4dc4d4877919adc8d808bd0cacf44efb40c7b32520ad26"
+      "source": "f393d88bb886a6ac5a8c5bb493dbef8567f926271dda0e14dac7c3b41a3801c0",
+      "skeleton": "233e89d071619150d1d9d993425edeaf3cd02325d11167238afdc506fcf1ed90"
     },
     "apps/customer/app/(panel)/agents/[id]/preview/page.tsx": {
-      "source": "1418a731d7e95a766382a305d1d336c2f5a586c88b1c568acfa4358750643724",
-      "skeleton": "3e4ae50ad2d74ea26e73e000974a56de922495691b3bc7716b99533a9f4259b0"
+      "source": "f393d88bb886a6ac5a8c5bb493dbef8567f926271dda0e14dac7c3b41a3801c0",
+      "skeleton": "cb908702c47ce92466d5fb6b52382d2d60c915958e2eccd4267950a51b296f21"
     },
     "apps/customer/app/(panel)/agents/new/page.tsx": {
-      "source": "1418a731d7e95a766382a305d1d336c2f5a586c88b1c568acfa4358750643724",
-      "skeleton": "4d0d5e23bece2162ed393e5cae89a4972d008c7d1e810bb0e59acd88eee7a3bd"
+      "source": "f393d88bb886a6ac5a8c5bb493dbef8567f926271dda0e14dac7c3b41a3801c0",
+      "skeleton": "41a161146ccc8736ba52c54717cd807bd7cfe09a44deb854c63952c1496dc550"
     },
     "apps/customer/app/(panel)/agents/page.tsx": {
-      "source": "1418a731d7e95a766382a305d1d336c2f5a586c88b1c568acfa4358750643724",
-      "skeleton": "1a1222e6fcecaf022c7528a8a137d74e4a6d79bdfc9c87a7772efa549d8fd57b"
+      "source": "f393d88bb886a6ac5a8c5bb493dbef8567f926271dda0e14dac7c3b41a3801c0",
+      "skeleton": "147c7b020b6054104fb36669b65e586ee939ff9122e38525a8536fa097ea8ad1"
     },
     "apps/customer/app/(panel)/chats/page.tsx": {
-      "source": "1418a731d7e95a766382a305d1d336c2f5a586c88b1c568acfa4358750643724",
-      "skeleton": "13f2376a7364102d897f21e76c093623db29eb79f534f16cbdf45de1b50724de"
+      "source": "f393d88bb886a6ac5a8c5bb493dbef8567f926271dda0e14dac7c3b41a3801c0",
+      "skeleton": "035dc355a2ee6521fbb3ad9c1e5834840b4b51d51584a9bdaf4996011eb1bca8"
     },
     "apps/customer/app/(panel)/knowledge/page.tsx": {
-      "source": "1418a731d7e95a766382a305d1d336c2f5a586c88b1c568acfa4358750643724",
-      "skeleton": "928fea618422af89396a2f166283f4bd6b1d877148b7f329815e6f802c338c9e"
+      "source": "f393d88bb886a6ac5a8c5bb493dbef8567f926271dda0e14dac7c3b41a3801c0",
+      "skeleton": "a706543925c1ec19dce830e45f012766d89764eb8b335cf3f57c3eef88c607e6"
     },
     "apps/customer/app/(panel)/page.tsx": {
-      "source": "1418a731d7e95a766382a305d1d336c2f5a586c88b1c568acfa4358750643724",
-      "skeleton": "3d44b7a9045727e65f3dfa9938a2d7fb2a4fbc7791bdd8ec07a8f33f75fcefb5"
+      "source": "f393d88bb886a6ac5a8c5bb493dbef8567f926271dda0e14dac7c3b41a3801c0",
+      "skeleton": "50a872a43ccf53d4a799780a2042963e2858f1ee229de3862eb97ccc52ee9eea"
     },
     "apps/customer/app/login/page.tsx": {
-      "source": "1418a731d7e95a766382a305d1d336c2f5a586c88b1c568acfa4358750643724",
-      "skeleton": "3f4daaf24b9498ed38b9a34b8cfa33b54c5c2b28453b6dc6198b9821872cfea9"
+      "source": "f393d88bb886a6ac5a8c5bb493dbef8567f926271dda0e14dac7c3b41a3801c0",
+      "skeleton": "fe924ecdf77f9d4b7330485f7bd0e6385b5b62d11bf0971d3aeba4730c015202"
     }
   }
 }
