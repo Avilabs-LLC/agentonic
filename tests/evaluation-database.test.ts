@@ -115,6 +115,7 @@ beforeEach(async () => {
     "202609160025_staging_runtime_contract",
     "202609160026_staging_content_cleanup",
     "202609160027_staging_agent_listing",
+    "202609180028_reranking",
   ])
     await db.exec(
       readFileSync(
@@ -1883,5 +1884,87 @@ it("bounds staging context to the frozen runtime's nine completed history turns"
   expect(context.history).toHaveLength(9)
   expect((context.history as { query: string }[])[0]!.query).toBe(
     "Synthetic question 2"
+  )
+})
+
+it("uses metered, reauthorized ranking for evaluation cases", async () => {
+  await sql(
+    "UPDATE agentonic.retrieval_provider_budgets SET cap_microusd=100000 WHERE provider='voyage'"
+  )
+  const p = await plan()
+  await register()
+  await authorize(p.evaluationId)
+  const job = (await evalClaim())!
+  await execute(job, "search", { embedding, rerank: true })
+  const candidates = (await execute(job, "rerank-context")) as {
+    passages: { id: string }[]
+  }
+  expect(candidates.passages.length).toBeGreaterThan(0)
+  expect(
+    await execute(job, "reserve", {
+      id: id(870),
+      provider: "voyage",
+      model: "rerank-2.5-lite",
+      microusd: 100,
+    })
+  ).toEqual({ ok: true })
+  await expect(
+    execute(job, "select-matches", {
+      ids: candidates.passages.map((p) => p.id),
+    })
+  ).rejects.toMatchObject({ code: "42501" })
+  await execute(job, "settle", { id: id(870), tokens: 100, microusd: 2 })
+  await expect(
+    execute(job, "select-matches", { ids: [id(999)] })
+  ).rejects.toMatchObject({ code: "42501" })
+  await execute(job, "select-matches", {
+    ids: candidates.passages.map((p) => p.id),
+  })
+  expect((await execute(job, "context")).passages).toEqual(candidates.passages)
+})
+
+it("uses the same candidate selection and metering contract for deployed chats", async () => {
+  await sql(
+    "UPDATE agentonic.retrieval_provider_budgets SET cap_microusd=100000 WHERE provider='voyage'"
+  )
+  const p = await approvedStaging()
+  await readyStaging(p)
+  await actor()
+  const conversation = await chat("start", {
+    deploymentId: p.deploymentId,
+    title: "Synthetic ranking",
+  })
+  await chat("turn", {
+    conversationId: conversation.id,
+    query: "Warranty?",
+    requestId: id(871),
+  })
+  const job = (await stagingWork(p.deploymentId, "claim")) as unknown as Job
+  await stagingWork(p.deploymentId, "search", job, { embedding, rerank: true })
+  const candidates = (await stagingWork(
+    p.deploymentId,
+    "rerank-context",
+    job
+  )) as { passages: { id: string }[] }
+  expect(candidates.passages.length).toBeGreaterThan(0)
+  await stagingWork(p.deploymentId, "reserve", job, {
+    id: id(872),
+    provider: "voyage",
+    model: "rerank-2.5-lite",
+    microusd: 100,
+  })
+  await stagingWork(p.deploymentId, "settle", job, {
+    id: id(872),
+    tokens: 100,
+    microusd: 2,
+  })
+  await expect(
+    stagingWork(p.deploymentId, "select-matches", job, { ids: [id(999)] })
+  ).rejects.toMatchObject({ code: "42501" })
+  await stagingWork(p.deploymentId, "select-matches", job, {
+    ids: candidates.passages.map((p) => p.id),
+  })
+  expect((await stagingWork(p.deploymentId, "context", job)).passages).toEqual(
+    candidates.passages
   )
 })

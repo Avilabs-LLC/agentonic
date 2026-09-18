@@ -1,3 +1,4 @@
+import { rerankJob } from "./reranking"
 import { runPreview, verifyRuntime } from "./runtime"
 import { fileURLToPath } from "node:url"
 import { answer } from "./answer"
@@ -19,6 +20,7 @@ export type Configuration = {
   supabaseUrl: string
   storageKey: string
   voyageKey: string
+  rerankEnabled?: boolean
   runtimeRoot?: string
   openaiKey?: string
 }
@@ -66,7 +68,10 @@ export async function embed(
   } catch {
     throw new Error("provider_unavailable")
   }
-  if (!response.ok) throw new Error("provider_unavailable")
+  if (!response.ok)
+    throw new Error("provider_unavailable", {
+      cause: { status: response.status },
+    })
   const body = (await response.json()) as {
     data?: { index: number; embedding: number[] }[]
     usage?: { total_tokens: number }
@@ -173,7 +178,18 @@ export async function processJob(
         config.voyageKey,
         signal
       )
-      await execute("search", job, { embedding: vectors[0] })
+      await execute("search", job, {
+        embedding: vectors[0],
+        rerank: config.rerankEnabled === true,
+      })
+      if (config.rerankEnabled)
+        await rerankJob(
+          String(data.retrievalQuery ?? data.query),
+          job,
+          execute,
+          config.voyageKey,
+          signal
+        )
     }
     if (data.preview)
       await runPreview(

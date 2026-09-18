@@ -64,6 +64,7 @@ const config = {
   supabaseUrl: "",
   storageKey: "",
   voyageKey: env.VOYAGE_API_KEY ?? "",
+  rerankEnabled: env.AGENTONIC_RERANK_ENABLED === "true",
   openaiKey: env.OPENAI_API_KEY ?? "",
   runtimeRoot: env.AGENTONIC_RUNTIME_ROOT,
 }

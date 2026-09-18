@@ -182,3 +182,56 @@ it("delivers all extracted pages when the PDF result exceeds the IPC buffer", as
   expect(Buffer.byteLength(JSON.stringify(pages))).toBeGreaterThan(128_000)
   expect(pages.every((page) => page.text.includes("three years"))).toBe(true)
 }, 20000)
+
+it("runs opt-in candidate search and reranking before publishing retrieval", async () => {
+  const passages = [1, 2].map((n) => ({
+    id: `10000000-0000-4000-8000-${String(n + 10).padStart(12, "0")}`,
+    text: `Synthetic evidence ${n}`,
+  }))
+  execute.mockImplementation(async (operation) =>
+    operation === "read"
+      ? { query: "Evidence?", generateAnswer: false }
+      : operation === "rerank-context"
+        ? { passages }
+        : { ok: true }
+  )
+  const vector = Array.from({ length: 1024 }, (_, i) => (i === 0 ? 1 : 0))
+  const fetch = vi
+    .fn()
+    .mockResolvedValueOnce(
+      Response.json({
+        usage: { total_tokens: 5 },
+        data: [{ index: 0, embedding: vector }],
+      })
+    )
+    .mockResolvedValueOnce(
+      Response.json({
+        usage: { total_tokens: 20 },
+        data: [
+          { index: 1, relevance_score: 0.9 },
+          { index: 0, relevance_score: 0.1 },
+        ],
+      })
+    )
+  vi.stubGlobal("fetch", fetch)
+  await processJob(
+    { ...job, kind: "retrieve" },
+    execute,
+    {
+      supabaseUrl: "",
+      storageKey: "",
+      voyageKey: "fixture",
+      rerankEnabled: true,
+    },
+    signal
+  )
+  expect(execute.mock.calls.find((c) => c[0] === "search")?.[2]).toMatchObject({
+    rerank: true,
+  })
+  expect(execute.mock.calls.at(-1)).toEqual([
+    "select-matches",
+    { ...job, kind: "retrieve" },
+    { ids: [passages[1]!.id, passages[0]!.id] },
+  ])
+  expect(fetch).toHaveBeenCalledTimes(2)
+})
