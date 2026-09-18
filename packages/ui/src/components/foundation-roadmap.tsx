@@ -14,7 +14,6 @@ import {
   ItemActions,
 } from "@workspace/ui/components/item"
 import Link from "next/link"
-import { Badge } from "@workspace/ui/components/badge"
 export function FoundationRoadmap({ customer }: { customer: boolean }) {
   const steps = customer
     ? [
@@ -75,9 +74,9 @@ export function FoundationRoadmap({ customer }: { customer: boolean }) {
                 <ItemDescription>{description}</ItemDescription>
               </ItemContent>
               <ItemActions>
-                <Badge variant={href ? "success" : "slate"}>
+                <span className="text-sm text-muted-foreground">
                   {href ? "Disponible" : "Pronto"}
-                </Badge>
+                </span>
               </ItemActions>
             </Item>
           </div>

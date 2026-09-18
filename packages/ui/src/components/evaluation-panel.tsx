@@ -1,4 +1,6 @@
 "use client"
+import { CardEmptyState } from "@workspace/ui/components/card-empty-state"
+import { ReviewResultStatus } from "@workspace/ui/components/review-result-status"
 import { useEffect, useId, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Controller, useFieldArray, useForm, useWatch } from "react-hook-form"
@@ -23,7 +25,6 @@ import { Field, FieldLabel, FieldError } from "@workspace/ui/components/field"
 import { Input } from "@workspace/ui/components/input"
 import { Textarea } from "@workspace/ui/components/textarea"
 import { Button } from "@workspace/ui/components/button"
-import { Badge } from "@workspace/ui/components/badge"
 import {
   Select,
   SelectTrigger,
@@ -424,9 +425,9 @@ export function EvaluationPanel({
       </CardHeader>
       <CardContent className="space-y-5">
         {!records.length && (
-          <p className="text-sm text-muted-foreground">
-            Todavía no hay una evaluación propuesta.
-          </p>
+          <CardEmptyState title="Sin evaluación propuesta">
+            Los casos y resultados aparecerán cuando se prepare la evaluación.
+          </CardEmptyState>
         )}
         {records.map((record) => (
           <section key={record.id} className="space-y-4 rounded-lg border p-4">
@@ -436,17 +437,9 @@ export function EvaluationPanel({
               </h3>
             )}
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <Badge
-                variant={
-                  record.status === "passed"
-                    ? "success"
-                    : record.status === "failed" || record.status === "error"
-                      ? "error"
-                      : "sky"
-                }
-              >
+              <p className="text-sm font-medium">
                 {evaluationStatus[record.status]}
-              </Badge>
+              </p>
               <span className="text-xs text-muted-foreground">
                 {record.environment === "azure_staging"
                   ? "Azure · Staging"
@@ -497,15 +490,16 @@ export function EvaluationPanel({
                       </p>
                       {result && (
                         <>
-                          <Badge
-                            variant={
-                              result.outcome === "passed" ? "success" : "error"
+                          <ReviewResultStatus
+                            outcome={
+                              result.outcome === "passed" ? "passed" : "failed"
                             }
-                          >
-                            {result.outcome === "passed"
-                              ? "Superado"
-                              : "No superado"}
-                          </Badge>
+                            label={
+                              result.outcome === "passed"
+                                ? "Superado"
+                                : "No superado"
+                            }
+                          />
                           <p className="whitespace-pre-wrap">{result.answer}</p>
                           {result.sources.length > 0 && (
                             <details>

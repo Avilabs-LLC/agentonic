@@ -1,3 +1,4 @@
+import { CardEmptyState } from "@workspace/ui/components/card-empty-state"
 import type { ReactNode } from "react"
 import type { FormResult, ReviewView } from "@agentonic/contracts/authoring"
 import {
@@ -8,7 +9,6 @@ import {
 } from "lucide-react"
 import { AgentSettingsCard } from "@workspace/ui/components/agent-settings-card"
 import { RecordHeader, BackRow } from "@workspace/ui/components/record-header"
-import { Badge } from "@workspace/ui/components/badge"
 import { MutationForm } from "@workspace/ui/components/mutation-form"
 import { Field, FieldLabel } from "@workspace/ui/components/field"
 import { Textarea } from "@workspace/ui/components/textarea"
@@ -53,9 +53,9 @@ export function SubmissionReviewLayout({
         title={review.agentName}
         description={`Propuesta ${review.number} · Revisa la versión enviada por el cliente.`}
         actions={
-          <Badge variant={testsPassed ? "success" : "slate"}>
+          <span className="text-sm text-muted-foreground">
             {testsPassed ? "Pruebas superadas" : "Sin evaluación superada"}
-          </Badge>
+          </span>
         }
       />
       <SubmissionVersionContent
@@ -70,7 +70,9 @@ export function SubmissionReviewLayout({
         description="Revisa los resultados de la evaluación antes de registrar una decisión. Explica al cliente qué debe ajustar o por qué su propuesta necesita atención."
         action={
           needsAttention ? (
-            <Badge variant="warning">Requiere atención</Badge>
+            <span className="text-sm text-muted-foreground">
+              Requiere atención
+            </span>
           ) : undefined
         }
       >
@@ -167,10 +169,10 @@ export function SubmissionVersionContent({
         icon={<ListChecksIcon />}
         description="Instrucciones específicas que complementan el comportamiento del agente."
         action={
-          <Badge variant="slate">
+          <span className="text-sm text-muted-foreground">
             {content.skills.length}{" "}
             {content.skills.length === 1 ? "habilidad" : "habilidades"}
-          </Badge>
+          </span>
         }
       >
         <div className="divide-y border-t">
@@ -187,9 +189,9 @@ export function SubmissionVersionContent({
               </div>
             ))
           ) : (
-            <p className="pt-5 text-sm text-muted-foreground">
-              Sin habilidades adicionales.
-            </p>
+            <CardEmptyState title="Sin habilidades adicionales">
+              Esta versión utiliza las instrucciones del sistema.
+            </CardEmptyState>
           )}
         </div>
       </AgentSettingsCard>
@@ -198,10 +200,10 @@ export function SubmissionVersionContent({
         icon={<LibraryBigIcon />}
         description="Colecciones que el cliente propone como fuente de información."
         action={
-          <Badge variant="slate">
+          <span className="text-sm text-muted-foreground">
             {collectionCount}{" "}
             {collectionCount === 1 ? "colección" : "colecciones"}
-          </Badge>
+          </span>
         }
         footer="La selección de colecciones no activa el acceso del agente."
       >
@@ -212,11 +214,17 @@ export function SubmissionVersionContent({
             ))}
           </ul>
         ) : (
-          <p className="text-sm leading-relaxed text-muted-foreground">
+          <CardEmptyState
+            title={
+              collectionCount
+                ? "Contenido restringido"
+                : "Sin conocimiento solicitado"
+            }
+          >
             {collectionCount
               ? "Esta revisión permite consultar los metadatos de las colecciones, sin acceso al contenido de sus documentos."
               : "El cliente no solicitó colecciones de conocimiento para esta versión."}
-          </p>
+          </CardEmptyState>
         )}
       </AgentSettingsCard>
     </>
