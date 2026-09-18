@@ -9,6 +9,9 @@ const config: NextConfig = {
   serverExternalPackages: ["@prisma/client", "@prisma/adapter-pg", "pg"],
   poweredByHeader: false,
   // Server action arguments can contain passwords and private customer content.
-  logging: { serverFunctions: false },
+  logging: {
+    serverFunctions: false,
+    incomingRequests: { ignore: [/\/api\/connections\/google\/callback/] },
+  },
 }
 export default config

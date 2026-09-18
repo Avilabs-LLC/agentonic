@@ -1115,3 +1115,55 @@ model ApprovalRenewalRequest {
  @@map("approval_renewal_requests")
  @@schema("agentonic")
 }
+
+// Gmail v1 scalar projection. Tenant-inclusive foreign keys, RLS, encryption
+// boundaries and state transitions are enforced by migration 29 RPCs.
+model GmailConnection {
+  id String @id @db.Uuid
+  workspaceId String @map("workspace_id") @db.Uuid
+  agentId String @map("agent_id") @db.Uuid
+  ownerMemberId String @map("owner_member_id") @db.Uuid
+  account String
+  status String @default("connected")
+  credentialCiphertext String? @map("credential_ciphertext")
+  operations Json @default("[]")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  @@unique([workspaceId,agentId,id])
+  @@map("gmail_connections")
+  @@schema("agentonic")
+}
+model GmailOauthState {
+  stateHash String @id @map("state_hash")
+  workspaceId String @map("workspace_id") @db.Uuid
+  agentId String @map("agent_id") @db.Uuid
+  ownerMemberId String @map("owner_member_id") @db.Uuid
+  connectionId String @unique @map("connection_id") @db.Uuid
+  verifierCiphertext String @map("verifier_ciphertext")
+  expiresAt DateTime @default(dbgenerated("(now() + '00:10:00'::interval)")) @map("expires_at") @db.Timestamptz
+  consumedAt DateTime? @map("consumed_at") @db.Timestamptz
+  finishedAt DateTime? @map("finished_at") @db.Timestamptz
+  @@map("gmail_oauth_states")
+  @@schema("agentonic")
+}
+model GmailInvocation {
+  executionContext String @default("staging") @map("execution_context")
+  id String @id @db.Uuid
+  workspaceId String @map("workspace_id") @db.Uuid
+  agentId String @map("agent_id") @db.Uuid
+  connectionId String @map("connection_id") @db.Uuid
+  ownerMemberId String @map("owner_member_id") @db.Uuid
+  turnId String @map("turn_id") @db.Uuid
+  conversationId String @map("conversation_id") @db.Uuid
+  operation String
+  argumentsCiphertext String? @map("arguments_ciphertext")
+  argumentsSha256 String @map("arguments_sha256")
+  status String @default("pending")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  expiresAt DateTime @default(dbgenerated("(now() + '00:10:00'::interval)")) @map("expires_at") @db.Timestamptz
+  approvedAt DateTime? @map("approved_at") @db.Timestamptz
+  finishedAt DateTime? @map("finished_at") @db.Timestamptz
+  result Json?
+  @@index([conversationId,createdAt],map:"gmail_invocations_conversation")
+  @@map("gmail_invocations")
+  @@schema("agentonic")
+}

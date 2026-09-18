@@ -9,7 +9,13 @@ export const previewCommand = z.discriminatedUnion("operation", [
   z
     .object({
       operation: z.literal("start"),
-      payload: z.object({ agentId: z.uuid(), candidateId: z.uuid() }).strict(),
+      payload: z
+        .object({
+          agentId: z.uuid(),
+          candidateId: z.uuid(),
+          enableTools: z.boolean().optional(),
+        })
+        .strict(),
     })
     .strict(),
   z
@@ -42,6 +48,7 @@ export const previewState = z.object({
   id: z.uuid(),
   expiresAt: z.string(),
   budgetUsd: z.number(),
+  toolsEnabled: z.boolean().default(false),
   committedMicrousd: z.number(),
   turns: z
     .array(
