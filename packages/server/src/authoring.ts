@@ -14,7 +14,7 @@ import {
 } from "@agentonic/contracts/authoring"
 import { uuid, type AppKind } from "@agentonic/contracts/identity"
 import { withIdentity } from "@agentonic/database/client"
-import { requireVerifiedUser } from "./auth"
+import { requireIdentity, requireVerifiedUser } from "./auth"
 import { defaultFreezeCode } from "@agentonic/contracts/workflow"
 import { latestCreationTemplate } from "./catalog"
 export async function runAuthoringCommand(app: AppKind, input: unknown) {
@@ -229,4 +229,45 @@ export async function loadAgentListing(workspaceId: string) {
     },
     actor.email
   )
+}
+
+export async function loadCustomerAgentListing(workspace?: string | string[]) {
+  const identity = await requireIdentity("customer")
+  const selectedWorkspaceIds = [
+    ...new Set(
+      workspace === undefined
+        ? []
+        : Array.isArray(workspace)
+          ? workspace
+          : [workspace]
+    ),
+  ]
+  if (
+    !identity.hasAccess ||
+    selectedWorkspaceIds.some(
+      (id) => !identity.workspaces.some((item) => item.id === id)
+    )
+  )
+    return null
+  const selectedWorkspaces = identity.workspaces.filter(
+    (item) =>
+      !selectedWorkspaceIds.length || selectedWorkspaceIds.includes(item.id)
+  )
+  // Every read retains its own verified transaction-local tenant context.
+  // A failed read rejects the complete listing instead of hiding missing rows.
+  const listings = await Promise.all(
+    selectedWorkspaces.map(async (item) =>
+      (await loadAgentListing(item.id)).map((agent) => ({
+        ...agent,
+        workspaceId: item.id,
+        workspaceName: item.name,
+      }))
+    )
+  )
+  return {
+    agents: listings.flat(),
+    workspaces: identity.workspaces,
+    selectedWorkspaces,
+    selectedWorkspaceIds,
+  }
 }
