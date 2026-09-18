@@ -1,3 +1,4 @@
+import { verifyStagingLive } from "./verify-staging-live.mjs"
 import assert from "node:assert/strict"
 import { randomUUID, createHash } from "node:crypto"
 import { writeFileSync, existsSync, readFileSync, unlinkSync } from "node:fs"
@@ -11,7 +12,13 @@ import {
 } from "./local-config.mjs"
 // Explicit synthetic nonproduction verification; never uses customer acceptance cases.
 // Historical decisions/usage remain immutable in a retired synthetic workspace.
-const marker = join(root, ".local/evaluation/review-flow-check.json")
+const stagingCheck = process.argv.includes("--staging")
+const marker = join(
+  root,
+  stagingCheck
+    ? ".local/staging/live-check.json"
+    : ".local/evaluation/review-flow-check.json"
+)
 let db,
   customer,
   staffClient,
@@ -21,7 +28,8 @@ try {
   assert.ok(
     process.argv.includes("--live") ||
       process.argv.includes("--cleanup") ||
-      process.argv.includes("--resume")
+      process.argv.includes("--resume") ||
+      process.argv.includes("--resume-staging")
   )
   const { e, ref } = bootstrapConfig()
   assert.equal(ref, "jkgdxkacariasunhentd")
@@ -103,6 +111,19 @@ try {
       [fixture.workspaceId]
     )
     assert.equal(owned.rowCount, 1)
+    if (stagingCheck) {
+      const deployments = await db.query(
+        "SELECT id FROM agentonic.deployments WHERE workspace_id=$1 AND status IN ('awaiting_activation','queued','preparing','running')",
+        [fixture.workspaceId]
+      )
+      for (const deployment of deployments.rows)
+        await cmd(
+          "stop",
+          { deploymentId: deployment.id },
+          "deployment_command",
+          true
+        )
+    }
     if (
       fixture.objectId &&
       (
@@ -237,6 +258,10 @@ try {
     assert.ok(decision?.valid)
     assert.equal(decision.actor_policy_version, "readonly-review-v1")
     assert.equal(decision.assessment_snapshot.humanReviewed, false)
+    if (stagingCheck) {
+      stage = "staging_activation"
+      await verifyStagingLive({ db, customer, owner, fixture, cmd, waitFor })
+    }
     await cmd(
       "revoke",
       {
@@ -293,6 +318,30 @@ try {
     await cleanup()
     console.log(
       "Synthetic workspace retired and document purged; immutable history and usage preserved."
+    )
+  } else if (process.argv.includes("--resume-staging")) {
+    assert.ok(stagingCheck)
+    fixture = JSON.parse(readFileSync(marker))
+    const existing = await db.query(
+      "SELECT id FROM agentonic.deployments WHERE workspace_id=$1 AND desired_state='running'",
+      [fixture.workspaceId]
+    )
+    for (const d of existing.rows)
+      await cmd("stop", { deploymentId: d.id }, "deployment_command", true)
+    stage = "staging_activation"
+    await verifyStagingLive({ db, customer, owner, fixture, cmd, waitFor })
+    await cmd(
+      "revoke",
+      {
+        submissionId: fixture.submissionId,
+        feedback: "Synthetic staging verification completed.",
+      },
+      "evaluation_command",
+      true
+    )
+    await cleanup()
+    console.log(
+      "Staging checks passed; synthetic workspace retired and document purged; usage retained."
     )
   } else if (process.argv.includes("--resume")) {
     fixture = JSON.parse(readFileSync(marker))
@@ -424,7 +473,7 @@ try {
       "prepare",
       {
         submissionId: submission.id,
-        budgetUsd: 0.5,
+        budgetUsd: stagingCheck ? 0.25 : 0.5,
         consent: true,
         requestId: randomUUID(),
       },
