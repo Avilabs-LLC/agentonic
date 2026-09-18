@@ -13,7 +13,7 @@ export type NavigationItem = {
   description: string
   group: string
   enabled: boolean
-  icon: "home" | "agents" | "review" | "knowledge" | "connections" | "activity"
+  icon: "home" | "agents" | "review" | "knowledge" | "connections" | "activity" | "chat"
 }
 export const retentionPolicy = z
   .object({

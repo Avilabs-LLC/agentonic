@@ -1,3 +1,6 @@
+import { loadLifecycle } from "@agentonic/server/lifecycle"
+import { AgentLifecycle } from "@workspace/ui/components/agent-lifecycle"
+import { lifecycleAction } from "../../actions"
 import { notFound } from "next/navigation"
 import { requireIdentity } from "@agentonic/server/auth"
 import { loadReviewReceipt } from "@agentonic/server/review-receipt"
@@ -14,12 +17,25 @@ export default async function Page({
   const { id } = await params
   const { workspace } = await searchParams
   if (!workspace) notFound()
-  const receipt = await loadReviewReceipt(workspace, id)
-  if (!receipt) notFound()
+  const [receipt, lifecycle] = await Promise.all([
+    loadReviewReceipt(workspace, id),
+    loadLifecycle("admin", workspace, id),
+  ])
+  if (!receipt || !lifecycle) notFound()
   return (
-    <SubmissionReceipt
-      receipt={receipt}
-      backHref={`/submissions?workspace=${workspace}&state=approved`}
-    />
+    <div className="space-y-6">
+      <SubmissionReceipt
+        receipt={receipt}
+        backHref={`/submissions?workspace=${workspace}&state=approved`}
+      />
+      <div className="mx-auto w-full max-w-4xl">
+        <AgentLifecycle
+          state={lifecycle}
+          workspaceId={workspace}
+          submissionId={id}
+          action={lifecycleAction.bind(null, workspace)}
+        />
+      </div>
+    </div>
   )
 }
