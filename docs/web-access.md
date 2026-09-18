@@ -1,5 +1,7 @@
 # Public web access — Browserbase
 
+**Release:** Agentonic 0.11.0 / runtime 0.3.0. The dated local checkpoints below are historical; see the VM release checkpoint for current installation details.
+
 ## Product decision
 
 Owner-selected scope, 18 September 2026: search and read public websites. This is a platform-funded capability in **Configuración → Herramientas → Acceso web**, independent of **Conexiones**. Customers do not create Browserbase accounts, supply API keys or complete OAuth. Gmail remains a personal connection with separate operations.
@@ -75,3 +77,25 @@ Implementation follows the [OpenAI function-calling loop](https://developers.ope
 - The full platform suite passed 386 tests; the final preparation-selection change additionally passed all 31 workflow/preparation tests. Runtime tests (9), typecheck, lint, Prisma generation/validation and all 15 skeleton baselines passed. Deterministic tests additionally cover the eight-call ceiling, old three-call releases, budget stops, lost authorization, duplicate failures and the deadline's final-answer phase.
 - Synthetic fixtures were removed and their usage/reservations preserved. The final five-case suite recorded 114,335 micro-USD of conservative combined model/tool estimates, including simulated Browserbase calls; this is not a Browserbase invoice. No VM or Corby rollout is included.
 - A separate real-provider check then passed through the new frozen runtime: four model calls, three Browserbase calls, verified public documentation answer and source links (21,777 micro-USD internal estimate). Its synthetic agent was removed; usage was retained. The local preview worker was restarted with the new broker code.
+
+## VM release checkpoint — 18 September 2026
+
+Branches: `codex/public-web-research` (platform 0.11.0) and `codex/web-research-runtime` (runtime 0.3.0). Runtime source commit: `f272ddaac23612132bbe0bb0f03ba8e55183a4bc`; catalog registration: `0.3.0-preview-f272ddaa`.
+
+| Installed artifact | SHA-256 |
+| --- | --- |
+| Runtime manifest | `5e776a45e4dd43d807f33fe6b05e058a373b21ecf6ad7b2ab8c68acdc2bb6129` |
+| Staging broker/controller | `f00cf702e6e3be82f5d876ef8a2665515b462bc1e32996113bc4c39e72497fc2` |
+| Evaluation worker | `774a4934d073575c926e7ab611becc8140e9b0b444bbd238a251b36f5461c049` |
+
+The frozen runtime and fixed service releases are installed on `vm-agents-01`; their hashes match registration. `agentonic-evaluator-staging.service` and `agentonic-deployer-staging.service` are active. The broker has the protected Browserbase key; the evaluator does not. Both protected environment files are root-owned mode 0600. The matching local controller installation is also updated, preserving the local preview worker. Existing service configuration was backed up before replacement; no customer deployment was active during the update and Corby services were not modified.
+
+VM host verification was refreshed at **2026-09-18 22:32:38 UTC** and evaluator verification at **2026-09-18 22:31:37 UTC**. Under the existing seven-day rule, reverify before **2026-09-25 22:31:37 UTC** to keep both usable. This is still private staging infrastructure; customer/admin web hosting and production activation are separate platform milestones.
+
+The release pipeline now derives catalog versions from the runtime package version. Reusing identical content-addressed service bundles preserves their original build provenance even after documentation-only Git commits; source hashes still must match. Web-enabled agents' next explicit preparation uses the newest available research release, while opening an existing prepared version keeps its exact original runtime.
+
+Acceptance: `check-review-flow-live.mjs --live --staging --web --rerank` completed six Azure evaluation checks, all passed, with six settled reranking operations. The existing policy correctly withheld automatic approval because the fixture requested tools. The harness was corrected to exercise the existing scoped staff approval gate for this synthetic workspace only; production approval policy was not changed. Staging checks resumed with `--resume-staging --staging --web --rerank`.
+
+Both local and Azure staging deployments then passed activation, cited knowledge chat, real Browserbase search/read with source links and settled metering, stop/access denial and content cleanup. The VM additionally passed a systemd restart with conversation recovery. Internal estimated usage retained for the deployment tests: local 15,953 micro-USD; Azure staging 15,942 micro-USD. Synthetic deployments were stopped, the source document purged, the workspace retired and approval revoked; immutable review and usage history remain. No customer agent was automatically activated. The ignored `.local/staging/live-report.json` records the completed checks.
+
+Release verification: 387 platform tests and 9 runtime tests passed, along with Prisma generation/validation, typecheck, lint, version consistency, 15 skeleton baselines and changed-file secret scans. Final preparation-selection checks passed all 31 workflow/preparation tests. The previously documented five-case live-model research benchmark remains the behavioral evidence; this deployment adds the real VM execution proof.
