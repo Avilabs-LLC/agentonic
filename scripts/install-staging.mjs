@@ -68,6 +68,8 @@ const broker = {
   AGENTONIC_BROKER_SHA256: packaged.brokerHash,
   OPENAI_API_KEY: keys.OPENAI_API_KEY,
   VOYAGE_API_KEY: keys.VOYAGE_API_KEY,
+  AGENTONIC_RERANK_ENABLED:
+    keys.AGENTONIC_RERANK_ENABLED === "true" ? "true" : "false",
 }
 const manager = {
   DATABASE_URL: credentials[`AGENTONIC_DEPLOYER_${suffix}_DATABASE_URL`],

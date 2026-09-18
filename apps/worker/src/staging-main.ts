@@ -335,6 +335,7 @@ async function serviceLoop() {
           storageKey: "",
           runtimeRoot,
           voyageKey: env.VOYAGE_API_KEY ?? "",
+          rerankEnabled: env.AGENTONIC_RERANK_ENABLED === "true",
           openaiKey: env.OPENAI_API_KEY ?? "",
         },
         controller.signal

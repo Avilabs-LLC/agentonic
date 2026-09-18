@@ -4,6 +4,7 @@ import { writeFileSync } from "node:fs"
 import { join } from "node:path"
 import { execFileSync } from "node:child_process"
 import { root } from "./local-config.mjs"
+import { verifyRerankUsage } from "./rerank-live-proof.mjs"
 // Called only by the explicitly live synthetic review smoke check after real approval.
 export async function verifyStagingLive({
   db,
@@ -12,6 +13,7 @@ export async function verifyStagingLive({
   fixture,
   cmd,
   waitFor,
+  rerankCheck = false,
 }) {
   const reports = []
   async function chat(operation, payload) {
@@ -85,6 +87,9 @@ export async function verifyStagingLive({
     })
     assert.match(answered.turns.at(-1).answer, /three|3|tres/i)
     assert.ok(answered.turns.at(-1).citations.length > 0)
+    const reranking = rerankCheck
+      ? await verifyRerankUsage(db, answered.turns.at(-1).id)
+      : undefined
     if (environment === "azure_staging") {
       // Restart the isolated synthetic service only. Reconcile and retain the conversation.
       const restartedAfter = Date.now()
@@ -138,12 +143,14 @@ export async function verifyStagingLive({
       environment,
       deploymentId: deployment.id,
       committedMicrousd: consumption,
+      ...(reranking ? { reranking } : {}),
       checks: [
         "verified activation",
         "cited private chat",
         "stop denies access",
         "content scrubbed",
         "usage retained",
+        ...(reranking ? ["rerank provider usage settled"] : []),
         ...(environment === "azure_staging"
           ? ["systemd restart and conversation recovery"]
           : []),

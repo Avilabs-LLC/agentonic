@@ -1,4 +1,5 @@
 import { verifyStagingLive } from "./verify-staging-live.mjs"
+import { rerankSmokeDocument, verifyRerankUsage } from "./rerank-live-proof.mjs"
 import assert from "node:assert/strict"
 import { randomUUID, createHash } from "node:crypto"
 import { writeFileSync, existsSync, readFileSync, unlinkSync } from "node:fs"
@@ -13,6 +14,7 @@ import {
 // Explicit synthetic nonproduction verification; never uses customer acceptance cases.
 // Historical decisions/usage remain immutable in a retired synthetic workspace.
 const stagingCheck = process.argv.includes("--staging")
+const rerankCheck = process.argv.includes("--rerank")
 const marker = join(
   root,
   stagingCheck
@@ -35,6 +37,7 @@ try {
   assert.equal(ref, "jkgdxkacariasunhentd")
   const env = loadLocal(".env.database.local"),
     worker = loadLocal("apps/worker/.env.local")
+  if (rerankCheck) assert.equal(worker.AGENTONIC_RERANK_ENABLED, "true")
   db = await connect(
     env.AGENTONIC_MIGRATION_DATABASE_URL,
     env.AGENTONIC_DATABASE_CA_FILE
@@ -236,6 +239,13 @@ try {
       })
     )
     assert.equal(finished.status, "passed")
+    const reranking = rerankCheck
+      ? await verifyRerankUsage(db, plan.id)
+      : undefined
+    if (reranking)
+      console.log(
+        JSON.stringify({ event: "evaluation_rerank_verified", ...reranking })
+      )
     const results = (
       await db.query(
         "SELECT outcome,assessment FROM agentonic.evaluation_results WHERE evaluation_run_id=$1",
@@ -260,7 +270,15 @@ try {
     assert.equal(decision.assessment_snapshot.humanReviewed, false)
     if (stagingCheck) {
       stage = "staging_activation"
-      await verifyStagingLive({ db, customer, owner, fixture, cmd, waitFor })
+      await verifyStagingLive({
+        db,
+        customer,
+        owner,
+        fixture,
+        cmd,
+        waitFor,
+        rerankCheck,
+      })
     }
     await cmd(
       "revoke",
@@ -290,6 +308,7 @@ try {
           evidenceSha256: finished.evidence_sha256,
           workerId: finished.worker_id,
           committedMicrousd: Number(finished.committed_microusd),
+          ...(reranking ? { reranking } : {}),
           checks: [
             "synthetic ingestion",
             "explicit consent gate",
@@ -329,7 +348,15 @@ try {
     for (const d of existing.rows)
       await cmd("stop", { deploymentId: d.id }, "deployment_command", true)
     stage = "staging_activation"
-    await verifyStagingLive({ db, customer, owner, fixture, cmd, waitFor })
+    await verifyStagingLive({
+      db,
+      customer,
+      owner,
+      fixture,
+      cmd,
+      waitFor,
+      rerankCheck,
+    })
     await cmd(
       "revoke",
       {
@@ -393,7 +420,9 @@ try {
     )
     fixture.collectionId = collection.id
     const bytes = Buffer.from(
-      "# Synthetic device policy\n\nThe synthetic device warranty lasts three years. Standard delivery takes seven business days.\n"
+      rerankCheck
+        ? rerankSmokeDocument
+        : "# Synthetic device policy\n\nThe synthetic device warranty lasts three years. Standard delivery takes seven business days.\n"
     )
     const reserved = await cmd("upload.reserve", {
       collectionId: collection.id,

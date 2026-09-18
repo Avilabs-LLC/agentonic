@@ -1,0 +1,135 @@
+{
+  "verifiedAt": "2026-09-18T18:10:59.646Z",
+  "environment": "controlled nonproduction: local and azure_staging",
+  "repository": "agentonic",
+  "profile": "hybrid40-rrf60-candidates32-rerank2.5lite-preserve8-v2",
+  "migration": "202609180028_reranking",
+  "rerankEnabled": true,
+  "artifacts": {
+    "evaluatorSha256": "c698a906de8a7c17dbec28b62356f5dfd443a53e15b0d92cd388bba9ed6c5b17",
+    "brokerSha256": "c4e2fec028dce2d9d693d6cf58e5ac80c97dfd63378203de47a1551741538ab0",
+    "runtimeSha256": "0c5a26d51a894c36a017be4ed65f7d97a9c0503a7be2ba03f9cc5c79f27e5718",
+    "runtimeUnchanged": true,
+    "sourceProvenance": "At deployment time, immutable package manifests recorded the base Git commit and individual source hashes from the local working tree. The subsequent v0.9.0 branch release records that implementation without rebuilding the installed artifacts."
+  },
+  "hosts": [
+    {
+      "environment": "azure_staging",
+      "broker_sha256": "c4e2fec028dce2d9d693d6cf58e5ac80c97dfd63378203de47a1551741538ab0",
+      "runtime_sha256": "0c5a26d51a894c36a017be4ed65f7d97a9c0503a7be2ba03f9cc5c79f27e5718",
+      "verified_at": "2026-09-18T18:04:12.972Z",
+      "online": true
+    },
+    {
+      "environment": "local",
+      "broker_sha256": "c4e2fec028dce2d9d693d6cf58e5ac80c97dfd63378203de47a1551741538ab0",
+      "runtime_sha256": "0c5a26d51a894c36a017be4ed65f7d97a9c0503a7be2ba03f9cc5c79f27e5718",
+      "verified_at": "2026-09-18T18:03:57.655Z",
+      "online": true
+    }
+  ],
+  "preview": {
+    "passed": true,
+    "rerankProviderOperationVerified": true,
+    "checks": [
+      "private ingestion",
+      "cited answer",
+      "abstention",
+      "cross-workspace denial",
+      "immediate revocation",
+      "physical database and Storage purge"
+    ]
+  },
+  "evaluation": {
+    "verifiedAt": "2026-09-18T18:10:20.606Z",
+    "environment": "azure_staging",
+    "evaluationId": "c843ae15-b0fb-4477-aad0-9f2ac10fecbe",
+    "evidenceSha256": "4cdfc6debc0bdb75315fef4527c0677467770a5c2888d4bd5f88a74d07b3e8f3",
+    "workerId": "466e87c7-c1de-4a6c-a963-bca3087b1df9",
+    "committedMicrousd": 8679,
+    "reranking": {
+      "model": "rerank-2.5-lite",
+      "operations": 6,
+      "committedMicrousd": 78
+    },
+    "checks": [
+      "synthetic ingestion",
+      "explicit consent gate",
+      "exact Azure runtime",
+      "AI-generated grounded criteria",
+      "persisted customer notes",
+      "semantic grading",
+      "abstention",
+      "automatic policy approval",
+      "immediate revocation"
+    ]
+  },
+  "deployedChat": [
+    {
+      "environment": "local",
+      "deploymentId": "bbb1f641-e91c-4da6-965d-c506dac51f24",
+      "committedMicrousd": 495,
+      "reranking": {
+        "model": "rerank-2.5-lite",
+        "operations": 1,
+        "committedMicrousd": 12
+      },
+      "checks": [
+        "verified activation",
+        "cited private chat",
+        "stop denies access",
+        "content scrubbed",
+        "usage retained",
+        "rerank provider usage settled"
+      ]
+    },
+    {
+      "environment": "azure_staging",
+      "deploymentId": "bea36052-8f36-4690-b3ca-7a0a1ae8c13f",
+      "committedMicrousd": 495,
+      "reranking": {
+        "model": "rerank-2.5-lite",
+        "operations": 1,
+        "committedMicrousd": 12
+      },
+      "checks": [
+        "verified activation",
+        "cited private chat",
+        "stop denies access",
+        "content scrubbed",
+        "usage retained",
+        "rerank provider usage settled",
+        "systemd restart and conversation recovery"
+      ]
+    }
+  ],
+  "syntheticCleanup": {
+    "retired": true,
+    "objects": 0,
+    "active_deployments": 0,
+    "unscrubbed_turns": 0,
+    "unsettled_operations": 0
+  },
+  "reviewAndStagingTotalMicrousd": 11151,
+  "costScope": "Synthetic review workspace only: ingestion, preparation, six-case evaluation and two deployed chats; excludes the separate preview smoke and earlier benchmarks.",
+  "originalDeployment": {
+    "status": "stopped",
+    "reason": "User authorized stopping the active test deployment for replacement",
+    "committedMicrousdPreserved": 4393,
+    "configurationAndReviewHistoryPreserved": true,
+    "privateChatContentScrubbed": true
+  },
+  "checks": {
+    "testsPassed": 329,
+    "typecheck": true,
+    "lint": true,
+    "prismaGenerate": true,
+    "prismaValidate": true,
+    "skeletonRoutes": 15
+  },
+  "limitations": [
+    "Synthetic infrastructure verification does not establish domain quality or capacity for 500 agents.",
+    "The original agent needs a fresh approval and customer operating consent before another activation.",
+    "Knowledge/preview and local staging remain Mac processes; web apps and ingestion were not deployed to the VM."
+  ]
+}

@@ -1,6 +1,6 @@
 {
   "name": "agentonic",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@11.21.0",
@@ -40,7 +40,8 @@
     "evaluation:check-live": "node scripts/check-evaluation-live.mjs --live",
     "setup:staging": "node scripts/setup-staging.mjs",
     "package:staging": "node scripts/package-staging.mjs",
-    "dev:staging": "node scripts/start-staging.mjs"
+    "dev:staging": "node scripts/start-staging.mjs",
+    "rag:benchmark": "tsx scripts/rag-benchmark/run.ts"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.8",

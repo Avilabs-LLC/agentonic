@@ -2,12 +2,14 @@ import assert from "node:assert/strict"
 import { setTimeout } from "node:timers"
 import { createHash, randomUUID } from "node:crypto"
 import { bootstrapConfig, loadLocal, connect, fail } from "./local-config.mjs"
+import { rerankSmokeDocument, verifyRerankUsage } from "./rerank-live-proof.mjs"
 // Explicit, paid, nonproduction smoke test. Uses only a temporary synthetic document.
 // Run a separately configured worker first. Provider caps are enforced in the database.
 let admin,
   customer,
   fixture,
   stage = "configuration"
+const rerankCheck = process.argv.includes("--rerank")
 try {
   if (!process.argv.includes("--live"))
     throw new Error("Explicit --live required")
@@ -17,6 +19,7 @@ try {
   assert.ok(
     worker.VOYAGE_API_KEY && worker.SUPABASE_SECRET_KEY && worker.OPENAI_API_KEY
   )
+  if (rerankCheck) assert.equal(worker.AGENTONIC_RERANK_ENABLED, "true")
   admin = await connect(
     env.AGENTONIC_MIGRATION_DATABASE_URL,
     env.AGENTONIC_DATABASE_CA_FILE
@@ -88,7 +91,9 @@ try {
   assert.equal(collection.ok, true)
   fixture = { collectionId: collection.id, command }
   const bytes = Buffer.from(
-    "# Synthetic device policy\n\nThe synthetic device warranty lasts three years. Standard delivery takes seven business days. Refund requests are accepted within thirty days of purchase.\n"
+    rerankCheck
+      ? rerankSmokeDocument
+      : "# Synthetic device policy\n\nThe synthetic device warranty lasts three years. Standard delivery takes seven business days. Refund requests are accepted within thirty days of purchase.\n"
   )
   const reserved = await command("upload.reserve", {
     collectionId: collection.id,
@@ -156,10 +161,19 @@ try {
   assert.equal(answered.result.answer.insufficientEvidence, false)
   assert.ok(answered.result.answer.citations.length > 0)
   assert.match(answered.result.answer.text, /\b(3|tres|three)\b/i)
+  if (rerankCheck)
+    console.log(
+      JSON.stringify({
+        event: "preview_rerank_verified",
+        ...(await verifyRerankUsage(admin, answered.id)),
+      })
+    )
   console.log(
     "Live hybrid retrieval and OpenAI answer: expected fact and valid citations passed."
   )
   stage = "abstention"
+  // Respect the small development embedding quota between independent questions.
+  if (rerankCheck) await new Promise((resolve) => setTimeout(resolve, 31000))
   const unknown = await ask(
     "¿Cuánto cuesta extender la garantía por un año adicional?"
   )
