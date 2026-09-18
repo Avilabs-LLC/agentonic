@@ -41,6 +41,7 @@ const config = {
   rerankEnabled: env.AGENTONIC_RERANK_ENABLED === "true",
   openaiKey: env.OPENAI_API_KEY ?? "",
   runtimeRoot: env.AGENTONIC_RUNTIME_ROOT,
+  browserbaseKey: env.BROWSERBASE_API_KEY,
   google:
     env.GOOGLE_CLIENT_ID &&
     env.GOOGLE_CLIENT_SECRET &&
@@ -57,9 +58,11 @@ const config = {
 }
 const execute: Execute = async (operation, job, payload = {}) => {
   const result = await pool.query(
-    operation.startsWith("gmail-")
-      ? "SELECT agentonic.gmail_preview_worker($1,$2::uuid,$3::uuid,$4::jsonb) result"
-      : "SELECT agentonic.rag_worker($1,$2::uuid,$3::uuid,$4::jsonb) result",
+    operation.startsWith("web-")
+      ? "SELECT agentonic.web_preview_worker($1,$2::uuid,$3::uuid,$4::jsonb) result"
+      : operation.startsWith("gmail-")
+        ? "SELECT agentonic.gmail_preview_worker($1,$2::uuid,$3::uuid,$4::jsonb) result"
+        : "SELECT agentonic.rag_worker($1,$2::uuid,$3::uuid,$4::jsonb) result",
     [operation, job.id, job.token, JSON.stringify(payload)]
   )
   return result.rows[0].result

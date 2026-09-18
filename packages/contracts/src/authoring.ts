@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { gmailGrant } from "./gmail"
+import { toolGrants } from "./tools"
 import { uuid } from "./identity"
 export const skill = z
   .object({
@@ -42,7 +42,7 @@ export const requestedAccess = z
   .object({
     version: z.literal(1),
     collectionIds: z.array(uuid).max(20),
-    tools: z.array(gmailGrant).max(1),
+    tools: toolGrants,
   })
   .strict()
   .refine((v) => new Set(v.collectionIds).size === v.collectionIds.length)
@@ -280,7 +280,7 @@ export const reviewView = z.object({
   requestedAccess: z
     .object({
       collectionIds: z.array(uuid),
-      tools: z.array(gmailGrant).optional(),
+      tools: toolGrants.optional(),
     })
     .passthrough(),
   hash: z.string(),

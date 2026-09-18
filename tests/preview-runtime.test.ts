@@ -425,3 +425,80 @@ it("constrains mailbox-only output to no KB citations and rejects fabricated doc
     )
   ).rejects.toMatchObject({ diagnostic: "answer_citations_invalid" })
 })
+it("automatic evaluation can execute a web-capable runtime without requesting tool authority", async () => {
+  const { runPreview } = await import("../apps/worker/src/runtime")
+  const root = mkdtempSync(join(tmpdir(), "agentonic-tools-off-"))
+  roots.push(root)
+  const source = `process.on('message',message=>{if(message.ok)process.send({type:'result',result:{...message.result,model:'${model}'}});else process.send({type:'generate',request:${JSON.stringify(request)}})});`
+  const sha = (s: string) => createHash("sha256").update(s).digest("hex")
+  const manifest = {
+    previewContract: "1",
+    gmailContract: "1",
+    webContract: "1",
+    model,
+    gitCommit: "a".repeat(40),
+    files: {
+      "src/surfaces/preview.mjs": sha(source),
+      "prompts/platform.md": sha("policy"),
+    },
+  }
+  const raw = JSON.stringify(manifest),
+    artifactSha256 = sha(raw),
+    directory = join(root, artifactSha256)
+  mkdirSync(join(directory, "src/surfaces"), { recursive: true })
+  mkdirSync(join(directory, "prompts"))
+  writeFileSync(join(directory, "manifest.json"), raw)
+  writeFileSync(join(directory, "src/surfaces/preview.mjs"), source)
+  writeFileSync(join(directory, "prompts/platform.md"), "policy")
+  const fetch = vi
+    .fn()
+    .mockResolvedValue(
+      Response.json({
+        status: "completed",
+        usage: { input_tokens: 1, output_tokens: 1 },
+        output: [
+          {
+            type: "message",
+            content: [
+              {
+                type: "output_text",
+                text: JSON.stringify({
+                  text: "Evaluation without live tools.",
+                  citations: [],
+                  insufficientEvidence: true,
+                }),
+              },
+            ],
+          },
+        ],
+      })
+    )
+  vi.stubGlobal("fetch", fetch)
+  const execute = vi.fn<Execute>().mockImplementation(async (op) => {
+    if (op === "context")
+      return {
+        accessJson: JSON.stringify({
+          tools: [
+            { capability: "web", operations: ["web.search", "web.read"] },
+          ],
+        }),
+        passages: [],
+      }
+    if (op.startsWith("web-") || op.startsWith("gmail-"))
+      throw new Error("Tools forbidden in evaluation")
+    return { ok: true }
+  })
+  await runPreview(
+    job,
+    execute,
+    { manifest, artifactSha256, gitCommit: manifest.gitCommit },
+    root,
+    "synthetic",
+    new AbortController().signal,
+    undefined,
+    "synthetic-web",
+    false
+  )
+  expect(execute.mock.calls.some(([op]) => op.startsWith("web-"))).toBe(false)
+  expect(JSON.parse(fetch.mock.calls[0]![1].body).tools).toBeUndefined()
+})

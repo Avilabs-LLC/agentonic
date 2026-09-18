@@ -25,7 +25,10 @@ const content = {
 let requested: {
   version: number
   collectionIds: string[]
-  tools: { connectionId: string; operations: string[] }[]
+  tools: (
+    | { connectionId: string; operations: string[] }
+    | { capability: "web"; operations: string[] }
+  )[]
 } = { version: 1, collectionIds: [collection], tools: [] }
 async function actor(user = owner, workspace = w, role = "agentonic_customer") {
   await db.exec(`RESET ROLE; SET LOCAL ROLE ${role}`)
@@ -122,6 +125,8 @@ beforeEach(async () => {
     "202609180028_reranking",
     "202609180029_gmail",
     "202609180030_gmail_preview",
+    "202609180031_web_access",
+    "202609180032_web_research",
   ])
     await db.exec(
       readFileSync(
@@ -138,7 +143,7 @@ beforeEach(async () => {
  INSERT INTO agentonic.code_repositories(id,name,repository_url,visibility,provisioning_status,created_by_staff_id) VALUES('${id(60)}','Synthetic','https://example.invalid/runtime','platform','ready','${staff}');
  INSERT INTO agentonic.agent_templates(id,slug,name,code_repository_id) VALUES('${id(51)}','synthetic','Synthetic','${id(60)}');
  INSERT INTO agentonic.template_versions(id,template_id,version,git_commit_sha,manifest_sha256,structure_manifest,runtime_contract_version) VALUES('${template}','${id(51)}','0.1.0',repeat('a',40),repeat('b',64),'{"platformPolicyText":"Synthetic platform policy"}','0.1');
- INSERT INTO agentonic.code_releases(id,version,template_version_id,git_commit_sha,artifact_sha256,registry_sha256,runtime_contract_version,code_repository_id,artifact_bucket,artifact_key,artifact_size_bytes,published_by_staff_id,execution_manifest) VALUES('${code}','0.1.0','${template}',repeat('a',40),repeat('b',64),repeat('c',64),'0.1','${id(60)}','synthetic','fixture',100,'${staff}','{"previewContract":"1","gmailContract":"1","model":"gpt-4.1-mini-2025-04-14"}');
+ INSERT INTO agentonic.code_releases(id,version,template_version_id,git_commit_sha,artifact_sha256,registry_sha256,runtime_contract_version,code_repository_id,artifact_bucket,artifact_key,artifact_size_bytes,published_by_staff_id,execution_manifest) VALUES('${code}','0.1.0','${template}',repeat('a',40),repeat('b',64),repeat('c',64),'0.1','${id(60)}','synthetic','fixture',100,'${staff}','{"previewContract":"1","gmailContract":"1","webContract":"1","model":"gpt-4.1-mini-2025-04-14"}');
  INSERT INTO agentonic.workspace_code_release_grants(workspace_id,code_release_id,granted_by_staff_id) VALUES('${w}','${code}','${staff}');
  INSERT INTO agentonic.agents(id,workspace_id,name,slug,owner_member_id,template_version_id,created_by_member_id) VALUES('${a}','${w}','Synthetic agent','synthetic','${member}','${template}','${member}');
  INSERT INTO agentonic.knowledge_collections(id,workspace_id,name,slug,owner_member_id) VALUES('${collection}','${w}','Knowledge','knowledge','${member}');`)
@@ -2164,4 +2169,81 @@ it("Gmail expiry blocks confirmation and offboarding erases credentials and prop
   await expect(
     p.tool("gmail-read", { connectionId: id(770), operation: "gmail.read" })
   ).rejects.toThrow()
+})
+
+it("meters frozen web tools in staging, rejects the wrong service and fences disabled web", async () => {
+  requested.tools = [
+    { capability: "web", operations: ["web.search", "web.read"] },
+  ]
+  const deployment = await approvedStaging()
+  await readyStaging(deployment)
+  await actor()
+  const conversation = await chat("start", {
+    deploymentId: deployment.deploymentId,
+    title: "Synthetic public web",
+  })
+  await chat("turn", {
+    conversationId: conversation.id,
+    requestId: id(801),
+    query: "Read public documentation",
+  })
+  const job = (await stagingWork(
+    deployment.deploymentId,
+    "claim"
+  )) as unknown as Job
+  async function web(
+    operation: string,
+    payload: Record<string, unknown> = {},
+    secret = serviceSecret
+  ) {
+    await db.exec(
+      "RESET ROLE;SET LOCAL ROLE agentonic_runtime_local;SAVEPOINT web_staging_test"
+    )
+    try {
+      const result = await db.query<{ r: Record<string, unknown> }>(
+        "SELECT agentonic.web_staging($1,$2,$3,$4,$5,$6) r",
+        [
+          operation,
+          deployment.deploymentId,
+          secret,
+          job.id,
+          job.token,
+          JSON.stringify(payload),
+        ]
+      )
+      await db.exec("RELEASE SAVEPOINT web_staging_test")
+      return result.rows[0]!.r
+    } catch (e) {
+      await db.exec(
+        "ROLLBACK TO SAVEPOINT web_staging_test;RELEASE SAVEPOINT web_staging_test"
+      )
+      throw e
+    }
+  }
+  expect(await web("web-tools")).toEqual({ enabled: true })
+  await expect(web("web-check", {}, "wrong")).rejects.toThrow()
+  await sql(
+    "UPDATE agentonic.retrieval_provider_budgets SET cap_microusd=100000 WHERE provider='browserbase'"
+  )
+  expect(
+    await web("web-reserve", { id: id(802), operation: "web.read" })
+  ).toEqual({ ok: true })
+  expect(
+    await web("web-settle", { id: id(802), operation: "web.read" })
+  ).toEqual({ ok: true })
+  const meter = await sql(
+    "SELECT actual_microusd FROM agentonic.retrieval_provider_operations WHERE id=$1",
+    [id(802)]
+  )
+  expect(
+    Number((meter.rows[0] as { actual_microusd: number }).actual_microusd)
+  ).toBe(4000)
+  await actor()
+  await command("draft.save", {
+    agentId: a,
+    revision: 1,
+    content,
+    requestedAccess: { version: 1, collectionIds: [collection], tools: [] },
+  })
+  await expect(web("web-check")).rejects.toThrow()
 })

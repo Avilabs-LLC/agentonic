@@ -15,6 +15,8 @@ import {
 // Historical decisions/usage remain immutable in a retired synthetic workspace.
 const stagingCheck = process.argv.includes("--staging")
 const rerankCheck = process.argv.includes("--rerank")
+const webCheck = process.argv.includes("--web")
+assert.ok(!webCheck || stagingCheck, "Web verification requires --staging")
 const marker = join(
   root,
   stagingCheck
@@ -278,6 +280,7 @@ try {
         cmd,
         waitFor,
         rerankCheck,
+        webCheck,
       })
     }
     await cmd(
@@ -356,6 +359,7 @@ try {
       cmd,
       waitFor,
       rerankCheck,
+      webCheck,
     })
     await cmd(
       "revoke",
@@ -477,13 +481,18 @@ try {
       content: {
         version: 1,
         systemPrompt:
-          "Answer in English using the authorized passages. Be concise. If the evidence cannot answer the question, explicitly say there is insufficient evidence. Never invent a secret code.",
+          "Answer in English using the authorized passages. Be concise. If the evidence cannot answer the question, explicitly say there is insufficient evidence. Never invent a secret code." +
+          (webCheck
+            ? " When specifically asked for public documentation, use the authorized web tools, read a source and provide its URL."
+            : ""),
         skills: [],
       },
       requestedAccess: {
         version: 1,
         collectionIds: [collection.id],
-        tools: [],
+        tools: webCheck
+          ? [{ capability: "web", operations: ["web.search", "web.read"] }]
+          : [],
       },
     })
     const candidate = await cmd("candidate.freeze", {
