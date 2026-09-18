@@ -5,6 +5,7 @@ import { useState } from "react"
 import { useTheme } from "next-themes"
 import {
   BotIcon,
+  MessageSquareIcon,
   HouseIcon,
   ClipboardCheckIcon,
   LibraryIcon,
@@ -25,7 +26,6 @@ import type {
 import { formatPathSegment } from "@agentonic/contracts/format"
 import { APP_NAME, APP_VERSION_LABEL } from "@workspace/ui/lib/version"
 import { notify } from "@workspace/ui/lib/toast"
-import { Badge } from "@workspace/ui/components/badge"
 import {
   Sidebar,
   SidebarProvider,
@@ -60,6 +60,7 @@ import {
 const icons = {
   home: HouseIcon,
   agents: BotIcon,
+  chat: MessageSquareIcon,
   review: ClipboardCheckIcon,
   knowledge: LibraryIcon,
   connections: PlugIcon,
@@ -153,12 +154,9 @@ export function AppShell({
                           <SidebarMenuButton disabled>
                             <Icon />
                             <span>{item.title}</span>
-                            <Badge
-                              variant="slate"
-                              className="ml-auto text-[10px]"
-                            >
+                            <span className="ml-auto text-xs text-muted-foreground">
                               Pronto
-                            </Badge>
+                            </span>
                           </SidebarMenuButton>
                         )}
                       </SidebarMenuItem>
@@ -253,9 +251,9 @@ export function AppShell({
               )}
             </BreadcrumbList>
           </Breadcrumb>
-          <Badge variant="violet" className="ml-auto">
+          <span className="ml-auto text-xs text-muted-foreground">
             Desarrollo
-          </Badge>
+          </span>
         </header>
         <main
           id="main"

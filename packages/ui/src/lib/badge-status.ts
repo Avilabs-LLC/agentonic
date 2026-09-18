@@ -1,8 +1,17 @@
-import type { VariantProps } from "class-variance-authority"
 import type { WorkspaceView } from "@agentonic/contracts/authoring"
-import type { badgeVariants } from "@workspace/ui/components/badge"
 
-type BadgeVariant = NonNullable<VariantProps<typeof badgeVariants>["variant"]>
+type BadgeVariant =
+  | "success"
+  | "warning"
+  | "error"
+  | "orange"
+  | "sky"
+  | "violet"
+  | "emerald"
+  | "slate"
+  | "pink"
+  | "indigo"
+  | "teal"
 
 export const submissionBadgeVariants: Record<string, BadgeVariant> = {
   submitted: "warning",
@@ -11,7 +20,7 @@ export const submissionBadgeVariants: Record<string, BadgeVariant> = {
   rejected: "error",
   withdrawn: "slate",
   approved: "success",
-  revoked: "error",
+  revoked: "violet",
 }
 
 export const agentBadges: Record<
@@ -40,4 +49,32 @@ export function documentBadge(
   if (document.status === "failed" || document.processingStatus === "failed")
     return { label: "Error", variant: "error" }
   return { label: "Sin procesar", variant: "slate" }
+}
+
+// Distinct colors within each state family; the same state uses the same map in both apps.
+export const approvalBadgeVariants = {
+  unapproved: "slate",
+  valid: "success",
+  expired: "warning",
+  superseded: "violet",
+  consent: "pink",
+  sources_changed: "orange",
+  evidence_expired: "sky",
+  authorization_changed: "error",
+} satisfies Record<
+  import("@agentonic/contracts/lifecycle").LifecycleState["submissions"][number]["reason"],
+  BadgeVariant
+>
+
+export const deploymentBadgeVariants: Record<string, BadgeVariant> = {
+  none: "slate",
+  awaiting_activation: "warning",
+  queued: "violet",
+  preparing: "sky",
+  running: "success",
+  offline: "orange",
+  stopped: "indigo",
+  failed: "error",
+  superseded: "teal",
+  unauthorized: "pink",
 }

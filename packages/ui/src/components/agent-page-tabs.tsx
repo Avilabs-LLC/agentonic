@@ -10,15 +10,21 @@ import {
 export function AgentPageTabs({
   configuration,
   proposals,
+  activation,
 }: {
   configuration: ReactNode
   proposals: ReactNode
+  activation?: ReactNode
 }) {
   const params = useSearchParams()
   return (
     <Tabs
       value={
-        params.get("tab") === "propuestas" ? "propuestas" : "configuracion"
+        params.get("tab") === "activacion" && activation
+          ? "activacion"
+          : params.get("tab") === "propuestas"
+            ? "propuestas"
+            : "configuracion"
       }
       className="gap-6"
       onValueChange={(value) => {
@@ -34,6 +40,11 @@ export function AgentPageTabs({
         <TabsTrigger value="propuestas" className="flex-none px-4">
           Propuestas
         </TabsTrigger>
+        {activation && (
+          <TabsTrigger value="activacion" className="flex-none px-4">
+            Activación
+          </TabsTrigger>
+        )}
       </TabsList>
       <TabsContent value="configuracion" keepMounted className="space-y-6">
         {configuration}
@@ -41,6 +52,11 @@ export function AgentPageTabs({
       <TabsContent value="propuestas" keepMounted className="space-y-6">
         {proposals}
       </TabsContent>
+      {activation && (
+        <TabsContent value="activacion" className="space-y-6">
+          {activation}
+        </TabsContent>
+      )}
     </Tabs>
   )
 }

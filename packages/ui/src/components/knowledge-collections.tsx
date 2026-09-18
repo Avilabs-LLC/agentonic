@@ -9,7 +9,6 @@ import {
   DataTable,
   DataTableColumnHeader,
 } from "@workspace/ui/components/data-table"
-import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
   Dialog,
@@ -61,9 +60,9 @@ const columns: ColumnDef<CollectionRow>[] = [
       <DataTableColumnHeader column={column} title="Tu acceso" />
     ),
     cell: ({ row }) => (
-      <Badge variant={row.original.canCurate ? "emerald" : "sky"}>
+      <span className="text-sm text-muted-foreground">
         {row.original.canCurate ? "Gestionar" : "Solo lectura"}
-      </Badge>
+      </span>
     ),
   },
   {

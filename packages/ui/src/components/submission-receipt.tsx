@@ -1,3 +1,4 @@
+import { approvalLabels } from "@agentonic/contracts/lifecycle"
 import {
   ClipboardCheckIcon,
   FileCheck2Icon,
@@ -8,7 +9,8 @@ import type { ReviewReceipt } from "@agentonic/contracts/review-receipt"
 import { SubmissionVersionContent } from "@workspace/ui/components/submission-review-layout"
 import { AgentSettingsCard } from "@workspace/ui/components/agent-settings-card"
 import { BackRow, RecordHeader } from "@workspace/ui/components/record-header"
-import { Badge } from "@workspace/ui/components/badge"
+import { EvaluationSummary } from "@workspace/ui/components/review-result-status"
+import { CardEmptyState } from "@workspace/ui/components/card-empty-state"
 
 import {
   ReceiptTextFrame,
@@ -39,7 +41,6 @@ export function SubmissionReceipt({
       <RecordHeader
         title={r.agentName}
         description={`Versión ${r.versionNumber} · Revisión ${r.number} · Comprobante de aprobación.`}
-        actions={<Badge variant="success">Aprobada</Badge>}
       />
       <AgentSettingsCard
         title="Resumen de la versión"
@@ -86,10 +87,10 @@ export function SubmissionReceipt({
           icon={<FileCheck2Icon />}
           description="El comprobante conserva los datos de la aprobación."
         >
-          <p className="text-sm text-muted-foreground">
+          <CardEmptyState title="Contenido no disponible">
             La autorización para consultar el contenido privado ya no está
             vigente.
-          </p>
+          </CardEmptyState>
         </AgentSettingsCard>
       )}
       <AgentSettingsCard
@@ -98,53 +99,56 @@ export function SubmissionReceipt({
         description="Las situaciones y decisiones que el cliente confirmó antes de evaluar esta versión."
       >
         {!r.reportAvailable ? (
-          <p className="text-sm text-muted-foreground">
+          <CardEmptyState title="Criterios no disponibles">
             Los criterios privados ya no están disponibles con la autorización
             actual.
-          </p>
+          </CardEmptyState>
         ) : r.criteria.length ? (
           <ReceiptCriteria criteria={r.criteria} />
         ) : (
-          <p className="text-sm text-muted-foreground">
+          <CardEmptyState title="Sin criterios individuales">
             Esta evaluación anterior no registra decisiones individuales del
             cliente. Los casos ejecutados se muestran en los resultados.
-          </p>
+          </CardEmptyState>
         )}
       </AgentSettingsCard>
       <AgentSettingsCard
         title="Resultados de la evaluación"
         icon={<ClipboardCheckIcon />}
         description="Respuestas y verificaciones de la evaluación que respaldó esta aprobación."
-        action={
-          r.reportAvailable ? (
-            <Badge variant="success">
-              {r.results.filter((result) => result.outcome === "passed").length}
-              /{r.results.length} superadas
-            </Badge>
-          ) : undefined
-        }
       >
         {!r.reportAvailable ? (
-          <p className="text-sm text-muted-foreground">
+          <CardEmptyState title="Resultados no disponibles">
             El detalle de las respuestas ya no está disponible por los límites
             de autorización o conservación de la evidencia.
-          </p>
+          </CardEmptyState>
         ) : (
-          <ReceiptResults results={r.results} />
+          <>
+            <EvaluationSummary
+              passed={
+                r.results.filter((result) => result.outcome === "passed").length
+              }
+              total={r.results.length}
+            />
+            <ReceiptResults results={r.results} />
+          </>
         )}
       </AgentSettingsCard>
       <AgentSettingsCard
         title="Aprobación registrada"
         icon={<FileCheck2Icon />}
         description="Decisión vinculada a esta versión y a su evaluación."
-        action={
-          <Badge variant={r.approval.valid ? "success" : "warning"}>
-            {r.approval.valid ? "Vigente" : "No vigente"}
-          </Badge>
-        }
       >
         <dl className="grid gap-5 text-sm sm:grid-cols-2">
           {[
+            [
+              "Vigencia",
+              r.approval.reason
+                ? approvalLabels[r.approval.reason]
+                : r.approval.valid
+                  ? "Vigente"
+                  : "No vigente",
+            ],
             [
               "Tipo de aprobación",
               r.approval.automatic ? "Automática" : "Revisión del equipo",
@@ -166,8 +170,8 @@ export function SubmissionReceipt({
         </dl>
         {!r.approval.valid && (
           <p className="mt-5 text-sm text-muted-foreground">
-            La aprobación está registrada, pero ya no permite activar esta
-            versión. Se necesita una aprobación vigente.
+            Esta versión conserva su aprobación histórica. Para activarla,
+            renueva la revisión desde la sección de aprobación y activación.
           </p>
         )}
         {r.approval.feedback && (

@@ -11,7 +11,7 @@ export function AgentsSkeleton() {
   return (
     <>
       <PageHeaderSkeleton />
-      <Skeleton className="h-8 w-48" />
+      <FiltersCardSkeleton />
       <Skeleton className="h-5 w-4/5" />
       <TableSkeleton columns={7} />
     </>
@@ -23,6 +23,31 @@ export function AgentEditorSkeleton() {
       <BackRowSkeleton />
       <PageHeaderSkeleton />
       <AgentPageTabs
+        activation={
+          <div className="space-y-6">
+            <Card className="gap-5 py-6 [--card-spacing:--spacing(6)]">
+              <CardHeader className="gap-2">
+                <div className="flex items-center gap-2.5">
+                  <Skeleton className="size-5" />
+                  <Skeleton className="h-7 w-56 max-w-full" />
+                </div>
+                <Skeleton className="h-5 w-4/5" />
+              </CardHeader>
+              <CardContent>
+                <ApprovalPackageSkeleton />
+              </CardContent>
+            </Card>
+            <Card className="gap-5 py-6 [--card-spacing:--spacing(6)]">
+              <CardHeader className="gap-2">
+                <Skeleton className="h-7 w-56" />
+                <Skeleton className="h-5 w-4/5" />
+              </CardHeader>
+              <CardContent>
+                <EmptyFrameSkeleton />
+              </CardContent>
+            </Card>
+          </div>
+        }
         configuration={
           <>
             <div className="space-y-6">
@@ -62,7 +87,7 @@ export function AgentEditorSkeleton() {
                           <Skeleton className="h-4 w-3/4" />
                         </div>
                       ) : section === "tools" || section === "connections" ? (
-                        <Skeleton className="h-5 w-4/5" />
+                        <EmptyFrameSkeleton />
                       ) : (
                         <div className="flex items-center gap-4 border-t py-5">
                           <div className="min-w-0 flex-1 space-y-3">
@@ -294,10 +319,7 @@ export function ReviewDetailSkeleton() {
             {section === "prompt" ? (
               <Skeleton className="h-40 w-full" />
             ) : (
-              <>
-                <Skeleton className="h-5 w-2/3" />
-                <Skeleton className="h-4 w-4/5" />
-              </>
+              <EmptyFrameSkeleton />
             )}
           </CardContent>
           {section === "knowledge" && (
@@ -372,6 +394,8 @@ export function ReviewReceiptSkeleton() {
         "criteria",
         "results",
         "approval",
+        "activation",
+        "deployments",
       ].map((section) => (
         <Card
           key={section}
@@ -388,7 +412,7 @@ export function ReviewReceiptSkeleton() {
             {section === "summary" || section === "approval" ? (
               <div className="grid gap-5 sm:grid-cols-2">
                 {Array.from(
-                  { length: section === "summary" ? 6 : 4 },
+                  { length: section === "summary" ? 6 : 5 },
                   (_, i) => (
                     <div key={i} className="space-y-2">
                       <Skeleton className="h-4 w-28" />
@@ -397,6 +421,19 @@ export function ReviewReceiptSkeleton() {
                   )
                 )}
               </div>
+            ) : section === "deployments" || section === "skills" ? (
+              <EmptyFrameSkeleton />
+            ) : section === "results" ? (
+              <>
+                <div className="flex items-baseline gap-3 border-b pb-4">
+                  <Skeleton className="h-8 w-16" />
+                  <Skeleton className="h-4 w-48" />
+                </div>
+                <Skeleton className="h-12 w-full" />
+                <Skeleton className="h-12 w-full" />
+              </>
+            ) : section === "activation" ? (
+              <ApprovalPackageSkeleton />
             ) : section === "prompt" ? (
               <Skeleton className="h-40 w-full" />
             ) : (
@@ -408,6 +445,36 @@ export function ReviewReceiptSkeleton() {
           </CardContent>
         </Card>
       ))}
+    </div>
+  )
+}
+
+function ApprovalPackageSkeleton() {
+  return (
+    <div className="overflow-hidden rounded-lg border bg-muted/20">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b p-4">
+        <div className="flex items-center gap-3">
+          <Skeleton className="size-10 shrink-0 rounded-md" />
+          <div className="space-y-1">
+            <Skeleton className="h-5 w-24" />
+            <Skeleton className="h-4 w-20" />
+          </div>
+        </div>
+        <Skeleton className="h-5 w-20 rounded-full" />
+      </div>
+      <div className="space-y-3 p-4">
+        <Skeleton className="h-4 w-72 max-w-full" />
+        <Skeleton className="h-8 w-44" />
+      </div>
+    </div>
+  )
+}
+
+function EmptyFrameSkeleton() {
+  return (
+    <div className="flex min-h-32 flex-col items-center justify-center gap-2 rounded-xl border border-dashed bg-muted/20 p-6">
+      <Skeleton className="h-5 w-40" />
+      <Skeleton className="h-4 w-64 max-w-full" />
     </div>
   )
 }

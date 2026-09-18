@@ -4,13 +4,15 @@ import {
   ListChecksIcon,
   ReceiptTextIcon,
 } from "lucide-react"
+import { submissionLabels } from "@agentonic/contracts/authoring"
 import type { AgentView } from "@agentonic/contracts/authoring"
 import {
   reviewFlowLabels,
   type ReviewPreparation,
 } from "@agentonic/contracts/review-flow"
 import { AgentSettingsCard } from "@workspace/ui/components/agent-settings-card"
-import { Badge } from "@workspace/ui/components/badge"
+import { EvaluationSummary } from "@workspace/ui/components/review-result-status"
+import { CardEmptyState } from "@workspace/ui/components/card-empty-state"
 import { SubmissionStatusBadge } from "@workspace/ui/components/status-badge"
 import {
   ReceiptCriteria,
@@ -32,15 +34,6 @@ export function ProposalReceipt({
   agentName: string
   versionNumber?: number
 }) {
-  const completed =
-    record &&
-    [
-      "approved",
-      "needs_changes",
-      "needs_attention",
-      "expired",
-      "revoked",
-    ].includes(record.status)
   const confirmed = Boolean(record?.evaluationId)
   const passed =
     record?.results.filter((r) => r.outcome === "passed").length ?? 0
@@ -50,14 +43,17 @@ export function ProposalReceipt({
         title="Resumen de la versión"
         icon={<ReceiptTextIcon />}
         description="Consulta el estado y lo registrado durante la revisión de tu propuesta."
-        action={<SubmissionStatusBadge status={submission.status} />}
       >
-        <dl className="grid gap-5 text-sm sm:grid-cols-2">
+        <dl className="grid gap-5 text-sm sm:grid-cols-3">
           {[
             ["Agente", agentName],
             [
               "Versión",
               versionNumber ?? record?.versionNumber ?? "No disponible",
+            ],
+            [
+              "Estado",
+              <SubmissionStatusBadge key="state" status={submission.status} />,
             ],
             ...(record
               ? [
@@ -69,7 +65,7 @@ export function ProposalReceipt({
                 ]
               : []),
           ].map(([label, value]) => (
-            <div key={label} className="min-w-0 space-y-1">
+            <div key={String(label)} className="min-w-0 space-y-1">
               <dt className="text-muted-foreground">{label}</dt>
               <dd className="font-medium break-words">{value}</dd>
             </div>
@@ -109,44 +105,44 @@ export function ProposalReceipt({
                 confirmed={confirmed}
               />
             ) : (
-              <p className="text-sm text-muted-foreground">
+              <CardEmptyState title="Sin situaciones disponibles">
                 {["queued", "preparing"].includes(record.status)
                   ? "Las situaciones aparecerán cuando termine la preparación."
                   : "El detalle de las situaciones no está disponible con la autorización actual."}
-              </p>
+              </CardEmptyState>
             )}
           </AgentSettingsCard>
           <AgentSettingsCard
             title="Resultados de la evaluación"
             icon={<ClipboardCheckIcon />}
             description="Consulta las respuestas del agente y los controles de la plataforma."
-            action={
-              record.results.length ? (
-                <Badge
-                  variant={
-                    completed && passed === record.results.length
-                      ? "success"
-                      : "sky"
-                  }
-                >
-                  {passed}/{record.results.length} superadas
-                </Badge>
-              ) : undefined
-            }
           >
             {record.results.length ? (
-              <ReceiptResults results={record.results} />
+              <>
+                <EvaluationSummary
+                  passed={passed}
+                  total={record.results.length}
+                  running={record.status === "evaluating"}
+                />
+                <ReceiptResults results={record.results} />
+              </>
             ) : (
-              <p className="text-sm text-muted-foreground">
+              <CardEmptyState
+                title={
+                  record.status === "evaluating"
+                    ? "Evaluación en curso"
+                    : "Sin resultados disponibles"
+                }
+              >
                 {record.status === "evaluating"
-                  ? "La evaluación está en curso. Los resultados aparecerán aquí."
+                  ? "Los resultados aparecerán aquí a medida que termine cada pregunta."
                   : !record.evaluationId &&
                       ["queued", "preparing", "criteria_ready"].includes(
                         record.status
                       )
                     ? "Las pruebas comenzarán después de confirmar tus situaciones y autorizar la evaluación."
                     : "El informe no está disponible. Puede que la evaluación no haya terminado o que el acceso a sus resultados ya no esté vigente."}
-              </p>
+              </CardEmptyState>
             )}
           </AgentSettingsCard>
         </>
@@ -155,29 +151,13 @@ export function ProposalReceipt({
         title="Estado de la revisión"
         icon={<FileCheck2Icon />}
         description="Resultado de la revisión y comentarios registrados para esta propuesta."
-        action={
-          record ? (
-            <Badge
-              variant={
-                record.status === "approved"
-                  ? "success"
-                  : [
-                        "expired",
-                        "revoked",
-                        "cancelled",
-                        "error",
-                        "needs_changes",
-                      ].includes(record.status)
-                    ? "warning"
-                    : "sky"
-              }
-            >
-              {reviewFlowLabels[record.status]}
-            </Badge>
-          ) : undefined
-        }
       >
         <div className="space-y-4">
+          {record && !["approved", "needs_changes"].includes(record.status) && (
+            <p className="text-sm font-medium">
+              {reviewFlowLabels[record.status]}
+            </p>
+          )}
           {record?.summary && (
             <p className="text-sm leading-relaxed text-muted-foreground">
               {record.summary}
@@ -185,7 +165,11 @@ export function ProposalReceipt({
           )}
           {submission.decisions.map((decision) => (
             <div key={decision.number} className="space-y-3 border-t pt-4">
-              <SubmissionStatusBadge status={decision.decision} />
+              {submission.decisions.length > 1 && (
+                <p className="text-sm font-medium">
+                  {submissionLabels[decision.decision]}
+                </p>
+              )}
               {decision.feedback && (
                 <ReceiptTextFrame
                   title="Comentarios del equipo"
@@ -195,11 +179,11 @@ export function ProposalReceipt({
             </div>
           ))}
           {!record && !submission.decisions.length && (
-            <p className="text-sm text-muted-foreground">
+            <CardEmptyState title="Sin decisión registrada">
               Todavía no se ha registrado una decisión para esta propuesta.
-            </p>
+            </CardEmptyState>
           )}
-          {submission.status === "approved" && (
+          {submission.status === "approved" && !record?.summary && (
             <p className="text-xs text-muted-foreground">
               La aprobación de esta versión no activa un despliegue.
             </p>

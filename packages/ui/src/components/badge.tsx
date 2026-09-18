@@ -36,6 +36,10 @@ const badgeVariants = cva(
           "border-emerald-200 bg-emerald-100 text-emerald-900 dark:border-emerald-300 dark:bg-background dark:text-emerald-300",
         slate:
           "border-slate-200 bg-slate-100 text-slate-900 dark:border-slate-700 dark:bg-background dark:text-slate-300",
+        pink: "border-pink-200 bg-pink-100 text-pink-900 dark:border-pink-300 dark:bg-background dark:text-pink-300",
+        indigo:
+          "border-indigo-200 bg-indigo-100 text-indigo-900 dark:border-indigo-300 dark:bg-background dark:text-indigo-300",
+        teal: "border-teal-200 bg-teal-100 text-teal-900 dark:border-teal-300 dark:bg-background dark:text-teal-300",
         // For colored/hero surfaces where the theme tokens don't apply.
         inverse:
           "border-white/15 bg-white/10 text-white dark:border-white/15 dark:bg-white/10 dark:text-white",

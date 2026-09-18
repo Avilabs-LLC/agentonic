@@ -1,3 +1,5 @@
+import { loadLifecycle } from "@agentonic/server/lifecycle"
+import { AgentLifecycle } from "@workspace/ui/components/agent-lifecycle"
 import { loadReviewFlow } from "@agentonic/server/review-flow"
 import { loadEvaluations } from "@agentonic/server/evaluation"
 import { EvaluationPanel } from "@workspace/ui/components/evaluation-panel"
@@ -5,7 +7,6 @@ import { notFound } from "next/navigation"
 import { loadWorkspace, loadAgent } from "@agentonic/server/authoring"
 import { RecordHeader, BackRow } from "@workspace/ui/components/record-header"
 import { AgentWorkflow } from "@workspace/ui/components/agent-workflow"
-import { Badge } from "@workspace/ui/components/badge"
 import { AgentPageTabs } from "@workspace/ui/components/agent-page-tabs"
 import { AgentProposals } from "@workspace/ui/components/agent-proposals"
 import { customerWorkspace } from "@/lib/workspace"
@@ -17,6 +18,7 @@ import {
   withdrawSubmission,
   evaluationAction,
   reviewFlowAction,
+  lifecycleAction,
 } from "../actions"
 export default async function Page({
   params,
@@ -27,13 +29,15 @@ export default async function Page({
 }) {
   const { selected } = await customerWorkspace(searchParams)
   const { id } = await params
-  const [data, workspace, evaluations, reviewFlow] = await Promise.all([
-    loadAgent(selected.id, id),
-    loadWorkspace(selected.id),
-    loadEvaluations("customer", selected.id, id),
-    loadReviewFlow("customer", selected.id, id),
-  ])
-  if (!data || !workspace) notFound()
+  const [lifecycle, data, workspace, evaluations, reviewFlow] =
+    await Promise.all([
+      loadLifecycle("customer", selected.id, id),
+      loadAgent(selected.id, id),
+      loadWorkspace(selected.id),
+      loadEvaluations("customer", selected.id, id),
+      loadReviewFlow("customer", selected.id, id),
+    ])
+  if (!data || !workspace || !lifecycle) notFound()
   if (!evaluations || !reviewFlow)
     throw new Error("No se pudieron cargar las evaluaciones.")
   return (
@@ -45,9 +49,24 @@ export default async function Page({
           data.agent.description ??
           "Personaliza tu agente y prepara una propuesta."
         }
-        actions={<Badge variant="slate">Sin despliegue</Badge>}
+        actions={
+          <span className="text-sm text-muted-foreground">
+            {lifecycle.deployments.some((d) => d.online)
+              ? "Activo en pruebas"
+              : lifecycle.deployments.some((d) => d.status === "running")
+                ? "Sin conexión"
+                : "Sin despliegue activo"}
+          </span>
+        }
       />
       <AgentPageTabs
+        activation={
+          <AgentLifecycle
+            state={lifecycle}
+            workspaceId={selected.id}
+            action={lifecycleAction.bind(null, selected.id)}
+          />
+        }
         configuration={
           <AgentWorkflow
             key={data.draft.revision}

@@ -1,4 +1,5 @@
 "use server"
+import { runLifecycle } from "@agentonic/server/lifecycle"
 import { runReviewFlow } from "@agentonic/server/review-flow"
 import { runEvaluationCommand } from "@agentonic/server/evaluation"
 import { revalidatePath } from "next/cache"
@@ -239,6 +240,12 @@ export async function evaluationAction(workspaceId: string, input: unknown) {
 
 export async function reviewFlowAction(workspaceId: string, input: unknown) {
   const result = await runReviewFlow(workspaceId, input)
+  if (result.ok) revalidatePath("/agents", "layout")
+  return result
+}
+
+export async function lifecycleAction(workspaceId: string, input: unknown) {
+  const result = await runLifecycle("customer", workspaceId, input)
   if (result.ok) revalidatePath("/agents", "layout")
   return result
 }

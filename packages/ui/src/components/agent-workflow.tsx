@@ -398,7 +398,7 @@ function VersionCards({
               )}
             </>
           ) : (
-            <div className="flex min-h-44 flex-1 flex-col items-center justify-center gap-3 py-6 text-center">
+            <div className="flex min-h-44 flex-1 flex-col items-center justify-center gap-3 rounded-xl border border-dashed bg-muted/20 p-6 text-center">
               <PackageOpenIcon
                 className="size-12 text-muted-foreground/60"
                 strokeWidth={1.5}

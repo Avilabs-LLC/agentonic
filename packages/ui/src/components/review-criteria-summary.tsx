@@ -1,4 +1,5 @@
 "use client"
+import { ReviewResultStatus } from "@workspace/ui/components/review-result-status"
 import { LoaderCircleIcon } from "lucide-react"
 import {
   criterionWasEdited,
@@ -15,7 +16,6 @@ import {
   TableRow,
   TableCell,
 } from "@workspace/ui/components/table"
-import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import { ConsentCheckbox } from "@workspace/ui/components/consent-checkbox"
 export function ReviewCriteriaSummary({
@@ -104,13 +104,16 @@ export function ReviewCriteriaSummary({
                   </TableCell>
                   <TableCell>{c.notes.trim() ? "Sí" : "No"}</TableCell>
                   <TableCell>
-                    <Badge
-                      variant={
-                        c.reviewDecision === "approved" ? "success" : "warning"
+                    <ReviewResultStatus
+                      outcome={
+                        c.excluded
+                          ? "excluded"
+                          : c.reviewDecision === "approved"
+                            ? "passed"
+                            : "pending"
                       }
-                    >
-                      {criterionDecisionLabel(c)}
-                    </Badge>
+                      label={criterionDecisionLabel(c)}
+                    />
                   </TableCell>
                 </TableRow>
               )

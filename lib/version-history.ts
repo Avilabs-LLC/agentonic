@@ -1,5 +1,10 @@
 export const VERSION_HISTORY = [
   {
+    "version": "0.8.0",
+    "date": "2026-09-18",
+    "summary": "Customer activation and private chat, clearer review states, and whole-platform release plan"
+  },
+  {
     "version": "0.7.0",
     "date": "2026-09-18",
     "summary": "Approval renewal, private staging deployments and isolated runtime services"

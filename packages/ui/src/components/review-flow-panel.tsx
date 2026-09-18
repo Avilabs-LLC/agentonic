@@ -1,4 +1,6 @@
 "use client"
+import { CardEmptyState } from "@workspace/ui/components/card-empty-state"
+import { ReviewResultStatus } from "@workspace/ui/components/review-result-status"
 import { useEffect, useId, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Controller, useForm } from "react-hook-form"
@@ -19,7 +21,6 @@ import { Field, FieldLabel, FieldError } from "@workspace/ui/components/field"
 import { Input } from "@workspace/ui/components/input"
 import { Textarea } from "@workspace/ui/components/textarea"
 import { Button } from "@workspace/ui/components/button"
-import { Badge } from "@workspace/ui/components/badge"
 import { ReviewCriteriaDialog } from "@workspace/ui/components/review-criteria-dialog"
 import {
   Table,
@@ -260,18 +261,9 @@ export function Preparation({
       {(record.status !== "criteria_ready" || !hasCriteriaDisclosure) && (
         <div className="flex flex-wrap items-center justify-between gap-3">
           {record.status !== "criteria_ready" && (
-            <Badge
-              variant={
-                record.status === "approved"
-                  ? "success"
-                  : record.status === "needs_changes" ||
-                      record.status === "error"
-                    ? "warning"
-                    : "sky"
-              }
-            >
+            <span className="text-sm text-muted-foreground">
               {reviewFlowLabels[record.status]}
-            </Badge>
+            </span>
           )}
           {!hasCriteriaDisclosure && costSummary}
         </div>
@@ -328,20 +320,19 @@ export function Preparation({
                       )}
                     </TableCell>
                     <TableCell className="py-4 text-right align-top">
-                      <Badge
-                        variant={
-                          c.reviewDecision === "approved"
-                            ? "success"
-                            : c.excluded
-                              ? "warning"
-                              : "slate"
+                      <ReviewResultStatus
+                        outcome={
+                          c.excluded
+                            ? "excluded"
+                            : c.reviewDecision === "approved"
+                              ? "passed"
+                              : "pending"
                         }
-                      >
-                        {criterionDecisionLabel(
+                        label={criterionDecisionLabel(
                           c,
                           record.status !== "criteria_ready"
                         )}
-                      </Badge>
+                      />
                     </TableCell>
                   </TableRow>
                 ))}
@@ -473,11 +464,11 @@ export function ReviewFlowPanel({
           <PreparationForm submissionId={submissionId} action={action} />
         ) : (
           !latest && (
-            <p className="text-sm text-muted-foreground">
+            <CardEmptyState title="Sin revisión preparada">
               {action
                 ? "Envía una versión a revisión para preparar sus criterios. Si ya la enviaste, la preparación estará disponible cuando el servicio de evaluación esté habilitado para esa versión."
                 : "El cliente inicia la preparación desde su agente. Aquí aparecerán los criterios confirmados, sus comentarios y el resultado automático."}
-            </p>
+            </CardEmptyState>
           )
         )}
         {state.preparations.length > 1 && (
