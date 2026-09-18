@@ -160,6 +160,9 @@ importers:
 
   apps/worker:
     dependencies:
+      '@agentonic/connectors':
+        specifier: workspace:*
+        version: link:../../packages/connectors
       '@agentonic/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
@@ -194,6 +197,31 @@ importers:
       tsx:
         specifier: ^4.20.0
         version: 4.23.13
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+
+  packages/connectors:
+    dependencies:
+      '@agentonic/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      zod:
+        specifier: ^4.4.3
+        version: 4.6.2
+    devDependencies:
+      '@types/node':
+        specifier: ^22
+        version: 22.20.2
+      '@workspace/eslint-config':
+        specifier: workspace:*
+        version: link:../eslint-config
+      '@workspace/typescript-config':
+        specifier: workspace:*
+        version: link:../typescript-config
+      eslint:
+        specifier: ^9
+        version: 9.39.5(jiti@2.7.0)(supports-color@7.2.0)
       typescript:
         specifier: ^5.9.3
         version: 5.9.3
@@ -301,6 +329,9 @@ importers:
 
   packages/server:
     dependencies:
+      '@agentonic/connectors':
+        specifier: workspace:*
+        version: link:../connectors
       '@agentonic/contracts':
         specifier: workspace:*
         version: link:../contracts

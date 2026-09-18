@@ -1057,7 +1057,9 @@ Implementation areas: `packages/contracts`, `packages/server`, reviewed Prisma m
 
 ### 37.5 P2 — first connection and read capabilities
 
-**Recommended first slice: Google Drive, selected files, with a dedicated synthetic test account.** This tests both knowledge ingestion and live tools without starting with unrestricted mailbox access. Confirm this provider choice with the owner when beginning integration. If Gmail is chosen instead, document a replacement scope and acceptance matrix before implementation; do not quietly broaden this Drive slice.
+**Owner update, 2026-09-18:** Gmail is the selected first connection: read/search mail, manage drafts and confirm sends. The replacement scope, acceptance matrix, staging secret-storage decision and rollout checklist are in [Gmail implementation](gmail-connection.md). Drive ingestion is deferred. The checkboxes below retain the original broader plan; they are not a completion claim for Gmail.
+
+**Original recommendation: Google Drive, selected files, with a dedicated synthetic test account.** This tests both knowledge ingestion and live tools without starting with unrestricted mailbox access. Confirm this provider choice with the owner when beginning integration. If Gmail is chosen instead, document a replacement scope and acceptance matrix before implementation; do not quietly broaden this Drive slice.
 
 - [ ] Register the OAuth application and exact callback URLs; configure designated test users and the smallest viable provider scopes. Account for provider verification and test-mode token lifetime separately from Agentonic's host/consent expiry.
 - [ ] Prototype `drive.file` plus explicit file selection. Verify access to the chosen existing files, supported exports and the intended output location in the actual test account. Do not assume selecting a folder grants recursive access to all existing descendants. Do not fall back silently to whole-Drive access when a capability is unavailable.
@@ -1147,3 +1149,11 @@ For each implementation slice, record: milestone ID/status; contracts and migrat
 Required owner inputs when their dependent work begins: first connector/provider and intended operation; Google Cloud OAuth app ownership and a dedicated test account/resource selection; explicit permission for test writes; two app hostnames and DNS control; SMTP sender/service; production project/provider access; pilot users/data; budget, retention/recovery expectations and alert recipient. Do not request secrets in chat. Missing live-provider inputs need not block synthetic contracts/tests or packaging work.
 
 Verification follows AGENTS.md: Prisma generation/validation for schema changes, typecheck, lint, relevant deterministic/full regression tests and reviewed skeleton checks for UI changes. Live acceptance uses separate synthetic fixtures and existing authorized budgets. Do not alter applied migrations, use real customer content as fixtures, broaden access as a shortcut, or change live Corby/VM services incidentally. Documentation-only changes need document/diff/link review rather than application builds or paid live tests.
+
+## 38. Gmail first connection — staging implementation, 2026-09-18
+
+[Gmail implementation and acceptance plan](gmail-connection.md) replaces the Drive-first slice at the owner’s request. It specifies owner-only staging connections, frozen operation selection, live read tools and durable per-action confirmation for mailbox writes. Migration 29 is applied to nonproduction; the Gmail-capable runtime, broker and evaluator are installed and registered for the local/VM test environments. The linked rollout checkpoint records artifact hashes and verification evidence. The shared UI follows §21. The owner completed Google account consent and confirmed live Gmail reads in private preview after the citation fix. Live draft/send acceptance remains pending; no Gmail-enabled agent was activated automatically.
+
+### 38.1 Owner-authorized private preview tools — 2026-09-18
+
+Owner request supersedes the initial preview restriction: private customer previews may use connected Gmail tools before review/activation. Migration 30 adds a preview-specific leased worker authority and explicit session policy, without granting staff or automated evaluations mailbox access. A start checkbox authorizes the prepared version’s tools for that private session; writes retain individual confirmation. See [Gmail implementation](gmail-connection.md#owner-authorized-preview-tools--migration-30) for policy, expiry, cleanup and rollout evidence.

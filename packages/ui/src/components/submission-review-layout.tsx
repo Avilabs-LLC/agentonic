@@ -1,3 +1,4 @@
+import { GmailScopeSummary } from "@workspace/ui/components/gmail-scope-summary"
 import { CardEmptyState } from "@workspace/ui/components/card-empty-state"
 import type { ReactNode } from "react"
 import type { FormResult, ReviewView } from "@agentonic/contracts/authoring"
@@ -61,6 +62,7 @@ export function SubmissionReviewLayout({
       <SubmissionVersionContent
         content={review.content}
         collectionCount={collections}
+        tools={review.requestedAccess.tools}
       />
       {evaluation}
       {history}
@@ -146,13 +148,16 @@ export function SubmissionVersionContent({
   content,
   collectionCount,
   collectionNames,
+  tools,
 }: {
   content: ReviewView["content"]
   collectionCount: number
+  tools?: ReviewView["requestedAccess"]["tools"]
   collectionNames?: string[]
 }) {
   return (
     <>
+      {tools?.length ? <GmailScopeSummary tools={tools} /> : null}
       <AgentSettingsCard
         title="Instrucciones del sistema"
         icon={<ScrollTextIcon />}

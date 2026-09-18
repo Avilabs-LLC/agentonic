@@ -22,7 +22,11 @@ const content = {
   systemPrompt: "Help organize a synthetic project.",
   skills: [{ name: "summarize", instructions: "Use concise summaries." }],
 }
-const requested = { version: 1, collectionIds: [collection], tools: [] }
+let requested: {
+  version: number
+  collectionIds: string[]
+  tools: { connectionId: string; operations: string[] }[]
+} = { version: 1, collectionIds: [collection], tools: [] }
 async function actor(user = owner, workspace = w, role = "agentonic_customer") {
   await db.exec(`RESET ROLE; SET LOCAL ROLE ${role}`)
   await db.query(
@@ -116,6 +120,8 @@ beforeEach(async () => {
     "202609160026_staging_content_cleanup",
     "202609160027_staging_agent_listing",
     "202609180028_reranking",
+    "202609180029_gmail",
+    "202609180030_gmail_preview",
   ])
     await db.exec(
       readFileSync(
@@ -132,12 +138,13 @@ beforeEach(async () => {
  INSERT INTO agentonic.code_repositories(id,name,repository_url,visibility,provisioning_status,created_by_staff_id) VALUES('${id(60)}','Synthetic','https://example.invalid/runtime','platform','ready','${staff}');
  INSERT INTO agentonic.agent_templates(id,slug,name,code_repository_id) VALUES('${id(51)}','synthetic','Synthetic','${id(60)}');
  INSERT INTO agentonic.template_versions(id,template_id,version,git_commit_sha,manifest_sha256,structure_manifest,runtime_contract_version) VALUES('${template}','${id(51)}','0.1.0',repeat('a',40),repeat('b',64),'{"platformPolicyText":"Synthetic platform policy"}','0.1');
- INSERT INTO agentonic.code_releases(id,version,template_version_id,git_commit_sha,artifact_sha256,registry_sha256,runtime_contract_version,code_repository_id,artifact_bucket,artifact_key,artifact_size_bytes,published_by_staff_id,execution_manifest) VALUES('${code}','0.1.0','${template}',repeat('a',40),repeat('b',64),repeat('c',64),'0.1','${id(60)}','synthetic','fixture',100,'${staff}','{"previewContract":"1","model":"gpt-4.1-mini-2025-04-14"}');
+ INSERT INTO agentonic.code_releases(id,version,template_version_id,git_commit_sha,artifact_sha256,registry_sha256,runtime_contract_version,code_repository_id,artifact_bucket,artifact_key,artifact_size_bytes,published_by_staff_id,execution_manifest) VALUES('${code}','0.1.0','${template}',repeat('a',40),repeat('b',64),repeat('c',64),'0.1','${id(60)}','synthetic','fixture',100,'${staff}','{"previewContract":"1","gmailContract":"1","model":"gpt-4.1-mini-2025-04-14"}');
  INSERT INTO agentonic.workspace_code_release_grants(workspace_id,code_release_id,granted_by_staff_id) VALUES('${w}','${code}','${staff}');
  INSERT INTO agentonic.agents(id,workspace_id,name,slug,owner_member_id,template_version_id,created_by_member_id) VALUES('${a}','${w}','Synthetic agent','synthetic','${member}','${template}','${member}');
  INSERT INTO agentonic.knowledge_collections(id,workspace_id,name,slug,owner_member_id) VALUES('${collection}','${w}','Knowledge','knowledge','${member}');`)
 })
 beforeEach(async () => {
+  requested = { version: 1, collectionIds: [collection], tools: [] }
   await db.exec("RESET ROLE;BEGIN")
   await actor()
 })
@@ -1459,7 +1466,10 @@ async function lifecycleCall(
 }
 async function approvedStaging() {
   const p = await prepareFlow()
-  await finishFlow(await confirmFlow(p))
+  const evaluated = await confirmFlow(p)
+  await finishFlow(evaluated)
+  if (requested.tools.length)
+    await approve({ ...p, evaluationId: evaluated.id })
   await sql(
     "INSERT INTO agentonic.runtime_hosts(environment,database_role,broker_sha256,runtime_sha256,verified_at,heartbeat_at) VALUES('local','agentonic_deployer_local',repeat('f',64),repeat('b',64),clock_timestamp(),clock_timestamp())"
   )
@@ -1967,4 +1977,191 @@ it("uses the same candidate selection and metering contract for deployed chats",
   expect((await stagingWork(p.deploymentId, "context", job)).passages).toEqual(
     candidates.passages
   )
+})
+
+async function gmailCommand(
+  operation: string,
+  payload: Record<string, unknown>
+) {
+  await db.exec("SAVEPOINT gmail")
+  try {
+    const r = await db.query<{ r: Record<string, unknown> }>(
+      "SELECT agentonic.gmail_command($1,$2) r",
+      [operation, JSON.stringify(payload)]
+    )
+    await db.exec("RELEASE SAVEPOINT gmail")
+    return r.rows[0]!.r
+  } catch (e) {
+    await db.exec("ROLLBACK TO SAVEPOINT gmail; RELEASE SAVEPOINT gmail")
+    throw e
+  }
+}
+async function gmailDeployment() {
+  await sql(
+    "INSERT INTO agentonic.gmail_connections(id,workspace_id,agent_id,owner_member_id,account,credential_ciphertext,operations) VALUES($1,$2,$3,$4,'synthetic@example.invalid','opaque','[\"gmail.read\",\"gmail.send\"]')",
+    [id(770), w, a, member]
+  )
+  await actor()
+  requested.tools = [
+    { connectionId: id(770), operations: ["gmail.read", "gmail.send"] },
+  ]
+  const deployment = await approvedStaging()
+  await readyStaging(deployment)
+  await actor()
+  const conversation = await chat("start", {
+    deploymentId: deployment.deploymentId,
+    title: "Synthetic Gmail tools",
+  })
+  await chat("turn", {
+    conversationId: conversation.id,
+    requestId: id(771),
+    query: "Prepare a synthetic email",
+  })
+  const job = (await stagingWork(
+    deployment.deploymentId,
+    "claim"
+  )) as unknown as Job
+  async function tool(
+    operation: string,
+    payload: Record<string, unknown> = {}
+  ) {
+    await db.exec(
+      "RESET ROLE; SET LOCAL ROLE agentonic_runtime_local; SAVEPOINT gmail_tool"
+    )
+    try {
+      const r = await db.query<{ r: Record<string, unknown> }>(
+        "SELECT agentonic.gmail_staging($1,$2,$3,$4,$5,$6) r",
+        [
+          operation,
+          deployment.deploymentId,
+          serviceSecret,
+          job.id,
+          job.token,
+          JSON.stringify(payload),
+        ]
+      )
+      await db.exec("RELEASE SAVEPOINT gmail_tool")
+      return r.rows[0]!.r
+    } catch (e) {
+      await db.exec(
+        "ROLLBACK TO SAVEPOINT gmail_tool; RELEASE SAVEPOINT gmail_tool"
+      )
+      throw e
+    }
+  }
+  return { deployment, conversation, job, tool }
+}
+it("Gmail freezes exact scope, requires manual review, and claims an unchanged write only once", async () => {
+  const p = await gmailDeployment()
+  expect((await p.tool("gmail-tools")).tools).toEqual(requested.tools)
+  await expect(
+    p.tool("gmail-read", {
+      connectionId: id(770),
+      operation: "gmail.drafts.read",
+    })
+  ).rejects.toThrow()
+  expect(
+    await p.tool("gmail-read", {
+      connectionId: id(770),
+      operation: "gmail.read",
+    })
+  ).toMatchObject({ credential: "opaque" })
+  expect(
+    await p.tool("gmail-propose", {
+      connectionId: id(770),
+      operation: "gmail.send",
+      id: id(772),
+      argumentsCiphertext: "opaque-message",
+      hash: "a".repeat(64),
+    })
+  ).toMatchObject({ pendingApproval: true })
+  await actor(other, otherW)
+  await expect(
+    gmailCommand("confirm", { id: id(772), hash: "a".repeat(64) })
+  ).rejects.toThrow()
+  await actor()
+  await expect(
+    gmailCommand("confirm", { id: id(772), hash: "b".repeat(64) })
+  ).rejects.toThrow()
+  expect(
+    await gmailCommand("confirm", { id: id(772), hash: "a".repeat(64) })
+  ).toMatchObject({ operation: "gmail.send" })
+  await expect(
+    gmailCommand("confirm", { id: id(772), hash: "a".repeat(64) })
+  ).rejects.toThrow()
+  await gmailCommand("complete", {
+    id: id(772),
+    status: "uncertain",
+    result: { code: "uncertain" },
+  })
+  await expect(
+    gmailCommand("confirm", { id: id(772), hash: "a".repeat(64) })
+  ).rejects.toThrow()
+  expect(
+    (
+      await sql(
+        "SELECT status,arguments_ciphertext FROM agentonic.gmail_invocations WHERE id=$1",
+        [id(772)]
+      )
+    ).rows
+  ).toEqual([{ status: "uncertain", arguments_ciphertext: null }])
+})
+it("Gmail revocation immediately fences leased reads and pending writes", async () => {
+  const p = await gmailDeployment()
+  await p.tool("gmail-propose", {
+    connectionId: id(770),
+    operation: "gmail.send",
+    id: id(772),
+    argumentsCiphertext: "opaque-message",
+    hash: "a".repeat(64),
+  })
+  await actor()
+  await gmailCommand("disconnect", { connectionId: id(770) })
+  await expect(
+    gmailCommand("confirm", { id: id(772), hash: "a".repeat(64) })
+  ).rejects.toThrow()
+  await expect(
+    p.tool("gmail-read", { connectionId: id(770), operation: "gmail.read" })
+  ).rejects.toThrow()
+  expect(
+    (
+      await sql(
+        "SELECT status,arguments_ciphertext FROM agentonic.gmail_invocations WHERE id=$1",
+        [id(772)]
+      )
+    ).rows
+  ).toEqual([{ status: "cancelled", arguments_ciphertext: null }])
+})
+it("Gmail expiry blocks confirmation and offboarding erases credentials and proposals", async () => {
+  const p = await gmailDeployment()
+  await p.tool("gmail-propose", {
+    connectionId: id(770),
+    operation: "gmail.send",
+    id: id(772),
+    argumentsCiphertext: "opaque-message",
+    hash: "a".repeat(64),
+  })
+  await sql(
+    "UPDATE agentonic.gmail_invocations SET expires_at=clock_timestamp()-interval '1 second' WHERE id=$1",
+    [id(772)]
+  )
+  await actor()
+  await expect(
+    gmailCommand("confirm", { id: id(772), hash: "a".repeat(64) })
+  ).rejects.toThrow()
+  await sql(
+    "UPDATE agentonic.workspace_members SET status='suspended' WHERE id=$1",
+    [member]
+  )
+  expect(
+    (
+      await sql(
+        "SELECT credential_ciphertext,status FROM agentonic.gmail_connections WHERE id=$1",
+        [id(770)]
+      )
+    ).rows
+  ).toEqual([{ credential_ciphertext: null, status: "disconnected" }])
+  await expect(
+    p.tool("gmail-read", { connectionId: id(770), operation: "gmail.read" })
+  ).rejects.toThrow()
 })

@@ -51,7 +51,7 @@ export function AgentEditorSkeleton() {
         configuration={
           <>
             <div className="space-y-6">
-              {["prompt", "skills", "knowledge", "tools", "connections"].map(
+              {["prompt", "skills", "knowledge", "connections", "tools"].map(
                 (section) => (
                   <Card
                     key={section}
@@ -86,8 +86,17 @@ export function AgentEditorSkeleton() {
                           </div>
                           <Skeleton className="h-4 w-3/4" />
                         </div>
-                      ) : section === "tools" || section === "connections" ? (
-                        <EmptyFrameSkeleton />
+                      ) : section === "tools" ? (
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          {Array.from({ length: 8 }, (_, i) => (
+                            <Skeleton key={i} className="h-12 w-full" />
+                          ))}
+                        </div>
+                      ) : section === "connections" ? (
+                        <div className="space-y-4">
+                          <EmptyFrameSkeleton />
+                          <Skeleton className="h-9 w-36" />
+                        </div>
                       ) : (
                         <div className="flex items-center gap-4 border-t py-5">
                           <div className="min-w-0 flex-1 space-y-3">

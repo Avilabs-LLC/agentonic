@@ -20,6 +20,7 @@ export type Configuration = {
   supabaseUrl: string
   storageKey: string
   voyageKey: string
+  google?: import("@agentonic/connectors/google").GoogleConfig
   rerankEnabled?: boolean
   runtimeRoot?: string
   openaiKey?: string
@@ -199,7 +200,8 @@ export async function processJob(
         config.runtimeRoot ??
           fileURLToPath(new URL("../../../.local/runtime/", import.meta.url)),
         config.openaiKey ?? "",
-        signal
+        signal,
+        config.google
       )
     else if (data.generateAnswer)
       await answer(job, execute, config.openaiKey ?? "", signal)

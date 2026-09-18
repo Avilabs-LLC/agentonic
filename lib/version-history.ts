@@ -1,5 +1,10 @@
 export const VERSION_HISTORY = [
   {
+    "version": "0.10.0",
+    "date": "2026-09-18",
+    "summary": "Conexión de Gmail, herramientas con confirmación y pruebas privadas con acceso autorizado a cuentas conectadas."
+  },
+  {
     "version": "0.9.0",
     "date": "2026-09-18",
     "summary": "Re-ranking con cobertura preservada, benchmark de recuperación y despliegue verificado en pruebas"

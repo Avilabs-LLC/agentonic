@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs"
 import { parse } from "dotenv"
 import pg from "pg"
+import { workerFailure } from "./failure"
 import { processJob, type Lease, type Execute } from "./pipeline"
 const env = {
   ...(existsSync(new URL("../.env.local", import.meta.url))
@@ -40,10 +41,25 @@ const config = {
   rerankEnabled: env.AGENTONIC_RERANK_ENABLED === "true",
   openaiKey: env.OPENAI_API_KEY ?? "",
   runtimeRoot: env.AGENTONIC_RUNTIME_ROOT,
+  google:
+    env.GOOGLE_CLIENT_ID &&
+    env.GOOGLE_CLIENT_SECRET &&
+    env.AGENTONIC_CONNECTION_KEY
+      ? {
+          clientId: env.GOOGLE_CLIENT_ID,
+          clientSecret: env.GOOGLE_CLIENT_SECRET,
+          encryptionKey: env.AGENTONIC_CONNECTION_KEY,
+          redirectUri:
+            env.GOOGLE_REDIRECT_URI ??
+            "http://localhost:3101/api/connections/google/callback",
+        }
+      : undefined,
 }
 const execute: Execute = async (operation, job, payload = {}) => {
   const result = await pool.query(
-    "SELECT agentonic.rag_worker($1,$2::uuid,$3::uuid,$4::jsonb) result",
+    operation.startsWith("gmail-")
+      ? "SELECT agentonic.gmail_preview_worker($1,$2::uuid,$3::uuid,$4::jsonb) result"
+      : "SELECT agentonic.rag_worker($1,$2::uuid,$3::uuid,$4::jsonb) result",
     [operation, job.id, job.token, JSON.stringify(payload)]
   )
   return result.rows[0].result
@@ -58,16 +74,6 @@ process.once("SIGINT", () => {
   stopping = true
   active?.abort()
 })
-const allowedErrors = new Set([
-  "provider_unavailable",
-  "budget_exhausted",
-  "invalid_document",
-  "ocr_required",
-  "too_much_text",
-  "storage_unavailable",
-  "configuration_required",
-  "lease_lost",
-])
 async function run() {
   console.log(
     JSON.stringify({
@@ -105,10 +111,7 @@ async function run() {
             })
           )
         } catch (error) {
-          const code =
-            error instanceof Error && allowedErrors.has(error.message)
-              ? error.message
-              : "lease_lost"
+          const { code, diagnostic } = workerFailure(error)
           await execute("fail", job, { code }).catch(() => {})
           console.log(
             JSON.stringify({
@@ -116,6 +119,7 @@ async function run() {
               job: job.id,
               kind: job.kind,
               code,
+              diagnostic,
             })
           )
         } finally {

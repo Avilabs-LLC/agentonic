@@ -9,6 +9,7 @@ import {
 export const draftEditorForm = z.object({
   content: editableDraftContent,
   collectionIds: requestedAccess.shape.collectionIds,
+  tools: requestedAccess.shape.tools.optional(),
 })
 export type DraftFormValues = z.infer<typeof draftEditorForm>
 export type DraftEditorStatus = {

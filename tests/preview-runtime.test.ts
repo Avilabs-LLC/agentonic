@@ -88,29 +88,27 @@ it("blocks model controls or tools and insufficient budget before making a provi
 })
 it("reserves before generation and settles actual usage; retains unknown reservations", async () => {
   const execute = vi.fn<Execute>().mockResolvedValue({ ok: true })
-  const fetch = vi
-    .fn()
-    .mockResolvedValue(
-      Response.json({
-        status: "completed",
-        usage: { input_tokens: 40, output_tokens: 20 },
-        output: [
-          {
-            type: "message",
-            content: [
-              {
-                type: "output_text",
-                text: JSON.stringify({
-                  text: "Evidence missing.",
-                  citations: [],
-                  insufficientEvidence: true,
-                }),
-              },
-            ],
-          },
-        ],
-      })
-    )
+  const fetch = vi.fn().mockResolvedValue(
+    Response.json({
+      status: "completed",
+      usage: { input_tokens: 40, output_tokens: 20 },
+      output: [
+        {
+          type: "message",
+          content: [
+            {
+              type: "output_text",
+              text: JSON.stringify({
+                text: "Evidence missing.",
+                citations: [],
+                insufficientEvidence: true,
+              }),
+            },
+          ],
+        },
+      ],
+    })
+  )
   vi.stubGlobal("fetch", fetch)
   await generatePreview(
     request,
@@ -141,4 +139,289 @@ it("reserves before generation and settles actual usage; retains unknown reserva
     )
   ).rejects.toThrow("provider_unavailable")
   expect(execute.mock.calls.map((c) => c[0])).toEqual(["reserve", "heartbeat"])
+})
+
+it("Gmail model calls are bounded and metered, and write tools only persist a proposal", async () => {
+  const execute = vi.fn<Execute>().mockResolvedValue({ ok: true })
+  const fetch = vi.fn().mockResolvedValue(
+    Response.json({
+      status: "completed",
+      usage: { input_tokens: 80, output_tokens: 30 },
+      output: [
+        {
+          type: "function_call",
+          name: "gmail_send",
+          call_id: "call_synthetic",
+          arguments: JSON.stringify({
+            to: ["synthetic@example.invalid"],
+            cc: [],
+            bcc: [],
+            subject: "Synthetic",
+            body: "Synthetic test only",
+          }),
+        },
+      ],
+    })
+  )
+  vi.stubGlobal("fetch", fetch)
+  const result = await generatePreview(
+    request,
+    job,
+    execute,
+    "fixture",
+    new AbortController().signal,
+    {
+      grant: { connectionId: job.id, operations: ["gmail.send"] },
+      config: {
+        clientId: "test",
+        clientSecret: "test",
+        encryptionKey: "a".repeat(64),
+        redirectUri: "http://localhost",
+      },
+    }
+  )
+  expect(result).toMatchObject({ insufficientEvidence: true })
+  expect(fetch).toHaveBeenCalledTimes(1)
+  expect(execute.mock.calls.map((c) => c[0])).toEqual([
+    "reserve",
+    "heartbeat",
+    "settle",
+    "gmail-propose",
+  ])
+  const sent = JSON.parse(fetch.mock.calls[0]![1].body)
+  expect(sent.parallel_tool_calls).toBe(false)
+  expect(sent.tools.map((t: { name: string }) => t.name)).toEqual([
+    "gmail_send",
+  ])
+  expect(JSON.stringify(result)).not.toContain("Synthetic test only")
+})
+it("rejects a model request for an ungranted Gmail operation after settling provider usage", async () => {
+  const execute = vi.fn<Execute>().mockResolvedValue({ ok: true })
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValue(
+      Response.json({
+        status: "completed",
+        usage: { input_tokens: 80, output_tokens: 30 },
+        output: [
+          {
+            type: "function_call",
+            name: "gmail_send",
+            call_id: "call_synthetic",
+            arguments: "{}",
+          },
+        ],
+      })
+    )
+  )
+  await expect(
+    generatePreview(
+      request,
+      job,
+      execute,
+      "fixture",
+      new AbortController().signal,
+      {
+        grant: { connectionId: job.id, operations: ["gmail.read"] },
+        config: {
+          clientId: "test",
+          clientSecret: "test",
+          encryptionKey: "a".repeat(64),
+          redirectUri: "http://localhost",
+        },
+      }
+    )
+  ).rejects.toThrow("runtime_mismatch")
+  expect(execute.mock.calls.map((c) => c[0])).toEqual([
+    "reserve",
+    "heartbeat",
+    "settle",
+  ])
+})
+it("derives KB citation coverage after a successful Gmail read instead of rejecting a mailbox answer", async () => {
+  const { seal } = await import("../packages/connectors/src/secrets")
+  const encryptionKey = "a".repeat(64)
+  const execute = vi.fn<Execute>().mockImplementation(async (op) =>
+    op === "gmail-read"
+      ? {
+          credential: seal(
+            { refreshToken: "synthetic" },
+            `gmail:${job.id}`,
+            encryptionKey
+          ),
+          account: "synthetic@example.invalid",
+        }
+      : { ok: true }
+  )
+  const final = {
+    status: "completed",
+    usage: { input_tokens: 80, output_tokens: 30 },
+    output: [
+      {
+        type: "message",
+        content: [
+          {
+            type: "output_text",
+            text: JSON.stringify({
+              text: "Synthetic email subject",
+              citations: [],
+              insufficientEvidence: false,
+            }),
+          },
+        ],
+      },
+    ],
+  }
+  const fetch = vi
+    .fn()
+    .mockResolvedValueOnce(
+      Response.json({
+        status: "completed",
+        usage: { input_tokens: 80, output_tokens: 30 },
+        output: [
+          {
+            type: "function_call",
+            name: "gmail_read",
+            call_id: "read_1",
+            arguments: JSON.stringify({ id: "abc123" }),
+          },
+        ],
+      })
+    )
+    .mockResolvedValueOnce(
+      Response.json({ access_token: "synthetic", expires_in: 3600 })
+    )
+    .mockResolvedValueOnce(
+      Response.json({
+        id: "abc123",
+        payload: {
+          mimeType: "text/plain",
+          body: {
+            data: Buffer.from("Synthetic email subject").toString("base64url"),
+          },
+        },
+      })
+    )
+    .mockResolvedValueOnce(Response.json(final))
+  vi.stubGlobal("fetch", fetch)
+  const result = await generatePreview(
+    request,
+    job,
+    execute,
+    "fixture",
+    new AbortController().signal,
+    {
+      grant: { connectionId: job.id, operations: ["gmail.read"] },
+      config: {
+        clientId: "test",
+        clientSecret: "test",
+        encryptionKey,
+        redirectUri: "http://localhost",
+      },
+    }
+  )
+  expect(result).toEqual({
+    text: "Synthetic email subject",
+    citations: [],
+    insufficientEvidence: true,
+  })
+  expect(execute.mock.calls.filter((c) => c[0] === "settle")).toHaveLength(2)
+  // Merely enabling Gmail must not make unsupported answers pass grounding.
+  fetch.mockResolvedValueOnce(Response.json(final))
+  expect(
+    await generatePreview(
+      request,
+      job,
+      execute,
+      "fixture",
+      new AbortController().signal,
+      {
+        grant: { connectionId: job.id, operations: ["gmail.read"] },
+        config: {
+          clientId: "test",
+          clientSecret: "test",
+          encryptionKey,
+          redirectUri: "http://localhost",
+        },
+      }
+    )
+  ).toMatchObject({ insufficientEvidence: false })
+})
+it("constrains mailbox-only output to no KB citations and rejects fabricated document IDs", async () => {
+  const execute = vi.fn<Execute>().mockResolvedValue({ ok: true })
+  const answer = (citations: string[]) =>
+    Response.json({
+      status: "completed",
+      usage: { input_tokens: 40, output_tokens: 20 },
+      output: [
+        {
+          type: "message",
+          content: [
+            {
+              type: "output_text",
+              text: JSON.stringify({
+                text: "Synthetic summary",
+                citations,
+                insufficientEvidence: true,
+              }),
+            },
+          ],
+        },
+      ],
+    })
+  const fetch = vi
+    .fn()
+    .mockResolvedValueOnce(answer([]))
+    .mockResolvedValueOnce(answer([job.id]))
+    .mockResolvedValueOnce(answer([job.token]))
+    .mockResolvedValueOnce(answer(["abc0"]))
+  vi.stubGlobal("fetch", fetch)
+  await generatePreview(
+    request,
+    job,
+    execute,
+    "fixture",
+    new AbortController().signal,
+    undefined,
+    []
+  )
+  const empty = JSON.parse(fetch.mock.calls[0]![1].body).text.format.schema
+    .properties
+  expect(empty.citations.maxItems).toBe(0)
+  expect(empty.insufficientEvidence.enum).toEqual([true])
+  await generatePreview(
+    request,
+    job,
+    execute,
+    "fixture",
+    new AbortController().signal,
+    undefined,
+    [job.id]
+  )
+  expect(
+    JSON.parse(fetch.mock.calls[1]![1].body).text.format.schema.properties
+      .citations.items.enum
+  ).toEqual([job.id])
+  await expect(
+    generatePreview(
+      request,
+      job,
+      execute,
+      "fixture",
+      new AbortController().signal,
+      undefined,
+      [job.id]
+    )
+  ).rejects.toMatchObject({ diagnostic: "answer_citations_invalid" })
+  await expect(
+    generatePreview(
+      request,
+      job,
+      execute,
+      "fixture",
+      new AbortController().signal,
+      undefined,
+      []
+    )
+  ).rejects.toMatchObject({ diagnostic: "answer_citations_invalid" })
 })

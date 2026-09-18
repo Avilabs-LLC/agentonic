@@ -1,5 +1,6 @@
 import { approvalReason } from "./lifecycle"
 import { z } from "zod"
+import { gmailGrant } from "./gmail"
 import { draftContent } from "./authoring"
 import { reviewCriterion } from "./review-flow"
 export const reviewReceipt = z.object({
@@ -15,6 +16,7 @@ export const reviewReceipt = z.object({
   reportAvailable: z.boolean(),
   content: draftContent.nullable(),
   note: z.string().nullable(),
+  tools: z.array(gmailGrant).optional(),
   collections: z.array(z.object({ id: z.uuid(), name: z.string() })),
   approval: z.object({
     id: z.uuid(),

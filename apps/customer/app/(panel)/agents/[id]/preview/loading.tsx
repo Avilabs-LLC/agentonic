@@ -14,8 +14,17 @@ export default function Loading() {
       <div className="space-y-5 rounded-lg border p-6">
         <Skeleton className="h-5 w-40" />
         <Skeleton className="h-9 w-full" />
+        <div className="flex items-start gap-3">
+          <Skeleton className="size-4 shrink-0" />
+          <Skeleton className="h-10 w-full" />
+        </div>
         <Skeleton className="h-5 w-3/4" />
         <Skeleton className="h-8 w-32" />
+        <div className="space-y-2 border-t pt-5">
+          <Skeleton className="h-4 w-full" />
+          <Skeleton className="h-4 w-5/6" />
+          <Skeleton className="h-4 w-full" />
+        </div>
       </div>
       <div className="overflow-hidden rounded-lg border">
         <div className="flex items-center justify-between border-b px-6 py-4">

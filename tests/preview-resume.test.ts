@@ -44,6 +44,7 @@ it("restores the exact existing state without starting or renewing a preview", a
     expiresAt: "2026-09-15T10:00:00Z",
     budgetUsd: 0.25,
     committedMicrousd: 7,
+    toolsEnabled: true,
     turns: [],
   }
   mocks.query

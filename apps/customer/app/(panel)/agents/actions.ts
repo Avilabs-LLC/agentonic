@@ -45,6 +45,8 @@ export async function saveDraft(
   const prompt = systemPromptInput.safeParse(value(data, "systemPrompt"))
   if (!prompt.success)
     return { ok: false, message: prompt.error.issues[0]!.message }
+  let tools: unknown
+  try { tools = JSON.parse(value(data, "tools") || "[]") } catch { return failed }
   const names = data.getAll("skillName")
   const instructions = data.getAll("skillInstructions")
   const r = await runAuthoringCommand("customer", {
@@ -64,7 +66,7 @@ export async function saveDraft(
       requestedAccess: {
         version: 1,
         collectionIds: data.getAll("collections").map(String),
-        tools: [],
+        tools,
       },
     },
   })

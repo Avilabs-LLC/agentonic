@@ -1,0 +1,94 @@
+# Gmail connection and tools — first staging slice
+
+Owner selected Gmail on 18 September 2026, replacing the Drive-first recommendation in architecture §37.5. Scope is a personal mailbox bound to one agent and one active workspace member, used through the owner’s private preview and activated staging chat. Google OAuth account connection is separate from Agentonic sign-in. Connecting starts with **no agent operations enabled**. This implementation does not import mail into RAG.
+
+## Scope and experience
+
+Agents → Configuración → Conexiones → Conectar Gmail opens a Base UI consent explanation, then Google account selection/consent, returning to the same agent. Herramientas offers search/read mail, list/read/create/update/delete drafts, and send a plain-text email. Save the selected operations in the draft and prepare a new immutable version. A tool-capable code artifact is required; an existing no-tool deployment cannot acquire Gmail permissions dynamically.
+
+Every mailbox change, including draft changes, creates a private pending action in chat. The customer opens Revisar acción, sees the account and exact arguments, checks explicit consent and confirms. Approval lasts ten minutes and is atomically consumed once. A write result survives browser refresh. Uncertain writes are never automatically retried. Check Gmail before requesting another action after an uncertain result. Sending uses the exact confirmed content, not a mutable draft reference. Reading a draft then asking to send its content creates a new explicit send proposal; it does not silently send/delete the source draft.
+
+Draft updates replace the draft with the confirmed plain-text content. Draft update/delete confirmation identifies the draft ID; v1 does not show its previous contents or fence concurrent edits made directly in Gmail. Read the draft before proposing a change. A richer before/after preview and concurrency check remain follow-up work.
+
+Initial exclusions: attachments, HTML composition, inbox deletion/modification, forwarding rules, shared mailbox access, delegated users, background schedules, autonomous writes, bulk operations and production activation. Search returns at most ten IDs; when the same frozen/live grant also includes read access, the preview worker expands them into headers and excerpts of at most 500 characters, individual messages are bounded to 20,000 characters, and the model can request at most three tools per turn. Received HTML is never rendered and remote images/links are never fetched.
+
+## Permission and execution contract
+
+- OAuth requests `gmail.readonly` and `gmail.compose`; compose also grants provider-level sending. Application permission checks remain narrower than OAuth. No `mail.google.com` or `gmail.modify` scope is requested.
+- Start is a same-origin POST, with server-verified customer identity, active workspace and agent editing rights. Ten-minute database state binds owner, workspace, agent and connection; its digest is persisted. A separate encrypted HttpOnly SameSite cookie binds the browser. PKCE uses S256. Callback state is consumed once before token exchange. Missing scopes or refresh token means connection failure.
+- The Gmail account identity comes from Google's authenticated `users/me/profile`, never a form or model-supplied account. Account connection and operation grants are distinct. Each frozen requested-access snapshot pins connection ID and operations; code/configuration tool indexes materialize atomically with freezing.
+- **Staging secret storage decision:** this slice uses authenticated AES-256-GCM ciphertext with record/purpose associated data and a random 32-byte key held outside the database. This is a deliberate staging alternative to the target Vault backend in §5, not an assertion that Vault integration is implemented. Database roles cannot decrypt. Only the customer server, trusted private-preview worker and staging broker receive the key; child runtime/model/browser never receive it. Hosted key management, rotation and production credential-service separation remain P4/P5 gates.
+- RLS tables expose no direct customer/staff/worker reads. Scoped SQL functions verify current member, agent and connection. Runtime access additionally verifies the existing service token, host, operating consent, conversation owner and turn lease; frozen scope intersects live grants. A read rechecks before provider access and before returning data. Staff and automated evaluations never access the real mailbox. The owner’s private preview can access it when explicitly enabled at session start; its frozen tool scope intersects live grants and its ten-minute expiry.
+- Writes store encrypted immutable arguments and a SHA-256 digest before any provider side effect. Confirmation binds exact invocation, account, operation, arguments, current actor and active deployment. Refresh occurs before atomic execution claim. After claiming, one provider attempt is made; uncertain network/provider outcomes stay uncertain. There is no exactly-once claim for Gmail itself. Stable Message-ID aids manual investigation but is not provider idempotency.
+- A proposal ends the current model turn. Confirmation executes the durable proposal without replaying or charging that turn again; the next user message starts a new turn. Automatic post-confirmation model continuation is deliberately absent in v1.
+- Offboarding/disconnect fences access and erases stored credentials/proposals. Chat closure erases pending arguments. Expired proposals are scrubbed on subsequent workspace Gmail operations; a scheduled retention sweep is required before hosted beta. Content-free operation IDs, hashes and outcomes remain audit evidence. Mail excerpts in chat answers follow existing private chat retention.
+- Automatic version approval remains restricted to **no-tool** versions. Gmail versions require staff review after normal evaluations. Evaluations assess frozen instructions/knowledge with no mailbox network access; synthetic deterministic connector tests are separate evidence, not a claim that an arbitrary customer's mailbox has been tested.
+
+## Configuration and rollout
+
+GCP Web OAuth client callback: `http://localhost:3101/api/connections/google/callback` exactly. Enable Gmail API and add the intended Google account as an OAuth test user while the app is in Testing. The two restricted scopes require Google's appropriate consent/verification process before general external distribution. Google's testing-mode token lifetime is separate from Agentonic host verification and operating consent.
+
+1. Keep `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` in protected `.env.staging.local`. Run `node scripts/setup-gmail.mjs`; it preserves/generates `AGENTONIC_CONNECTION_KEY` once and copies only required Google settings into the customer server and private-preview worker’s protected `.env.local` files. Restart customer dev and the private-preview worker after changing environment. Never expose these as `NEXT_PUBLIC_*` values. Back up the encryption key securely; losing it means reconnecting accounts.
+2. Apply new migration `202609180029_gmail` using `pnpm db:migrate` against the explicitly configured nonproduction project, after deterministic checks. Do not edit applied migrations or reset the database.
+3. Review and commit the sibling runtime changes, then use the existing preview packager/setup workflow to publish a **new immutable artifact** with `previewContract:1` plus `gmailContract:1`. Old artifacts remain supported and unchanged. The new broker accepts the optional versioned Gmail extension only after artifact verification.
+4. Package/install the staging broker with the existing installer, carrying protected Google settings. Its active-deployment guard remains in place. Publishing source or registering a code release does not replace a running broker. Reverify evaluation/host releases through existing workflows before deploying a Gmail-enabled candidate.
+5. Connect the designated test account in the customer app, enable only required tools, save and prepare. In Probar agente, explicitly enable the version’s connected tools when starting a private preview. Test before submitting for evaluation/staff review. Approval and operating authorization remain required for activation. The browser's Google consent is a human step; storing client credentials does not connect a mailbox.
+6. On explicitly authorized synthetic test messages, verify read/search, draft creation/update/delete, send to the agreed test recipient, revocation and uncertain-result handling. Do not use real customer mail as fixtures or automatically send a live test email.
+
+### Rollout checkpoint — 18 September 2026
+
+- Migration `202609180029_gmail` applied to the configured nonproduction project at 18:57:51 UTC.
+- Runtime commit `b54d39f9aaf31a1709ab7538470629227207206f`, registered as `0.2.0-preview-b54d39f9`; immutable manifest SHA-256 `167671fb0c38c635156bf76ce3561aea7bb70b1e6c246370259689ed4073c9a2`.
+- Broker SHA-256 `13fbcbe4ca397ddedfb58cc08f1310a0d6568108cd2517a6c5ad26b5b159d6b8` installed locally and on the VM. Host verification refreshed at 19:03:39 UTC (local) and 19:00:54 UTC (Azure staging).
+- Evaluator SHA-256 `b5d3987f495212abe1349a3667fe8e882ce022ec8566b33046cd4cb866d7909a` installed on the VM. Both VM evaluator and deployment controller report active; local controller and knowledge worker are running. Installed broker/runtime hashes match their registrations; protected VM broker configuration includes the Google settings and encryption key with file mode 600.
+- No active deployments existed during replacement; existing usage and old artifacts were preserved. No Gmail-enabled agent was activated automatically.
+- Platform: 344 tests passed; runtime: 8 tests passed. Prisma generation/validation, typecheck, lint, 15-route skeleton audit and version consistency checks passed. Browser review confirmed the connection cards/dialog and successful navigation to Google's account chooser.
+- **Still pending:** the owner must select/authorize the intended Google test account, enable tools and prepare a new version for staff review. OAuth callback/token refresh and actual read/draft/send operations have not yet been verified against a live mailbox. No real messages were read, changed or sent. Live writes require a specifically agreed test message and recipient plus the in-app action confirmation.
+
+Follow-up, 18 September: the owner completed an OAuth connection and prepared a Gmail-capable version with the selected operations. Read-only database checks confirmed a connected account, frozen tool grants and a preview session, but no active deployment. The reported mailbox-access denial came from **Probar agente**, which at that checkpoint had no Google credentials or Gmail tool execution. Live Gmail read/write and refresh acceptance remain pending; a successful account connection does not establish those checks. The owner subsequently authorized enabling tools in private preview; see the implementation update below.
+
+This checkpoint establishes deployed test infrastructure and deterministic evidence; it does not claim completed live Gmail acceptance or production readiness. Scheduled retention cleanup, managed key rotation and the hosted rollout gates remain outstanding.
+
+## Acceptance matrix
+
+| Boundary | Required evidence |
+|---|---|
+| OAuth | State expiry, replay, wrong browser/actor/workspace, partial scopes, refresh failure |
+| Authorization | Wrong connection/operation, removed actor, revoked connection, changed frozen scope, invalid lease |
+| Write confirmation | Changed arguments, double confirmation, expiration, cancellation, crash/unknown outcome, no automatic resend |
+| Content handling | Header injection, forbidden attachments/URLs, HTML/mail prompt injection cannot invoke writes without approval |
+| Lifecycle | Actual frozen version → manual review → consent → staging chat; connection alone grants no operation |
+| UI | Shared cards/dialogs, Spanish labels, sparse badges, accurate disabled/empty states and reviewed skeletons |
+| Regression | Existing no-tool agent/RAG/preview/evaluation/deployment checks pass |
+
+Provider references checked 18 September 2026: [OAuth web-server flow](https://developers.google.com/identity/protocols/oauth2/web-server), [Gmail scopes](https://developers.google.com/workspace/gmail/api/auth/scopes), [draft lifecycle](https://developers.google.com/workspace/gmail/api/guides/drafts), [sending MIME mail](https://developers.google.com/workspace/gmail/api/guides/sending), [Responses function calling](https://developers.openai.com/api/docs/guides/function-calling).
+
+## Owner-authorized preview tools — migration 30
+
+Private preview now offers an explicit start checkbox for connected tools. It pins the prepared version’s operations in the session policy; pre-existing/no-tool sessions remain unchanged. The worker’s new `gmail_preview_worker` RPC derives owner, agent and scope only from a currently leased customer preview job. Evaluation workers/staff cannot execute it. Normal RAG jobs cannot borrow this authority. No deployment or staff approval is required for private preview.
+
+Preview proposals share the existing confirmation UI, encrypted argument binding, one-time claim and uncertain-outcome behavior. `gmail_invocations.execution_context` distinguishes staging conversations from preview sessions. Confirmation checks the live session, owner, frozen scope and current grants. Proposal expiry is capped at preview expiry; cancellation/deletion scrubs pending payloads, and the existing preview sweeper expires sessions. All model generations continue through existing reservation/usage accounting.
+
+To use an older deep link, finish its session if still active, enable connected tools and start a new preview. Previous responses are not retroactively regenerated. Live mailbox testing remains an owner action; synthetic tests contain no real messages.
+
+Rollout: migration `202609180030_gmail_preview` was applied to the configured nonproduction database on 18 September at 20:52:48 UTC. The local private-preview worker was restarted with the matching protected encryption key and Google client configuration. The existing Gmail-capable immutable runtime artifact remains unchanged; this update requires no new agent version when its prepared version already contains the Gmail grants. VM deployment/evaluation services were not replaced for this preview change. Browser inspection confirmed the new opt-in, real-account explanation and existing visual styling on the owner's preview page. No live mailbox reads or writes were performed for acceptance; the owner can now run that test from the refreshed preview.
+
+Verification for this update: 353 platform tests passed, including preview opt-in isolation, frozen/live scope intersection, five-message summaries, wrong actor/staff/lease denial, cancellation/expiry and one-time uncertain write claims. Prisma generation and validation passed; typecheck, lint and the 15-route skeleton audit are required rollout checks.
+
+### Preview answer validation follow-up — 18 September 2026
+
+Two owner preview turns failed after two settled model calls; the old worker recorded only `lease_lost`, so their original internal failure cannot be reconstructed conclusively. Read-only diagnostics confirmed refresh-token exchange and Gmail profile access both succeed. A reproducible validation defect was found: after a successful Gmail read, the model can report sufficient evidence while providing no knowledge-base citations, violating the frozen runtime's KB-only evidence invariant. The broker now derives that KB coverage flag when mailbox evidence was actually read and no KB citations are present. It does not discard citations, relax authorization, or treat merely enabled tools as evidence.
+
+The installed immutable runtime accepted the corrected response in a synthetic IPC/tool-loop check with all provider calls mocked. Sixteen focused tests, typecheck and lint passed. Runtime-validation failures now map to the existing response-failure message instead of authorization loss and carry an allowlisted diagnostic; raw provider/SQL payloads are never logged. Unknown ingestion failures retain their non-retrying fallback. Tool-enabled previews receive up to 110 seconds within the existing runtime timeout. The local preview worker was restarted while idle; failed turns were not replayed and metered usage was preserved. Live owner retest remains the confirmation of the original symptom.
+
+### Confirmed citation failure and live regression check — 18 September 2026
+
+The earlier evidence-flag correction was incomplete. A live model run against five synthetic Gmail messages reproduced `answer_citations_invalid`: the response placed mailbox message IDs (`abc0` through `abc4`) in the KB citation array. This explains the rejected-answer behavior; no real mailbox content was used in the reproduction.
+
+The broker now constructs its output schema from the trusted current passage IDs: citations are restricted to those IDs, and mailbox-only answers have an empty citation array with the KB evidence flag set to true. It still validates returned citations independently and rejects invented IDs rather than stripping them. The exact same live-model/synthetic-mail test then completed two metered model calls, passed the installed frozen runtime, and persisted its answer successfully. Synthetic database fixtures were removed while retaining provider usage. Eighteen focused tests, typecheck and lint passed; the local preview worker was restored with the fix. Safe diagnostics now distinguish JSON, citation, general answer-schema and incomplete-response failures without logging private response content.
+
+Schema constraints checked against [OpenAI Structured Outputs](https://developers.openai.com/api/docs/guides/structured-outputs). This updates the local preview worker; fixed VM broker releases retain their installed bytes until an explicit subsequent rollout.
+
+### Release 0.10.0 acceptance checkpoint
+
+The owner confirmed the Gmail preview now works after the citation fix. This supplies live owner acceptance for connected-mailbox reading in private preview, in addition to the synthetic live-model regression evidence. Live draft modifications and sending are not recorded as accepted yet. The branch release groups connection/security foundations, broker/preview execution and shared UI/documentation. Mail ingestion and writing-profile personalization were discussed but are not part of this release.
