@@ -34,14 +34,6 @@ export const navigation = [
     icon: "knowledge",
   },
   {
-    href: "/connections",
-    title: "Conexiones",
-    description: "Servicios autorizados para tus agentes.",
-    group: "Mi espacio",
-    enabled: false,
-    icon: "connections",
-  },
-  {
     href: "/account",
     title: "Mi cuenta",
     description: "Identidad y acceso a Agentonic.",

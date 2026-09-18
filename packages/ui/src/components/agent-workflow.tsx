@@ -1,4 +1,5 @@
 "use client"
+import type { GmailState } from "@agentonic/contracts/gmail"
 import { useEffect, useRef, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { Controller, useForm, useWatch } from "react-hook-form"
@@ -417,6 +418,8 @@ function VersionCards({
 }
 
 export function AgentWorkflow({
+  gmail,
+  workspaceId,
   data,
   collections,
   save,
@@ -424,6 +427,8 @@ export function AgentWorkflow({
   preview,
   submit,
 }: {
+  gmail?: GmailState
+  workspaceId?: string
   data: AgentView
   collections: WorkspaceView["collections"]
   save: (values: FormData) => Promise<FormResult>
@@ -438,6 +443,7 @@ export function AgentWorkflow({
     defaultValues: {
       content: data.draft.content,
       collectionIds: data.draft.requestedAccess.collectionIds,
+      tools: data.draft.requestedAccess.tools,
     },
   })
   const [editingSkill, setEditingSkill] = useState(false)
@@ -474,6 +480,7 @@ export function AgentWorkflow({
         JSON.stringify({
           content: data.draft.content,
           collectionIds: data.draft.requestedAccess.collectionIds,
+          tools: data.draft.requestedAccess.tools,
         })
     )
       return
@@ -508,6 +515,9 @@ export function AgentWorkflow({
   return (
     <>
       <DraftEditor
+        gmail={gmail}
+        workspaceId={workspaceId}
+        agentId={data.agent.id}
         draft={data.draft}
         collections={collections}
         action={save}

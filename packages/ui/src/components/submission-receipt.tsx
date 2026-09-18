@@ -79,6 +79,7 @@ export function SubmissionReceipt({
         <SubmissionVersionContent
           content={r.content}
           collectionCount={r.collections.length}
+          tools={r.tools}
           collectionNames={r.collections.map((c) => c.name)}
         />
       ) : (

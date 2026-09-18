@@ -16,6 +16,8 @@ import {
   SelectItem,
   SelectValue,
 } from "@workspace/ui/components/select"
+import { ConsentCheckbox } from "@workspace/ui/components/consent-checkbox"
+import { GmailApprovals } from "@workspace/ui/components/gmail-approvals"
 import { AgentSettingsCard } from "@workspace/ui/components/agent-settings-card"
 export function AgentPreview({
   workspaceId,
@@ -37,6 +39,7 @@ export function AgentPreview({
     initialState?.id ?? null
   )
   const [state, setState] = useState<PreviewState | null>(initialState)
+  const [enableTools, setEnableTools] = useState(false)
   const [query, setQuery] = useState("")
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState("")
@@ -113,7 +116,13 @@ export function AgentPreview({
     setError("")
     try {
       if (operation === "start") {
-        const result = await command("start", { candidateId: candidate })
+        const result = await command("start", {
+          candidateId: candidate,
+          enableTools,
+        })
+        setState(
+          previewState.parse(await command("state", { previewId: result.id }))
+        )
         setPreviewId(result.id!)
         request.current = null
       } else if (operation === "cancel") {
@@ -151,6 +160,7 @@ export function AgentPreview({
       <AgentSettingsCard
         title="Versión de prueba"
         description="Solo tú puedes ver esta conversación. Termina a los 10 minutos o al alcanzar 10 mensajes."
+        footer="Las herramientas habilitadas usan tu cuenta real. Crear, editar o eliminar borradores y enviar correos requiere revisar y confirmar cada acción. Al finalizar o vencer esta prueba, sus acciones pendientes dejan de estar disponibles."
       >
         <div className="space-y-4">
           <Field>
@@ -181,10 +191,26 @@ export function AgentPreview({
               del agente.
             </p>
           )}
+          {previewId ? (
+            <p className="text-sm text-muted-foreground">
+              {state?.toolsEnabled
+                ? "Herramientas conectadas habilitadas para esta prueba."
+                : "Esta sesión no usa conexiones. Finalízala e inicia otra habilitando las herramientas para probar Gmail."}
+            </p>
+          ) : (
+            <ConsentCheckbox
+              checked={enableTools}
+              onCheckedChange={setEnableTools}
+              disabled={busy}
+            >
+              Habilitar las conexiones y herramientas de esta versión en mi
+              cuenta real durante esta prueba.
+            </ConsentCheckbox>
+          )}
           <div className="flex flex-wrap items-center justify-between gap-3">
             <p className="text-xs text-muted-foreground">
-              Máximo US$0,25 por prueba · Fuentes de prueba · Sin acciones
-              externas
+              Máximo US$0,25 por prueba · Solo los permisos de la versión
+              preparada
             </p>
             {previewId ? (
               <Button
@@ -207,6 +233,14 @@ export function AgentPreview({
           </div>
         </div>
       </AgentSettingsCard>
+      {previewId && state?.toolsEnabled && (
+        <GmailApprovals
+          key={previewId}
+          workspaceId={workspaceId}
+          conversationId={previewId}
+          context="preview"
+        />
+      )}
       <div className="overflow-hidden rounded-lg border bg-card">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b px-6 py-4">
           <h2 className="font-medium">Conversación de prueba</h2>

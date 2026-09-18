@@ -1,4 +1,6 @@
 "use client"
+import { GmailConnection } from "@workspace/ui/components/gmail-connection"
+import type { GmailState } from "@agentonic/contracts/gmail"
 import { CardEmptyState } from "@workspace/ui/components/card-empty-state"
 import { useState } from "react"
 import { useRouter } from "next/navigation"
@@ -35,6 +37,9 @@ import type { DraftFormValues as Values } from "@agentonic/contracts/workflow"
 import { notify } from "@workspace/ui/lib/toast"
 
 export function DraftEditor({
+  gmail,
+  workspaceId,
+  agentId,
   draft,
   collections,
   action,
@@ -42,6 +47,9 @@ export function DraftEditor({
   form,
   onEditingSkillChange,
 }: {
+  gmail?: GmailState
+  workspaceId?: string
+  agentId?: string
   draft: AgentView["draft"]
   collections: WorkspaceView["collections"]
   action: (data: FormData) => Promise<FormResult>
@@ -63,6 +71,7 @@ export function DraftEditor({
     setEditingState(value)
     onEditingSkillChange(value !== null)
   }
+  const tools = useWatch({ control, name: "tools" })
   const skills = useWatch({ control, name: "content.skills" })
   const prompt = useWatch({ control, name: "content.systemPrompt" })
   const promptError =
@@ -81,6 +90,7 @@ export function DraftEditor({
     if (disabled || editing !== null) return
     setMessage("")
     const data = new FormData()
+    data.set("tools", JSON.stringify(values.tools ?? []))
     data.set("revision", String(draft.revision))
     data.set("systemPrompt", values.content.systemPrompt)
     values.content.skills.forEach((skill) => {
@@ -262,8 +272,26 @@ export function DraftEditor({
             </Field>
           </AgentSettingsCard>
         </fieldset>
-        <AgentCapabilityPlaceholder kind="tools" />
-        <AgentCapabilityPlaceholder kind="connections" />
+        {gmail && workspaceId && agentId ? (
+          <GmailConnection
+            state={gmail}
+            workspaceId={workspaceId}
+            agentId={agentId}
+            tools={tools ?? []}
+            onTools={(value) =>
+              setValue("tools", value, {
+                shouldDirty: true,
+                shouldValidate: true,
+              })
+            }
+            disabled={disabled || isSubmitting}
+          />
+        ) : (
+          <>
+            <AgentCapabilityPlaceholder kind="tools" />
+            <AgentCapabilityPlaceholder kind="connections" />
+          </>
+        )}
         <div
           className="sticky bottom-4 z-20 flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-card p-4 shadow-sm"
           aria-live="polite"

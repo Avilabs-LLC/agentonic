@@ -1,4 +1,5 @@
 "use client"
+import { GmailApprovals } from "@workspace/ui/components/gmail-approvals"
 import { formatUtcDateTime } from "@agentonic/contracts/format"
 import { CardEmptyState } from "@workspace/ui/components/card-empty-state"
 import { useCallback, useEffect, useId, useRef, useState } from "react"
@@ -296,6 +297,11 @@ export function StagingChats({
             </div>
           ) : (
             <>
+              <GmailApprovals
+                key={selected}
+                workspaceId={workspaceId}
+                conversationId={selected}
+              />
               <div className="min-h-64 space-y-5" role="log" aria-live="polite">
                 {state.turns.map((t) => (
                   <div key={t.id} className="space-y-3">

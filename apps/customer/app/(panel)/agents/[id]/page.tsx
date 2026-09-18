@@ -1,3 +1,4 @@
+import { loadGmail } from "@agentonic/server/gmail"
 import { loadLifecycle } from "@agentonic/server/lifecycle"
 import { AgentLifecycle } from "@workspace/ui/components/agent-lifecycle"
 import { loadReviewFlow } from "@agentonic/server/review-flow"
@@ -29,13 +30,14 @@ export default async function Page({
 }) {
   const { selected } = await customerWorkspace(searchParams)
   const { id } = await params
-  const [lifecycle, data, workspace, evaluations, reviewFlow] =
+  const [lifecycle, data, workspace, evaluations, reviewFlow, gmail] =
     await Promise.all([
       loadLifecycle("customer", selected.id, id),
       loadAgent(selected.id, id),
       loadWorkspace(selected.id),
       loadEvaluations("customer", selected.id, id),
       loadReviewFlow("customer", selected.id, id),
+      loadGmail(selected.id, id),
     ])
   if (!data || !workspace || !lifecycle) notFound()
   if (!evaluations || !reviewFlow)
@@ -69,6 +71,7 @@ export default async function Page({
         }
         configuration={
           <AgentWorkflow
+            gmail={gmail} workspaceId={selected.id}
             key={data.draft.revision}
             data={data}
             collections={workspace.collections}

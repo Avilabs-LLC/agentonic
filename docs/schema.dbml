@@ -2269,3 +2269,57 @@ Ref: agentonic.evaluation_preparations.(workspace_id,evaluation_id) > agentonic.
 Ref: agentonic.evaluation_runs.(workspace_id,preparation_id) > agentonic.evaluation_preparations.(workspace_id,id)
 Ref: agentonic.evaluation_criteria_revisions.(workspace_id,preparation_id) > agentonic.evaluation_preparations.(workspace_id,id)
 Ref: agentonic.evaluation_criteria_revisions.(workspace_id,edited_by_member_id) > agentonic.workspace_members.(workspace_id,id)
+
+// Implemented staging-specific Gmail slice (migration 29). The generic target
+// connections/tool_invocations model above remains the production destination.
+Table agentonic.gmail_connections {
+ id uuid [pk]
+ workspace_id uuid [not null]
+ agent_id uuid [not null]
+ owner_member_id uuid [not null]
+ account text [not null]
+ status text [not null]
+ credential_ciphertext text
+ operations jsonb [not null]
+ created_at timestamptz [not null]
+ indexes { (workspace_id,agent_id,id) [unique] }
+ Note: 'Owner-only staging account. Authenticated ciphertext; decryption key outside DB. No direct application table grants. Frozen scope intersects live operations.'
+}
+Table agentonic.gmail_oauth_states {
+ state_hash text [pk]
+ workspace_id uuid [not null]
+ agent_id uuid [not null]
+ owner_member_id uuid [not null]
+ connection_id uuid [not null, unique]
+ verifier_ciphertext text [not null]
+ expires_at timestamptz [not null]
+ consumed_at timestamptz
+ finished_at timestamptz
+ Note: 'One-use OAuth state, PKCE and verified actor/browser binding; no raw authorization codes stored.'
+}
+Table agentonic.gmail_invocations {
+  execution_context text [not null, default: 'staging', note: 'staging or preview; conversation_id identifies that private session']
+ id uuid [pk]
+ workspace_id uuid [not null]
+ agent_id uuid [not null]
+ connection_id uuid [not null]
+ owner_member_id uuid [not null]
+ turn_id uuid [not null]
+ conversation_id uuid [not null]
+ operation text [not null]
+ arguments_ciphertext text
+ arguments_sha256 text [not null]
+ status text [not null]
+ created_at timestamptz [not null]
+ expires_at timestamptz [not null]
+ approved_at timestamptz
+ finished_at timestamptz
+ result jsonb
+ Note: 'Durable exact-argument one-use write approval and result; pending/executing/succeeded/failed/uncertain/cancelled/expired. No automatic replay of uncertain writes. Private arguments erased independently of content-free audit.'
+}
+Ref: agentonic.gmail_connections.(workspace_id,agent_id) > agentonic.agents.(workspace_id,id)
+Ref: agentonic.gmail_connections.(workspace_id,owner_member_id) > agentonic.workspace_members.(workspace_id,id)
+Ref: agentonic.gmail_oauth_states.(workspace_id,agent_id) > agentonic.agents.(workspace_id,id)
+Ref: agentonic.gmail_oauth_states.(workspace_id,owner_member_id) > agentonic.workspace_members.(workspace_id,id)
+Ref: agentonic.gmail_invocations.(workspace_id,agent_id,connection_id) > agentonic.gmail_connections.(workspace_id,agent_id,id)
+Ref: agentonic.gmail_invocations.(workspace_id,owner_member_id) > agentonic.workspace_members.(workspace_id,id)
