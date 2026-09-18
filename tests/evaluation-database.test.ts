@@ -82,7 +82,7 @@ beforeEach(async () => {
   db = new PGlite({ extensions: { vector } })
   await db.exec(`CREATE SCHEMA auth; CREATE TABLE auth.users(id uuid PRIMARY KEY);
  CREATE ROLE anon; CREATE ROLE authenticated; CREATE ROLE service_role; CREATE ROLE agentonic_migrator;
- CREATE ROLE agentonic_admin NOSUPERUSER NOBYPASSRLS; CREATE ROLE agentonic_customer NOSUPERUSER NOBYPASSRLS; CREATE ROLE agentonic_worker NOSUPERUSER NOBYPASSRLS; CREATE ROLE agentonic_eval_local NOSUPERUSER NOBYPASSRLS; CREATE ROLE agentonic_eval_azure NOSUPERUSER NOBYPASSRLS;
+ CREATE ROLE agentonic_admin NOSUPERUSER NOBYPASSRLS; CREATE ROLE agentonic_customer NOSUPERUSER NOBYPASSRLS; CREATE ROLE agentonic_worker NOSUPERUSER NOBYPASSRLS; CREATE ROLE agentonic_deployer_local NOSUPERUSER NOBYPASSRLS; CREATE ROLE agentonic_deployer_azure NOSUPERUSER NOBYPASSRLS; CREATE ROLE agentonic_runtime_local NOSUPERUSER NOBYPASSRLS; CREATE ROLE agentonic_runtime_azure NOSUPERUSER NOBYPASSRLS; CREATE ROLE agentonic_eval_local NOSUPERUSER NOBYPASSRLS; CREATE ROLE agentonic_eval_azure NOSUPERUSER NOBYPASSRLS;
  CREATE SCHEMA agentonic_bootstrap;
  CREATE FUNCTION agentonic_bootstrap.link_auth_users() RETURNS void LANGUAGE sql SECURITY DEFINER SET search_path='' AS $f$ ALTER TABLE agentonic.users ADD CONSTRAINT users_auth_user_fk FOREIGN KEY(auth_user_id) REFERENCES auth.users(id) ON DELETE RESTRICT; $f$;
  CREATE SCHEMA storage; CREATE TABLE storage.buckets(id text PRIMARY KEY,public boolean,file_size_limit bigint); INSERT INTO storage.buckets VALUES('agentonic-documents',false,10485760);
@@ -100,6 +100,7 @@ beforeEach(async () => {
     "202609140009_preview_followups",
     "202609140010_collection_deletion",
     "202609150011_preview_discovery",
+    "202609150012_review_queue",
     "202609150013_evaluations",
     "202609150014_evaluation_evidence_views",
     "202609150015_evaluation_retention",
@@ -108,6 +109,12 @@ beforeEach(async () => {
     "202609150019_criterion_decisions",
     "202609150020_review_summary",
     "202609150021_approved_receipts",
+    "202609160022_approval_renewal",
+    "202609160023_staging_deployments",
+    "202609160024_activation_authority",
+    "202609160025_staging_runtime_contract",
+    "202609160026_staging_content_cleanup",
+    "202609160027_staging_agent_listing",
   ])
     await db.exec(
       readFileSync(
@@ -1429,4 +1436,452 @@ it("supports manually approved receipts and hides private content after consent 
     results: [],
     approval: { valid: false },
   })
+})
+
+async function lifecycleCall(
+  fn: string,
+  operation: string,
+  payload: Record<string, unknown>
+) {
+  await db.exec("SAVEPOINT lifecycle")
+  try {
+    const r = await db.query<{ result: Record<string, unknown> }>(
+      `SELECT agentonic.${fn}($1,$2,$3) result`,
+      [operation, JSON.stringify(payload), id(991)]
+    )
+    await db.exec("RELEASE SAVEPOINT lifecycle")
+    return r.rows[0]!.result
+  } catch (e) {
+    await db.exec("ROLLBACK TO SAVEPOINT lifecycle;RELEASE SAVEPOINT lifecycle")
+    throw e
+  }
+}
+async function approvedStaging() {
+  const p = await prepareFlow()
+  await finishFlow(await confirmFlow(p))
+  await sql(
+    "INSERT INTO agentonic.runtime_hosts(environment,database_role,broker_sha256,runtime_sha256,verified_at,heartbeat_at) VALUES('local','agentonic_deployer_local',repeat('f',64),repeat('b',64),clock_timestamp(),clock_timestamp())"
+  )
+  await actor()
+  const d = await lifecycleCall("deployment_command", "authorize", {
+    submissionId: p.submissionId,
+    environment: "local",
+    budgetUsd: 0.25,
+    consent: true,
+    requestId: id(980),
+  })
+  expect(d.ok).toBe(true)
+  return { ...p, deploymentId: String(d.id) }
+}
+const serviceSecret = "a".repeat(64)
+async function hostCall(operation: string, deploymentId: string | null = null) {
+  await db.exec("RESET ROLE;SET LOCAL ROLE agentonic_deployer_local")
+  const r = await db.query<{ result: Record<string, unknown> }>(
+    "SELECT agentonic.deployment_host($1,$2,jsonb_build_object('brokerHash',repeat('f',64),'tokenHash',encode(sha256(convert_to($3,'UTF8')),'hex'))) result",
+    [operation, deploymentId, serviceSecret]
+  )
+  return r.rows[0]!.result
+}
+async function readyStaging(p: Awaited<ReturnType<typeof approvedStaging>>) {
+  await actor(staff, w, "agentonic_admin")
+  expect(
+    (
+      await lifecycleCall("deployment_command", "activate", {
+        deploymentId: p.deploymentId,
+      })
+    ).ok
+  ).toBe(true)
+  const prepared = await hostCall("prepare", p.deploymentId)
+  await db.exec("RESET ROLE;SET LOCAL ROLE agentonic_runtime_local")
+  const result = await db.query<{ result: { ok: boolean } }>(
+    "SELECT agentonic.deployment_service('ready',$1,$2,$3) result",
+    [
+      p.deploymentId,
+      serviceSecret,
+      JSON.stringify({ manifestHash: prepared.manifestHash }),
+    ]
+  )
+  expect(result.rows[0]!.result.ok).toBe(true)
+}
+async function chat(operation: string, payload: Record<string, unknown>) {
+  const r = await db.query<{ result: Record<string, unknown> }>(
+    "SELECT agentonic.staging_chat($1,$2) result",
+    [operation, JSON.stringify(payload)]
+  )
+  return r.rows[0]!.result
+}
+async function stagingWork(
+  dep: string,
+  operation: string,
+  job: Job | null = null,
+  payload: Record<string, unknown> = {}
+) {
+  await db.exec(
+    "RESET ROLE;SET LOCAL ROLE agentonic_runtime_local;SAVEPOINT staging_worker"
+  )
+  try {
+    const r = await db.query<{ result: Record<string, unknown> }>(
+      "SELECT agentonic.staging_worker($1,$2,$3,$4,$5,$6) result",
+      [
+        operation,
+        dep,
+        serviceSecret,
+        job?.id ?? null,
+        job?.token ?? null,
+        JSON.stringify(payload),
+      ]
+    )
+    await db.exec("RELEASE SAVEPOINT staging_worker")
+    return r.rows[0]!.result
+  } catch (e) {
+    await db.exec(
+      "ROLLBACK TO SAVEPOINT staging_worker;RELEASE SAVEPOINT staging_worker"
+    )
+    throw e
+  }
+}
+it("requires customer consent and current approval before staff can activate staging", async () => {
+  const p = await approvedStaging()
+  await expect(
+    lifecycleCall("deployment_command", "activate", {
+      deploymentId: p.deploymentId,
+    })
+  ).rejects.toMatchObject({ code: "42501" })
+  await actor(other, otherW)
+  await expect(
+    lifecycleCall("deployment_command", "authorize", {
+      submissionId: p.submissionId,
+      environment: "local",
+      budgetUsd: 0.25,
+      consent: true,
+      requestId: id(981),
+    })
+  ).rejects.toMatchObject({ code: "42501" })
+  await actor(staff, w, "agentonic_admin")
+  const state = await db.query<{ result: { deployments: unknown[] } }>(
+    "SELECT agentonic.lifecycle_state($1) result",
+    [p.submissionId]
+  )
+  expect(state.rows[0]!.result.deployments).toMatchObject([
+    { status: "awaiting_activation", canActivate: true, online: false },
+  ])
+  await readyStaging(p)
+  await actor()
+  const c = await chat("start", {
+    deploymentId: p.deploymentId,
+    title: "Synthetic staging chat",
+  })
+  expect(c.ok).toBe(true)
+  await actor(other, otherW)
+  expect((await chat("state", { conversationId: c.id })).ok).toBe(false)
+})
+it("separates activation expiry from ongoing staging consent and rechecks source rights", async () => {
+  const p = await approvedStaging()
+  await readyStaging(p)
+  // Passage of the activation deadline, without mutating immutable approval scope.
+  await sql(
+    "ALTER TABLE agentonic.submission_review_decisions DISABLE TRIGGER USER"
+  )
+  await sql(
+    "UPDATE agentonic.submission_review_decisions SET created_at=clock_timestamp()-interval '2 days',approval_expires_at=clock_timestamp()-interval '1 second' WHERE submission_id=$1 AND decision='approved'",
+    [p.submissionId]
+  )
+  await sql(
+    "ALTER TABLE agentonic.submission_review_decisions ENABLE TRIGGER USER"
+  )
+  const authorized = await sql(
+    "SELECT agentonic.deployment_authorized(d) valid FROM agentonic.deployments d WHERE id=$1",
+    [p.deploymentId]
+  )
+  expect(authorized.rows[0]).toMatchObject({ valid: true })
+  await actor()
+  const c = await chat("start", {
+    deploymentId: p.deploymentId,
+    title: "Live consent",
+  })
+  expect(c.ok).toBe(true)
+  await sql(
+    "UPDATE agentonic.knowledge_sources SET configuration='{\"revoked\":true}' WHERE collection_id=$1",
+    [collection]
+  )
+  await actor()
+  expect((await chat("state", { conversationId: c.id })).ok).toBe(false)
+  await hostCall("poll")
+  expect(
+    (
+      await sql("SELECT status FROM agentonic.deployments WHERE id=$1", [
+        p.deploymentId,
+      ])
+    ).rows[0]
+  ).toMatchObject({ status: "stopped" })
+})
+it("denies stale approval at activation and never marks an unverified installation running", async () => {
+  const p = await approvedStaging()
+  await actor(staff, w, "agentonic_admin")
+  await lifecycleCall("deployment_command", "activate", {
+    deploymentId: p.deploymentId,
+  })
+  const prepared = await hostCall("prepare", p.deploymentId)
+  expect(prepared.manifest).toMatchObject({
+    configurationId: p.candidateId,
+    deploymentId: p.deploymentId,
+  })
+  await sql(
+    "ALTER TABLE agentonic.submission_review_decisions DISABLE TRIGGER USER"
+  )
+  await sql(
+    "UPDATE agentonic.submission_review_decisions SET created_at=clock_timestamp()-interval '2 days',approval_expires_at=clock_timestamp()-interval '1 second' WHERE submission_id=$1 AND decision='approved'",
+    [p.submissionId]
+  )
+  await sql(
+    "ALTER TABLE agentonic.submission_review_decisions ENABLE TRIGGER USER"
+  )
+  await db.exec("RESET ROLE;SET LOCAL ROLE agentonic_runtime_local")
+  const result = await db.query<{ result: { ok: boolean } }>(
+    "SELECT agentonic.deployment_service('ready',$1,$2,$3) result",
+    [
+      p.deploymentId,
+      serviceSecret,
+      JSON.stringify({ manifestHash: prepared.manifestHash }),
+    ]
+  )
+  expect(result.rows[0]!.result.ok).toBe(false)
+  expect(
+    (
+      await sql("SELECT status FROM agentonic.deployments WHERE id=$1", [
+        p.deploymentId,
+      ])
+    ).rows[0]
+  ).toMatchObject({ status: "preparing" })
+})
+it("serializes private chat, validates citations, settles usage once and fences failed leases", async () => {
+  const p = await approvedStaging()
+  await readyStaging(p)
+  await actor()
+  const listing = await db.query<{
+    result: { configuration: { liveVersion: string } }[]
+  }>("SELECT agentonic.agent_listing() result")
+  expect(listing.rows[0]!.result[0]!.configuration.liveVersion).toContain(
+    "Pruebas locales"
+  )
+  const c = await chat("start", {
+    deploymentId: p.deploymentId,
+    title: "Synthetic answers",
+  })
+  const payload = {
+    conversationId: c.id,
+    query: "How long is the warranty?",
+    requestId: id(982),
+  }
+  const first = await chat("turn", payload)
+  expect(await chat("turn", payload)).toEqual(first)
+  expect((await chat("turn", { ...payload, requestId: id(983) })).code).toBe(
+    "busy"
+  )
+  const job = (await stagingWork(p.deploymentId, "claim")) as unknown as Job
+  await stagingWork(p.deploymentId, "reserve", job, {
+    id: id(984),
+    provider: "openai",
+    model: "gpt-4.1-mini-2025-04-14",
+    microusd: 1000,
+  })
+  await stagingWork(p.deploymentId, "settle", job, {
+    id: id(984),
+    tokens: 100,
+    microusd: 500,
+  })
+  await expect(
+    stagingWork(p.deploymentId, "settle", job, {
+      id: id(984),
+      tokens: 100,
+      microusd: 500,
+    })
+  ).rejects.toMatchObject({ code: "42501" })
+  await stagingWork(p.deploymentId, "search", job, { embedding })
+  await db.exec("RESET ROLE")
+  await sql(
+    "INSERT INTO agentonic.retrieval_provider_operations(id,job_id,workspace_id,provider,model,reserved_microusd) VALUES($1,$2,$3,'openai','gpt-4.1-mini-2025-04-14',1000)",
+    [id(990), id(991), w]
+  )
+  await expect(
+    stagingWork(p.deploymentId, "settle", job, {
+      id: id(990),
+      tokens: 1,
+      microusd: 1,
+    })
+  ).rejects.toMatchObject({ code: "42501" })
+  const context = await stagingWork(p.deploymentId, "context", job)
+  expect(JSON.parse(String(context.configurationJson))).toEqual(content)
+  await expect(
+    stagingWork(p.deploymentId, "answer", job, {
+      text: "three years",
+      citations: [id(998)],
+      insufficientEvidence: false,
+      model: "gpt-4.1-mini-2025-04-14",
+    })
+  ).rejects.toMatchObject({ code: "42501" })
+  await stagingWork(p.deploymentId, "answer", job, {
+    text: "three years",
+    citations: (context.passages as { id: string }[]).map((x) => x.id),
+    insufficientEvidence: false,
+    model: "gpt-4.1-mini-2025-04-14",
+  })
+  await actor()
+  expect(await chat("state", { conversationId: c.id })).toMatchObject({
+    ok: true,
+    committedMicrousd: 500,
+    turns: [{ answer: "three years", status: "succeeded" }],
+  })
+  await chat("turn", { ...payload, requestId: id(983) })
+  const lost = (await stagingWork(p.deploymentId, "claim")) as unknown as Job
+  await stagingWork(p.deploymentId, "reserve", lost, {
+    id: id(985),
+    provider: "openai",
+    model: "gpt-4.1-mini-2025-04-14",
+    microusd: 1000,
+  })
+  await sql(
+    "UPDATE agentonic.staging_turns SET lease_until=clock_timestamp()-interval '1 second' WHERE id=$1",
+    [lost.id]
+  )
+  expect(await stagingWork(p.deploymentId, "claim")).toBeNull()
+  await expect(
+    stagingWork(p.deploymentId, "answer", lost, {})
+  ).rejects.toMatchObject({ code: "42501" })
+  expect(
+    (
+      await sql(
+        "SELECT committed_microusd FROM agentonic.deployments WHERE id=$1",
+        [p.deploymentId]
+      )
+    ).rows[0]
+  ).toMatchObject({ committed_microusd: 1500 })
+  await actor(staff, w, "agentonic_admin")
+  await lifecycleCall("deployment_command", "stop", {
+    deploymentId: p.deploymentId,
+  })
+  await hostCall("poll")
+  expect(
+    (
+      await sql(
+        "SELECT count(*)::int n FROM agentonic.staging_turns WHERE conversation_id=$1 AND scrubbed_at IS NULL",
+        [c.id]
+      )
+    ).rows[0]
+  ).toMatchObject({ n: 0 })
+  expect(
+    (
+      await sql(
+        "SELECT committed_microusd FROM agentonic.deployments WHERE id=$1",
+        [p.deploymentId]
+      )
+    ).rows[0]
+  ).toMatchObject({ committed_microusd: 1500 })
+})
+it("renews an expired approval as a new review of the exact same version and retains earlier costs", async () => {
+  const p = await approvedStaging()
+  await sql(
+    "ALTER TABLE agentonic.submission_review_decisions DISABLE TRIGGER USER"
+  )
+  await sql(
+    "UPDATE agentonic.submission_review_decisions SET created_at=clock_timestamp()-interval '2 days',approval_expires_at=clock_timestamp()-interval '1 second' WHERE submission_id=$1 AND decision='approved'",
+    [p.submissionId]
+  )
+  await sql(
+    "ALTER TABLE agentonic.submission_review_decisions ENABLE TRIGGER USER"
+  )
+  await actor(staff, w, "agentonic_admin")
+  expect(
+    (
+      await lifecycleCall("approval_renewal", "request", {
+        submissionId: p.submissionId,
+      })
+    ).ok
+  ).toBe(true)
+  await actor()
+  const payload = {
+    submissionId: p.submissionId,
+    budgetUsd: 0.25,
+    consent: true,
+    requestId: id(990),
+  }
+  const renewed = await lifecycleCall("approval_renewal", "renew", payload)
+  expect(renewed.ok).toBe(true)
+  expect(renewed.id).not.toBe(p.submissionId)
+  expect(await lifecycleCall("approval_renewal", "renew", payload)).toEqual(
+    renewed
+  )
+  const rows = await sql(
+    "SELECT configuration_release_id,status,renewed_from_submission_id FROM agentonic.agent_submissions ORDER BY submission_number"
+  )
+  expect(rows.rows).toMatchObject([
+    {
+      configuration_release_id: p.candidateId,
+      status: "approved",
+      renewed_from_submission_id: null,
+    },
+    {
+      configuration_release_id: p.candidateId,
+      status: "submitted",
+      renewed_from_submission_id: p.submissionId,
+    },
+  ])
+  expect(
+    (
+      await sql(
+        "SELECT committed_microusd FROM agentonic.evaluation_preparations WHERE id=$1",
+        [p.preparationId]
+      )
+    ).rows[0]
+  ).toMatchObject({ committed_microusd: 500 })
+})
+
+it("rechecks the initiating staff authority when a queued installation becomes ready", async () => {
+  const p = await approvedStaging()
+  await actor(staff, w, "agentonic_admin")
+  await lifecycleCall("deployment_command", "activate", {
+    deploymentId: p.deploymentId,
+  })
+  const prepared = await hostCall("prepare", p.deploymentId)
+  await sql("UPDATE agentonic.platform_staff SET role='support' WHERE id=$1", [
+    staff,
+  ])
+  await db.exec("RESET ROLE;SET LOCAL ROLE agentonic_runtime_local")
+  const r = await db.query<{ result: { ok: boolean } }>(
+    "SELECT agentonic.deployment_service('ready',$1,$2,$3) result",
+    [
+      p.deploymentId,
+      serviceSecret,
+      JSON.stringify({ manifestHash: prepared.manifestHash }),
+    ]
+  )
+  expect(r.rows[0]!.result.ok).toBe(false)
+})
+
+it("bounds staging context to the frozen runtime's nine completed history turns", async () => {
+  const p = await approvedStaging()
+  await readyStaging(p)
+  await actor()
+  const c = await chat("start", {
+    deploymentId: p.deploymentId,
+    title: "Synthetic history",
+  })
+  await db.exec("RESET ROLE")
+  for (let number = 1; number <= 10; number++)
+    await sql(
+      "INSERT INTO agentonic.staging_turns(workspace_id,conversation_id,request_id,number,query,answer,status,created_at) VALUES($1,$2,$3,$4,$5,'Synthetic answer','succeeded',clock_timestamp()-interval '10 minutes')",
+      [w, c.id, id(1100 + number), number, `Synthetic question ${number}`]
+    )
+  await actor()
+  await chat("turn", {
+    conversationId: c.id,
+    query: "Next question",
+    requestId: id(1120),
+  })
+  const job = (await stagingWork(p.deploymentId, "claim")) as unknown as Job
+  const context = await stagingWork(p.deploymentId, "context", job)
+  expect(context.history).toHaveLength(9)
+  expect((context.history as { query: string }[])[0]!.query).toBe(
+    "Synthetic question 2"
+  )
 })
