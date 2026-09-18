@@ -302,7 +302,9 @@ async function serviceLoop() {
   }
   const execute: Execute = async (operation, job, payload = {}) => {
     const r = await pool.query(
-      "SELECT agentonic.staging_worker($1,$2,$3,$4,$5,$6) result",
+      operation.startsWith("gmail-")
+        ? "SELECT agentonic.gmail_staging($1,$2,$3,$4,$5,$6) result"
+        : "SELECT agentonic.staging_worker($1,$2,$3,$4,$5,$6) result",
       [operation, id, secret, job.id, job.token, JSON.stringify(payload)]
     )
     return r.rows[0].result
@@ -337,6 +339,19 @@ async function serviceLoop() {
           voyageKey: env.VOYAGE_API_KEY ?? "",
           rerankEnabled: env.AGENTONIC_RERANK_ENABLED === "true",
           openaiKey: env.OPENAI_API_KEY ?? "",
+          google:
+            env.AGENTONIC_CONNECTION_KEY &&
+            env.GOOGLE_CLIENT_ID &&
+            env.GOOGLE_CLIENT_SECRET
+              ? {
+                  clientId: env.GOOGLE_CLIENT_ID,
+                  clientSecret: env.GOOGLE_CLIENT_SECRET,
+                  encryptionKey: env.AGENTONIC_CONNECTION_KEY,
+                  redirectUri:
+                    env.GOOGLE_REDIRECT_URI ??
+                    "http://localhost:3101/api/connections/google/callback",
+                }
+              : undefined,
         },
         controller.signal
       )
