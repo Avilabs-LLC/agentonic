@@ -99,7 +99,10 @@ export async function runAuthoringCommand(app: AppKind, input: unknown) {
                 enriched,
                 codes.map((code) => code.id),
                 hasWeb(view.draft.requestedAccess.tools)
-                  ? codes.filter((code) => code.research).map((code) => code.id)
+                  ? codes
+                      .filter((code) => code.research)
+                      .slice(0, 1)
+                      .map((code) => code.id)
                   : []
               ) || null,
             candidates: view.candidates.map((candidate) => {

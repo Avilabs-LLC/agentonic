@@ -41,12 +41,12 @@ mkdirSync(directory, { recursive: true, mode: 0o700 })
 if (existsSync(join(directory, "broker.mjs")))
   assert.equal(sha(readFileSync(join(directory, "broker.mjs"))), brokerHash)
 else writeFileSync(join(directory, "broker.mjs"), bytes, { mode: 0o444 })
-if (existsSync(join(directory, "manifest.json")))
-  assert.deepEqual(
-    JSON.parse(readFileSync(join(directory, "manifest.json"))),
-    manifest
-  )
-else
+if (existsSync(join(directory, "manifest.json"))) {
+  const existing = JSON.parse(readFileSync(join(directory, "manifest.json")))
+  // An unrelated Git commit does not change this content-addressed bundle.
+  // Preserve its original provenance; still require identical source hashes.
+  assert.deepEqual({ ...existing, baseCommit: manifest.baseCommit }, manifest)
+} else
   writeFileSync(
     join(directory, "manifest.json"),
     JSON.stringify(manifest, null, 2) + "\n",
