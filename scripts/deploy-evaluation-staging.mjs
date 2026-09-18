@@ -82,6 +82,8 @@ const variables = {
   AGENTONIC_EVALUATION_WORKER_SHA256: packaged.workerHash,
   OPENAI_API_KEY: keys.OPENAI_API_KEY,
   VOYAGE_API_KEY: keys.VOYAGE_API_KEY,
+  AGENTONIC_RERANK_ENABLED:
+    keys.AGENTONIC_RERANK_ENABLED === "true" ? "true" : "false",
   NODE_ENV: "production",
 }
 assert.ok(variables.OPENAI_API_KEY && variables.VOYAGE_API_KEY)

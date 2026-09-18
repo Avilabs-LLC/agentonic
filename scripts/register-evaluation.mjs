@@ -104,6 +104,8 @@ try {
     AGENTONIC_EVALUATION_WORKER_SHA256: proof.workerSha256,
     OPENAI_API_KEY: keys.OPENAI_API_KEY,
     VOYAGE_API_KEY: keys.VOYAGE_API_KEY,
+    AGENTONIC_RERANK_ENABLED:
+      keys.AGENTONIC_RERANK_ENABLED === "true" ? "true" : "false",
   })
   console.log(
     "Measured staging evaluator registered. Separate local evaluator profile prepared; provider usage preserved."
