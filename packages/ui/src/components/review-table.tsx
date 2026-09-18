@@ -1,5 +1,9 @@
 "use client"
 
+import {
+  approvalLabels,
+  deploymentLabels,
+} from "@agentonic/contracts/lifecycle"
 import { useId, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import type { ColumnDef } from "@tanstack/react-table"
@@ -37,6 +41,7 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
 } from "@workspace/ui/components/dropdown-menu"
+import { approvalBadgeVariants } from "@workspace/ui/lib/badge-status"
 import { Badge } from "@workspace/ui/components/badge"
 import { notify } from "@workspace/ui/lib/toast"
 import { RevokeApprovalDialog } from "@workspace/ui/components/revoke-approval-dialog"
@@ -153,9 +158,9 @@ export function ReviewTable({
             <DropdownMenuItem disabled>
               <UserRoundIcon />
               Ver usuario
-              <Badge variant="secondary" className="ml-auto">
+              <span className="ml-auto text-xs text-muted-foreground tabular-nums">
                 Pronto
-              </Badge>
+              </span>
             </DropdownMenuItem>
             <DropdownMenuItem
               disabled={
@@ -177,9 +182,9 @@ export function ReviewTable({
             <DropdownMenuItem disabled>
               <ArrowRightLeftIcon />
               Cambiar estado
-              <Badge variant="secondary" className="ml-auto">
+              <span className="ml-auto text-xs text-muted-foreground tabular-nums">
                 Pronto
-              </Badge>
+              </span>
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -194,7 +199,7 @@ export function ReviewTable({
         row.original.canOpen || row.original.status === "approved" ? (
           <Button
             variant="link"
-            className="h-auto p-0 text-sm text-blue-600 underline underline-offset-4 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
+            className="h-auto p-0 text-xs font-medium text-blue-600 underline underline-offset-4 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
             disabled={pending}
             aria-label={`Ver revisión ${row.original.number} de ${row.original.agentName}`}
             onClick={() => open(row.original)}
@@ -206,7 +211,9 @@ export function ReviewTable({
           </Button>
         ) : (
           <div>
-            <span className="font-medium">{row.original.agentName}</span>
+            <span className="text-xs font-medium">
+              {row.original.agentName}
+            </span>
             <p className="text-xs text-muted-foreground">
               {["submitted", "in_review"].includes(row.original.status)
                 ? "Sin autorización vigente"
@@ -248,6 +255,36 @@ export function ReviewTable({
         <span className="tabular-nums">{row.original.versionNumber}</span>
       ),
     },
+    ...[
+      {
+        id: "approvalValidity",
+        header: "Autorización",
+        cell: ({ row }: { row: { original: Review } }) => (
+          <Badge
+            variant={
+              approvalBadgeVariants[
+                row.original
+                  .approvalReason as keyof typeof approvalBadgeVariants
+              ] ?? "slate"
+            }
+          >
+            {approvalLabels[
+              row.original.approvalReason as keyof typeof approvalLabels
+            ] ?? "No disponible"}
+          </Badge>
+        ),
+      },
+      {
+        id: "deployment",
+        header: "Despliegue",
+        cell: ({ row }: { row: { original: Review } }) => (
+          <span className="text-sm">
+            {deploymentLabels[row.original.deploymentStatus ?? "none"] ??
+              "No disponible"}
+          </span>
+        ),
+      },
+    ],
   ]
 
   return (
@@ -314,12 +351,12 @@ export function ReviewTable({
               .map((state) => (
                 <TabsTrigger key={state.value} value={state.value}>
                   {state.label}
-                  <Badge variant="secondary" className="tabular-nums">
+                  <span className="ml-auto text-xs text-muted-foreground tabular-nums">
                     {
                       reviews.filter((review) => review.status === state.value)
                         .length
                     }
-                  </Badge>
+                  </span>
                 </TabsTrigger>
               ))}
           </TabsList>
@@ -328,7 +365,14 @@ export function ReviewTable({
           <TabsContent key={state.value} value={state.value}>
             <DataTable
               key={`${selectedWorkspace}-${tableReset}`}
-              columns={columns}
+              columns={
+                state.value === "approved"
+                  ? columns
+                  : columns.filter(
+                      (c) =>
+                        c.id !== "approvalValidity" && c.id !== "deployment"
+                    )
+              }
               data={reviews.filter((review) => review.status === state.value)}
               searchKeys={[
                 "userEmail",

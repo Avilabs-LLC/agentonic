@@ -1,4 +1,5 @@
 "use client"
+import { CardEmptyState } from "@workspace/ui/components/card-empty-state"
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import {
@@ -49,7 +50,6 @@ import {
 } from "@workspace/ui/components/dropdown-menu"
 import { notify } from "@workspace/ui/lib/toast"
 import { SubmissionStatusBadge } from "@workspace/ui/components/status-badge"
-import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
   Table,
@@ -286,9 +286,9 @@ export function AgentProposals({
       description="Consulta tus envíos y revisa las situaciones antes de autorizar la evaluación."
     >
       {!submissions.length ? (
-        <p className="text-sm text-muted-foreground">
-          Aún no has enviado propuestas.
-        </p>
+        <CardEmptyState title="Sin propuestas">
+          Prepara una versión y envíala a revisión para comenzar.
+        </CardEmptyState>
       ) : (
         <Table
           aria-label="Propuestas"
@@ -335,20 +335,13 @@ export function AgentProposals({
                   </TableCell>
                   <TableCell className="py-4 align-top whitespace-normal">
                     <div className="space-y-2">
-                      <Badge
-                        variant={
-                          record?.status === "criteria_ready" &&
-                          count === record.criteria.length
-                            ? "success"
-                            : "slate"
-                        }
-                      >
+                      <span className="text-sm text-muted-foreground">
                         {record
                           ? record.status === "criteria_ready"
                             ? `${count}/${record.criteria.length} revisadas`
                             : reviewFlowLabels[record.status]
                           : "Sin iniciar"}
-                      </Badge>
+                      </span>
                       {record?.status === "criteria_ready" && (
                         <p className="text-xs text-muted-foreground">
                           {count === record.criteria.length

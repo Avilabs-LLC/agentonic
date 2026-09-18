@@ -1,4 +1,5 @@
 "use server"
+import { runLifecycle } from "@agentonic/server/lifecycle"
 import { runEvaluationCommand } from "@agentonic/server/evaluation"
 import { loadReviewFlow } from "@agentonic/server/review-flow"
 import { revalidatePath } from "next/cache"
@@ -79,4 +80,10 @@ export async function revokeApproval(
     operation: "revoke",
     payload: { submissionId, feedback },
   })
+}
+
+export async function lifecycleAction(workspaceId: string, input: unknown) {
+  const result = await runLifecycle("admin", workspaceId, input)
+  if (result.ok) revalidatePath("/submissions", "layout")
+  return result
 }

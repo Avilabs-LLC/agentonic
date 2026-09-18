@@ -19,3 +19,15 @@ export function formatPathSegment(segment: string) {
     ? segment.slice(0, 8)
     : decodeURIComponent(segment)
 }
+
+/** Stable es-VE UTC timestamps for HTML rendered by both Node and browsers.
+ * Intl locale data differs across engines (including spaces in day periods).
+ */
+export function formatUtcDateTime(value: string | Date) {
+  const date = typeof value === "string" ? new Date(value) : value
+  if (!Number.isFinite(date.getTime())) return "No disponible"
+  const hour = date.getUTCHours()
+  const minute = String(date.getUTCMinutes()).padStart(2, "0")
+  const second = String(date.getUTCSeconds()).padStart(2, "0")
+  return `${date.getUTCDate()}/${date.getUTCMonth() + 1}/${date.getUTCFullYear()}, ${hour % 12 || 12}:${minute}:${second} ${hour < 12 ? "a. m." : "p. m."}`
+}

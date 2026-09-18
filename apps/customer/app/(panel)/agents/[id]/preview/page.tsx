@@ -3,7 +3,6 @@ import { loadAgent } from "@agentonic/server/authoring"
 import { loadCandidatePreview } from "@agentonic/server/preview"
 import { preparedVersionLabel } from "@agentonic/contracts/workflow"
 import { RecordHeader, BackRow } from "@workspace/ui/components/record-header"
-import { Badge } from "@workspace/ui/components/badge"
 import { AgentPreview } from "@workspace/ui/components/agent-preview"
 import { customerWorkspace } from "@/lib/workspace"
 export default async function Page({
@@ -36,7 +35,9 @@ export default async function Page({
       <RecordHeader
         title={`Probar ${data.agent.name}`}
         description="Conversa con una versión congelada. Los cambios del borrador no afectan esta prueba."
-        actions={<Badge variant="violet">Prueba privada</Badge>}
+        actions={
+          <span className="text-sm text-muted-foreground">Prueba privada</span>
+        }
       />
       <AgentPreview
         key={`${candidate?.id ?? "none"}:${initialState?.id ?? "none"}`}

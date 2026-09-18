@@ -1,9 +1,9 @@
 "use client"
+import { CardEmptyState } from "@workspace/ui/components/card-empty-state"
 
 import { useState } from "react"
 import { EllipsisIcon, EyeIcon, Trash2Icon } from "lucide-react"
 import { Button } from "@workspace/ui/components/button"
-import { Badge } from "@workspace/ui/components/badge"
 import {
   Item,
   ItemGroup,
@@ -72,7 +72,6 @@ export function AgentAssetList({
                 >
                   {row.name}
                 </p>
-                <Badge variant="violet">Borrador</Badge>
               </div>
               <ItemDescription className="text-sm break-words">
                 {row.description}
@@ -113,7 +112,7 @@ export function AgentAssetList({
         ))}
         {!rows.length && (
           <Item role="listitem" className="rounded-none border-0 px-0 py-6">
-            <ItemDescription className="text-sm">{empty}</ItemDescription>
+            <CardEmptyState title="Sin habilidades">{empty}</CardEmptyState>
           </Item>
         )}
       </ItemGroup>

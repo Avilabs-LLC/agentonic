@@ -1,4 +1,5 @@
 "use client"
+import { ReviewResultStatus } from "@workspace/ui/components/review-result-status"
 import { useId, useState } from "react"
 import { useRouter } from "next/navigation"
 import {
@@ -28,7 +29,6 @@ import {
   DialogDescription,
 } from "@workspace/ui/components/dialog"
 import { Button } from "@workspace/ui/components/button"
-import { Badge } from "@workspace/ui/components/badge"
 import { Field, FieldLabel } from "@workspace/ui/components/field"
 import { Textarea } from "@workspace/ui/components/textarea"
 import { ReviewCriteriaSummary } from "@workspace/ui/components/review-criteria-summary"
@@ -287,20 +287,19 @@ export function ReviewCriteriaDialog({
                 <span className="text-sm font-medium">
                   Situación {index + 1} de {criteria.length}
                 </span>
-                <Badge
-                  variant={
+                <ReviewResultStatus
+                  outcome={
                     current.reviewDecision === "not_applicable"
-                      ? "warning"
+                      ? "excluded"
                       : criterionReviewed(current)
-                        ? "success"
-                        : "slate"
+                        ? "passed"
+                        : "pending"
                   }
-                >
-                  {criterionDecisionLabel(
+                  label={criterionDecisionLabel(
                     current,
                     record.status !== "criteria_ready"
                   )}
-                </Badge>
+                />
               </div>
               <div className="flex gap-2">
                 <Button

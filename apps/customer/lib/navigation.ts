@@ -18,6 +18,14 @@ export const navigation = [
     icon: "agents",
   },
   {
+    href: "/chats",
+    title: "Chats",
+    description: "Conversaciones privadas con tus agentes activos.",
+    group: "Mi espacio",
+    enabled: true,
+    icon: "chat",
+  },
+  {
     href: "/knowledge",
     title: "Conocimiento",
     description: "Documentos y fuentes seleccionadas.",

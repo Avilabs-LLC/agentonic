@@ -1,8 +1,9 @@
 "use client"
 import Link from "next/link"
+import { useId, useState, useTransition } from "react"
+import { useRouter } from "next/navigation"
 import {
-  CheckIcon,
-  XIcon,
+  FileTextIcon,
   RocketIcon,
   Clock3Icon,
   EllipsisIcon,
@@ -40,18 +41,48 @@ import {
   TooltipTrigger,
   TooltipContent,
 } from "@workspace/ui/components/tooltip"
-import { Badge } from "@workspace/ui/components/badge"
+import { FiltersCard } from "@workspace/ui/components/filters-card"
+import { Field, FieldLabel } from "@workspace/ui/components/field"
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from "@workspace/ui/components/select"
 import {
   AgentStatusBadge,
   SubmissionStatusBadge,
 } from "@workspace/ui/components/status-badge"
 export function AuthoringTable({
   agents,
-  workspaceId,
+  workspaces,
+  selectedWorkspaceIds,
 }: {
-  agents: AgentListing
-  workspaceId: string
+  agents: (AgentListing[number] & {
+    workspaceId: string
+    workspaceName: string
+  })[]
+  workspaces: { id: string; name: string }[]
+  selectedWorkspaceIds: string[]
 }) {
+  const router = useRouter()
+  const filterId = useId()
+  const [pending, startTransition] = useTransition()
+  const [tableReset, setTableReset] = useState(0)
+  const workspaceOptions = workspaces.map((workspace) => ({
+    value: workspace.id,
+    label: workspace.name,
+  }))
+  function selectWorkspaces(ids: string[]) {
+    const query = new URLSearchParams()
+    ids.forEach((id) => query.append("workspace", id))
+    startTransition(() =>
+      router.push(query.size ? `/agents?${query}` : "/agents", {
+        scroll: false,
+      })
+    )
+  }
   const unavailable = (
     <span
       className="text-muted-foreground"
@@ -76,7 +107,7 @@ export function AuthoringTable({
       upcoming: true,
     },
   ] as const
-  const columns: ColumnDef<AgentListing[number]>[] = [
+  const columns: ColumnDef<(typeof agents)[number]>[] = [
     {
       id: "actions",
       header: "",
@@ -99,7 +130,7 @@ export function AuthoringTable({
               <DropdownMenuItem
                 render={
                   <Link
-                    href={`/agents/${row.original.id}?workspace=${workspaceId}`}
+                    href={`/agents/${row.original.id}?workspace=${row.original.workspaceId}`}
                   />
                 }
               >
@@ -146,49 +177,22 @@ export function AuthoringTable({
         <div className="max-w-56 min-w-32 whitespace-normal">
           {row.original.canEdit ? (
             <Link
-              href={`/agents/${row.original.id}?workspace=${workspaceId}`}
-              className="font-medium text-blue-600 underline underline-offset-4 outline-none hover:text-blue-800 focus-visible:ring-2 focus-visible:ring-ring dark:text-blue-400 dark:hover:text-blue-300"
+              href={`/agents/${row.original.id}?workspace=${row.original.workspaceId}`}
+              className="text-xs font-medium text-blue-600 underline underline-offset-4 outline-none hover:text-blue-800 focus-visible:ring-2 focus-visible:ring-ring dark:text-blue-400 dark:hover:text-blue-300"
             >
               {row.original.name}
             </Link>
           ) : (
-            <p className="font-medium">{row.original.name}</p>
+            <p className="text-xs font-medium">{row.original.name}</p>
           )}
         </div>
       ),
     },
     {
-      id: "promptCharacters",
-      accessorFn: (agent) => agent.configuration?.promptCharacters ?? -1,
+      accessorKey: "workspaceName",
       header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Instrucciones" />
+        <DataTableColumnHeader column={column} title="Espacio de trabajo" />
       ),
-      cell: ({ row }) => {
-        const configuration = row.original.configuration
-        if (!configuration) return unavailable
-        const ready =
-          configuration.promptCharacters >= SYSTEM_PROMPT_MIN_CHARACTERS
-        return (
-          <div className="flex items-center gap-2">
-            <Badge
-              variant={ready ? "success" : "warning"}
-              className="size-6 justify-center p-0"
-            >
-              {ready ? (
-                <CheckIcon className="size-3.5" aria-hidden="true" />
-              ) : (
-                <XIcon className="size-3.5" aria-hidden="true" />
-              )}
-              <span className="sr-only">
-                {ready ? "Instrucciones listas" : "Instrucciones incompletas"}
-              </span>
-            </Badge>
-            <span className="text-xs text-muted-foreground tabular-nums">
-              {configuration.promptCharacters} caracteres
-            </span>
-          </div>
-        )
-      },
     },
     {
       id: "resources",
@@ -196,8 +200,27 @@ export function AuthoringTable({
       cell: ({ row }) => {
         const configuration = row.original.configuration
         if (!configuration) return unavailable
+        const ready =
+          configuration.promptCharacters >= SYSTEM_PROMPT_MIN_CHARACTERS
+        const instructions = `Instrucciones ${ready ? "listas" : "incompletas"}: ${configuration.promptCharacters} caracteres`
         return (
           <div className="flex items-center gap-4">
+            <Tooltip>
+              <TooltipTrigger
+                render={<span tabIndex={0} />}
+                aria-label={instructions}
+                className="inline-flex items-center gap-1.5 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <FileTextIcon
+                  className="size-4 shrink-0 text-muted-foreground"
+                  aria-hidden="true"
+                />
+                <span className="tabular-nums" aria-hidden="true">
+                  {configuration.promptCharacters}
+                </span>
+              </TooltipTrigger>
+              <TooltipContent>{instructions}</TooltipContent>
+            </Tooltip>
             {resources.map(({ key, label, icon: Icon, ...resource }) => {
               const description = `${label}: ${configuration[key]}${"upcoming" in resource ? " · Próximamente" : ""}`
               return (
@@ -292,16 +315,57 @@ export function AuthoringTable({
     },
   ]
   return (
-    <div className="space-y-3">
+    <div className="space-y-4" aria-busy={pending}>
+      <FiltersCard
+        description="Filtra los agentes por uno o varios espacios de trabajo."
+        disabled={pending}
+        onClear={() => {
+          setTableReset((value) => value + 1)
+          selectWorkspaces([])
+        }}
+      >
+        <Field>
+          <FieldLabel htmlFor={filterId}>Espacios de trabajo</FieldLabel>
+          <Select
+            multiple
+            items={workspaceOptions}
+            value={selectedWorkspaceIds}
+            disabled={pending}
+            onValueChange={selectWorkspaces}
+          >
+            <SelectTrigger id={filterId} className="w-full">
+              <SelectValue>
+                {selectedWorkspaceIds.length === 0
+                  ? "Todos los espacios"
+                  : selectedWorkspaceIds.length === 1
+                    ? workspaces.find(
+                        (workspace) => workspace.id === selectedWorkspaceIds[0]
+                      )?.name
+                    : `${selectedWorkspaceIds.length} espacios seleccionados`}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent alignItemWithTrigger={false}>
+              {workspaceOptions.map((workspace) => (
+                <SelectItem key={workspace.value} value={workspace.value}>
+                  {workspace.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </Field>
+      </FiltersCard>
       <p className="text-sm text-muted-foreground">
         Los conteos corresponden al borrador guardado. Instrucciones listas: al
         menos {SYSTEM_PROMPT_MIN_CHARACTERS} caracteres sin contar espacios.
         Desliza horizontalmente para ver todas las columnas.
       </p>
       <DataTable
+        key={`${selectedWorkspaceIds.join(",")}-${tableReset}`}
         columns={columns}
         data={agents}
-        searchKeys={["name", "description", "slug", "id"]}
+        searchKeys={["name", "description", "slug", "id", "workspaceName"]}
+        searchLabel="Buscar agentes"
+        getRowId={(agent) => agent.id}
       />
     </div>
   )

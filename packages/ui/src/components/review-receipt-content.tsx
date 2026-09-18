@@ -1,7 +1,7 @@
 import { ChevronDownIcon } from "lucide-react"
 import type { ReviewReceipt } from "@agentonic/contracts/review-receipt"
 import { criterionDecisionLabel } from "@agentonic/contracts/review-flow"
-import { Badge } from "@workspace/ui/components/badge"
+import { ReviewResultStatus } from "@workspace/ui/components/review-result-status"
 
 export function ReceiptTextFrame({
   title,
@@ -38,18 +38,16 @@ export function ReceiptCriteria({
             <span className="min-w-0 flex-1 break-words">
               Situación {i + 1}: {c.question}
             </span>
-            <Badge
-              className="shrink-0"
-              variant={
+            <ReviewResultStatus
+              outcome={
                 c.excluded
-                  ? "warning"
+                  ? "excluded"
                   : c.reviewDecision === "approved" || confirmed
-                    ? "success"
-                    : "slate"
+                    ? "passed"
+                    : "pending"
               }
-            >
-              {criterionDecisionLabel(c, confirmed)}
-            </Badge>
+              label={criterionDecisionLabel(c, confirmed)}
+            />
             <ChevronDownIcon
               aria-hidden="true"
               className="size-4 shrink-0 transition-transform group-open:rotate-180"
@@ -108,16 +106,22 @@ export function ReceiptResults({
                 : "Situación"}{" "}
               {i + 1}: {result.question}
             </span>
-            <Badge
-              className="shrink-0"
-              variant={result.outcome === "passed" ? "success" : "warning"}
-            >
-              {result.outcome === "passed"
-                ? "Superada"
-                : result.outcome === "failed"
-                  ? "No superada"
-                  : "Requiere atención"}
-            </Badge>
+            <ReviewResultStatus
+              outcome={
+                result.outcome === "passed"
+                  ? "passed"
+                  : result.outcome === "failed"
+                    ? "failed"
+                    : "attention"
+              }
+              label={
+                result.outcome === "passed"
+                  ? "Superada"
+                  : result.outcome === "failed"
+                    ? "No superada"
+                    : "Requiere atención"
+              }
+            />
             <ChevronDownIcon
               aria-hidden="true"
               className="size-4 shrink-0 transition-transform group-open:rotate-180"
