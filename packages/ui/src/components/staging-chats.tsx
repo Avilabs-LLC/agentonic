@@ -1,4 +1,5 @@
 "use client"
+import { AgentAnswer } from "@workspace/ui/components/agent-answer"
 import { GmailApprovals } from "@workspace/ui/components/gmail-approvals"
 import { formatUtcDateTime } from "@agentonic/contracts/format"
 import { CardEmptyState } from "@workspace/ui/components/card-empty-state"
@@ -314,9 +315,7 @@ export function StagingChats({
                         Agente
                       </p>
                       {t.answer ? (
-                        <p className="text-sm whitespace-pre-wrap">
-                          {t.answer}
-                        </p>
+                        <AgentAnswer text={t.answer} />
                       ) : t.status === "failed" ? (
                         <p className="text-sm text-destructive">
                           {lifecycleErrors[t.errorCode ?? ""] ??

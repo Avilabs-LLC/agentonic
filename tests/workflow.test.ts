@@ -230,3 +230,19 @@ describe("single review card states", () => {
     expect(reviewPreparation(draft, [ready], id).current).toBeUndefined()
   })
 })
+
+it("prepares a new reviewed capability family without substituting an old frozen candidate", () => {
+  const research = "10000000-0000-4000-8000-000000000099"
+  expect(defaultFreezeCode([candidate], [research, code], [research])).toBe(
+    research
+  )
+  expect(candidate.codeReleaseId).toBe(code)
+  expect(defaultFreezeCode([candidate], [code], [research])).toBe(code)
+  expect(
+    defaultFreezeCode(
+      [{ ...candidate, codeReleaseId: research }, candidate],
+      [code, research],
+      [research]
+    )
+  ).toBe(research)
+})

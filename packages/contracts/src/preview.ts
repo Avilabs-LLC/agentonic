@@ -48,6 +48,7 @@ export const previewState = z.object({
   id: z.uuid(),
   expiresAt: z.string(),
   budgetUsd: z.number(),
+  gmailEnabled: z.boolean().default(false),
   toolsEnabled: z.boolean().default(false),
   committedMicrousd: z.number(),
   turns: z

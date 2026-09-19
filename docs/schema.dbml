@@ -2323,3 +2323,13 @@ Ref: agentonic.gmail_oauth_states.(workspace_id,agent_id) > agentonic.agents.(wo
 Ref: agentonic.gmail_oauth_states.(workspace_id,owner_member_id) > agentonic.workspace_members.(workspace_id,id)
 Ref: agentonic.gmail_invocations.(workspace_id,agent_id,connection_id) > agentonic.gmail_connections.(workspace_id,agent_id,id)
 Ref: agentonic.gmail_invocations.(workspace_id,owner_member_id) > agentonic.workspace_members.(workspace_id,id)
+
+// Browserbase public web slice (migration 31): requested_access.tools accepts a
+// platform grant {capability:"web",operations:["web.search","web.read"]} alongside
+// an optional Gmail grant. No OAuth connection row is created for web access.
+// Existing code_tools/configuration_tools index the frozen web-v1 operations.
+// retrieval_provider_budgets includes browserbase; provider operations reserve
+// conservative per-call overage estimates without storing search/page content.
+// Migration 32 changes only functions: new webResearch runtimes declare an eight-call
+// registry ceiling; existing immutable code_tools rows retain their original three.
+// web_meter derives the limit from the preview/deployment's pinned code release.

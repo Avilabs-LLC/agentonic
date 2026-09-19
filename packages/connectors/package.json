@@ -11,14 +11,15 @@
     "lint": "eslint src"
   },
   "dependencies": {
-    "zod": "^4.4.3",
-    "@agentonic/contracts": "workspace:*"
+    "@agentonic/contracts": "workspace:*",
+    "@browserbasehq/sdk": "^2.20.0",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@workspace/typescript-config": "workspace:*",
+    "@types/node": "^22",
     "@workspace/eslint-config": "workspace:*",
-    "typescript": "^5.9.3",
+    "@workspace/typescript-config": "workspace:*",
     "eslint": "^9",
-    "@types/node": "^22"
+    "typescript": "^5.9.3"
   }
 }

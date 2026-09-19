@@ -1,4 +1,5 @@
 "use client"
+import { AgentAnswer } from "@workspace/ui/components/agent-answer"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { PlayIcon, SendIcon, SquareIcon, MessageSquareIcon } from "lucide-react"
 import {
@@ -160,7 +161,7 @@ export function AgentPreview({
       <AgentSettingsCard
         title="Versión de prueba"
         description="Solo tú puedes ver esta conversación. Termina a los 10 minutos o al alcanzar 10 mensajes."
-        footer="Las herramientas habilitadas usan tu cuenta real. Crear, editar o eliminar borradores y enviar correos requiere revisar y confirmar cada acción. Al finalizar o vencer esta prueba, sus acciones pendientes dejan de estar disponibles."
+        footer="El acceso web consulta páginas públicas. Las herramientas de Gmail usan tu cuenta real. Crear, editar o eliminar borradores y enviar correos requiere revisar y confirmar cada acción. Al finalizar o vencer esta prueba, sus acciones pendientes dejan de estar disponibles."
       >
         <div className="space-y-4">
           <Field>
@@ -194,8 +195,8 @@ export function AgentPreview({
           {previewId ? (
             <p className="text-sm text-muted-foreground">
               {state?.toolsEnabled
-                ? "Herramientas conectadas habilitadas para esta prueba."
-                : "Esta sesión no usa conexiones. Finalízala e inicia otra habilitando las herramientas para probar Gmail."}
+                ? "Herramientas de esta versión habilitadas para esta prueba."
+                : "Esta sesión no usa herramientas. Finalízala e inicia otra para probar el acceso web o Gmail."}
             </p>
           ) : (
             <ConsentCheckbox
@@ -203,8 +204,9 @@ export function AgentPreview({
               onCheckedChange={setEnableTools}
               disabled={busy}
             >
-              Habilitar las conexiones y herramientas de esta versión en mi
-              cuenta real durante esta prueba.
+              Habilitar las herramientas de esta versión durante esta prueba.
+              Gmail utilizará mi cuenta real; el acceso web consultará páginas
+              públicas.
             </ConsentCheckbox>
           )}
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -233,7 +235,7 @@ export function AgentPreview({
           </div>
         </div>
       </AgentSettingsCard>
-      {previewId && state?.toolsEnabled && (
+      {previewId && state?.gmailEnabled && (
         <GmailApprovals
           key={previewId}
           workspaceId={workspaceId}
@@ -282,9 +284,7 @@ export function AgentPreview({
                 </p>
                 {turn.answer ? (
                   <>
-                    <p className="text-sm break-words whitespace-pre-wrap">
-                      {turn.answer.text}
-                    </p>
+                    <AgentAnswer text={turn.answer.text} />
                     {turn.answer.citations.length > 0 && (
                       <details className="rounded-md border p-3">
                         <summary className="cursor-pointer text-xs font-medium">

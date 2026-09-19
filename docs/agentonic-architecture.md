@@ -1,6 +1,6 @@
 # Agentonic — architecture and implementation decisions
 
-**Status:** accepted direction; authoring, knowledge retrieval, automatic review and private staging deployment/chat implemented (§§30–36); complete hosted platform, external connectors/tools and production operation pending. **Next implementation plan:** §37. · **Decision date:** 2026-09-13 · **Owner:** Agentonic founder
+**Status:** accepted direction; authoring, knowledge retrieval, automatic review and private staging deployment/chat implemented (§§30–36); Gmail and public-web tools implemented for private previews and private staging (§§38–39); complete hosted platform and production operation pending. **Next implementation plan:** §37. · **Decision date:** 2026-09-13 · **Owner:** Agentonic founder
 
 This is the authoritative architecture decision record for the initial Agentonic platform. It records the owner's accepted choices and the implementation judgment delegated to Codex for scope, operational details and corrections. Its authoritative schema companion is [schema.dbml](schema.dbml).
 
@@ -1157,3 +1157,15 @@ Verification follows AGENTS.md: Prisma generation/validation for schema changes,
 ### 38.1 Owner-authorized private preview tools — 2026-09-18
 
 Owner request supersedes the initial preview restriction: private customer previews may use connected Gmail tools before review/activation. Migration 30 adds a preview-specific leased worker authority and explicit session policy, without granting staff or automated evaluations mailbox access. A start checkbox authorizes the prepared version’s tools for that private session; writes retain individual confirmation. See [Gmail implementation](gmail-connection.md#owner-authorized-preview-tools--migration-30) for policy, expiry, cleanup and rollout evidence.
+
+## 39. Public web capability — Browserbase, 2026-09-18
+
+Owner selected public website search and reading. **Acceso web** belongs in **Herramientas**, independently of customer-authorized **Conexiones**. Browserbase uses a protected platform key. [Implementation and rollout](web-access.md) specifies frozen grants, opt-in previews, staging authorization, public-only Search/Fetch, source links and conservative provider usage reservations. Website logins, interactions and background KB ingestion are outside this slice. Migration 31 extends the existing grant/ledger boundaries; immutable runtime releases must explicitly declare `webContract: "1"`. See that document for verified rollout evidence and remaining gates.
+
+### 39.1 Bounded research and recoverable reads — 2026-09-18
+
+Migration 32 preserves immutable registry limits while newly published runtimes opt into eight research calls with `webResearch: "1"`. Shared broker policy retains mandatory criteria, rejects unsupported matches and background-work promises. Recoverable read errors can lead to another source; live authorization and spending remain hard boundaries. Content-free failure diagnostics and a metered synthetic-model benchmark cover constrained comparison, failed reads and follow-up context. See [web research acceptance](web-access.md#research-quality-and-recovery--migration-32) for execution, evidence and limits.
+
+### 39.2 Versioned VM staging release — 2026-09-18
+
+Platform 0.11.0 and runtime 0.3.0 are published on `codex/public-web-research` and `codex/web-research-runtime`. The current evaluator, staging broker/controller and frozen runtime are installed and hash-verified on `vm-agents-01`; local staging is aligned. [Release hashes, verification deadlines and live evidence](web-access.md#vm-release-checkpoint--18-september-2026) record six passed evaluation checks, reranking, cited chat, public search/read, VM restart recovery, metering and fixture cleanup. Tool-bearing versions still require the existing staff approval gate. Customer deployments require explicit preparation, approval and operating consent/activation; the release does not automatically activate an existing version. Hosted web apps and production rollout remain in §37.

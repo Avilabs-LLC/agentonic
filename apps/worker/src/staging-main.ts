@@ -302,9 +302,11 @@ async function serviceLoop() {
   }
   const execute: Execute = async (operation, job, payload = {}) => {
     const r = await pool.query(
-      operation.startsWith("gmail-")
-        ? "SELECT agentonic.gmail_staging($1,$2,$3,$4,$5,$6) result"
-        : "SELECT agentonic.staging_worker($1,$2,$3,$4,$5,$6) result",
+      operation.startsWith("web-")
+        ? "SELECT agentonic.web_staging($1,$2,$3,$4,$5,$6) result"
+        : operation.startsWith("gmail-")
+          ? "SELECT agentonic.gmail_staging($1,$2,$3,$4,$5,$6) result"
+          : "SELECT agentonic.staging_worker($1,$2,$3,$4,$5,$6) result",
       [operation, id, secret, job.id, job.token, JSON.stringify(payload)]
     )
     return r.rows[0].result
@@ -339,6 +341,7 @@ async function serviceLoop() {
           voyageKey: env.VOYAGE_API_KEY ?? "",
           rerankEnabled: env.AGENTONIC_RERANK_ENABLED === "true",
           openaiKey: env.OPENAI_API_KEY ?? "",
+          browserbaseKey: env.BROWSERBASE_API_KEY,
           google:
             env.AGENTONIC_CONNECTION_KEY &&
             env.GOOGLE_CLIENT_ID &&

@@ -80,7 +80,11 @@ try {
     template.structure_manifest.platformPolicyText,
     readFileSync(join(packaged.directory, "prompts/platform.md"), "utf8")
   )
-  const version = `0.2.0-preview-${manifest.gitCommit.slice(0, 8)}`
+  const runtimeVersion = JSON.parse(
+    readFileSync(join(checkout, "package.json"), "utf8")
+  ).version
+  assert.match(runtimeVersion, /^\d+\.\d+\.\d+$/)
+  const version = `${runtimeVersion}-preview-${manifest.gitCommit.slice(0, 8)}`
   let release = (
     await db.query(
       "SELECT id,artifact_sha256 FROM agentonic.code_releases WHERE code_repository_id=$1 AND version=$2",

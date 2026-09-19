@@ -1,4 +1,6 @@
 "use client"
+import { gmailGrants, hasWeb } from "@agentonic/contracts/tools"
+import { WEB_GRANT } from "@agentonic/contracts/web"
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import {
@@ -67,7 +69,10 @@ export function GmailConnection({
     [busy, setBusy] = useState(false),
     [connecting, setConnecting] = useState(false),
     [remove, setRemove] = useState<string | null>(null)
-  const selected = tools[0]
+  const selected = gmailGrants(tools)[0]
+  const webEnabled = hasWeb(tools)
+  const onGmailTools = (value: typeof tools) =>
+    onTools([...tools.filter((g) => "capability" in g), ...value])
   const [chosenAccount, setChosenAccount] = useState(
     selected?.connectionId ??
       state.connections.find((c) => c.status === "connected")?.id ??
@@ -96,7 +101,7 @@ export function GmailConnection({
         connectionId: connection.id,
         operations,
       })
-      onTools(
+      onGmailTools(
         operations.length ? [{ connectionId: connection.id, operations }] : []
       )
     } catch (e) {
@@ -171,71 +176,105 @@ export function GmailConnection({
       <AgentSettingsCard
         title="Herramientas"
         icon={<WrenchIcon />}
-        description="Selecciona las operaciones de Gmail que incluirá la próxima versión."
+        description="Elige qué puede hacer el agente en la próxima versión."
         footer="Guarda el borrador y prepara una nueva versión para revisar cambios de acceso. Puedes probarlas en Probar agente antes de enviar la versión a revisión. Crear, editar o eliminar borradores y enviar correos siempre requiere tu confirmación."
       >
-        {state.connections.some((c) => c.status === "connected") && (
-          <div className="mb-4">
-            <Select
-              items={state.connections
-                .filter((c) => c.status === "connected")
-                .map((c) => ({ value: c.id, label: c.account }))}
-              value={connection?.id ?? ""}
-              disabled={disabled || busy}
-              onValueChange={(value) => {
-                setChosenAccount(value ?? "")
-                onTools([])
-              }}
-            >
-              <SelectTrigger aria-label="Cuenta de Gmail para las herramientas">
-                <SelectValue placeholder="Selecciona una cuenta" />
-              </SelectTrigger>
-              <SelectContent>
-                {state.connections
-                  .filter((c) => c.status === "connected")
-                  .map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.account}
-                    </SelectItem>
-                  ))}
-              </SelectContent>
-            </Select>
-          </div>
-        )}
-        {!connection ? (
-          <CardEmptyState title="Conecta una cuenta primero">
-            Las herramientas estarán disponibles cuando conectes Gmail.
-          </CardEmptyState>
-        ) : (
-          <fieldset
+        <label className="flex cursor-pointer items-start gap-3 rounded-lg border p-4">
+          <Checkbox.Root
+            checked={webEnabled}
             disabled={disabled || busy}
-            className="grid gap-3 sm:grid-cols-2"
+            onCheckedChange={(checked) =>
+              onTools(
+                checked
+                  ? [...gmailGrants(tools), WEB_GRANT]
+                  : gmailGrants(tools)
+              )
+            }
+            className="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded border data-checked:bg-primary data-checked:text-primary-foreground"
           >
-            <legend className="mb-4 text-sm text-muted-foreground">
-              Cuenta: {connection.account}
-            </legend>
-            {gmailOperation.options.map((op) => (
-              <label
-                key={op}
-                className="flex cursor-pointer items-start gap-3 rounded-lg border p-3 text-sm"
+            <Checkbox.Indicator>
+              <CheckIcon className="size-3" />
+            </Checkbox.Indicator>
+          </Checkbox.Root>
+          <span className="space-y-1">
+            <span className="block text-sm font-medium">Acceso web</span>
+            <span className="block text-sm text-muted-foreground">
+              Buscar información y leer páginas públicas con enlaces a las
+              fuentes. No requiere conectar una cuenta.
+            </span>
+            <span className="block text-xs text-muted-foreground">
+              No inicia sesión ni completa formularios. Su uso está sujeto al
+              presupuesto de la prueba. Desactivarlo y guardar retira el acceso
+              de las versiones existentes.
+            </span>
+          </span>
+        </label>
+        <div className="mt-5 space-y-4 border-t pt-5">
+          <h3 className="text-sm font-medium">Gmail</h3>
+          {state.connections.some((c) => c.status === "connected") && (
+            <div className="mb-4">
+              <Select
+                items={state.connections
+                  .filter((c) => c.status === "connected")
+                  .map((c) => ({ value: c.id, label: c.account }))}
+                value={connection?.id ?? ""}
+                disabled={disabled || busy}
+                onValueChange={(value) => {
+                  setChosenAccount(value ?? "")
+                  onGmailTools([])
+                }}
               >
-                <Checkbox.Root
-                  checked={
-                    selected?.connectionId === connection.id &&
-                    selected.operations.includes(op)
-                  }
-                  onCheckedChange={(checked) => void permission(op, checked)}
-                  className="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded border data-checked:bg-primary data-checked:text-primary-foreground"
+                <SelectTrigger aria-label="Cuenta de Gmail para las herramientas">
+                  <SelectValue placeholder="Selecciona una cuenta" />
+                </SelectTrigger>
+                <SelectContent>
+                  {state.connections
+                    .filter((c) => c.status === "connected")
+                    .map((c) => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {c.account}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+          {!connection ? (
+            <CardEmptyState title="Conecta una cuenta primero">
+              Conecta Gmail para habilitar herramientas de correo. El acceso web
+              funciona de forma independiente.
+            </CardEmptyState>
+          ) : (
+            <fieldset
+              disabled={disabled || busy}
+              className="grid gap-3 sm:grid-cols-2"
+            >
+              <legend className="mb-4 text-sm text-muted-foreground">
+                Cuenta: {connection.account}
+              </legend>
+              {gmailOperation.options.map((op) => (
+                <label
+                  key={op}
+                  className="flex cursor-pointer items-start gap-3 rounded-lg border p-3 text-sm"
                 >
-                  <Checkbox.Indicator>
-                    <CheckIcon className="size-3" />
-                  </Checkbox.Indicator>
-                </Checkbox.Root>
-                <span>{gmailLabels[op]}</span>
-              </label>
-            ))}
-          </fieldset>
-        )}
+                  <Checkbox.Root
+                    checked={
+                      selected?.connectionId === connection.id &&
+                      selected.operations.includes(op)
+                    }
+                    onCheckedChange={(checked) => void permission(op, checked)}
+                    className="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded border data-checked:bg-primary data-checked:text-primary-foreground"
+                  >
+                    <Checkbox.Indicator>
+                      <CheckIcon className="size-3" />
+                    </Checkbox.Indicator>
+                  </Checkbox.Root>
+                  <span>{gmailLabels[op]}</span>
+                </label>
+              ))}
+            </fieldset>
+          )}
+        </div>
       </AgentSettingsCard>
       <Dialog open={connecting} onOpenChange={setConnecting}>
         <DialogContent>
@@ -298,7 +337,7 @@ export function GmailConnection({
                   const result = await gmailCommand(workspaceId, "disconnect", {
                     connectionId: remove,
                   })
-                  if (selected?.connectionId === remove) onTools([])
+                  if (selected?.connectionId === remove) onGmailTools([])
                   setRemove(null)
                   notify.success(
                     result.revoked

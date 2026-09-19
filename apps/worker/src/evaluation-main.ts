@@ -61,6 +61,7 @@ for (const signal of ["SIGINT", "SIGTERM"] as const)
     active?.abort()
   })
 const config = {
+  allowTools: false,
   supabaseUrl: "",
   storageKey: "",
   voyageKey: env.VOYAGE_API_KEY ?? "",

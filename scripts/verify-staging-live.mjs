@@ -14,6 +14,7 @@ export async function verifyStagingLive({
   cmd,
   waitFor,
   rerankCheck = false,
+  webCheck = false,
 }) {
   const reports = []
   async function chat(operation, payload) {
@@ -41,7 +42,7 @@ export async function verifyStagingLive({
       {
         submissionId: fixture.submissionId,
         environment,
-        budgetUsd: 0.05,
+        budgetUsd: webCheck ? 0.1 : 0.05,
         consent: true,
         requestId: randomUUID(),
       },
@@ -118,7 +119,41 @@ export async function verifyStagingLive({
       const restored = await chat("state", { conversationId: conversation.id })
       assert.equal(restored.turns[0].answer, answered.turns[0].answer)
     }
-    const consumption = answered.committedMicrousd
+    let finalState = answered
+    if (webCheck) {
+      await chat("turn", {
+        conversationId: conversation.id,
+        query:
+          "Search the official Browserbase Search documentation and read a source. What is the maximum number of results per search? Include the source URL. Use at most one search and two reads.",
+        requestId: randomUUID(),
+      })
+      finalState = await waitFor(async () => {
+        const state = await chat("state", { conversationId: conversation.id })
+        const turn = state.turns.at(-1)
+        if (turn?.status === "failed")
+          throw new Error("Synthetic web turn failed")
+        return turn?.status === "succeeded" && state.turns.length === 2
+          ? state
+          : null
+      })
+      const turn = finalState.turns.at(-1)
+      assert.match(turn.answer, /25/)
+      assert.match(turn.answer, /Fuentes web:/)
+      assert.match(turn.answer, /https:\/\/docs\.browserbase\.com\//)
+      const usage = (
+        await db.query(
+          "SELECT model,status FROM agentonic.retrieval_provider_operations WHERE job_id=$1 AND provider='browserbase'",
+          [turn.id]
+        )
+      ).rows
+      assert.ok(
+        usage.some((x) => x.model === "web.search" && x.status === "settled")
+      )
+      assert.ok(
+        usage.some((x) => x.model === "web.read" && x.status === "settled")
+      )
+    }
+    const consumption = finalState.committedMicrousd
     await cmd(
       "stop",
       { deploymentId: deployment.id },
@@ -150,6 +185,13 @@ export async function verifyStagingLive({
         "stop denies access",
         "content scrubbed",
         "usage retained",
+        ...(webCheck
+          ? [
+              "public search and read",
+              "web sources rendered",
+              "Browserbase usage settled",
+            ]
+          : []),
         ...(reranking ? ["rerank provider usage settled"] : []),
         ...(environment === "azure_staging"
           ? ["systemd restart and conversation recovery"]

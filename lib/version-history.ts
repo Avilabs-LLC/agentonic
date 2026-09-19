@@ -1,5 +1,10 @@
 export const VERSION_HISTORY = [
   {
+    "version": "0.11.0",
+    "date": "2026-09-18",
+    "summary": "Acceso web público con investigación acotada, fuentes verificadas y recuperación de lecturas fallidas."
+  },
+  {
     "version": "0.10.0",
     "date": "2026-09-18",
     "summary": "Conexión de Gmail, herramientas con confirmación y pruebas privadas con acceso autorizado a cuentas conectadas."

@@ -15,6 +15,8 @@ import {
 // Historical decisions/usage remain immutable in a retired synthetic workspace.
 const stagingCheck = process.argv.includes("--staging")
 const rerankCheck = process.argv.includes("--rerank")
+const webCheck = process.argv.includes("--web")
+assert.ok(!webCheck || stagingCheck, "Web verification requires --staging")
 const marker = join(
   root,
   stagingCheck
@@ -168,6 +170,61 @@ try {
     )
     if (existsSync(marker)) unlinkSync(marker)
   }
+  async function approveSyntheticWebFixture() {
+    if (!webCheck) return
+    // Tools intentionally remain outside automatic approval. Exercise the
+    // existing scoped staff gate only for this operator-authorized fixture.
+    assert.equal(
+      (
+        await db.query(
+          "SELECT 1 FROM agentonic.workspaces WHERE id=$1 AND slug LIKE 'eval-check-%' AND name='Synthetic evaluation verification'",
+          [fixture.workspaceId]
+        )
+      ).rowCount,
+      1
+    )
+    const run = (
+      await db.query(
+        "SELECT status,environment,evidence_sha256,jsonb_array_length(dataset_snapshot) cases FROM agentonic.evaluation_runs WHERE id=$1 AND workspace_id=$2 AND submission_id=$3",
+        [fixture.evaluationId, fixture.workspaceId, fixture.submissionId]
+      )
+    ).rows[0]
+    assert.equal(run?.status, "passed")
+    assert.equal(run.environment, "azure_staging")
+    const passed = (
+      await db.query(
+        "SELECT count(*)::int n FROM agentonic.evaluation_results WHERE evaluation_run_id=$1 AND outcome='passed' AND assessment->>'verdict'='passed'",
+        [fixture.evaluationId]
+      )
+    ).rows[0].n
+    assert.equal(passed, run.cases)
+    const existing = (
+      await db.query(
+        "SELECT 1 FROM agentonic.submission_review_decisions WHERE submission_id=$1 AND decision='approved' AND agentonic.version_approval_valid(id)",
+        [fixture.submissionId]
+      )
+    ).rowCount
+    if (existing) return
+    const review = await cmd(
+      "review.open",
+      { submissionId: fixture.submissionId },
+      "authoring_command",
+      true
+    )
+    await cmd(
+      "approve",
+      {
+        evaluationId: fixture.evaluationId,
+        grantId: review.data.grantId,
+        evidenceHash: run.evidence_sha256,
+        reviewed: true,
+        feedback:
+          "Operator-authorized synthetic web deployment verification only. All synthetic evaluation outcomes checked; no customer quality approval.",
+      },
+      "evaluation_command",
+      true
+    )
+  }
   async function continueReview() {
     const preparation = { id: fixture.preparationId },
       submission = { id: fixture.submissionId }
@@ -258,7 +315,8 @@ try {
         (r) => r.outcome === "passed" && r.assessment.verdict === "passed"
       )
     )
-    stage = "automatic_approval"
+    stage = webCheck ? "synthetic_staff_approval" : "automatic_approval"
+    await approveSyntheticWebFixture()
     const decision = (
       await db.query(
         "SELECT id,actor_policy_version,assessment_snapshot,agentonic.version_approval_valid(id) valid FROM agentonic.submission_review_decisions WHERE submission_id=$1 AND decision='approved'",
@@ -266,8 +324,10 @@ try {
       )
     ).rows[0]
     assert.ok(decision?.valid)
-    assert.equal(decision.actor_policy_version, "readonly-review-v1")
-    assert.equal(decision.assessment_snapshot.humanReviewed, false)
+    if (!webCheck) {
+      assert.equal(decision.actor_policy_version, "readonly-review-v1")
+      assert.equal(decision.assessment_snapshot.humanReviewed, false)
+    }
     if (stagingCheck) {
       stage = "staging_activation"
       await verifyStagingLive({
@@ -278,6 +338,7 @@ try {
         cmd,
         waitFor,
         rerankCheck,
+        webCheck,
       })
     }
     await cmd(
@@ -317,7 +378,9 @@ try {
             "persisted customer notes",
             "semantic grading",
             "abstention",
-            "automatic policy approval",
+            webCheck
+              ? "scoped synthetic staff approval"
+              : "automatic policy approval",
             "immediate revocation",
           ],
         },
@@ -347,6 +410,7 @@ try {
     )
     for (const d of existing.rows)
       await cmd("stop", { deploymentId: d.id }, "deployment_command", true)
+    await approveSyntheticWebFixture()
     stage = "staging_activation"
     await verifyStagingLive({
       db,
@@ -356,6 +420,7 @@ try {
       cmd,
       waitFor,
       rerankCheck,
+      webCheck,
     })
     await cmd(
       "revoke",
@@ -477,13 +542,18 @@ try {
       content: {
         version: 1,
         systemPrompt:
-          "Answer in English using the authorized passages. Be concise. If the evidence cannot answer the question, explicitly say there is insufficient evidence. Never invent a secret code.",
+          "Answer in English using the authorized passages. Be concise. If the evidence cannot answer the question, explicitly say there is insufficient evidence. Never invent a secret code." +
+          (webCheck
+            ? " When specifically asked for public documentation, use the authorized web tools, read a source and provide its URL."
+            : ""),
         skills: [],
       },
       requestedAccess: {
         version: 1,
         collectionIds: [collection.id],
-        tools: [],
+        tools: webCheck
+          ? [{ capability: "web", operations: ["web.search", "web.read"] }]
+          : [],
       },
     })
     const candidate = await cmd("candidate.freeze", {
