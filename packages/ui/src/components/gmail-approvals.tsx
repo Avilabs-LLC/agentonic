@@ -11,6 +11,7 @@ import { Button } from "@workspace/ui/components/button"
 import {
   Dialog,
   DialogContent,
+  DialogHeader,
   DialogTitle,
   DialogDescription,
 } from "@workspace/ui/components/dialog"
@@ -177,13 +178,15 @@ export function GmailApprovals({
         onOpenChange={(open) => !busy && !open && setSelected(null)}
       >
         <DialogContent className="max-h-[85vh] overflow-y-auto">
-          <DialogTitle>
-            {selected ? gmailLabels[selected.operation] : "Revisar acción"}
-          </DialogTitle>
-          <DialogDescription>
-            Confirma esta acción exacta. Cambiar el contenido o los
-            destinatarios requiere una nueva confirmación.
-          </DialogDescription>
+          <DialogHeader>
+            <DialogTitle>
+              {selected ? gmailLabels[selected.operation] : "Revisar acción"}
+            </DialogTitle>
+            <DialogDescription>
+              Confirma esta acción exacta. Cambiar el contenido o los
+              destinatarios requiere una nueva confirmación.
+            </DialogDescription>
+          </DialogHeader>
           {selected && (
             <>
               <Details item={selected} />

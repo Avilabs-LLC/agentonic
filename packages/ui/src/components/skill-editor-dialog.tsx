@@ -6,6 +6,7 @@ import { z } from "zod"
 import {
   Dialog,
   DialogContent,
+  DialogHeader,
   DialogTitle,
   DialogDescription,
 } from "@workspace/ui/components/dialog"
@@ -68,13 +69,15 @@ export function SkillEditorDialog({
       }}
     >
       <DialogContent className="max-w-2xl">
-        <DialogTitle>
-          {initial ? "Detalles de la habilidad" : "Añadir habilidad"}
-        </DialogTitle>
-        <DialogDescription>
-          Describe un procedimiento que el agente debe seguir. Guarda el
-          borrador después de aplicar los cambios.
-        </DialogDescription>
+        <DialogHeader>
+          <DialogTitle>
+            {initial ? "Detalles de la habilidad" : "Añadir habilidad"}
+          </DialogTitle>
+          <DialogDescription>
+            Describe un procedimiento que el agente debe seguir. Guarda el
+            borrador después de aplicar los cambios.
+          </DialogDescription>
+        </DialogHeader>
         <form noValidate onSubmit={handleSubmit(onApply)} className="space-y-5">
           <Field data-invalid={!!errors.name}>
             <FieldLabel htmlFor={`${id}-name`}>

@@ -36,6 +36,7 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogHeader,
   DialogTitle,
   DialogDescription,
 } from "@workspace/ui/components/dialog"
@@ -319,7 +320,7 @@ export function AgentLifecycle({
         }}
       >
         <DialogContent>
-          <div className="space-y-2">
+          <DialogHeader>
             <DialogTitle>
               {form?.operation === "renew"
                 ? "Renovar aprobación"
@@ -330,7 +331,7 @@ export function AgentLifecycle({
                 ? "Se abrirá una nueva revisión de esta misma versión. Se prepararán criterios para que los revises y confirmes antes de evaluar. La aprobación anterior se conserva."
                 : "Autoriza el uso privado de esta versión y su conocimiento durante un máximo de siete días. El equipo activará el agente; podrás detenerlo en cualquier momento."}
             </DialogDescription>
-          </div>
+          </DialogHeader>
           <div className="space-y-5">
             {form?.operation === "authorize" && (
               <Field>

@@ -14,6 +14,7 @@ import {
   Dialog,
   DialogTrigger,
   DialogContent,
+  DialogHeader,
   DialogTitle,
   DialogDescription,
 } from "@workspace/ui/components/dialog"
@@ -123,10 +124,12 @@ export function KnowledgeCollections({
               Crear colección
             </DialogTrigger>
             <DialogContent showCloseButton={!pending}>
-              <DialogTitle>Crear colección</DialogTitle>
-              <DialogDescription>
-                Organiza documentos relacionados en una colección privada.
-              </DialogDescription>
+              <DialogHeader>
+                <DialogTitle>Crear colección</DialogTitle>
+                <DialogDescription>
+                  Organiza documentos relacionados en una colección privada.
+                </DialogDescription>
+              </DialogHeader>
               <ResourceCreateForm
                 action={create}
                 disabled={!canCreate}
