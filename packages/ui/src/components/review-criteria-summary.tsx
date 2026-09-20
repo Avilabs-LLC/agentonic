@@ -52,14 +52,12 @@ export function ReviewCriteriaSummary({
       <div className="min-h-0 space-y-6 overflow-y-auto">
         <Table
           aria-label="Resumen de situaciones"
-          className="min-w-[520px] table-fixed"
+          className="min-w-[520px] table-fixed [&_td]:py-3"
         >
           <TableHeader>
             <TableRow>
               <TableHead>Situación</TableHead>
-              <TableHead className="whitespace-normal">
-                Mensaje o respuesta editados
-              </TableHead>
+              <TableHead>Editados</TableHead>
               <TableHead>Aclaraciones</TableHead>
               <TableHead>Decisión</TableHead>
             </TableRow>
@@ -74,7 +72,7 @@ export function ReviewCriteriaSummary({
                 )
               return (
                 <TableRow key={c.key}>
-                  <TableCell className="py-3 whitespace-normal">
+                  <TableCell className="whitespace-normal">
                     <Button
                       type="button"
                       variant="link"
