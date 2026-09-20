@@ -358,7 +358,7 @@ it("requires a new preview to opt into tools and never upgrades the existing ses
 it("does not grant normal retrieval jobs Gmail authority", async () => {
   const p = await privatePreview()
   await f.sql(
-    "UPDATE agentonic.background_jobs SET preview_id=NULL,turn_number=NULL,request_key=NULL WHERE id=$1",
+    "UPDATE agentonic.background_jobs SET preview_id=NULL,turn_number=NULL,request_key=NULL,response_model='gpt-4.1-mini-2025-04-14',reasoning_effort=NULL WHERE id=$1",
     [p.job.id]
   )
   await expect(p.tool("gmail-tools")).rejects.toThrow()

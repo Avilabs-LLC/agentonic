@@ -1,4 +1,5 @@
 import type { WorkspaceView } from "@agentonic/contracts/authoring"
+import type { ProposalStatus } from "@agentonic/contracts/proposals"
 
 type BadgeVariant =
   | "success"
@@ -21,6 +22,14 @@ export const submissionBadgeVariants: Record<string, BadgeVariant> = {
   withdrawn: "slate",
   approved: "success",
   revoked: "violet",
+}
+
+export const proposalBadgeVariants: Record<ProposalStatus, BadgeVariant> = {
+  in_progress: "sky",
+  approved: "success",
+  changes_requested: "orange",
+  needs_attention: "warning",
+  closed: "slate",
 }
 
 export const agentBadges: Record<

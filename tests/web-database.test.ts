@@ -220,7 +220,7 @@ it("blocks staff, ordinary jobs and direct metering; web-only state has no Gmail
     ])
   ).rejects.toThrow()
   await f.sql(
-    "UPDATE agentonic.background_jobs SET preview_id=NULL,turn_number=NULL,request_key=NULL WHERE id=$1",
+    "UPDATE agentonic.background_jobs SET preview_id=NULL,turn_number=NULL,request_key=NULL,response_model='gpt-4.1-mini-2025-04-14',reasoning_effort=NULL WHERE id=$1",
     [p.job.id]
   )
   await expect(p.web("web-tools")).rejects.toThrow()
@@ -238,4 +238,117 @@ it("preserves the three-call ceiling of previously published runtimes", async ()
   expect(
     await p.web("web-reserve", { id: id(703), operation: "web.read" })
   ).toEqual({ ok: false, code: "call_limit" })
+})
+it("pins preview model per turn, meters the actual model and preserves retry identity", async () => {
+  const candidate = await prepared()
+  const p = await rpc("preview_command", [
+    "start",
+    JSON.stringify({
+      agentId: id(20),
+      candidateId: candidate.id,
+      budgetUsd: 3,
+    }),
+  ])
+  const payload = {
+    agentId: id(20),
+    previewId: p.id,
+    query: "Compare sources",
+    requestKey: id(750),
+    model: "gpt-6-astra",
+  }
+  const queued = await rpc("preview_command", ["turn", JSON.stringify(payload)])
+  expect(
+    (await rpc("preview_command", ["turn", JSON.stringify(payload)])).id
+  ).toBe(queued.id)
+  expect(
+    (
+      await rpc("preview_command", [
+        "turn",
+        JSON.stringify({ ...payload, model: "gpt-4.1-mini-2025-04-14" }),
+      ])
+    ).code
+  ).toBe("request_conflict")
+  const job = await f.claim()
+  await f.worker(job, "empty-search")
+  expect((await f.worker(job, "context")).previewModel).toBe("gpt-6-astra")
+  const worker = (operation: string, data: Record<string, unknown> = {}) =>
+    rpc("rag_worker", [operation, job.id, job.token, JSON.stringify(data)])
+  await expect(
+    worker("reserve", {
+      id: id(751),
+      provider: "openai",
+      model: "gpt-4.1-mini-2025-04-14",
+      microusd: 100,
+    })
+  ).rejects.toThrow()
+  await f.sql(
+    "UPDATE agentonic.retrieval_provider_budgets SET cap_microusd=10000000 WHERE provider='openai'"
+  )
+  await f.db.exec("RESET ROLE;SET LOCAL ROLE agentonic_worker")
+  expect(
+    (
+      await worker("reserve", {
+        id: id(751),
+        provider: "openai",
+        model: "gpt-6-astra",
+        microusd: 1200000,
+      })
+    ).ok
+  ).toBe(true)
+  await worker("settle", {
+    id: id(751),
+    microusd: 11000,
+    tokens: 100,
+    outputTokens: 200,
+  })
+  await expect(
+    worker("answer", {
+      text: "No match.",
+      citations: [],
+      insufficientEvidence: true,
+      model: "gpt-4.1-mini-2025-04-14",
+    })
+  ).rejects.toThrow()
+  await worker("answer", {
+    text: "No match.",
+    citations: [],
+    insufficientEvidence: true,
+    model: "gpt-6-astra",
+  })
+  await f.actor()
+  const state = await rpc("preview_command", [
+    "state",
+    JSON.stringify({ agentId: id(20), previewId: p.id }),
+  ])
+  expect(state.budgetUsd).toBe(3)
+  expect(state.committedMicrousd).toBe(11000)
+  expect(state.turns).toMatchObject([
+    { model: "gpt-6-astra", answer: { model: "gpt-6-astra" } },
+  ])
+  await expect(
+    rpc("preview_command", [
+      "turn",
+      JSON.stringify({
+        ...payload,
+        requestKey: id(752),
+        model: "unreviewed-model",
+      }),
+    ])
+  ).rejects.toThrow()
+  await rpc("preview_command", [
+    "turn",
+    JSON.stringify({
+      ...payload,
+      requestKey: id(753),
+      model: "gpt-4.1-mini-2025-04-14",
+    }),
+  ])
+  const next = await f.claim()
+  await f.worker(next, "empty-search")
+  expect((await f.worker(next, "context")).previewModel).toBe(
+    "gpt-4.1-mini-2025-04-14"
+  )
+  expect((await f.worker(next, "context")).history).toMatchObject([
+    { answer: "No match." },
+  ])
 })

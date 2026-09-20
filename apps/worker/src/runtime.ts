@@ -1,3 +1,4 @@
+import { modelConfiguration, modelCatalog } from "@agentonic/contracts/models"
 import {
   WEB_RESEARCH_POLICY,
   WEB_RESEARCH_CALLS,
@@ -18,6 +19,16 @@ import {
 } from "@agentonic/contracts/gmail"
 import { executeGmail } from "./gmail"
 import { PreviewFailure } from "./failure"
+import {
+  previewModel,
+  DEFAULT_PREVIEW_MODEL,
+  type PreviewModel,
+} from "@agentonic/contracts/preview-models"
+import {
+  previewCost,
+  previewModelProfile,
+  previewReservation,
+} from "./preview-models"
 import { GoogleError, type GoogleConfig } from "@agentonic/connectors/google"
 import type { Execute, Lease } from "./pipeline"
 const MODEL = "gpt-4.1-mini-2025-04-14"
@@ -124,10 +135,31 @@ export async function generatePreview(
   gmailOptions?: { grant: z.infer<typeof gmailGrant>; config: GoogleConfig },
   passageIds?: string[],
   webKey?: string,
-  webCallLimit = 3
+  webCallLimit = 3,
+  selectedModel: PreviewModel = DEFAULT_PREVIEW_MODEL,
+  selectedReasoning?: string | null
 ) {
   if (!key) throw new Error("configuration_required")
   const request = requestSchema.parse(value)
+  const model = previewModel.parse(selectedModel)
+  const reasoning =
+    selectedReasoning === undefined
+      ? modelCatalog.find((m) => m.id === model)!.defaultLevel
+      : selectedReasoning
+  modelConfiguration.parse({ model, reasoning })
+  const profile = previewModelProfile(model, reasoning)
+  const modelRequest =
+    model === DEFAULT_PREVIEW_MODEL
+      ? request
+      : {
+          store: request.store,
+          input: request.input,
+          text: request.text,
+          model,
+          reasoning: { effort: reasoning },
+          max_output_tokens: profile.maxOutput,
+          include: ["reasoning.encrypted_content"],
+        }
   const allowedCitations =
     passageIds === undefined
       ? undefined
@@ -218,7 +250,7 @@ export async function generatePreview(
       })
 
     const body = JSON.stringify({
-      ...request,
+      ...modelRequest,
       input,
       text: { format: responseFormat },
       ...(definitions.length
@@ -234,8 +266,8 @@ export async function generatePreview(
     const reserved = await execute("reserve", job, {
       id,
       provider: "openai",
-      model: MODEL,
-      microusd: Math.ceil((Buffer.byteLength(body) + 4096) * 0.4 + 1600),
+      model,
+      microusd: previewReservation(model, body, reasoning),
     })
     if (!reserved.ok) {
       if (!webKey) throw new Error("budget_exhausted")
@@ -302,13 +334,19 @@ export async function generatePreview(
       id,
       tokens: usage.input_tokens,
       outputTokens: usage.output_tokens,
-      microusd: Math.ceil(usage.input_tokens * 0.4 + usage.output_tokens * 1.6),
+      microusd: previewCost(model, usage.input_tokens, usage.output_tokens),
     })
     if (output.status !== "completed")
       throw new PreviewFailure("response_incomplete")
     const calls = output.output?.filter((x) => x.type === "function_call") ?? []
     if (calls.length) {
       if (calls.length !== 1 || finalOnly) throw new Error("runtime_mismatch")
+      // Stateless reasoning models require their returned reasoning items when
+      // continuing a tool call. These stay in memory, never logs or transcripts.
+      if (model !== DEFAULT_PREVIEW_MODEL)
+        input.push(
+          ...(output.output?.filter((x) => x.type === "reasoning") ?? [])
+        )
       const call = calls[0]!
       const operation = gmailOptions?.grant.operations.find(
         (op) => op.replaceAll(".", "_") === call.name
@@ -431,7 +469,14 @@ export async function runPreview(
   allowTools = true
 ) {
   const entry = verifyRuntime(value, root)
-  const context = await execute("context", job)
+  const {
+    previewModel: selectedModel,
+    reasoningLevel,
+    ...context
+  } = await execute("context", job)
+  // The trusted broker pins the execution configuration for this turn/run.
+  // Legacy contexts keep the original runtime model.
+  const model = previewModel.parse(selectedModel ?? DEFAULT_PREVIEW_MODEL)
   const manifest = runtimeSchema.parse(value).manifest
   const access =
     typeof context.accessJson === "string"
@@ -518,13 +563,18 @@ export async function runPreview(
               .parse(context.passages)
               .map((p) => p.id),
             webKey,
-            manifest.webResearch === "1" ? WEB_RESEARCH_CALLS : 3
+            manifest.webResearch === "1" ? WEB_RESEARCH_CALLS : 3,
+            model,
+            reasoningLevel as string | null | undefined
           )
           if (finished) return
           generated = true
           child.send({ ok: true, result })
         } else if (event.type === "result" && generated) {
-          await execute("answer", job, resultSchema.parse(event.result))
+          await execute("answer", job, {
+            ...resultSchema.parse(event.result),
+            model,
+          })
           finish()
         } else finish("runtime_mismatch")
       })().catch((error) =>

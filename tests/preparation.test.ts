@@ -98,14 +98,29 @@ describe("separate preparation from exact private testing", () => {
     expect(mocks.freeze).not.toHaveBeenCalled()
     expect(mocks.preview).not.toHaveBeenCalled()
   })
-  it("opens a requested earlier version without preparing the newer draft", async () => {
+  it("opens the latest prepared version with tools without freezing newer draft edits", async () => {
     existing(1)
     await openAgentPreview(workspace, agentId, { revision: 2, candidateId })
     expect(mocks.freeze).not.toHaveBeenCalled()
     expect(mocks.preview).toHaveBeenCalledWith(workspace, {
       operation: "start",
-      payload: { agentId, candidateId },
+      payload: { agentId, candidateId, enableTools: true },
     })
+  })
+  it("rejects an older candidate when a newer version has been prepared", async () => {
+    existing(1)
+    agent.candidates.unshift({
+      ...agent.candidates[0]!,
+      id: "10000000-0000-4000-8000-000000000006",
+      revision: 2,
+      number: 2,
+    })
+    expect(
+      (await openAgentPreview(workspace, agentId, { revision: 2, candidateId }))
+        .ok
+    ).toBe(false)
+    expect(mocks.preview).not.toHaveBeenCalled()
+    expect(mocks.freeze).not.toHaveBeenCalled()
   })
   it("rejects unavailable or foreign candidates without substituting another", async () => {
     expect(

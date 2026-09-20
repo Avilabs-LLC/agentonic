@@ -1,6 +1,18 @@
 import { readFileSync } from "node:fs"
 import { PGlite } from "@electric-sql/pglite"
-import { beforeEach, afterEach, expect, it } from "vitest"
+import { beforeEach, afterEach, expect, it, vi } from "vitest"
+const submissionMocks = vi.hoisted(() => ({
+  identity: vi.fn(),
+  auth: vi.fn(),
+  query: vi.fn(),
+}))
+vi.mock("@agentonic/database/client", () => ({
+  withIdentity: submissionMocks.identity,
+}))
+vi.mock("../packages/server/src/auth", () => ({
+  requireVerifiedUser: submissionMocks.auth,
+}))
+import { submitAgentForReview } from "../packages/server/src/submission"
 import { reviewReceipt } from "../packages/contracts/src/review-receipt"
 import { vector } from "@electric-sql/pglite-pgvector"
 let db: PGlite
@@ -888,7 +900,12 @@ it("blocks staff decisions until the customer's evaluation finishes, including d
   expect(finished.rows[0]!.result.canDecide).toBe(true)
   expect(await command("review.decide", payload)).toMatchObject({ ok: true })
 })
-async function finishFlow(job: Job, verdict = "passed", routine = true) {
+async function finishFlow(
+  job: Job,
+  verdict = "passed",
+  routine = true,
+  executionModel = "gpt-4.1-mini-2025-04-14"
+) {
   for (let i = 0; i < 3; i++) {
     await execute(job, "search", { embedding })
     const context = await execute(job, "context")
@@ -904,7 +921,7 @@ async function finishFlow(job: Job, verdict = "passed", routine = true) {
       citations:
         i === 0 ? (context.passages as { id: string }[]).map((p) => p.id) : [],
       insufficientEvidence: i !== 0,
-      model: "gpt-4.1-mini-2025-04-14",
+      model: executionModel,
       assessment: {
         verdict,
         explanation: "Synthetic grounded comparison.",
@@ -2246,4 +2263,453 @@ it("meters frozen web tools in staging, rejects the wrong service and fences dis
     requestedAccess: { version: 1, collectionIds: [collection], tools: [] },
   })
   await expect(web("web-check")).rejects.toThrow()
+})
+
+// Exercise the actual application transaction against the restricted SQL roles.
+async function saveReviewDraft(revision = 0) {
+  return command("draft.save", {
+    agentId: a,
+    revision,
+    content: {
+      ...content,
+      systemPrompt:
+        "Help organize the synthetic project, explain the available evidence, and clearly identify any missing information.",
+    },
+    requestedAccess: requested,
+  })
+}
+async function combinedSubmissionFixture() {
+  await saveReviewDraft()
+  const frozen = await command("candidate.freeze", {
+    agentId: a,
+    revision: 1,
+    codeReleaseId: code,
+  })
+  submissionMocks.auth.mockResolvedValue({ authId: owner, email: null })
+  submissionMocks.identity.mockImplementation(async (_auth, workspace, run) => {
+    await actor(owner, workspace)
+    await db.exec("SAVEPOINT combined_submission")
+    try {
+      submissionMocks.query.mockImplementation(
+        async (parts: TemplateStringsArray, ...values: unknown[]) => {
+          const query = parts.reduce(
+            (text, part, index) => text + (index ? `$${index}` : "") + part,
+            ""
+          )
+          return (await db.query(query, values)).rows
+        }
+      )
+      const result = await run({ $queryRaw: submissionMocks.query })
+      await db.exec("RELEASE SAVEPOINT combined_submission")
+      return result
+    } catch (error) {
+      await db.exec(
+        "ROLLBACK TO SAVEPOINT combined_submission; RELEASE SAVEPOINT combined_submission"
+      )
+      throw error
+    }
+  })
+  return {
+    candidateId: frozen.id,
+    revision: 1,
+    note: "Synthetic review",
+    consent: true,
+    budgetUsd: 0.25,
+    requestId: id(987),
+  }
+}
+
+it("submits and queues criteria together without running evaluation or duplicating a retry", async () => {
+  const input = await combinedSubmissionFixture()
+  const result = await submitAgentForReview(w, a, input)
+  expect(result).toMatchObject({
+    ok: true,
+    href: `/agents/${a}?workspace=${w}&tab=propuestas`,
+  })
+  const rows = await sql(
+    "SELECT s.id,p.status,p.budget_usd,p.evaluation_id FROM agentonic.agent_submissions s JOIN agentonic.evaluation_preparations p ON p.submission_id=s.id WHERE s.agent_id=$1",
+    [a]
+  )
+  expect(rows.rows).toHaveLength(1)
+  expect(rows.rows[0]).toMatchObject({ status: "queued", evaluation_id: null })
+  expect(Number((rows.rows[0] as { budget_usd: string }).budget_usd)).toBe(0.25)
+  expect((await submitAgentForReview(w, a, input)).ok).toBe(false)
+  const counts = await sql(
+    "SELECT (SELECT count(*)::integer FROM agentonic.agent_submissions WHERE agent_id=$1) submissions, (SELECT count(*)::integer FROM agentonic.evaluation_preparations WHERE agent_id=$1) preparations",
+    [a]
+  )
+  expect(counts.rows[0]).toEqual({ submissions: 1, preparations: 1 })
+})
+
+it("rolls back the submission when criteria preparation cannot be queued", async () => {
+  const input = await combinedSubmissionFixture()
+  // A consumed idempotency key cannot be reused for another submission.
+  const first = await command("submission.send", {
+    candidateId: input.candidateId,
+    note: "",
+    consent: true,
+  })
+  await flow("prepare", {
+    submissionId: first.id,
+    budgetUsd: 0.25,
+    consent: true,
+    requestId: input.requestId,
+  })
+  await db.exec("COMMIT;BEGIN")
+  await actor()
+  await saveReviewDraft(1)
+  const second = await command("candidate.freeze", {
+    agentId: a,
+    revision: 2,
+    codeReleaseId: code,
+  })
+  expect(
+    (
+      await submitAgentForReview(w, a, {
+        ...input,
+        candidateId: second.id,
+        revision: 2,
+      })
+    ).ok
+  ).toBe(false)
+  expect(submissionMocks.query.mock.calls.at(-1)?.[0].join("")).toContain(
+    "review_flow_command"
+  )
+  const rows = await sql(
+    "SELECT id FROM agentonic.agent_submissions WHERE configuration_release_id=$1",
+    [second.id]
+  )
+  expect(rows.rows).toHaveLength(0)
+  const retained = await sql(
+    "SELECT id FROM agentonic.evaluation_preparations WHERE submission_id=$1",
+    [first.id]
+  )
+  expect(retained.rows).toHaveLength(1)
+})
+
+it("rolls back a stale revision and rejects missing budget or consent before mutation", async () => {
+  const input = await combinedSubmissionFixture()
+  for (const changed of [
+    { revision: 2 },
+    { budgetUsd: undefined },
+    { budgetUsd: 2 },
+    { consent: false },
+  ]) {
+    expect(
+      (await submitAgentForReview(w, a, { ...input, ...changed })).ok
+    ).toBe(false)
+  }
+  const rows = await sql(
+    "SELECT id FROM agentonic.agent_submissions WHERE agent_id=$1",
+    [a]
+  )
+  expect(rows.rows).toHaveLength(0)
+})
+
+async function modelReview() {
+  const p = await prepareFlow()
+  await db.exec("RESET ROLE")
+  for (const migration of [
+    "202609190033_preview_models",
+    "202609190034_frontier_reservations",
+    "202609190035_model_evaluations",
+    "202609190036_chat_model_levels",
+    "202609190037_model_review_receipt_history",
+  ])
+    await db.exec(
+      readFileSync(
+        `packages/database/prisma/migrations/${migration}/migration.sql`,
+        "utf8"
+      )
+        .replace(/^BEGIN;/, "")
+        .replace(/COMMIT;\s*$/, "")
+    )
+  await sql(
+    "UPDATE agentonic.evaluation_workers SET revoked_at=clock_timestamp() WHERE database_role='agentonic_eval_azure' AND revoked_at IS NULL"
+  )
+  await sql(
+    "INSERT INTO agentonic.evaluation_workers(database_role,environment,worker_sha256,runtime_sha256,verified_at,verification) VALUES('agentonic_eval_azure','azure_staging',repeat('d',64),repeat('b',64),now(),'{\"reviewProtocol\":3,\"isolation\":true,\"recovery\":true,\"artifactIntegrity\":true}')"
+  )
+  await actor()
+  await flow("save", {
+    preparationId: p.preparationId,
+    revision: 0,
+    criteria: p.criteria.map((c) => ({ ...c, reviewDecision: "approved" })),
+  })
+  expect(
+    await flow("confirm", {
+      preparationId: p.preparationId,
+      revision: 1,
+      consent: true,
+    })
+  ).toMatchObject({ ok: true })
+  return p
+}
+it("model batches separate confirmation from paid runs, enforce scope and preserve repeated history", async () => {
+  const p = await modelReview()
+  expect(
+    (
+      await sql(
+        "SELECT count(*)::int n FROM agentonic.evaluation_runs WHERE preparation_id=$1",
+        [p.preparationId]
+      )
+    ).rows
+  ).toEqual([{ n: 0 }])
+  const payload = {
+    preparationId: p.preparationId,
+    revision: 1,
+    models: [
+      { model: "gpt-4.1-mini-2025-04-14", reasoning: null },
+      { model: "gpt-6-astra", reasoning: "high" },
+    ],
+    budgetUsd: 3,
+    consent: true,
+    requestId: id(990),
+  }
+  await actor(other, otherW)
+  await expect(flow("run", payload)).rejects.toMatchObject({ code: "42501" })
+  await actor()
+  const batch = await flow("run", payload)
+  expect(batch.ok).toBe(true)
+  expect(await flow("run", payload)).toEqual(batch)
+  expect(await flow("run", { ...payload, requestId: id(991) })).toMatchObject({
+    ok: false,
+    code: "busy",
+  })
+  expect(
+    await flow("save", {
+      preparationId: p.preparationId,
+      revision: 1,
+      criteria: p.criteria,
+    })
+  ).toMatchObject({ ok: false, code: "busy" })
+  const claimedModel = await evalClaim()
+  await finishFlow(claimedModel!)
+  expect(
+    (
+      await sql("SELECT status FROM agentonic.agent_submissions WHERE id=$1", [
+        p.submissionId,
+      ])
+    ).rows
+  ).toEqual([{ status: "submitted" }])
+  const second = (await evalClaim())!
+  const context = await execute(second, "context")
+  expect(context).toMatchObject({
+    previewModel: "gpt-6-astra",
+    reasoningLevel: "high",
+  })
+  await execute(second, "fail", { code: "provider_unavailable" })
+  await actor()
+  const state = await db.query<{
+    result: {
+      preparations: { canRun: boolean; batches: { models: unknown[] }[] }[]
+    }
+  }>("SELECT agentonic.review_flow_state($1) result", [a])
+  expect(state.rows[0]!.result.preparations[0]).toMatchObject({ canRun: true })
+  expect(
+    state.rows[0]!.result.preparations[0]!.batches[0]!.models
+  ).toHaveLength(2)
+  expect(await flow("run", { ...payload, requestId: id(991) })).toMatchObject({
+    ok: true,
+  })
+  expect(
+    (
+      await sql(
+        "SELECT count(*)::int n FROM agentonic.evaluation_batches WHERE preparation_id=$1",
+        [p.preparationId]
+      )
+    ).rows
+  ).toEqual([{ n: 2 }])
+})
+it("model review permits editing and rerunning after success without rewriting the original evidence", async () => {
+  const p = await modelReview()
+  const payload = {
+    preparationId: p.preparationId,
+    revision: 1,
+    models: [{ model: "gpt-4.1-mini-2025-04-14", reasoning: null }],
+    budgetUsd: 3,
+    consent: true,
+    requestId: id(992),
+  }
+  await actor()
+  await flow("run", payload)
+  const job = (await evalClaim())!
+  await finishFlow(job)
+  expect(
+    (
+      await sql("SELECT status FROM agentonic.agent_submissions WHERE id=$1", [
+        p.submissionId,
+      ])
+    ).rows
+  ).toEqual([{ status: "approved" }])
+  const before = (
+    await sql(
+      "SELECT dataset_snapshot, evidence_sha256, committed_microusd FROM agentonic.evaluation_runs WHERE id=$1",
+      [job.id]
+    )
+  ).rows
+  await actor()
+  expect(
+    await flow("save", {
+      preparationId: p.preparationId,
+      revision: 1,
+      criteria: p.criteria.map((c) => ({
+        ...c,
+        expectedAnswer:
+          "The warranty lasts three years; describe the duration clearly.",
+        reviewDecision: "approved",
+      })),
+    })
+  ).toMatchObject({ ok: true })
+  expect(
+    await flow("run", { ...payload, revision: 2, requestId: id(993) })
+  ).toMatchObject({ ok: false, code: "criteria_required" })
+  await flow("confirm", {
+    preparationId: p.preparationId,
+    revision: 2,
+    consent: true,
+  })
+  expect(
+    await flow("run", { ...payload, revision: 2, requestId: id(993) })
+  ).toMatchObject({ ok: true })
+  expect(
+    (
+      await sql(
+        "SELECT dataset_snapshot, evidence_sha256, committed_microusd FROM agentonic.evaluation_runs WHERE id=$1",
+        [job.id]
+      )
+    ).rows
+  ).toEqual(before)
+})
+it("model review validates levels, caps cumulative batch reservations and cancels every model", async () => {
+  const p = await modelReview()
+  const payload = {
+    preparationId: p.preparationId,
+    revision: 1,
+    models: [{ model: "gpt-6-astra", reasoning: "none" }],
+    budgetUsd: 0.1,
+    consent: true,
+    requestId: id(994),
+  }
+  await expect(flow("run", payload)).rejects.toMatchObject({ code: "42501" })
+  const choices = [
+    { model: "gpt-5.4-mini", reasoning: "medium" },
+    { model: "gpt-5.4", reasoning: "high" },
+  ]
+  await flow("run", { ...payload, models: choices })
+  const job = (await evalClaim())!
+  expect(
+    await execute(job, "reserve", {
+      id: id(995),
+      provider: "openai",
+      model: choices[0]!.model,
+      microusd: 60000,
+    })
+  ).toMatchObject({ ok: true })
+  await execute(job, "fail", { code: "provider_unavailable" })
+  const next = (await evalClaim())!
+  expect(
+    await execute(next, "reserve", {
+      id: id(996),
+      provider: "openai",
+      model: choices[1]!.model,
+      microusd: 60000,
+    })
+  ).toMatchObject({ ok: false, code: "budget_exhausted" })
+  await actor()
+  await flow("cancel", { preparationId: p.preparationId })
+  expect(
+    (
+      await sql(
+        "SELECT count(*)::int n FROM agentonic.evaluation_runs WHERE preparation_id=$1 AND consent_revoked_at IS NOT NULL",
+        [p.preparationId]
+      )
+    ).rows
+  ).toEqual([{ n: 2 }])
+  expect(
+    (
+      await sql(
+        "SELECT committed_microusd FROM agentonic.evaluation_preparations WHERE id=$1",
+        [p.preparationId]
+      )
+    ).rows
+  ).toEqual([{ committed_microusd: 60500 }])
+})
+it("model review approvals expose only the approved models and levels in live chats and staff receipts", async () => {
+  const p = await modelReview()
+  const models = [
+    { model: "gpt-5.4-mini", reasoning: "medium" },
+    { model: "gpt-6-astra", reasoning: "low" },
+  ]
+  await flow("run", {
+    preparationId: p.preparationId,
+    revision: 1,
+    models,
+    budgetUsd: 3,
+    consent: true,
+    requestId: id(980),
+  })
+  for (const configuration of models)
+    await finishFlow((await evalClaim())!, "passed", true, configuration.model)
+  await actor(staff, w, "agentonic_admin")
+  const report = await receipt(p.submissionId)
+  if (!report) throw new Error("Expected authorized receipt")
+  expect(report.modelBatch?.models).toHaveLength(2)
+  expect(report.criteria).toHaveLength(1)
+  await sql(
+    "INSERT INTO agentonic.runtime_hosts(environment,database_role,broker_sha256,runtime_sha256,verified_at,heartbeat_at) VALUES('local','agentonic_deployer_local',repeat('f',64),repeat('b',64),clock_timestamp(),clock_timestamp())"
+  )
+  await actor()
+  const d = await lifecycleCall("deployment_command", "authorize", {
+    submissionId: p.submissionId,
+    environment: "local",
+    budgetUsd: 0.25,
+    consent: true,
+    requestId: id(981),
+  })
+  expect(d.ok).toBe(true)
+  const deploymentId = String(d.id)
+  await readyStaging({ ...p, deploymentId })
+  await actor()
+  const conversation = await chat("start", {
+    deploymentId,
+    title: "Synthetic model chat",
+  })
+  expect(
+    await chat("state", { conversationId: conversation.id })
+  ).toMatchObject({ models })
+  await db.exec("SAVEPOINT unapproved_model")
+  await expect(
+    chat("turn", {
+      conversationId: conversation.id,
+      query: "Synthetic question",
+      requestId: id(982),
+      model: "gpt-6-astra",
+      reasoning: "high",
+    })
+  ).rejects.toMatchObject({ code: "42501" })
+  await db.exec(
+    "ROLLBACK TO SAVEPOINT unapproved_model; RELEASE SAVEPOINT unapproved_model"
+  )
+  expect(
+    await chat("turn", {
+      conversationId: conversation.id,
+      query: "Synthetic question",
+      requestId: id(982),
+      ...models[1],
+    })
+  ).toMatchObject({ ok: true })
+  expect(
+    await chat("turn", {
+      conversationId: conversation.id,
+      query: "Synthetic question",
+      requestId: id(982),
+      ...models[0],
+    })
+  ).toMatchObject({ ok: false, code: "request_conflict" })
+  const job = (await stagingWork(deploymentId, "claim")) as unknown as Job
+  expect(await stagingWork(deploymentId, "context", job)).toMatchObject({
+    previewModel: "gpt-6-astra",
+    reasoningLevel: "low",
+  })
 })

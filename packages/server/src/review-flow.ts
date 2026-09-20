@@ -27,9 +27,13 @@ export async function runReviewFlow(
       return {
         ok: false,
         message:
-          result?.code === "conflict"
-            ? "Los criterios cambiaron. Actualiza la página antes de continuar."
-            : "Revisa cada situación: apruébala o indica por qué no aplica antes de evaluar.",
+          result?.code === "busy"
+            ? "Ya hay una evaluación en curso."
+            : result?.code === "worker_unavailable"
+              ? "El servicio de evaluación de modelos todavía no está disponible para esta versión."
+              : result?.code === "conflict"
+                ? "Los criterios cambiaron. Actualiza la página antes de continuar."
+                : "Revisa cada situación: apruébala o indica por qué no aplica antes de evaluar.",
       }
     return {
       ok: true,
@@ -37,8 +41,8 @@ export async function runReviewFlow(
         prepare:
           "Prepararemos los criterios con IA dentro del límite autorizado.",
         save: "Criterios y comentarios guardados.",
-        confirm:
-          "Criterios confirmados. La evaluación comenzará automáticamente.",
+        confirm: "Criterios confirmados. Ya puedes iniciar una evaluación.",
+        run: "Evaluación iniciada. Puedes cerrar el diálogo y volver a consultar el progreso.",
         cancel: "Revisión cancelada. Se conservará el consumo realizado.",
       }[parsed.data.operation],
     }

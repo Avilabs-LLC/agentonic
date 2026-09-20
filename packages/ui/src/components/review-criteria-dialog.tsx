@@ -25,20 +25,22 @@ import {
   Dialog,
   DialogTrigger,
   DialogContent,
+  DialogHeader,
   DialogTitle,
   DialogDescription,
 } from "@workspace/ui/components/dialog"
 import { Button } from "@workspace/ui/components/button"
 import { Field, FieldLabel } from "@workspace/ui/components/field"
+import {
+  Tabs,
+  TabsList,
+  TabsTrigger,
+  TabsContent,
+} from "@workspace/ui/components/tabs"
 import { Textarea } from "@workspace/ui/components/textarea"
 import { ReviewCriteriaSummary } from "@workspace/ui/components/review-criteria-summary"
 
 type Action = (input: unknown) => Promise<FormResult>
-export function shortCriterionBasis(basis: string) {
-  const text = basis.replace(/\s+/g, " ").trim()
-  if (text.length <= 220) return text
-  return `${text.slice(0, 217).replace(/\s+\S*$/, "")}…`
-}
 export function ReviewCriteriaDialog({
   record,
   action,
@@ -78,10 +80,9 @@ export function ReviewCriteriaDialog({
   const [editingFromSummary, setEditingFromSummary] = useState(false)
   const editable = record.canEdit && !!action
   const current = record.criteria.length ? criteria[index] : undefined
-  const reviewed =
-    record.status === "criteria_ready"
-      ? criteria.filter(criterionReviewed).length
-      : criteria.length
+  const reviewed = record.canEdit
+    ? criteria.filter(criterionReviewed).length
+    : criteria.length
   const progress = criteria.length
     ? Math.round((reviewed / criteria.length) * 100)
     : 0
@@ -195,7 +196,7 @@ export function ReviewCriteriaDialog({
       router.refresh()
     } catch {
       setError(
-        "No se pudo iniciar la evaluación. Revisa el estado antes de volver a intentarlo."
+        "No se pudieron confirmar los criterios. Revisa el estado antes de volver a intentarlo."
       )
     } finally {
       setPending(false)
@@ -252,11 +253,13 @@ export function ReviewCriteriaDialog({
         {summaryMode ? (
           <ReviewCriteriaSummary
             record={record}
+            revision={revision}
             criteria={criteria}
             consent={consent}
             onConsent={setConsent}
             pending={pending}
             canConfirm={ready}
+            confirmed={record.confirmedRevision === revision && !dirty}
             onConfirm={() => void confirm()}
             onReview={(nextIndex) => {
               setIndex(nextIndex)
@@ -266,14 +269,14 @@ export function ReviewCriteriaDialog({
             }}
           />
         ) : (
-          <div className="space-y-2">
+          <DialogHeader>
             <DialogTitle>Revisión de las situaciones ({progress}%)</DialogTitle>
             <DialogDescription>
               {editable
-                ? "Revisa cada situación y guarda tu decisión. Las pruebas comenzarán cuando confirmes el conjunto."
+                ? "Revisa cada situación y confirma el conjunto. Después podrás elegir los modelos e iniciar una evaluación."
                 : "Consulta los criterios y las decisiones guardadas por el cliente."}
             </DialogDescription>
-          </div>
+          </DialogHeader>
         )}
         {!current && (
           <p className="text-sm text-muted-foreground">
@@ -301,60 +304,82 @@ export function ReviewCriteriaDialog({
                   )}
                 />
               </div>
-              <div className="flex gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={index === 0 || pending}
-                  onClick={() => {
-                    setIndex(index - 1)
-                    setError("")
-                  }}
-                >
-                  <ChevronLeftIcon />
-                  Anterior
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={index === criteria.length - 1 || pending}
-                  onClick={() => {
-                    setIndex(index + 1)
-                    setError("")
-                  }}
-                >
-                  Siguiente
-                  <ChevronRightIcon />
-                </Button>
+              <div className="flex flex-wrap gap-2">
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={index === 0 || pending}
+                    onClick={() => {
+                      setIndex(index - 1)
+                      setError("")
+                    }}
+                  >
+                    <ChevronLeftIcon />
+                    Anterior
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={index === criteria.length - 1 || pending}
+                    onClick={() => {
+                      setIndex(index + 1)
+                      setError("")
+                    }}
+                  >
+                    Siguiente
+                    <ChevronRightIcon />
+                  </Button>
+                </div>
               </div>
             </div>
-            <div
+            <Tabs
               key={current.key}
-              className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1"
+              defaultValue="situation"
+              className="min-h-0 flex-1 gap-4"
             >
-              <fieldset disabled={pending || !editable} className="grid gap-4">
-                <div className="rounded-lg border border-blue-200 bg-blue-50/60 p-4 dark:border-blue-400/25 dark:bg-blue-400/5">
+              <TabsList
+                className="w-full shrink-0"
+                aria-label="Contenido de la situación"
+              >
+                <TabsTrigger value="situation">Situación</TabsTrigger>
+                <TabsTrigger value="evidence">Evidencia</TabsTrigger>
+              </TabsList>
+              <TabsContent
+                value="situation"
+                className="min-h-0 space-y-4 overflow-y-auto pr-1"
+              >
+                <fieldset
+                  disabled={pending || !editable}
+                  className="grid gap-4"
+                >
                   <Field>
                     <FieldLabel htmlFor={`${id}-question`}>
+                      <span
+                        className="size-2 rounded-full bg-primary"
+                        aria-hidden="true"
+                      />
                       Mensaje al agente
                     </FieldLabel>
                     <Textarea
                       id={`${id}-question`}
-                      className="min-h-20 bg-background"
+                      className="min-h-20 border-primary/30 bg-primary/5 dark:bg-primary/5"
                       maxLength={1000}
                       value={current.question}
                       onChange={(e) => edit({ question: e.target.value })}
                     />
                   </Field>
-                </div>
-                <div className="rounded-lg border border-emerald-200 bg-emerald-50/60 p-4 dark:border-emerald-400/25 dark:bg-emerald-400/5">
                   <Field>
                     <FieldLabel htmlFor={`${id}-answer`}>
+                      <span
+                        className="size-2 rounded-full bg-emerald-600 dark:bg-emerald-400"
+                        aria-hidden="true"
+                      />
                       Respuesta o comportamiento esperado
                     </FieldLabel>
                     <Textarea
                       id={`${id}-answer`}
-                      className="min-h-24 bg-background"
+                      className="min-h-24 border-emerald-200 bg-emerald-50/60 dark:border-emerald-400/25 dark:bg-emerald-400/5"
                       maxLength={2000}
                       value={current.expectedAnswer}
                       placeholder="Describe qué debería responder o hacer el agente."
@@ -366,81 +391,71 @@ export function ReviewCriteriaDialog({
                       }
                     />
                   </Field>
-                </div>
-              </fieldset>
-              <div className="space-y-2 text-sm">
-                <p className="text-muted-foreground">
+                </fieldset>
+                <p className="text-sm text-muted-foreground">
                   <span className="font-medium text-foreground">Motivo: </span>
-                  {shortCriterionBasis(current.basis)}
+                  {current.basis}
                 </p>
-                <Dialog>
-                  <DialogTrigger
-                    render={
-                      <Button
-                        type="button"
-                        variant="link"
-                        className="h-auto p-0"
-                      />
-                    }
-                  >
-                    Ver fundamento y fuentes
-                  </DialogTrigger>
-                  <DialogContent className="max-w-xl">
-                    <div className="space-y-2">
-                      <DialogTitle>Fundamento de la situación</DialogTitle>
-                      <DialogDescription>
-                        Información utilizada para proponer este criterio.
-                      </DialogDescription>
-                    </div>
-                    <div className="max-h-80 space-y-4 overflow-y-auto text-sm leading-relaxed">
-                      <p className="break-words">
-                        {current.basis.replace(/\s+/g, " ").trim()}
-                      </p>
-                      {record.sources
-                        .filter((s) => current.sourceIds.includes(s.id))
-                        .map((s, n) => (
-                          <div
-                            key={s.id}
-                            className="space-y-2 rounded-lg border p-4"
-                          >
-                            <h3 className="font-medium">Fuente {n + 1}</h3>
-                            <p className="break-words whitespace-pre-wrap text-muted-foreground">
-                              {s.text}
-                            </p>
-                          </div>
-                        ))}
-                    </div>
-                  </DialogContent>
-                </Dialog>
-              </div>
-              <fieldset disabled={pending || !editable} className="space-y-4">
-                <Field>
-                  <FieldLabel htmlFor={`${id}-notes`}>
-                    Aclaraciones (opcional)
-                  </FieldLabel>
-                  <Textarea
-                    id={`${id}-notes`}
-                    className="min-h-16"
-                    maxLength={1500}
-                    value={current.notes}
-                    onChange={(e) => edit({ notes: e.target.value })}
-                  />
-                </Field>
-                {current.excluded && (
+                <fieldset disabled={pending || !editable} className="space-y-4">
                   <Field>
-                    <FieldLabel htmlFor={`${id}-saved-exclusion`}>
-                      Motivo de exclusión
+                    <FieldLabel htmlFor={`${id}-notes`}>
+                      Aclaraciones (opcional)
                     </FieldLabel>
                     <Textarea
-                      id={`${id}-saved-exclusion`}
-                      className="min-h-16 resize-none bg-muted/50 text-muted-foreground"
-                      value={current.exclusionReason}
-                      readOnly
+                      id={`${id}-notes`}
+                      className="min-h-16"
+                      maxLength={1500}
+                      value={current.notes}
+                      onChange={(e) => edit({ notes: e.target.value })}
                     />
                   </Field>
+                  {current.excluded && (
+                    <Field>
+                      <FieldLabel htmlFor={`${id}-saved-exclusion`}>
+                        Motivo de exclusión
+                      </FieldLabel>
+                      <Textarea
+                        id={`${id}-saved-exclusion`}
+                        className="min-h-16 resize-none bg-muted/50 text-muted-foreground"
+                        value={current.exclusionReason}
+                        readOnly
+                      />
+                    </Field>
+                  )}
+                </fieldset>
+              </TabsContent>
+              <TabsContent
+                value="evidence"
+                className="min-h-0 space-y-4 overflow-y-auto pr-1 text-sm leading-relaxed"
+              >
+                <section className="space-y-2">
+                  <h3 className="font-medium">Fundamento</h3>
+                  <p className="break-words text-muted-foreground">
+                    {current.basis.replace(/\s+/g, " ").trim()}
+                  </p>
+                </section>
+                {record.sources
+                  .filter((source) => current.sourceIds.includes(source.id))
+                  .map((source, n) => (
+                    <section
+                      key={source.id}
+                      className="space-y-2 rounded-lg border p-4"
+                    >
+                      <h3 className="font-medium">Fuente {n + 1}</h3>
+                      <p className="break-words whitespace-pre-wrap text-muted-foreground">
+                        {source.text}
+                      </p>
+                    </section>
+                  ))}
+                {!record.sources.some((source) =>
+                  current.sourceIds.includes(source.id)
+                ) && (
+                  <p className="text-muted-foreground">
+                    Esta situación no tiene fuentes adjuntas.
+                  </p>
                 )}
-              </fieldset>
-            </div>
+              </TabsContent>
+            </Tabs>
             {editable &&
               current.basis === "Aportado por el cliente." &&
               current.sourceIds.length === 0 && (
@@ -587,7 +602,7 @@ export function ReviewCriteriaDialog({
                     className="max-w-lg"
                     showCloseButton={!pending}
                   >
-                    <div className="space-y-2">
+                    <DialogHeader>
                       <DialogTitle>
                         ¿Por qué no aplica esta situación?
                       </DialogTitle>
@@ -595,7 +610,7 @@ export function ReviewCriteriaDialog({
                         Explica el motivo para que el equipo pueda revisar la
                         exclusión.
                       </DialogDescription>
-                    </div>
+                    </DialogHeader>
                     <form
                       className="space-y-4"
                       onSubmit={(event) => {

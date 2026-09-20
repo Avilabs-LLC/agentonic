@@ -450,29 +450,27 @@ it("automatic evaluation can execute a web-capable runtime without requesting to
   writeFileSync(join(directory, "manifest.json"), raw)
   writeFileSync(join(directory, "src/surfaces/preview.mjs"), source)
   writeFileSync(join(directory, "prompts/platform.md"), "policy")
-  const fetch = vi
-    .fn()
-    .mockResolvedValue(
-      Response.json({
-        status: "completed",
-        usage: { input_tokens: 1, output_tokens: 1 },
-        output: [
-          {
-            type: "message",
-            content: [
-              {
-                type: "output_text",
-                text: JSON.stringify({
-                  text: "Evaluation without live tools.",
-                  citations: [],
-                  insufficientEvidence: true,
-                }),
-              },
-            ],
-          },
-        ],
-      })
-    )
+  const fetch = vi.fn().mockResolvedValue(
+    Response.json({
+      status: "completed",
+      usage: { input_tokens: 1, output_tokens: 1 },
+      output: [
+        {
+          type: "message",
+          content: [
+            {
+              type: "output_text",
+              text: JSON.stringify({
+                text: "Evaluation without live tools.",
+                citations: [],
+                insufficientEvidence: true,
+              }),
+            },
+          ],
+        },
+      ],
+    })
+  )
   vi.stubGlobal("fetch", fetch)
   const execute = vi.fn<Execute>().mockImplementation(async (op) => {
     if (op === "context")
@@ -502,3 +500,65 @@ it("automatic evaluation can execute a web-capable runtime without requesting to
   expect(execute.mock.calls.some(([op]) => op.startsWith("web-"))).toBe(false)
   expect(JSON.parse(fetch.mock.calls[0]![1].body).tools).toBeUndefined()
 })
+it.each([
+  ["gpt-6-astra", "low", 4096, 11000],
+  ["gpt-6-astra", "high", 16384, 11000],
+  ["gpt-5.4", "medium", 4096, 3250],
+  ["gpt-5.4-mini", "none", 4096, 975],
+] as const)(
+  "uses %s at %s and bills reasoning output at its own rate",
+  async (selected, effort, maxOutput, cost) => {
+    const execute = vi.fn<Execute>().mockResolvedValue({ ok: true })
+    const fetch = vi.fn().mockResolvedValue(
+      Response.json({
+        status: "completed",
+        usage: { input_tokens: 100, output_tokens: 200 },
+        output: [
+          {
+            type: "message",
+            content: [
+              {
+                type: "output_text",
+                text: JSON.stringify({
+                  text: "No verified match.",
+                  citations: [],
+                  insufficientEvidence: true,
+                }),
+              },
+            ],
+          },
+        ],
+      })
+    )
+    vi.stubGlobal("fetch", fetch)
+    await generatePreview(
+      request,
+      job,
+      execute,
+      "fixture",
+      new AbortController().signal,
+      undefined,
+      [],
+      undefined,
+      8,
+      selected,
+      effort
+    )
+    const body = JSON.parse(fetch.mock.calls[0]![1].body)
+    expect(body.model).toBe(selected)
+    expect(body.temperature).toBeUndefined()
+    expect(body.reasoning).toEqual({ effort })
+    expect(body.include).toContain("reasoning.encrypted_content")
+    expect(body.max_output_tokens).toBe(maxOutput)
+    expect(
+      execute.mock.calls.find((c) => c[0] === "reserve")![2]
+    ).toMatchObject({
+      model: selected,
+    })
+    expect(execute.mock.calls.find((c) => c[0] === "settle")![2]).toMatchObject(
+      {
+        microusd: cost,
+      }
+    )
+  }
+)

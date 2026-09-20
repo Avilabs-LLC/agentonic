@@ -1,3 +1,4 @@
+import { ApprovedModelResults } from "@workspace/ui/components/model-evaluation-dialog"
 import { approvalLabels } from "@agentonic/contracts/lifecycle"
 import {
   ClipboardCheckIcon,
@@ -123,6 +124,15 @@ export function SubmissionReceipt({
             El detalle de las respuestas ya no está disponible por los límites
             de autorización o conservación de la evidencia.
           </CardEmptyState>
+        ) : r.modelBatch ? (
+          <ApprovedModelResults
+            agentName={r.agentName}
+            batch={r.modelBatch}
+            versionNumber={r.versionNumber}
+            history={r.reviewBatches}
+            currentRevision={r.currentCriteriaRevision}
+            totalCommittedMicrousd={r.totalCommittedMicrousd}
+          />
         ) : (
           <>
             <EvaluationSummary
