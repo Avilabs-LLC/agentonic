@@ -1,3 +1,4 @@
+import { modelConfiguration, modelId, reasoningLevel } from "./models"
 import { z } from "zod"
 export const approvalReason = z.enum([
   "unapproved",
@@ -46,6 +47,8 @@ export const lifecycleState = z.object({
     z.object({
       id: z.uuid(),
       number: z.number(),
+      model: modelId.optional(),
+      reasoning: reasoningLevel.nullable().optional(),
       candidateId: z.uuid(),
       versionNumber: z.number(),
       approvalId: z.uuid().nullable(),
@@ -66,6 +69,7 @@ export const lifecycleState = z.object({
       status: z.string(),
       authorized: z.boolean(),
       online: z.boolean(),
+      models: z.array(modelConfiguration).default([]),
       expiresAt: z.string(),
       budgetUsd: z.number(),
       committedMicrousd: z.number(),
@@ -147,6 +151,8 @@ export const chatCommand = z.discriminatedUnion("operation", [
           conversationId: z.uuid(),
           requestId: z.uuid(),
           query: z.string().trim().min(1).max(1000),
+          model: modelId.optional(),
+          reasoning: reasoningLevel.nullable().optional(),
         })
         .strict(),
     })
@@ -180,12 +186,15 @@ export const chatState = z.object({
   agentId: z.uuid(),
   expiresAt: z.string(),
   online: z.boolean(),
+  models: z.array(modelConfiguration).default([]),
   budgetUsd: z.number(),
   committedMicrousd: z.number(),
   turns: z.array(
     z.object({
       id: z.uuid(),
       number: z.number(),
+      model: modelId.optional(),
+      reasoning: reasoningLevel.nullable().optional(),
       query: z.string(),
       answer: z.string().nullable(),
       citations: z.array(z.uuid()),

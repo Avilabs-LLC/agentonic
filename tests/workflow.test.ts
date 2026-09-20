@@ -171,12 +171,20 @@ describe("workflow button prerequisites", () => {
       ).canSubmit
     ).toBe(false)
     expect(
-      submissionForm.safeParse({ candidateId: id, note: "", consent: false })
-        .success
+      submissionForm.safeParse({
+        candidateId: id,
+        note: "",
+        budgetUsd: 0.25,
+        consent: false,
+      }).success
     ).toBe(false)
     expect(
-      submissionForm.safeParse({ candidateId: id, note: "", consent: true })
-        .success
+      submissionForm.safeParse({
+        candidateId: id,
+        note: "",
+        budgetUsd: 0.25,
+        consent: true,
+      }).success
     ).toBe(true)
   })
   it("blocks stale, unavailable, already-sent and missing candidates", () => {

@@ -723,6 +723,8 @@ Table agentonic.schedule_fires {
 }
 
 Table agentonic.background_jobs {
+ response_model text [not null, default: 'gpt-4.1-mini-2025-04-14']
+ reasoning_effort text
   preview_id uuid
   turn_number integer [check: `turn_number BETWEEN 1 AND 10`]
   request_key uuid
@@ -1718,7 +1720,27 @@ Table agentonic.evaluation_workers {
  Note: 'Immutable measured worker identity; only irrevocable revocation can change. One unrevoked registration per database role, enforced by a partial index in Prisma SQL.'
 }
 
+Table agentonic.evaluation_batches {
+ id uuid [pk, not null, default: `gen_random_uuid()`]
+ workspace_id uuid [not null]
+ preparation_id uuid [not null]
+ request_id uuid [not null]
+ revision integer [not null]
+ criteria_sha256 text [not null]
+ models jsonb [not null]
+ budget_usd numeric(20,8) [not null]
+ created_at timestamptz [not null]
+ indexes {
+  (workspace_id,id) [unique]
+  (preparation_id,request_id) [unique]
+ }
+ Note: 'Implemented migration 35. Immutable explicit authorization for selected model/effort configurations. Every child runs the same criteria. Reservations across all children share this budget; repeated executions never reset earlier usage.'
+}
+
 Table agentonic.evaluation_runs {
+  batch_id uuid
+  response_model text [not null, default: 'gpt-4.1-mini-2025-04-14']
+  reasoning_effort text
   preparation_id uuid [note: 'Implemented v2 customer preparation; NULL for legacy staff plans.']
   id uuid [pk, not null, default: `gen_random_uuid()`]
   workspace_id uuid [not null]
@@ -2168,6 +2190,7 @@ TableGroup commercial {
 
 TableGroup quality {
   agentonic.evaluation_preparations
+  agentonic.evaluation_batches
   agentonic.evaluation_criteria_revisions
   agentonic.evaluation_workers
   agentonic.datasets
@@ -2214,6 +2237,7 @@ Ref: agentonic.evaluation_runs.(workspace_id, agent_id, code_release_id, configu
 
 
 Table agentonic.evaluation_preparations {
+ confirmed_revision integer
  id uuid [pk, not null]
  workspace_id uuid [not null]
  agent_id uuid [not null]
@@ -2247,7 +2271,7 @@ Table agentonic.evaluation_preparations {
   (workspace_id,id) [unique]
   (workspace_id,authorized_by_member_id,request_id) [unique]
  }
- Note: 'Implemented migration 17. Customer consent precedes AI preparation. Shared total budget covers generation, execution and grading. Confirmation freezes criteria. Scoped SECURITY DEFINER APIs only; no direct app/worker grants. Automatic approval requires exact passing Azure evidence, routine read-only scope and no exclusions.'
+ Note: 'Implemented migration 17. Customer consent precedes AI preparation. Migration 35 separates preparation budget, criteria confirmation and individually authorized evaluation batches. Editing current criteria creates a new revision and clears confirmation; immutable run snapshots and historical consumption remain unchanged. Scoped SECURITY DEFINER APIs only; no direct app/worker grants. Automatic approval requires exact passing Azure evidence, routine read-only scope and no exclusions.'
 }
 Table agentonic.evaluation_criteria_revisions {
  id uuid [pk, not null]
@@ -2333,3 +2357,6 @@ Ref: agentonic.gmail_invocations.(workspace_id,owner_member_id) > agentonic.work
 // Migration 32 changes only functions: new webResearch runtimes declare an eight-call
 // registry ceiling; existing immutable code_tools rows retain their original three.
 // web_meter derives the limit from the preview/deployment's pinned code release.
+
+Ref: agentonic.evaluation_batches.(workspace_id,preparation_id) > agentonic.evaluation_preparations.(workspace_id,id)
+Ref: agentonic.evaluation_runs.(workspace_id,batch_id) > agentonic.evaluation_batches.(workspace_id,id)

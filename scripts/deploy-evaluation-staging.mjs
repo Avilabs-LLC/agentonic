@@ -230,7 +230,7 @@ systemctl is-active agentonic-evaluator-staging.service
     runtimeSha256: runtime.artifactSha256,
     verifiedAt: new Date().toISOString(),
     verification: {
-      reviewProtocol: 2,
+      reviewProtocol: 3,
       isolation: true,
       recovery: true,
       artifactIntegrity: true,

@@ -8,6 +8,7 @@ import {
   authoringResult,
   workspaceView,
   agentView,
+  configurationSnapshot,
   reviewQueue,
   type ReviewListing,
   reviewView,
@@ -56,11 +57,13 @@ export async function runAuthoringCommand(app: AppKind, input: unknown) {
             eligible: boolean
             previewAvailable: boolean
             content: unknown
+            requestedAccess: unknown
             number: number
             createdAt: string
           }[]
         >`
           SELECT r.id, r.code_release_id AS "codeReleaseId", r.content,
+            r.requested_access_snapshot AS "requestedAccess",
             (row_number() OVER (ORDER BY r.created_at, r.id))::integer AS number,
             r.created_at::text AS "createdAt",
             (r.retired_at IS NULL AND agentonic.can_use_code(r.code_release_id) AND EXISTS(SELECT 1 FROM agentonic.code_releases c WHERE c.id=r.code_release_id AND c.execution_manifest->>'previewContract'='1')) AS "previewAvailable",
@@ -112,6 +115,12 @@ export async function runAuthoringCommand(app: AppKind, input: unknown) {
                 codeReleaseId: detail?.codeReleaseId ?? null,
                 number: detail?.number,
                 createdAt: detail?.createdAt,
+                snapshot: detail
+                  ? configurationSnapshot.parse({
+                      content: detail.content,
+                      requestedAccess: detail.requestedAccess,
+                    })
+                  : undefined,
                 canPreview: !!detail?.previewAvailable,
                 previewExpiresAt:
                   activePreviews.find((p) => p.candidateId === candidate.id)

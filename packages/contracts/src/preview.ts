@@ -1,5 +1,7 @@
 import { z } from "zod"
+import { reasoningLevel } from "./models"
 import { retrievalResult } from "./rag"
+import { previewModel, DEFAULT_PREVIEW_MODEL } from "./preview-models"
 const identity = { agentId: z.uuid(), previewId: z.uuid() }
 export const previewStartResult = z.discriminatedUnion("ok", [
   z.object({ ok: z.literal(true), id: z.uuid() }),
@@ -14,6 +16,7 @@ export const previewCommand = z.discriminatedUnion("operation", [
           agentId: z.uuid(),
           candidateId: z.uuid(),
           enableTools: z.boolean().optional(),
+          budgetUsd: z.union([z.literal(0.25), z.literal(3)]).optional(),
         })
         .strict(),
     })
@@ -26,6 +29,8 @@ export const previewCommand = z.discriminatedUnion("operation", [
           ...identity,
           query: z.string().trim().min(1).max(1000),
           requestKey: z.uuid(),
+          model: previewModel.optional(),
+          reasoning: reasoningLevel.nullable().optional(),
         })
         .strict(),
     })
@@ -56,6 +61,8 @@ export const previewState = z.object({
       retrievalResult.extend({
         id: z.uuid(),
         number: z.number(),
+        model: previewModel.default(DEFAULT_PREVIEW_MODEL),
+        reasoning: reasoningLevel.nullable().optional(),
         query: z.string().nullable(),
       })
     )
@@ -63,6 +70,8 @@ export const previewState = z.object({
 })
 export type PreviewState = z.infer<typeof previewState>
 export const previewErrors: Record<string, string> = {
+  request_conflict:
+    "Este mensaje ya se envió con otro contenido o modelo. Actualiza la conversación antes de continuar.",
   runtime_unavailable:
     "Esta versión todavía no tiene un motor de pruebas disponible. Congela una versión compatible.",
   unavailable:

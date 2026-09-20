@@ -2,7 +2,7 @@ import { approvalReason } from "./lifecycle"
 import { z } from "zod"
 import { toolGrants } from "./tools"
 import { draftContent } from "./authoring"
-import { reviewCriterion } from "./review-flow"
+import { reviewCriterion, evaluationBatch } from "./review-flow"
 export const reviewReceipt = z.object({
   id: z.uuid(),
   agentName: z.string(),
@@ -38,6 +38,10 @@ export const reviewReceipt = z.object({
     evidenceHash: z.string(),
   }),
   criteria: z.array(reviewCriterion),
+  modelBatch: evaluationBatch.nullable().optional(),
+  reviewBatches: z.array(evaluationBatch).default([]),
+  currentCriteriaRevision: z.number().optional(),
+  totalCommittedMicrousd: z.number().optional(),
   results: z.array(
     z.object({
       key: z.string(),
