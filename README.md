@@ -19,6 +19,23 @@ pnpm dev
 
 Local dev commands allow up to 64 KiB of request headers, because browsers share host-only cookies across every `localhost` port. This avoids HTTP 431 when other local apps leave large session cookies. The setting applies only to the loopback development servers; production startup is unchanged.
 
+### Mobile testing through a development tunnel
+
+Forward the customer app's port 3101 through an authenticated HTTPS tunnel. Set
+`AGENTONIC_CUSTOMER_DEV_ORIGIN=https://YOUR-TUNNEL-3101.REGION.devtunnels.ms` in
+`apps/customer/.env.local`, then restart the customer dev server. Open that HTTPS
+URL on the phone, pass the tunnel's sign-in, and sign into Agentonic. Keep the Mac
+and its preview worker running when testing agents.
+
+This development-only setting permits the exact tunnel hostname for Next.js dev
+assets and Server Actions, plus the `localhost:3101` / `127.0.0.1:3101` origins
+that Dev Tunnels may forward. It does not trust wildcard tunnel domains, change
+production origin checks, expose the loopback listener to the LAN, or grant app
+access. Update the setting when the tunnel URL changes. Existing Gmail connections
+can be used; connecting a new Gmail account on mobile additionally requires the
+same tunnel callback URL in `GOOGLE_REDIRECT_URI` and Google's authorized redirect
+URIs. A localhost callback returns to the phone, not this Mac.
+
 Both apps use the same Base UI/shadcn Mira preset (`b1GfVg2Oe`), Figtree font and shared UI package. Authentication cookies are separate per app, host-only and HTTP-only. Customer membership never grants staff access.
 
 The local bootstrap has already provisioned dedicated roles and applied the first six migrations to the configured nonproduction Supabase project. The three confirmed Auth users are now linked: one staff administrator and two customer owners, each with a separate test workspace. Their actual access boundaries have been verified; interactive sign-in uses the private passwords chosen in Supabase. App `.env.local` files contain only their restricted database credentials and public Supabase configuration. No bootstrap or migration URL belongs in either app's environment.

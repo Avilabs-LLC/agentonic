@@ -1,5 +1,11 @@
 import type { NextConfig } from "next"
+import { customerDevOrigins } from "./dev-origin"
+
 const config: NextConfig = {
+  ...customerDevOrigins(
+    process.env.NODE_ENV,
+    process.env.AGENTONIC_CUSTOMER_DEV_ORIGIN
+  ),
   transpilePackages: [
     "@workspace/ui",
     "@agentonic/contracts",
