@@ -7,6 +7,7 @@ import {
   Dialog,
   DialogTrigger,
   DialogContent,
+  DialogHeader,
   DialogTitle,
   DialogDescription,
 } from "@workspace/ui/components/dialog"
@@ -67,11 +68,13 @@ export function AgentCreateDialog({
         Crear agente
       </DialogTrigger>
       <DialogContent showCloseButton={!pending}>
-        <DialogTitle>Crear agente</DialogTitle>
-        <DialogDescription>
-          Un nuevo borrador en {selectedName}. Serás su propietario y después
-          podrás personalizar sus instrucciones y conocimiento.
-        </DialogDescription>
+        <DialogHeader>
+          <DialogTitle>Crear agente</DialogTitle>
+          <DialogDescription>
+            Un nuevo borrador en {selectedName}. Serás su propietario y después
+            podrás personalizar sus instrucciones y conocimiento.
+          </DialogDescription>
+        </DialogHeader>
         {workspaces && workspaces.length > 1 && (
           <Field>
             <FieldLabel htmlFor={fieldId}>Espacio de trabajo</FieldLabel>

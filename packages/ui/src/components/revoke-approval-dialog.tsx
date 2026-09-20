@@ -8,6 +8,7 @@ import type { FormResult } from "@agentonic/contracts/authoring"
 import {
   Dialog,
   DialogContent,
+  DialogHeader,
   DialogTitle,
   DialogDescription,
 } from "@workspace/ui/components/dialog"
@@ -50,13 +51,13 @@ export function RevokeApprovalDialog({
       }}
     >
       <DialogContent>
-        <div className="space-y-2">
+        <DialogHeader>
           <DialogTitle>Revocar aprobación</DialogTitle>
           <DialogDescription>
             La aprobación de {name} dejará de ser válida. El motivo quedará
             registrado en la revisión.
           </DialogDescription>
-        </div>
+        </DialogHeader>
         <form
           className="space-y-4"
           onSubmit={handleSubmit(async ({ feedback }) => {

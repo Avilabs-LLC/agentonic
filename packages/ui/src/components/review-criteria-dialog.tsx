@@ -304,7 +304,7 @@ export function ReviewCriteriaDialog({
                   )}
                 />
               </div>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex w-full flex-wrap items-center justify-between gap-2 sm:w-auto">
                 <div className="flex gap-2">
                   <Button
                     type="button"
@@ -331,6 +331,21 @@ export function ReviewCriteriaDialog({
                     <ChevronRightIcon />
                   </Button>
                 </div>
+                {editable && allReviewed && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="sm:hidden"
+                    disabled={pending}
+                    onClick={() => {
+                      setEditingFromSummary(false)
+                      setError("")
+                    }}
+                  >
+                    <ListChecksIcon aria-hidden="true" />
+                    Ver resumen
+                  </Button>
+                )}
               </div>
             </div>
             <Tabs
@@ -392,10 +407,21 @@ export function ReviewCriteriaDialog({
                     />
                   </Field>
                 </fieldset>
-                <p className="text-sm text-muted-foreground">
-                  <span className="font-medium text-foreground">Motivo: </span>
-                  {current.basis}
-                </p>
+                <Field>
+                  <FieldLabel htmlFor={`${id}-basis`}>
+                    <span
+                      className="size-2 rounded-full bg-amber-500 dark:bg-amber-400"
+                      aria-hidden="true"
+                    />
+                    Motivo
+                  </FieldLabel>
+                  <Textarea
+                    id={`${id}-basis`}
+                    className="min-h-20 border-amber-200 bg-amber-50/60 dark:border-amber-400/25 dark:bg-amber-400/5"
+                    value={current.basis}
+                    readOnly
+                  />
+                </Field>
                 <fieldset disabled={pending || !editable} className="space-y-4">
                   <Field>
                     <FieldLabel htmlFor={`${id}-notes`}>
@@ -536,7 +562,7 @@ export function ReviewCriteriaDialog({
               <Button
                 type="button"
                 variant="outline"
-                className="justify-self-start"
+                className="hidden justify-self-start sm:inline-flex"
                 disabled={pending}
                 onClick={() => {
                   setEditingFromSummary(false)

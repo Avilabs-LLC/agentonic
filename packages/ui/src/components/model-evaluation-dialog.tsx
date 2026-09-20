@@ -115,7 +115,10 @@ export function ModelResultsDialog({
                   setSelectedModel(null)
                 }}
               >
-                <SelectTrigger aria-label="Ejecución de evaluación">
+                <SelectTrigger
+                  className="w-full"
+                  aria-label="Ejecución de evaluación"
+                >
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -147,7 +150,7 @@ export function ModelResultsDialog({
                 </span>
               </div>
               <progress
-                className="block h-2 w-full"
+                className="block h-2 w-full appearance-none overflow-hidden rounded-full border-0 bg-muted [&::-moz-progress-bar]:rounded-full [&::-moz-progress-bar]:bg-primary [&::-webkit-progress-bar]:rounded-full [&::-webkit-progress-bar]:bg-muted [&::-webkit-progress-value]:rounded-full [&::-webkit-progress-value]:bg-primary"
                 value={completed}
                 max={Math.max(total, 1)}
                 aria-label="Progreso de evaluación"
