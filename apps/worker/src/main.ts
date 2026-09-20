@@ -34,6 +34,11 @@ const pool = new pg.Pool({
   statement_timeout: 30000,
   application_name: "agentonic_knowledge_worker",
 })
+// pg removes failed idle connections itself. Handle its error event so the
+// worker survives and the next poll can reconnect without logging credentials.
+pool.on("error", () => {
+  console.error(JSON.stringify({ event: "knowledge_worker_connection_lost" }))
+})
 const config = {
   supabaseUrl: supabase.origin,
   storageKey: env.SUPABASE_SECRET_KEY ?? "",
