@@ -1,5 +1,10 @@
 export const VERSION_HISTORY = [
   {
+    "version": "0.13.0",
+    "date": "2026-09-20",
+    "summary": "Evaluaciones repetibles por modelo y nivel, revisión con criterios confirmados y propuestas con configuración congelada."
+  },
+  {
     "version": "0.12.0",
     "date": "2026-09-20",
     "summary": "Acceso móvil de desarrollo mediante un túnel HTTPS autorizado para la aplicación de clientes."
