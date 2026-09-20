@@ -1,4 +1,10 @@
 "use client"
+import {
+  DEFAULT_MODEL_CONFIGURATION,
+  modelCatalog,
+  type ModelConfiguration,
+} from "@agentonic/contracts/models"
+import { ModelConfigurationSelect } from "@workspace/ui/components/model-configuration-select"
 import { AgentAnswer } from "@workspace/ui/components/agent-answer"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { PlayIcon, SendIcon, SquareIcon, MessageSquareIcon } from "lucide-react"
@@ -17,34 +23,43 @@ import {
   SelectItem,
   SelectValue,
 } from "@workspace/ui/components/select"
-import { ConsentCheckbox } from "@workspace/ui/components/consent-checkbox"
 import { GmailApprovals } from "@workspace/ui/components/gmail-approvals"
-import { AgentSettingsCard } from "@workspace/ui/components/agent-settings-card"
+import {
+  previewModelName,
+  type PreviewModel,
+} from "@agentonic/contracts/preview-models"
 export function AgentPreview({
   workspaceId,
   agentId,
-  candidates,
-  initialCandidateId,
+  candidateId,
   initialState = null,
 }: {
   workspaceId: string
   agentId: string
-  candidates: { id: string; version: string; hash: string }[]
-  initialCandidateId?: string
+  candidateId?: string
   initialState?: PreviewState | null
 }) {
-  const [candidate, setCandidate] = useState(
-    initialCandidateId ?? candidates[0]?.id ?? ""
-  )
   const [previewId, setPreviewId] = useState<string | null>(
     initialState?.id ?? null
   )
   const [state, setState] = useState<PreviewState | null>(initialState)
-  const [enableTools, setEnableTools] = useState(false)
+  const [model, setModel] = useState<PreviewModel>(
+    initialState?.turns.at(-1)?.model ?? DEFAULT_MODEL_CONFIGURATION.model
+  )
+  const [reasoning, setReasoning] = useState<ModelConfiguration["reasoning"]>(
+    initialState?.turns.at(-1)?.reasoning ??
+      modelCatalog.find((m) => m.id === model)!.defaultLevel
+  )
+  const [budgetUsd, setBudgetUsd] = useState<0.25 | 3>(0.25)
   const [query, setQuery] = useState("")
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState("")
-  const request = useRef<{ query: string; key: string } | null>(null)
+  const request = useRef<{
+    query: string
+    key: string
+    model: PreviewModel
+    reasoning: ModelConfiguration["reasoning"]
+  } | null>(null)
   const locked = useRef(false)
   const generation = useRef(0)
   const bottom = useRef<HTMLDivElement>(null)
@@ -118,13 +133,18 @@ export function AgentPreview({
     try {
       if (operation === "start") {
         const result = await command("start", {
-          candidateId: candidate,
-          enableTools,
+          candidateId,
+          enableTools: true,
+          budgetUsd,
         })
         setState(
           previewState.parse(await command("state", { previewId: result.id }))
         )
         setPreviewId(result.id!)
+        const url = new URL(window.location.href)
+        url.searchParams.set("candidate", candidateId!)
+        url.searchParams.set("preview", result.id!)
+        window.history.replaceState(null, "", url)
         request.current = null
       } else if (operation === "cancel") {
         await command("cancel", { previewId })
@@ -132,16 +152,30 @@ export function AgentPreview({
         setPreviewId(null)
         setState(null)
         setQuery("")
+        const url = new URL(window.location.href)
+        url.searchParams.delete("preview")
+        window.history.replaceState(null, "", url)
         request.current = null
       } else {
         const text = query.trim()
         if (!text) return
-        if (request.current?.query !== text)
-          request.current = { query: text, key: crypto.randomUUID() }
+        if (
+          request.current?.query !== text ||
+          request.current?.model !== model ||
+          request.current?.reasoning !== reasoning
+        )
+          request.current = {
+            query: text,
+            key: crypto.randomUUID(),
+            model,
+            reasoning,
+          }
         await command("turn", {
           previewId,
           query: text,
           requestKey: request.current.key,
+          model: request.current.model,
+          reasoning: request.current.reasoning,
         })
         setQuery("")
         request.current = null
@@ -158,83 +192,65 @@ export function AgentPreview({
   }
   return (
     <div className="space-y-6">
-      <AgentSettingsCard
-        title="Versión de prueba"
-        description="Solo tú puedes ver esta conversación. Termina a los 10 minutos o al alcanzar 10 mensajes."
-        footer="El acceso web consulta páginas públicas. Las herramientas de Gmail usan tu cuenta real. Crear, editar o eliminar borradores y enviar correos requiere revisar y confirmar cada acción. Al finalizar o vencer esta prueba, sus acciones pendientes dejan de estar disponibles."
-      >
-        <div className="space-y-4">
-          <Field>
-            <FieldLabel htmlFor="preview-candidate">
-              Versión preparada
-            </FieldLabel>
-            <Select
-              value={candidate || null}
-              onValueChange={(value) => setCandidate(value ?? "")}
-              items={candidates.map((c) => ({ value: c.id, label: c.version }))}
-              disabled={!!previewId || busy}
-            >
-              <SelectTrigger id="preview-candidate" className="w-full">
-                <SelectValue placeholder="Sin versiones compatibles" />
-              </SelectTrigger>
-              <SelectContent>
-                {candidates.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>
-                    {c.version}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </Field>
-          {!candidates.length && (
-            <p className="text-sm text-muted-foreground">
-              Guarda el borrador y usa Preparar versión desde la configuración
-              del agente.
-            </p>
-          )}
+      <div className="space-y-4 rounded-lg border bg-card p-4 sm:p-6">
+        {!candidateId && (
+          <p className="text-sm text-muted-foreground">
+            Prepara una versión desde la configuración del agente para probarla.
+          </p>
+        )}
+        <div className="flex flex-wrap items-end justify-between gap-3">
           {previewId ? (
-            <p className="text-sm text-muted-foreground">
-              {state?.toolsEnabled
-                ? "Herramientas de esta versión habilitadas para esta prueba."
-                : "Esta sesión no usa herramientas. Finalízala e inicia otra para probar el acceso web o Gmail."}
+            <p className="self-center text-sm text-muted-foreground">
+              Máximo US$
+              {(state?.budgetUsd ?? budgetUsd).toFixed(2).replace(".", ",")} por
+              prueba
             </p>
           ) : (
-            <ConsentCheckbox
-              checked={enableTools}
-              onCheckedChange={setEnableTools}
-              disabled={busy}
-            >
-              Habilitar las herramientas de esta versión durante esta prueba.
-              Gmail utilizará mi cuenta real; el acceso web consultará páginas
-              públicas.
-            </ConsentCheckbox>
-          )}
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-xs text-muted-foreground">
-              Máximo US$0,25 por prueba · Solo los permisos de la versión
-              preparada
-            </p>
-            {previewId ? (
-              <Button
-                variant="outline"
+            <Field className="w-full sm:w-48">
+              <FieldLabel htmlFor="preview-budget">
+                Máximo por prueba
+              </FieldLabel>
+              <Select
+                value={String(budgetUsd)}
+                onValueChange={(value) =>
+                  setBudgetUsd(value === "3" ? 3 : 0.25)
+                }
                 disabled={busy}
-                onClick={() => void act("cancel")}
+                items={[
+                  { value: "0.25", label: "US$0,25" },
+                  { value: "3", label: "US$3,00" },
+                ]}
               >
-                <SquareIcon aria-hidden="true" />
-                Finalizar prueba
-              </Button>
-            ) : (
-              <Button
-                disabled={busy || !candidate}
-                onClick={() => void act("start")}
-              >
-                <PlayIcon aria-hidden="true" />
-                {busy ? "Iniciando…" : "Iniciar prueba"}
-              </Button>
-            )}
-          </div>
+                <SelectTrigger id="preview-budget" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="0.25">US$0,25</SelectItem>
+                  <SelectItem value="3">US$3,00</SelectItem>
+                </SelectContent>
+              </Select>
+            </Field>
+          )}
+          {previewId ? (
+            <Button
+              variant="outline"
+              disabled={busy}
+              onClick={() => void act("cancel")}
+            >
+              <SquareIcon aria-hidden="true" />
+              Finalizar prueba
+            </Button>
+          ) : (
+            <Button
+              disabled={busy || !candidateId}
+              onClick={() => void act("start")}
+            >
+              <PlayIcon aria-hidden="true" />
+              {busy ? "Iniciando…" : "Iniciar prueba"}
+            </Button>
+          )}
         </div>
-      </AgentSettingsCard>
+      </div>
       {previewId && state?.gmailEnabled && (
         <GmailApprovals
           key={previewId}
@@ -245,7 +261,25 @@ export function AgentPreview({
       )}
       <div className="overflow-hidden rounded-lg border bg-card">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b px-6 py-4">
-          <h2 className="font-medium">Conversación de prueba</h2>
+          <div className="space-y-1">
+            <h2 className="text-xs text-muted-foreground">
+              Conversación de prueba
+            </h2>
+            <ModelConfigurationSelect
+              value={{ model, reasoning }}
+              disabled={busy || waiting}
+              onChange={(choice) => {
+                setModel(choice.model)
+                setReasoning(choice.reasoning)
+              }}
+            />
+            {model === "gpt-6-astra" && (state?.budgetUsd ?? budgetUsd) < 3 && (
+              <p className="max-w-sm text-xs text-muted-foreground">
+                Astra puede necesitar el límite de US$3,00
+                {previewId ? ". Puedes elegirlo al iniciar otra prueba" : ""}.
+              </p>
+            )}
+          </div>
           <span className="text-sm text-muted-foreground">
             {previewId
               ? `${state?.turns.length ?? 0} de 10 mensajes`
@@ -280,7 +314,7 @@ export function AgentPreview({
               </div>
               <div className="space-y-3">
                 <p className="text-xs font-medium text-muted-foreground">
-                  Agente · Prueba
+                  Agente · Prueba · {previewModelName(turn.model)}
                 </p>
                 {turn.answer ? (
                   <>

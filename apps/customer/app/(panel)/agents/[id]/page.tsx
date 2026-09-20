@@ -71,7 +71,8 @@ export default async function Page({
         }
         configuration={
           <AgentWorkflow
-            gmail={gmail} workspaceId={selected.id}
+            gmail={gmail}
+            workspaceId={selected.id}
             key={data.draft.revision}
             data={data}
             collections={workspace.collections}
@@ -85,6 +86,7 @@ export default async function Page({
           <>
             <AgentProposals
               agentName={data.agent.name}
+              approvals={lifecycle.submissions}
               candidates={data.candidates}
               submissions={data.submissions}
               state={reviewFlow}

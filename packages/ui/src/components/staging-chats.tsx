@@ -1,4 +1,10 @@
 "use client"
+import {
+  DEFAULT_MODEL_CONFIGURATION,
+  modelConfigurationKey,
+  type ModelConfiguration,
+} from "@agentonic/contracts/models"
+import { ModelConfigurationSelect } from "@workspace/ui/components/model-configuration-select"
 import { AgentAnswer } from "@workspace/ui/components/agent-answer"
 import { GmailApprovals } from "@workspace/ui/components/gmail-approvals"
 import { formatUtcDateTime } from "@agentonic/contracts/format"
@@ -51,7 +57,20 @@ export function StagingChats({
     [query, setQuery] = useState(""),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false)
-  const request = useRef<{ query: string; id: string } | null>(null)
+  const [chosenModel, setChosenModel] = useState<ModelConfiguration>(
+    DEFAULT_MODEL_CONFIGURATION
+  )
+  const configuration =
+    state?.models.find(
+      (m) => modelConfigurationKey(m) === modelConfigurationKey(chosenModel)
+    ) ??
+    state?.models[0] ??
+    chosenModel
+  const request = useRef<{
+    query: string
+    id: string
+    configuration: string
+  } | null>(null)
   const command = useCallback(
     async (operation: string, payload: Record<string, unknown> = {}) => {
       const response = await fetch(`/api/chats?workspace=${workspaceId}`, {
@@ -127,12 +146,22 @@ export function StagingChats({
         setState(null)
         setTitle("")
       } else if (operation === "turn" && selected) {
-        if (!request.current || request.current.query !== query)
-          request.current = { query, id: crypto.randomUUID() }
+        if (
+          !request.current ||
+          request.current.query !== query ||
+          request.current.configuration !== modelConfigurationKey(configuration)
+        )
+          request.current = {
+            query,
+            id: crypto.randomUUID(),
+            configuration: modelConfigurationKey(configuration),
+          }
         await command("turn", {
           conversationId: selected,
           query,
           requestId: request.current.id,
+          model: configuration.model,
+          reasoning: configuration.reasoning,
         })
         if (current === epoch.current) {
           setQuery("")
@@ -351,6 +380,17 @@ export function StagingChats({
                   <FieldLabel htmlFor={`${fieldId}-message`}>
                     Mensaje
                   </FieldLabel>
+                  <ModelConfigurationSelect
+                    value={configuration}
+                    onChange={setChosenModel}
+                    options={state?.models ?? []}
+                    disabled={
+                      busy ||
+                      !!state?.turns.some((t) =>
+                        ["queued", "running"].includes(t.status)
+                      )
+                    }
+                  />
                   <Textarea
                     id={`${fieldId}-message`}
                     value={query}

@@ -1,17 +1,18 @@
 "use client"
+import {
+  ModelResultsDialog,
+  modelResultsLabel,
+} from "@workspace/ui/components/model-evaluation-dialog"
+import { batchRunning } from "@agentonic/contracts/review-flow"
 import { CardEmptyState } from "@workspace/ui/components/card-empty-state"
-import { ReviewResultStatus } from "@workspace/ui/components/review-result-status"
 import { useEffect, useId, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Controller, useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { Checkbox } from "@base-ui/react/checkbox"
-import { CheckIcon, ClipboardCheckIcon, ChevronRightIcon } from "lucide-react"
+import { CheckIcon, ClipboardCheckIcon } from "lucide-react"
 import {
-  criterionDecisionLabel,
-  criterionReviewed,
-  reviewFlowLabels,
   type ReviewPreparation,
   type ReviewFlowState,
 } from "@agentonic/contracts/review-flow"
@@ -22,21 +23,8 @@ import { Input } from "@workspace/ui/components/input"
 import { Textarea } from "@workspace/ui/components/textarea"
 import { Button } from "@workspace/ui/components/button"
 import { ReviewCriteriaDialog } from "@workspace/ui/components/review-criteria-dialog"
-import {
-  Table,
-  TableHeader,
-  TableHead,
-  TableBody,
-  TableRow,
-  TableCell,
-} from "@workspace/ui/components/table"
 import { notify } from "@workspace/ui/lib/toast"
 type Action = (input: unknown) => Promise<FormResult>
-const usd = (value: number) =>
-  value.toLocaleString("es-VE", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })
 function Check({
   checked,
   onChange,
@@ -136,9 +124,8 @@ export function PreparationForm({
           <FieldError errors={[errors.budgetUsd]} />
         </Field>
         <p className="text-sm text-muted-foreground">
-          Incluye preparar los criterios, probar el agente y evaluar las
-          respuestas. El consumo realizado cuenta dentro de este límite; las
-          operaciones cuyo resultado no se conoce conservan su reserva.
+          Este límite cubre la preparación de criterios con IA. Cada evaluación
+          se autoriza por separado.
         </p>
         <Controller
           control={control}
@@ -153,7 +140,7 @@ export function PreparationForm({
           )}
         />
         <Button type="submit" disabled={!isValid || mutation.pending}>
-          {mutation.pending ? "Iniciando…" : "Generar criterios con IA"}
+          {mutation.pending ? "Preparando…" : "Preparar criterios"}
         </Button>
       </fieldset>
       {mutation.error && (
@@ -241,159 +228,28 @@ export function Preparation({
   const mutation = useMutation(
     action ?? (async () => ({ ok: false, message: "Acción no disponible." }))
   )
-  const failed = record.results.filter((r) => r.outcome !== "passed")
-  const hasCriteriaDisclosure =
-    !(record.canEdit && action) && record.criteria.length > 0
-  const costSummary = (
-    <span
-      className="text-xs font-normal text-muted-foreground sm:ml-auto"
-      title="Incluye el consumo confirmado y el importe reservado para solicitudes cuyo costo aún no se ha confirmado."
-    >
-      Límite USD {usd(record.budgetUsd)} · Uso del presupuesto USD{" "}
-      {(record.committedMicrousd / 1000000).toLocaleString("es-VE", {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 4,
-      })}
-    </span>
-  )
+  const [resultsOpen, setResultsOpen] = useState(false)
   return (
     <section className="space-y-4">
-      {(record.status !== "criteria_ready" || !hasCriteriaDisclosure) && (
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          {record.status !== "criteria_ready" && (
-            <span className="text-sm text-muted-foreground">
-              {reviewFlowLabels[record.status]}
-            </span>
-          )}
-          {!hasCriteriaDisclosure && costSummary}
-        </div>
-      )}
-      {record.status !== "criteria_ready" && record.summary && (
-        <p className="text-sm text-muted-foreground">{record.summary}</p>
-      )}
-      {record.canEdit && action ? (
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="text-sm text-muted-foreground">
-            {record.criteria.filter(criterionReviewed).length}/
-            {record.criteria.length} situaciones revisadas
-          </p>
-          <ReviewCriteriaDialog record={record} action={action} />
-        </div>
-      ) : (
-        record.criteria.length > 0 && (
-          <details className="group/criteria text-sm">
-            <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-x-6 gap-y-2 font-medium [&::-webkit-details-marker]:hidden">
-              <span className="flex items-center gap-2">
-                <ChevronRightIcon
-                  aria-hidden="true"
-                  className="size-4 shrink-0 group-open/criteria:rotate-90"
-                />
-                {record.status === "criteria_ready"
-                  ? "Ver criterios propuestos"
-                  : "Ver criterios y comentarios confirmados"}
-              </span>
-              {costSummary}
-            </summary>
-            <Table
-              className="mt-4"
-              aria-label="Decisiones del cliente por situación"
-            >
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Situación y comportamiento esperado</TableHead>
-                  <TableHead className="w-36 text-right">
-                    Decisión del cliente
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {record.criteria.map((c) => (
-                  <TableRow key={c.key}>
-                    <TableCell className="space-y-2 py-4 whitespace-normal">
-                      <p className="font-medium">{c.question}</p>
-                      <p className="text-muted-foreground">
-                        {c.expectedAnswer || "Pendiente de completar."}
-                      </p>
-                      {c.notes && <p>Comentario: {c.notes}</p>}
-                      {c.excluded && (
-                        <p>Motivo de exclusión: {c.exclusionReason}</p>
-                      )}
-                    </TableCell>
-                    <TableCell className="py-4 text-right align-top">
-                      <ReviewResultStatus
-                        outcome={
-                          c.excluded
-                            ? "excluded"
-                            : c.reviewDecision === "approved"
-                              ? "passed"
-                              : "pending"
-                        }
-                        label={criterionDecisionLabel(
-                          c,
-                          record.status !== "criteria_ready"
-                        )}
-                      />
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </details>
-        )
-      )}
-      {failed.length > 0 && (
-        <div className="space-y-3">
-          {failed.map((r) => (
-            <div key={r.key} className="rounded-lg border p-4 text-sm">
-              <p className="font-medium">
-                {r.kind === "platform"
-                  ? "Control de la plataforma"
-                  : r.question}
-              </p>
-              <p className="mt-2">{r.explanation}</p>
-              {r.suggestion && (
-                <p className="mt-2 text-muted-foreground">{r.suggestion}</p>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-      {record.results.length > 0 && (
-        <details className="text-sm">
-          <summary className="cursor-pointer font-medium">
-            Ver informe de pruebas (
-            {record.results.filter((r) => r.outcome === "passed").length}/
-            {record.results.length} superadas)
-          </summary>
-          <div className="mt-4 space-y-4">
-            {record.results.map((r) => (
-              <div key={r.key} className="space-y-2 border-t pt-3">
-                <p className="font-medium">{r.question}</p>
-                <p className="text-muted-foreground">
-                  Esperado: {r.expectedAnswer}
-                </p>
-                <p className="whitespace-pre-wrap">{r.answer}</p>
-                <p>{r.explanation}</p>
-                {r.sources.length > 0 && (
-                  <details>
-                    <summary className="cursor-pointer text-muted-foreground">
-                      Consultar evidencia
-                    </summary>
-                    {r.sources.map((s) => (
-                      <blockquote
-                        key={s.id}
-                        className="mt-2 border-l-2 pl-3 whitespace-pre-wrap"
-                      >
-                        {s.text}
-                      </blockquote>
-                    ))}
-                  </details>
-                )}
-              </div>
-            ))}
-          </div>
-        </details>
-      )}
+      <div className="flex flex-wrap items-center gap-3">
+        <ReviewCriteriaDialog
+          record={record}
+          action={action}
+          label="Ver criterios"
+        />
+        <Button
+          variant="outline"
+          disabled={!record.batches.length}
+          onClick={() => setResultsOpen(true)}
+        >
+          {modelResultsLabel(record)}
+        </Button>
+      </div>
+      <ModelResultsDialog
+        record={record}
+        open={resultsOpen}
+        onClose={() => setResultsOpen(false)}
+      />
       {record.canApprove && grantId && approveAction && (
         <ExceptionApproval
           record={record}
@@ -437,8 +293,9 @@ export function ReviewFlowPanel({
   approveAction?: Action
 }) {
   const router = useRouter()
-  const active = state.preparations.some((p) =>
-    ["queued", "preparing", "evaluating"].includes(p.status)
+  const active = state.preparations.some(
+    (p) =>
+      ["queued", "preparing"].includes(p.status) || batchRunning(p.batches[0])
   )
   useEffect(() => {
     const timer = setInterval(() => router.refresh(), active ? 4000 : 15000)
