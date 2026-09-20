@@ -1,5 +1,10 @@
 export const VERSION_HISTORY = [
   {
+    "version": "0.12.0",
+    "date": "2026-09-20",
+    "summary": "Acceso móvil de desarrollo mediante un túnel HTTPS autorizado para la aplicación de clientes."
+  },
+  {
     "version": "0.11.0",
     "date": "2026-09-18",
     "summary": "Acceso web público con investigación acotada, fuentes verificadas y recuperación de lecturas fallidas."
