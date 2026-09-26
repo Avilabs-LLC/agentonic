@@ -195,9 +195,9 @@ export function AgentEditorSkeleton() {
                     {[0, 1].map((row) => (
                       <div
                         key={row}
-                        className="grid grid-cols-[32px_1.5fr_1fr_0.6fr_1.2fr] items-start gap-4 border-b px-2 py-4 last:border-0"
+                        className="grid grid-cols-[32px_1.5fr_1fr_0.6fr_1.2fr] items-center gap-4 border-b px-2 py-3 last:border-0"
                       >
-                        <Skeleton className="size-8" />
+                        <Skeleton className="size-7" />
                         <Skeleton className="h-4 w-44" />
                         <Skeleton className="h-5 w-24 rounded-full" />
                         <Skeleton className="h-5 w-16" />

@@ -1,5 +1,10 @@
 export const VERSION_HISTORY = [
   {
+    "version": "0.14.0",
+    "date": "2026-09-20",
+    "summary": "Diálogos consistentes, criterios más claros y alineación uniforme de las tablas de propuestas y resultados."
+  },
+  {
     "version": "0.13.0",
     "date": "2026-09-20",
     "summary": "Evaluaciones repetibles por modelo y nivel, revisión con criterios confirmados y propuestas con configuración congelada."

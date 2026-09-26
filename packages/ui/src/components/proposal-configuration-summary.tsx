@@ -1,3 +1,9 @@
+import {
+  LibraryBigIcon,
+  ListChecksIcon,
+  PlugIcon,
+  WrenchIcon,
+} from "lucide-react"
 import type { ConfigurationSnapshot } from "@agentonic/contracts/authoring"
 import { gmailLabels } from "@agentonic/contracts/gmail"
 import { gmailGrants, hasWeb } from "@agentonic/contracts/tools"
@@ -25,19 +31,23 @@ export function ProposalConfigurationSummary({
           {
             label: "Habilidades",
             count: content.skills.length,
+            icon: ListChecksIcon,
           },
           {
             label: "Colecciones",
             count: requestedAccess.collectionIds.length,
+            icon: LibraryBigIcon,
           },
           {
             label: "Herramientas",
             count: requestedAccess.tools.length,
+            icon: WrenchIcon,
           },
-          { label: "Conexiones", count: connectionCount },
-        ].map(({ label, count }) => (
+          { label: "Conexiones", count: connectionCount, icon: PlugIcon },
+        ].map(({ label, count, icon: Icon }) => (
           <div key={label} className="space-y-1">
-            <dt className="text-xs text-muted-foreground">
+            <dt className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Icon className="size-4 shrink-0" aria-hidden="true" />
               {label}
             </dt>
             <dd className="text-lg font-semibold tabular-nums">{count}</dd>

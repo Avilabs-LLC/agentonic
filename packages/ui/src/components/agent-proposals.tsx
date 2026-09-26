@@ -149,7 +149,7 @@ function ProposalRow({
   return (
     <>
       <TableRow>
-        <TableCell className="py-3 align-top">
+        <TableCell>
           <DropdownMenu>
             <DropdownMenuTrigger
               render={
@@ -203,21 +203,21 @@ function ProposalRow({
             </DropdownMenuContent>
           </DropdownMenu>
         </TableCell>
-        <TableCell className="py-4 align-top font-medium">
+        <TableCell className="font-medium">
           <Button
             variant="link"
             size="sm"
-            className="h-auto p-0 underline"
+            className="h-auto p-0 no-underline hover:no-underline"
             aria-label={`Ver detalle de ${descriptor.toLowerCase()}`}
             onClick={() => setView("details")}
           >
             {descriptor}
           </Button>
         </TableCell>
-        <TableCell className="py-4 align-top">
+        <TableCell>
           <ProposalStatusBadge status={status} />
         </TableCell>
-        <TableCell className="py-3 align-top whitespace-normal">
+        <TableCell className="whitespace-normal">
           {record?.criteria.length ? (
             <Button
               variant={!confirmed && record.canEdit ? "default" : "link"}
@@ -238,7 +238,7 @@ function ProposalRow({
             </span>
           )}
         </TableCell>
-        <TableCell className="py-3 align-top">
+        <TableCell>
           {record?.batches.length ? (
             <Button
               variant="link"
@@ -385,7 +385,7 @@ export function AgentProposals(props: ProposalProps) {
           Envía una versión desde Configuración para iniciar su revisión.
         </CardEmptyState>
       ) : (
-        <Table aria-label="Propuestas">
+        <Table aria-label="Propuestas" className="[&_td]:py-3">
           <TableHeader>
             <TableRow>
               <TableHead className="w-12">
