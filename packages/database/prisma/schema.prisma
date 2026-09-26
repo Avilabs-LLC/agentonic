@@ -762,6 +762,8 @@ model DocumentChunk {
 }
 
 model BackgroundJob {
+  reasoningEffort String? @map("reasoning_effort")
+  responseModel String @default("gpt-4.1-mini-2025-04-14") @map("response_model")
   previewId   String?          @map("preview_id") @db.Uuid
   turnNumber  Int?             @map("turn_number")
   requestKey  String?          @map("request_key") @db.Uuid
@@ -885,7 +887,28 @@ model EvaluationWorker {
   @@schema("agentonic")
 }
 
+model EvaluationBatch {
+ id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+ workspaceId String @map("workspace_id") @db.Uuid
+ preparationId String @map("preparation_id") @db.Uuid
+ requestId String @map("request_id") @db.Uuid
+ revision Int
+ criteriaSha256 String @map("criteria_sha256")
+ models Json
+ budgetUsd Decimal @map("budget_usd") @db.Decimal(20,8)
+ createdAt DateTime @default(dbgenerated("clock_timestamp()")) @map("created_at") @db.Timestamptz
+ preparation EvaluationPreparation @relation(fields:[workspaceId,preparationId],references:[workspaceId,id],onDelete:NoAction,onUpdate:NoAction)
+ runs EvaluationRun[]
+ @@unique([workspaceId,id])
+ @@unique([preparationId,requestId])
+ @@map("evaluation_batches")
+ @@schema("agentonic")
+}
 model EvaluationRun {
+ batchId String? @map("batch_id") @db.Uuid
+ batch EvaluationBatch? @relation(fields:[workspaceId,batchId],references:[workspaceId,id],onDelete:NoAction,onUpdate:NoAction)
+ responseModel String @default("gpt-4.1-mini-2025-04-14") @map("response_model")
+ reasoningEffort String? @map("reasoning_effort")
   id                     String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   workspaceId            String             @map("workspace_id") @db.Uuid
   agentId                String             @map("agent_id") @db.Uuid
@@ -955,6 +978,8 @@ model EvaluationResult {
 }
 
 model EvaluationPreparation {
+ confirmedRevision Int? @map("confirmed_revision")
+ batches EvaluationBatch[]
  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
  workspaceId String @map("workspace_id") @db.Uuid
  agentId String @map("agent_id") @db.Uuid
@@ -1083,6 +1108,8 @@ model StagingConversation {
  @@schema("agentonic")
 }
 model StagingTurn {
+  responseModel String @default("gpt-4.1-mini-2025-04-14") @map("response_model")
+  reasoningEffort String? @map("reasoning_effort")
  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
  workspaceId String @map("workspace_id") @db.Uuid
  conversationId String @map("conversation_id") @db.Uuid

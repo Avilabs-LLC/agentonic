@@ -52,7 +52,7 @@ import {
 } from "@workspace/ui/components/select"
 import {
   AgentStatusBadge,
-  SubmissionStatusBadge,
+  DomainStatus,
 } from "@workspace/ui/components/status-badge"
 export function AuthoringTable({
   agents,
@@ -270,7 +270,11 @@ export function AuthoringTable({
                     aria-hidden="true"
                   />
                   <span>{version.version}</span>
-                  <SubmissionStatusBadge status={version.status} />
+                  <DomainStatus
+                    domain="submission"
+                    status={version.status}
+                    className="text-xs"
+                  />
                 </div>
               ))
             ) : (

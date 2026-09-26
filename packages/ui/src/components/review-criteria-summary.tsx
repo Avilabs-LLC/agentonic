@@ -1,13 +1,12 @@
 "use client"
-import { ReviewResultStatus } from "@workspace/ui/components/review-result-status"
+import { CriterionStatus } from "@workspace/ui/components/status-badge"
 import { LoaderCircleIcon } from "lucide-react"
 import {
   criterionWasEdited,
-  criterionDecisionLabel,
   type ReviewCriterion,
   type ReviewPreparation,
 } from "@agentonic/contracts/review-flow"
-import { DialogTitle, DialogDescription } from "@workspace/ui/components/dialog"
+import { ProposalDialogHeader } from "@workspace/ui/components/proposal-dialog-header"
 import {
   Table,
   TableHeader,
@@ -20,54 +19,44 @@ import { Button } from "@workspace/ui/components/button"
 import { ConsentCheckbox } from "@workspace/ui/components/consent-checkbox"
 export function ReviewCriteriaSummary({
   record,
+  revision,
   criteria,
   consent,
   onConsent,
   pending,
   canConfirm,
+  confirmed = false,
   onConfirm,
   onReview,
 }: {
   record: ReviewPreparation
+  revision: number
   criteria: ReviewCriterion[]
   consent: boolean
   onConsent: (checked: boolean) => void
   pending: boolean
   canConfirm: boolean
+  confirmed?: boolean
   onConfirm: () => void
   onReview: (index: number) => void
 }) {
   return (
     <>
-      <DialogTitle className="sr-only">Resumen antes de evaluar</DialogTitle>
-      <DialogDescription className="sr-only">
-        Revisa las situaciones y autoriza las pruebas de esta versión.
-      </DialogDescription>
+      <ProposalDialogHeader
+        section="Criterios"
+        agentName={record.agentName}
+        version={record.versionNumber}
+        revision={revision}
+      />
       <div className="min-h-0 space-y-6 overflow-y-auto">
-        <dl className="flex flex-wrap gap-x-12 gap-y-4 pr-8">
-          <div className="min-w-0 space-y-1">
-            <dt className="text-sm text-muted-foreground">Agente</dt>
-            <dd className="text-xl font-semibold tracking-tight break-words">
-              {record.agentName ?? "No disponible"}
-            </dd>
-          </div>
-          <div className="space-y-1">
-            <dt className="text-sm text-muted-foreground">Versión</dt>
-            <dd className="text-xl font-semibold tabular-nums">
-              {record.versionNumber ?? "—"}
-            </dd>
-          </div>
-        </dl>
         <Table
           aria-label="Resumen de situaciones"
-          className="min-w-[520px] table-fixed"
+          className="min-w-[520px] table-fixed [&_td]:py-3"
         >
           <TableHeader>
             <TableRow>
               <TableHead>Situación</TableHead>
-              <TableHead className="whitespace-normal">
-                Mensaje o respuesta editados
-              </TableHead>
+              <TableHead>Editados</TableHead>
               <TableHead>Aclaraciones</TableHead>
               <TableHead>Decisión</TableHead>
             </TableRow>
@@ -82,7 +71,7 @@ export function ReviewCriteriaSummary({
                 )
               return (
                 <TableRow key={c.key}>
-                  <TableCell className="py-3 whitespace-normal">
+                  <TableCell className="whitespace-normal">
                     <Button
                       type="button"
                       variant="link"
@@ -104,16 +93,7 @@ export function ReviewCriteriaSummary({
                   </TableCell>
                   <TableCell>{c.notes.trim() ? "Sí" : "No"}</TableCell>
                   <TableCell>
-                    <ReviewResultStatus
-                      outcome={
-                        c.excluded
-                          ? "excluded"
-                          : c.reviewDecision === "approved"
-                            ? "passed"
-                            : "pending"
-                      }
-                      label={criterionDecisionLabel(c)}
-                    />
+                    <CriterionStatus criterion={c} confirmed={confirmed} />
                   </TableCell>
                 </TableRow>
               )
@@ -126,36 +106,38 @@ export function ReviewCriteriaSummary({
             situación para revisar tu decisión.
           </p>
         )}
-        <form
-          className="space-y-4"
-          onSubmit={(event) => {
-            event.preventDefault()
-            onConfirm()
-          }}
-        >
-          <ConsentCheckbox
-            checked={consent}
-            onCheckedChange={onConsent}
-            disabled={pending || !canConfirm}
+        {confirmed ? (
+          <p className="text-sm text-muted-foreground">
+            Criterios confirmados. Puedes abrir una situación para ajustarla.
+          </p>
+        ) : (
+          <form
+            className="space-y-4"
+            onSubmit={(event) => {
+              event.preventDefault()
+              onConfirm()
+            }}
           >
-            Confirmo estas situaciones y autorizo las pruebas dentro del límite
-            total de USD{" "}
-            {record.budgetUsd.toLocaleString("es-VE", {
-              minimumFractionDigits: 2,
-            })}
-            .
-          </ConsentCheckbox>
-          <Button
-            type="submit"
-            disabled={!consent || !canConfirm || pending}
-            aria-busy={pending}
-          >
-            {pending && (
-              <LoaderCircleIcon className="animate-spin" aria-hidden="true" />
-            )}
-            Confirmar criterios y evaluar
-          </Button>
-        </form>
+            <ConsentCheckbox
+              checked={consent}
+              onCheckedChange={onConsent}
+              disabled={pending || !canConfirm}
+            >
+              Confirmo estas situaciones y el comportamiento esperado del
+              agente.
+            </ConsentCheckbox>
+            <Button
+              type="submit"
+              disabled={!consent || !canConfirm || pending}
+              aria-busy={pending}
+            >
+              {pending && (
+                <LoaderCircleIcon className="animate-spin" aria-hidden="true" />
+              )}
+              Confirmar criterios
+            </Button>
+          </form>
+        )}
       </div>
     </>
   )

@@ -1,6 +1,5 @@
 "use client"
 import { CardEmptyState } from "@workspace/ui/components/card-empty-state"
-import { ReviewResultStatus } from "@workspace/ui/components/review-result-status"
 import { useEffect, useId, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Controller, useFieldArray, useForm, useWatch } from "react-hook-form"
@@ -10,7 +9,6 @@ import { Checkbox } from "@base-ui/react/checkbox"
 import { CheckIcon, PlusIcon, Trash2Icon } from "lucide-react"
 import {
   evaluationCases,
-  evaluationStatus,
   type EvaluationRecord,
 } from "@agentonic/contracts/evaluation"
 import type { FormResult } from "@agentonic/contracts/authoring"
@@ -25,6 +23,7 @@ import { Field, FieldLabel, FieldError } from "@workspace/ui/components/field"
 import { Input } from "@workspace/ui/components/input"
 import { Textarea } from "@workspace/ui/components/textarea"
 import { Button } from "@workspace/ui/components/button"
+import { DomainStatus } from "@workspace/ui/components/status-badge"
 import {
   Select,
   SelectTrigger,
@@ -437,9 +436,11 @@ export function EvaluationPanel({
               </h3>
             )}
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="text-sm font-medium">
-                {evaluationStatus[record.status]}
-              </p>
+              <DomainStatus
+                domain="evaluation"
+                status={record.status}
+                appearance="badge"
+              />
               <span className="text-xs text-muted-foreground">
                 {record.environment === "azure_staging"
                   ? "Azure · Staging"
@@ -490,15 +491,9 @@ export function EvaluationPanel({
                       </p>
                       {result && (
                         <>
-                          <ReviewResultStatus
-                            outcome={
-                              result.outcome === "passed" ? "passed" : "failed"
-                            }
-                            label={
-                              result.outcome === "passed"
-                                ? "Superado"
-                                : "No superado"
-                            }
+                          <DomainStatus
+                            domain="result"
+                            status={result.outcome}
                           />
                           <p className="whitespace-pre-wrap">{result.answer}</p>
                           {result.sources.length > 0 && (

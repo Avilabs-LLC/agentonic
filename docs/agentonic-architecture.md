@@ -427,105 +427,9 @@ Local database TLS verification uses Supabase’s published CA, downloaded from 
 
 ## 21. Shared UI contract — admin and customer apps
 
-**Owner direction, 2026-09-13:** follow the rulebook in `Dev/acachuchazo-admin/docs/ui/ui-contract.md`, with the new Agentonic shadcn preset below. That source was read in full, including its detail-page conventions. This section records the applicable rules locally so implementation does not depend on another checkout. Keep the two authoritative documents in `/docs`; this UI decision requires no schema change. These are the complete UI implementation requirements. Section 22 records the implemented foundation subset and checks; later screens must meet the same rules.
+The authoritative UI requirements now live in [docs/ui/ui-contract.md](ui/ui-contract.md), adapted from the Acachuchazo baseline and updated with the owner's 2026-09-15 badge rules. Read that contract before all UI work. It preserves Agentonic's preset, Base UI composition, navigation, forms, table/detail layouts and skeleton checks.
 
-### 21.1. Preset, primitives and styling
-
-Owner-supplied initialization command:
-
-```sh
-pnpm dlx shadcn@latest init --preset b1GfVg2Oe --template next
-```
-
-The official CLI's read-only `preset decode b1GfVg2Oe --json` resolved the base preset on 2026-09-13. The table below includes the subsequent owner override from large to default/medium radius:
-
-| Setting | Agentonic |
-|---|---|
-| Style | Mira |
-| Base color | Mist |
-| Theme | Sky |
-| Font | Figtree; headings inherit |
-| Icons | Lucide |
-| Radius | Default / medium (`--radius: 0.625rem`), owner override |
-| Chart color | Amber |
-| Menu color / accent | Default / subtle |
-
-Preset reference: [Agentonic preset](https://ui.shadcn.com/create?preset=b1GfVg2Oe). The [official CLI documentation](https://ui.shadcn.com/docs/cli) describes initialization and preset inspection. Preserve the generated token values except the explicit owner radius override: use `--radius: 0.625rem`, matching the [default shadcn radius](https://ui.shadcn.com/docs/theming), and retain the generated derived radius scale. The preset ID still encodes the original large radius; reinitializing it must reapply this override. Initialize within the planned monorepo layout, with shared primitives and theme; do not accidentally create a third app at the repository root. Pin the resulting dependencies in the workspace lockfile.
-
-Retain the source contract's **Base UI** component architecture. The decoded preset does not identify a primitive library: explicitly select Base UI during initialization (the CLI supports `--base base`) and verify the generated configuration. Compose with `render`, using Base UI's actual open-state hooks (`data-popup-open` / `data-open` as applicable). A `Button` rendered as a Next.js `Link` sets `nativeButton={false}`. A `Select` with machine-readable values supplies a value-to-label `items` mapping so the trigger displays a human label.
-
-Use shadcn components wherever an appropriate primitive exists, including buttons, fields, menus, dialogs, tables, empty states and tabs. Styling uses semantic tokens; no scattered palette classes. The new preset replaces Acachuchazo's Lyra geometry and green primary. Preserve its deliberate pill-shaped status badges, centralized status palette, blue underlined ID links and limited `text-highlight` token. The highlight remains a violet semantic token, used for at most one key value per card, never for status or a background surface; check its contrast against the new theme. Centralize these exceptions in shared components/tokens.
-
-Shared label maps, variants and formatting helpers live in modules without `"use client"`; server components must not import non-component values from client modules. Both apps consume a shared UI package, while navigation, customer/staff actions and server authorization remain app-specific.
-
-Carry over the source's Spanish (`es-VE`) interface and centralized `Intl` formatting as the initial language convention. All visible labels, pagination, errors and notifications use it consistently. Display operational times with an explicit applicable user/workspace timezone; do not inherit Acachuchazo's business timezone. Capitalize the word following separators such as `·` in metadata lines.
-
-### 21.2. Page anatomy and navigation
-
-Collection pages render a shared `PageHeader`: bold `text-3xl` title, formatted count appended as `Título: 1.811`, one-line muted description and right-aligned page actions. Optional statistics and filters precede the main content. Do not invent counts before data exists.
-
-Every “Crear…” button, including dialog launchers and form submit buttons, includes a leading decorative Lucide plus icon. Keep the Spanish text as its accessible name and preserve pending/disabled behavior.
-
-Each app has one typed navigation registry providing its sidebar, breadcrumb and page-header labels. Share the registry contract and rendering helpers, not staff navigation entries with customers. Unbuilt sections appear disabled with a `Pronto` badge. Keep routes, labels and permissions explicit.
-
-### 21.3. Tables
-
-Use pinned TanStack Table v8 and a shared `DataTable` for entity tables. Prefer a table over a card grid for collections larger than about six records; this does not turn chat transcripts or prompt editors into tables.
-
-- Every data column has a sortable `DataTableColumnHeader`. The row-action column has no meaningless sort control.
-- Search sits above the table and covers common-sense entity fields with multi-term AND matching. Server-backed search, sorting and pagination must cover the authorized result set, not only the current browser page.
-- Provide Spanish pagination, page-size selection, a sticky header in a bounded scroll area, and a shadcn `Empty` state.
-- When an entity has a working detail route, its first column is an eight-character ID rendered by the shared blue underlined `IdLink`. Omit that column until the detail route exists. **Customer agent list override (owner direction, 2026-09-14):** the ellipsis action column comes first; the Agente cell shows only the name as a blue underlined detail link, without a description or description tooltip. The ID column is omitted, and Estado is the last column. Existing edit permission checks also govern the name link.
-- Statuses use pill badges with the source palette: `success`, `warning`, `error`, `orange`, `sky`, `violet`, `emerald`, `slate`, and the appropriate `inverse*` variants on colored surfaces. Light mode uses tinted surfaces/dark text; dark mode uses page-background surfaces/luminous text. Never use the solid primary `default` badge for statuses. Text communicates status as well as color.
-- Shared `status-badge` components and `lib/badge-status` maps assign the same labels/colors in both apps: ready/active/approved/available → success; queued/submitted/paused/unevaluated → warning; processing/in review/read access/selected knowledge → sky; requested changes/examples → orange; drafts/development → violet; collection management → emerald; failure/rejection/revocation → error; withdrawn/archived/unprocessed/undeployed/upcoming → slate. Unknown statuses use a slate “Estado desconocido” badge. The Acachuchazo palette remains centralized in `badge.tsx`; inverse variants are reserved for colored surfaces.
-
-**Badge restraint and empty cards — owner direction, 2026-09-17.** Reserve a badge for a record's primary state or a distinct authorization/deployment state needed for scanning. Do not repeat the same approval across page headers, card headers and decision feedback. In proposal receipts, Estado is the third summary field beside Agente and Versión. Counts, budgets, capabilities, access descriptions and secondary review phases use text; individual criteria/results use quiet icons with explicit labels. Evaluation totals use a numeric summary in the card body, never a badge. The denominator is the number of recorded results, not a claim that every planned case has completed. Approval, submission and deployment badge colors come from shared maps, with distinct colors within each family; equivalent states use the same map across both apps. “Sin aprobación” is slate; “Vencida” is yellow. Text always names the state, so color is never the sole signal.
-
-Empty or unavailable card content uses the shared `CardEmptyState`: a muted, dashed, bounded-height frame with a short title and useful next step. It must distinguish absent content, work in progress and authorization-limited content. A version without approval always explains the pending approval and directs the reader to Propuestas; do not render a blank package footer. These presentation rules do not change consent, review, retention or deployment authority.
-
-### 21.4. Filters and row actions
-
-Extra filters live in a shared `FiltersCard` titled `Filtros`, arranged in a responsive grid, with a `Limpiar` action resetting every filter. The page's table wrapper owns filter state.
-
-**Customer agent list update (2026-09-16):** the only extra filter is a workspace multi-select, using repeated `workspace` URL parameters. No selection shows all active memberships; existing single-workspace URLs still select that workspace. Each selected workspace is read in its own verified transaction, and failed reads fail the complete listing. Rows retain trusted workspace IDs for links/actions. The sortable Espacio de trabajo column replaces Instrucciones; instruction character count is the leftmost Recursos item with a document icon and an accessible readiness tooltip. Limpiar restores all workspaces and clears table search. Agent creation offers a workspace choice when several selected workspaces permit creation. The loading state mirrors the filter card and seven-column table.
-
-Row actions use a final-column ellipsis menu with icons. Destructive actions are red, separated at the bottom, and consequential operations require an `AlertDialog` with explicit title, consequence and confirmation label. A disabled or hidden control does not replace server-side authorization.
-
-### 21.5. Forms and feedback
-
-Forms use react-hook-form, Zod, `zodResolver`, `mode: "onChange"`, and shadcn `Field`, `FieldLabel`, and `FieldError`. Submit is disabled while required inputs are invalid or submission is in progress: `disabled={!isValid || isSubmitting}`. Validate again on the server and preserve actionable field errors.
-
-Creation entry buttons use a `+` icon. Inside dialogs, submit buttons omit that icon and retain a specific action label such as `Crear agente`, `Crear colección` or `Eliminar colección`, rather than generic `Confirmar`. Repeating the dialog's action makes the result of submitting explicit. Use `Cancelar` for dismissal and the appropriate progress label while submitting.
-
-Use Sonner at the bottom right with centralized `notify` helpers and distinct success, warning and destructive styles. Components do not call `toast` directly. Every completed submission or row action produces exactly one notification, including failures; cancellation produces no success claim. Inline field errors complement that notification. Pending asynchronous work must be described as queued/submitted, not deployed or completed.
-
-### 21.6. Loading states and verification
-
-Every rendered page route has a `loading.tsx` matching its actual structure: header, back row, cards, toolbar and table column count as applicable. Shared skeleton primitives include `PageHeaderSkeleton`, `RecordHeaderSkeleton`, `BackRowSkeleton`, `FiltersCardSkeleton`, `TableSkeleton` and `StatCardsSkeleton`; chat and editor routes receive matching specialized skeletons.
-
-Port the source's skeleton freshness audit concept to both apps. Fingerprint each route's page, colocated visual components and loading skeleton; include relevant shared visual dependencies so a shared component change cannot silently escape review. `pnpm skeletons:check` must fail for missing skeletons, stale manifests and unreviewed visual changes. After changing a skeleton or explicitly confirming unchanged geometry, `pnpm skeletons:update` records the reviewed baseline. Hash freshness supplements visual review; it does not prove visual equivalence.
-
-Foundation CI runs typecheck, lint, applicable tests and the skeleton audit. Verify responsive layouts, keyboard navigation, focus, validation feedback and light/dark/system themes as UI work lands. **Do not run `pnpm build` or `next build` for verification unless the owner explicitly requests a full build.**
-
-### 21.7. Shell and detail pages
-
-Use shadcn `Sidebar` with `variant="inset"`, an Agentonic brand mark placeholder, centralized application name/version, grouped navigation and bottom user menu. The menu provides theme selection (`Claro`, `Oscuro`, `Sistema` through next-themes with the `class` attribute), account and sign-out when those features work. Dynamic breadcrumbs use the navigation registry and shorten UUID segments to eight characters. Customer workspace selection and staff context must remain visibly distinct.
-
-Nested pages render a separate ghost `BackRow` with left arrow immediately above `RecordHeader`, linking one route level up. Wrap the pair in `space-y-3`. Header actions remain available for operations and cross-links. `RecordHeader` contains title, one muted metadata line, status badges and right-aligned actions; do not add an initials avatar there.
-
-For ordinary detail pages, use a responsive `lg:grid-cols-3` grid: operational content spans two columns, reference data occupies the side track. Use stat tiles with muted uppercase labels and tabular numeric values, shadcn `Item`/`ItemSeparator` for record lists and definition rows with `Separator` for attributes. Related records reuse `IdLink`; statuses reuse the shared maps.
-
-When an agent has independent facets, use tabs under its record header, such as configuration, knowledge, connections and activity, with counts where useful. Dense workflows can have dedicated pages. Preserve the shared shell, form, feedback and loading rules across the customer editor, upload journey and chat.
-
-Acachuchazo's credit-line meter, financial layouts, KYC tabs and single-customer mock overlay are domain-specific examples, not Agentonic features. Apply the underlying composition rules to agents, submissions and deployments. Synthetic fixtures must be clearly identified and isolated from real workflows; never display fabricated deployment health or costs as live data. Agentonic logo/favicon and custom login composition remain implementation work; the approved preset supplies the initial theme.
-
-### 21.8. Agentonic workflow clarity
-
-The customer app must distinguish an editable draft, a frozen submission awaiting review and the currently deployed version. Clearly label staging previews, selected source scopes and requested capabilities. Customer actions create, personalize, preview and submit; staff actions review and deploy through the established approval boundary. Shared visual components do not collapse those responsibilities.
-
-Keep chat access, configuration management, transcript access and knowledge sharing separate in the interface. Explain what is being shared before granting it. A connection's knowledge-import scope and live tool permissions are separate choices. Display unknown cost as unknown, and show deployment progress from observed status rather than treating a queued command as a successful release.
-
-
+Primary record states may use a badge; nested outcomes use unboxed icons and text; metadata and counts use ordinary text. Current approval validity takes precedence over historical success in receipt headers. Domain descriptors centrally define status labels, tones and icons. These current rules supersede earlier badge-specific implementation notes below (including type, selection-count and prompt-readiness pills).
 
 ## 22. Shared foundation implementation — 2026-09-13
 
@@ -1169,3 +1073,45 @@ Migration 32 preserves immutable registry limits while newly published runtimes 
 ### 39.2 Versioned VM staging release — 2026-09-18
 
 Platform 0.11.0 and runtime 0.3.0 are published on `codex/public-web-research` and `codex/web-research-runtime`. The current evaluator, staging broker/controller and frozen runtime are installed and hash-verified on `vm-agents-01`; local staging is aligned. [Release hashes, verification deadlines and live evidence](web-access.md#vm-release-checkpoint--18-september-2026) record six passed evaluation checks, reranking, cited chat, public search/read, VM restart recovery, metering and fixture cleanup. Tool-bearing versions still require the existing staff approval gate. Customer deployments require explicit preparation, approval and operating consent/activation; the release does not automatically activate an existing version. Hosted web apps and production rollout remain in §37.
+
+### 39.3 Preview-only model comparison — 19 September 2026
+
+Customer preview chat now offers explicit per-message GPT-4.1 mini / GPT-6 Astra selection with a shadcn radio menu. Migrations 33–34 bind the selected model to the queued turn, provider metering and stored answer. They also allow an explicitly chosen US$3 preview ceiling and compatible frontier request reservations; existing/default previews remain US$0.25 and no accumulated usage is reset. This experimental broker override does not modify frozen candidates, approved evaluations, live Chats or VM deployments. See [preview model selection](preview-models.md) for contracts, accounting, operation and comparison procedures.
+
+**Preview workflow update (owner direction, 2026-09-19):** customer previews use the latest prepared candidate without a historical version selector. Opening or starting a preview enables the candidate’s configured tools by default; this supersedes the earlier preview-checkbox opt-in UX in §§38.1–39. The frozen permission scope, live authorization checks and individual Gmail write confirmations remain enforced. Existing session policies and usage are retained. The preview UI keeps the spending ceiling and session controls concise.
+
+
+### 39.4 Single submission and evaluation preparation — 19 September 2026
+
+Owner-approved customer flow supersedes the separate initial submission/preparation steps in §35. The **Enviar a revisión** dialog collects the total preparation/execution/grading ceiling (US$0.05–1, default US$0.25) and explicit seven-day team-review/AI-knowledge authorization. The customer server invokes the existing submission and preparation commands in one verified-identity transaction. Submission acquires the workspace write lock; current agent/candidate/draft validation and preparation happen before commit. Any failure rolls back the submission, consent and queued preparation together. Duplicate submission attempts cannot queue another preparation. Success navigates to **Propuestas**; no provider calls run in the web request.
+
+The table identifies **Versión N**, omits proposal/draft-revision numbering, and shows criteria preparation progress. **Revisar criterios** becomes available when criteria exist, before test execution; the existing per-situation decisions and final confirmation still gate execution. Once execution begins, **Ver resultados** opens the criteria, responses, findings and authorized budget/use without repeating the table’s version summary, status or comments. Empty/redacted reviews stay disabled. **Preparar evaluación** is an explicit recovery action only for existing unprepared submissions or attempts with status `error` or `cancelled`. It is unavailable during active preparation/evaluation and after completed results, including `needs_changes` and `needs_attention`. A completed nonpassing evaluation directs the customer to its results; correcting confirmed criteria would require a separately named, explicitly authorized new evaluation, not the preparation recovery action. Existing records are not automatically authorized or restarted, and accumulated usage/reservations remain intact.
+
+No migrations, worker/runtime replacement, live AI invocation or customer submission is needed for this application-only change. Deterministic restricted-role database tests cover atomic queuing, rollback on preparation failure, stale revisions, missing consent/budget and duplicate attempts. UI action tests cover pending, ready, evaluating, redacted and recovery states. The existing five-column proposal skeleton remains structurally valid.
+
+
+### 39.5 Model evaluations and repeatable review (19 September 2026)
+
+This replaces the single-model/confirm-and-execute flow in §39.4. Submission authorizes **criteria preparation only**. Confirmation records the current criteria revision without starting inference. The customer then explicitly authorizes a model evaluation from the proposal menu: choose model/reasoning combinations and a run budget (USD 0.05–50). Every run repeats all included business situations and immutable platform controls for every selected combination. A model counts as 100% only when every selected level passes every situation. Model scores never average away a failing level.
+
+The proposal table retains version/status/evaluation/comments and adds **Criterios** and **Resultados**. Pending criteria are the emphasized next action. Each column opens its own dialog. Results open at a model aggregate index, then drill into situations by level. Progress is persisted server-side, polled while running, and survives closing/reopening the dialog. The menu contains **Evaluar modelos**, disabled until criteria are confirmed and throughout an active run. It becomes available again after success, failure or interruption. The confirmation states that every run uses metered AI and may incur charges; no card integration or charge capture is represented as implemented.
+
+Migration 35 adds immutable evaluation batches, per-run execution model/effort, and a mutable current criteria confirmation revision. Each batch captures the authorized criteria revision/hash, selected combinations, request identity and budget. The workspace/preparation locks serialize customer changes and provider reservations. Repeated request IDs return the original batch only for identical input; concurrent runs and criteria edits during active execution are blocked. Editing criteria clears confirmation and creates a revision; prior datasets, assessments, costs and unknown-outcome reservations remain unchanged. Each batch has a separate explicit ceiling, while preparation-level accumulated consumption remains retained. Cancellation revokes every associated execution. Existing single-model reviews remain readable as historical one-model runs; they are not automatically reevaluated.
+
+Approval eligibility requires all requested model/level runs to pass with current evidence, the latest batch and matching confirmed criteria revision. Existing staff and tool-scope gates still apply; 100% situations is not itself deployment activation. Staff review and approval receipts use the same model aggregate results. Receipts retrieve the criteria revision that actually supported the approval, not subsequently edited criteria.
+
+The shared catalog includes GPT-5.4 mini, GPT-5.4, GPT-6 Astra and historical GPT-4.1 mini. Supported API reasoning levels are validated in contracts and SQL. New exploratory previews default to GPT-5.4 mini/medium; legacy approvals and historical turns retain their actual mini model. Migration 36 pins model/effort per preview and deployed-chat turn, validates retry identity, and permits only combinations recorded in the deployment's approval. The trusted broker applies those parameters without modifying frozen runtime assets, records model-specific usage, and preserves tool authorization and conversation budgets. Configurable reasoning does not authorize additional tools. Switching preserves conversation history; the current evaluation suite tests situations independently and does **not** claim specific multi-turn model-switching coverage.
+
+Evaluation protocol 3 workers execute this matrix. Criteria generation and semantic judging currently remain GPT-4.1 mini; the evaluator is identified in result detail. New batches use `grounded-review-v3`, which distinguishes unsupported policies from harmless elaboration, avoids demanding every limitation in general self-descriptions, and receives frozen requested permissions and the isolated read-only evaluation scope. These evaluations do not execute Gmail writes or public-web tools and do not certify their operation. The exact worker hash, model identifier, effort, dataset, rubric and runtime are bound into evidence; model aliases are not claimed to pin upstream weights.
+
+Verification uses synthetic database fixtures and mocked provider calls; no paid evaluation of customer content is necessary to verify workflow transitions. Worker upgrades remain explicit, idle-queue, measured installations. Provider budgets and real customer criteria/results are never reset as part of deployment.
+
+### 39.6 Compact customer proposals (20 September 2026)
+
+Owner-approved presentation supersedes the proposal-table columns in §39.5. The customer table has an action menu and four data columns: **Propuesta**, **Estado**, **Criterios**, **Resultados**. Estado displays one badge without secondary text: **En proceso**, **Aprobada**, **Requiere cambios**, **Requiere atención**, or **Cerrada**. These are derived presentation states; stored submission decisions, review states and authorization rules are unchanged. Rejected, withdrawn and revoked proposals are closed. A historical approval appears as approved only when the server's lifecycle read confirms current validity; otherwise it needs attention. Explicit decisions take precedence over evaluation progress, while a new active run supersedes an earlier evaluation failure. Preparation/evaluation interruptions, cancelled review authorization, unavailable criteria and expired approval require attention.
+
+Criteria show **Preparando…**, **Confirmar**, **Ver**, or **—**. Results show **—**, **Evaluar**, **Ver progreso**, or the existing count of models passing every selected level. Evaluar opens model selection and explicit budget/consent authorization; it never starts inference merely by opening the dialog. The menu retains repeat evaluation, criteria preparation/recovery, authorization cancellation and withdrawal. Clicking the proposal descriptor opens the frozen configuration receipt. Evaluación and Comentarios are removed from the table. The proposal loading skeleton matches the five total columns.
+
+The Propuesta cell identifies **Versión N · Revisión R**, where R is the current criteria revision; unavailable numbers use an em dash. The Criterios cover and Resultados dialog use the entity name as their title, with no preheader. Their description shows the shared agent icon followed by the agent name and version/revision descriptor. The criteria cover uses its current saved revision, while results identify the frozen revision of the selected execution. This replaces the criteria cover’s agent/version grid. Resultados table cells remain on one line.
+
+The proposal dialog leads with a compact receipt of the frozen configuration: saved system prompt, skill names, collection/tool/connection counts, and the included web/Gmail operations. Tools count the saved capability grants; connections count distinct saved connection IDs. Counts and content come from the authorized configuration-release snapshot, never the current draft or current connection inventory. Source manifests are omitted from the presentation contract; unavailable snapshots show an explicit empty state. The four configuration counts reuse the corresponding skills, collections, tools and connections icons. The dialog omits the status and comments section. The criteria cover uses **Editados** as its column heading. Situation fields place labels and textareas directly in the form, retaining distinct message/expected-response color cues without padded outer frames.

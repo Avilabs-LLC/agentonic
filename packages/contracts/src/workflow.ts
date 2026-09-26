@@ -72,8 +72,19 @@ export function reviewPreparation(
 export const submissionForm = z.object({
   candidateId: uuid,
   note: z.string().max(2000, "La nota no puede superar los 2000 caracteres."),
+  budgetUsd: z
+    .number()
+    .min(0.05, "El mínimo es US$0,05.")
+    .max(1, "El máximo es US$1,00."),
   consent: z.boolean().refine(Boolean, "Autoriza la revisión para continuar."),
 })
+export const submissionInput = submissionForm
+  .extend({
+    revision: z.number().int().positive(),
+    requestId: uuid,
+  })
+  .strict()
+
 export function workflowRequirements(input: {
   draft: AgentView["draft"]
   editor: DraftEditorStatus

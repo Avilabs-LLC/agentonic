@@ -204,6 +204,12 @@ export const agentListing = z.array(
 )
 export type AgentListing = z.infer<typeof agentListing>
 export type WorkspaceView = z.infer<typeof workspaceView>
+export const configurationSnapshot = z.object({
+  content: draftContent,
+  // Frozen access also contains source manifests. Expose only configuration fields.
+  requestedAccess: requestedAccess.strip(),
+})
+export type ConfigurationSnapshot = z.infer<typeof configurationSnapshot>
 export const agentView = z.object({
   preparationCodeReleaseId: uuid.nullable().default(null),
   agent: z.object({
@@ -229,6 +235,7 @@ export const agentView = z.object({
       previewExpiresAt: z.string().nullable().optional(),
       number: z.number().int().positive().optional(),
       createdAt: z.string().optional(),
+      snapshot: configurationSnapshot.optional(),
     })
   ),
   submissions: z.array(

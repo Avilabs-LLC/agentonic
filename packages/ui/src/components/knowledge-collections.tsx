@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { FolderIcon, PlusIcon } from "lucide-react"
+import { FolderIcon, PlusIcon, EyeIcon, Settings2Icon } from "lucide-react"
 import type { ColumnDef } from "@tanstack/react-table"
 import type { FormResult, WorkspaceView } from "@agentonic/contracts/authoring"
 import { AgentSettingsCard } from "@workspace/ui/components/agent-settings-card"
@@ -14,6 +14,7 @@ import {
   Dialog,
   DialogTrigger,
   DialogContent,
+  DialogHeader,
   DialogTitle,
   DialogDescription,
 } from "@workspace/ui/components/dialog"
@@ -60,7 +61,12 @@ const columns: ColumnDef<CollectionRow>[] = [
       <DataTableColumnHeader column={column} title="Tu acceso" />
     ),
     cell: ({ row }) => (
-      <span className="text-sm text-muted-foreground">
+      <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
+        {row.original.canCurate ? (
+          <Settings2Icon aria-hidden="true" className="size-3.5" />
+        ) : (
+          <EyeIcon aria-hidden="true" className="size-3.5" />
+        )}
         {row.original.canCurate ? "Gestionar" : "Solo lectura"}
       </span>
     ),
@@ -123,10 +129,12 @@ export function KnowledgeCollections({
               Crear colección
             </DialogTrigger>
             <DialogContent showCloseButton={!pending}>
-              <DialogTitle>Crear colección</DialogTitle>
-              <DialogDescription>
-                Organiza documentos relacionados en una colección privada.
-              </DialogDescription>
+              <DialogHeader>
+                <DialogTitle>Crear colección</DialogTitle>
+                <DialogDescription>
+                  Organiza documentos relacionados en una colección privada.
+                </DialogDescription>
+              </DialogHeader>
               <ResourceCreateForm
                 action={create}
                 disabled={!canCreate}

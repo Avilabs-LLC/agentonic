@@ -10,6 +10,10 @@ import {
 } from "lucide-react"
 import { AgentSettingsCard } from "@workspace/ui/components/agent-settings-card"
 import { RecordHeader, BackRow } from "@workspace/ui/components/record-header"
+import {
+  SubmissionStatusBadge,
+  DomainStatus,
+} from "@workspace/ui/components/status-badge"
 import { MutationForm } from "@workspace/ui/components/mutation-form"
 import { Field, FieldLabel } from "@workspace/ui/components/field"
 import { Textarea } from "@workspace/ui/components/textarea"
@@ -53,12 +57,13 @@ export function SubmissionReviewLayout({
       <RecordHeader
         title={review.agentName}
         description={`Propuesta ${review.number} · Revisa la versión enviada por el cliente.`}
-        actions={
-          <span className="text-sm text-muted-foreground">
-            {testsPassed ? "Pruebas superadas" : "Sin evaluación superada"}
-          </span>
-        }
+        actions={<SubmissionStatusBadge status={review.status} />}
       />
+      <p className="text-sm text-muted-foreground">
+        {testsPassed
+          ? "Hay pruebas superadas en el historial. Consulta la revisión actual antes de decidir."
+          : "No hay una evaluación superada registrada."}
+      </p>
       <SubmissionVersionContent
         content={review.content}
         collectionCount={collections}
@@ -72,9 +77,7 @@ export function SubmissionReviewLayout({
         description="Revisa los resultados de la evaluación antes de registrar una decisión. Explica al cliente qué debe ajustar o por qué su propuesta necesita atención."
         action={
           needsAttention ? (
-            <span className="text-sm text-muted-foreground">
-              Requiere atención
-            </span>
+            <DomainStatus domain="review" status="needs_attention" />
           ) : undefined
         }
       >
@@ -174,7 +177,7 @@ export function SubmissionVersionContent({
         icon={<ListChecksIcon />}
         description="Instrucciones específicas que complementan el comportamiento del agente."
         action={
-          <span className="text-sm text-muted-foreground">
+          <span className="text-sm text-muted-foreground tabular-nums">
             {content.skills.length}{" "}
             {content.skills.length === 1 ? "habilidad" : "habilidades"}
           </span>
@@ -205,7 +208,7 @@ export function SubmissionVersionContent({
         icon={<LibraryBigIcon />}
         description="Colecciones que el cliente propone como fuente de información."
         action={
-          <span className="text-sm text-muted-foreground">
+          <span className="text-sm text-muted-foreground tabular-nums">
             {collectionCount}{" "}
             {collectionCount === 1 ? "colección" : "colecciones"}
           </span>

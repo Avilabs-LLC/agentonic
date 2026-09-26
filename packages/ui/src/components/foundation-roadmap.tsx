@@ -14,6 +14,7 @@ import {
   ItemActions,
 } from "@workspace/ui/components/item"
 import Link from "next/link"
+import { ChevronRightIcon } from "lucide-react"
 export function FoundationRoadmap({ customer }: { customer: boolean }) {
   const steps = customer
     ? [
@@ -74,8 +75,12 @@ export function FoundationRoadmap({ customer }: { customer: boolean }) {
                 <ItemDescription>{description}</ItemDescription>
               </ItemContent>
               <ItemActions>
-                <span className="text-sm text-muted-foreground">
-                  {href ? "Disponible" : "Pronto"}
+                <span className="text-xs text-muted-foreground">
+                  {href ? (
+                    <ChevronRightIcon aria-hidden="true" className="size-4" />
+                  ) : (
+                    "Pronto"
+                  )}
                 </span>
               </ItemActions>
             </Item>

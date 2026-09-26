@@ -2,6 +2,7 @@ import { AgentPageTabs } from "@workspace/ui/components/agent-page-tabs"
 import { Skeleton } from "@workspace/ui/components/skeleton"
 import {
   PageHeaderSkeleton,
+  RecordHeaderSkeleton,
   BackRowSkeleton,
   TableSkeleton,
   FiltersCardSkeleton,
@@ -21,7 +22,7 @@ export function AgentEditorSkeleton() {
   return (
     <div className="mx-auto w-full max-w-4xl space-y-6">
       <BackRowSkeleton />
-      <PageHeaderSkeleton />
+      <RecordHeaderSkeleton indicator="metadata" />
       <AgentPageTabs
         activation={
           <div className="space-y-6">
@@ -140,7 +141,7 @@ export function AgentEditorSkeleton() {
                     <div className="overflow-hidden rounded-lg border bg-muted/20">
                       <div className="flex flex-wrap items-center justify-between gap-3 border-b p-4">
                         <div className="flex items-center gap-3">
-                          <Skeleton className="size-10 shrink-0 rounded-md" />
+                          <Skeleton className="size-5 shrink-0" />
                           <div className="space-y-1">
                             <Skeleton className="h-5 w-20" />
                             <Skeleton className="h-4 w-24" />
@@ -184,24 +185,24 @@ export function AgentEditorSkeleton() {
               </CardHeader>
               <CardContent>
                 <div className="overflow-x-auto border-t">
-                  <div className="min-w-[700px]">
-                    <div className="grid grid-cols-[32px_repeat(4,minmax(0,1fr))] gap-4 border-b px-2 py-3">
+                  <div className="min-w-[680px]">
+                    <div className="grid grid-cols-[32px_1.5fr_1fr_0.6fr_1.2fr] gap-4 border-b px-2 py-3">
                       <span />
                       <Skeleton className="h-4 w-20" />
                       <Skeleton className="h-4 w-16" />
-                      <Skeleton className="h-4 w-24" />
-                      <Skeleton className="h-4 w-24" />
+                      <Skeleton className="h-4 w-20" />
+                      <Skeleton className="h-4 w-20" />
                     </div>
                     {[0, 1].map((row) => (
                       <div
                         key={row}
-                        className="grid grid-cols-[32px_repeat(4,minmax(0,1fr))] items-start gap-4 border-b px-2 py-4 last:border-0"
+                        className="grid grid-cols-[32px_1.5fr_1fr_0.6fr_1.2fr] items-center gap-4 border-b px-2 py-3 last:border-0"
                       >
-                        <Skeleton className="size-8" />
-                        <Skeleton className="h-4 w-20" />
+                        <Skeleton className="size-7" />
+                        <Skeleton className="h-4 w-44" />
                         <Skeleton className="h-5 w-24 rounded-full" />
-                        <Skeleton className="h-4 w-4/5" />
-                        <Skeleton className="h-5 w-24" />
+                        <Skeleton className="h-5 w-16" />
+                        <Skeleton className="h-5 w-40" />
                       </div>
                     ))}
                   </div>
@@ -314,7 +315,8 @@ export function ReviewDetailSkeleton() {
   return (
     <div className="mx-auto w-full max-w-4xl space-y-6">
       <BackRowSkeleton />
-      <PageHeaderSkeleton />
+      <RecordHeaderSkeleton indicator="status" />
+      <Skeleton className="h-5 w-4/5" />
       {["prompt", "skills", "knowledge"].map((section) => (
         <Card
           key={section}
@@ -383,9 +385,9 @@ function EvaluationSkeleton({ customer = false }: { customer?: boolean }) {
             <Skeleton className="h-9 w-48" />
           </>
         ) : (
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <Skeleton className="h-5 w-48" />
-            <Skeleton className="h-4 w-64 max-w-full" />
+          <div className="flex flex-wrap items-center gap-3">
+            <Skeleton className="h-9 w-32" />
+            <Skeleton className="h-9 w-52 max-w-full" />
           </div>
         )}
       </CardContent>
@@ -397,7 +399,7 @@ export function ReviewReceiptSkeleton() {
   return (
     <div className="mx-auto w-full max-w-4xl space-y-6">
       <BackRowSkeleton />
-      <PageHeaderSkeleton />
+      <RecordHeaderSkeleton indicator="status" />
       {[
         "summary",
         "prompt",
@@ -436,18 +438,27 @@ export function ReviewReceiptSkeleton() {
             ) : section === "deployments" || section === "skills" ? (
               <EmptyFrameSkeleton />
             ) : section === "results" ? (
-              <>
-                <div className="flex items-baseline gap-3 border-b pb-4">
-                  <Skeleton className="h-8 w-16" />
-                  <Skeleton className="h-4 w-48" />
-                </div>
-                <Skeleton className="h-12 w-full" />
-                <Skeleton className="h-12 w-full" />
-              </>
+              <Skeleton className="h-9 w-72 max-w-full" />
             ) : section === "activation" ? (
               <ApprovalPackageSkeleton />
             ) : section === "prompt" ? (
               <Skeleton className="h-40 w-full" />
+            ) : section === "criteria" ? (
+              <div className="divide-y border-y">
+                {[0, 1, 2].map((row) => (
+                  <div
+                    key={row}
+                    className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 py-4 sm:grid-cols-[minmax(0,1fr)_12rem_auto]"
+                  >
+                    <Skeleton className="h-5 w-4/5" />
+                    <div className="col-start-1 row-start-2 flex items-center gap-2 sm:col-start-2 sm:row-start-1">
+                      <Skeleton className="size-3.5 shrink-0" />
+                      <Skeleton className="h-4 w-28" />
+                    </div>
+                    <Skeleton className="col-start-2 row-start-1 size-4 sm:col-start-3" />
+                  </div>
+                ))}
+              </div>
             ) : (
               <>
                 <Skeleton className="h-5 w-full" />

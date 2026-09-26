@@ -1,5 +1,4 @@
 "use client"
-import { CardEmptyState } from "@workspace/ui/components/card-empty-state"
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import {
@@ -7,28 +6,37 @@ import {
   ClipboardCheckIcon,
   EllipsisIcon,
   BanIcon,
-  SparklesIcon,
+  PlayIcon,
 } from "lucide-react"
 import {
-  submissionLabels,
   type AgentView,
   type FormResult,
 } from "@agentonic/contracts/authoring"
 import {
-  criterionReviewed,
-  reviewFlowLabels,
+  batchRunning,
   type ReviewFlowState,
 } from "@agentonic/contracts/review-flow"
-import { AgentSettingsCard } from "@workspace/ui/components/agent-settings-card"
-import { ReviewCriteriaDialog } from "@workspace/ui/components/review-criteria-dialog"
+import type { LifecycleState } from "@agentonic/contracts/lifecycle"
 import {
-  Preparation,
-  PreparationForm,
-} from "@workspace/ui/components/review-flow-panel"
-import { ProposalReceipt } from "@workspace/ui/components/proposal-receipt"
+  proposalDescriptor,
+  proposalStatus,
+} from "@agentonic/contracts/proposals"
+import { preparedVersionLabel } from "@agentonic/contracts/workflow"
+import { AgentSettingsCard } from "@workspace/ui/components/agent-settings-card"
+import { CardEmptyState } from "@workspace/ui/components/card-empty-state"
+import { ReviewCriteriaDialog } from "@workspace/ui/components/review-criteria-dialog"
+import { PreparationForm } from "@workspace/ui/components/review-flow-panel"
+import { ProposalConfigurationSummary } from "@workspace/ui/components/proposal-configuration-summary"
+import { ProposalDialogHeader } from "@workspace/ui/components/proposal-dialog-header"
+import {
+  ModelResultsDialog,
+  RunModelEvaluationDialog,
+  modelResultsLabel,
+} from "@workspace/ui/components/model-evaluation-dialog"
 import {
   Dialog,
   DialogContent,
+  DialogHeader,
   DialogTitle,
   DialogDescription,
 } from "@workspace/ui/components/dialog"
@@ -49,7 +57,7 @@ import {
   DropdownMenuSeparator,
 } from "@workspace/ui/components/dropdown-menu"
 import { notify } from "@workspace/ui/lib/toast"
-import { SubmissionStatusBadge } from "@workspace/ui/components/status-badge"
+import { ProposalStatusBadge } from "@workspace/ui/components/status-badge"
 import { Button } from "@workspace/ui/components/button"
 import {
   Table,
@@ -61,15 +69,17 @@ import {
 } from "@workspace/ui/components/table"
 type ProposalProps = {
   agentName: string
+  approvals: LifecycleState["submissions"]
   candidates: AgentView["candidates"]
   submissions: AgentView["submissions"]
   state: ReviewFlowState
   action: (input: unknown) => Promise<FormResult>
   withdraw: (id: string) => Promise<FormResult>
 }
-function ProposalActions({
+function ProposalRow({
   submission,
   agentName,
+  approvals,
   candidates,
   state,
   action,
@@ -78,22 +88,41 @@ function ProposalActions({
   submission: AgentView["submissions"][number]
 }) {
   const router = useRouter()
-  const [view, setView] = useState<"review" | "cancel" | "withdraw" | null>(
-    null
-  )
+  const [view, setView] = useState<
+    | "details"
+    | "criteria"
+    | "results"
+    | "run"
+    | "prepare"
+    | "cancel"
+    | "withdraw"
+    | null
+  >(null)
   const [pending, setPending] = useState(false)
   const [error, setError] = useState("")
-  const records = state.preparations.filter(
+  const record = state.preparations.find(
     (p) => p.submissionId === submission.id
   )
-  const record = records[0]
-  const versionNumber = candidates.find(
-    (candidate) => candidate.id === submission.candidateId
-  )?.number
-  const canWithdraw = ["submitted", "in_review"].includes(submission.status)
-  const canPrepare = state.canPrepare && canWithdraw
-  async function run() {
-    if (pending) return
+  const candidate = candidates.find((c) => c.id === submission.candidateId)
+  const version = candidate
+    ? preparedVersionLabel(candidate)
+    : "Versión no disponible"
+  const descriptor = proposalDescriptor(
+    record?.versionNumber ?? candidate?.number ?? candidate?.revision,
+    record?.revision
+  )
+  const confirmed = record && record.confirmedRevision === record.revision
+  const running = batchRunning(record?.batches[0])
+  const approval = approvals.find((item) => item.id === submission.id)
+  const status = proposalStatus(submission.status, record, approval)
+  const recover =
+    state.canPrepare &&
+    ["submitted", "in_review"].includes(submission.status) &&
+    !running &&
+    (!record ||
+      (!record.criteria.length &&
+        ["error", "cancelled"].includes(record.status)))
+  async function revoke() {
     setPending(true)
     setError("")
     try {
@@ -119,111 +148,183 @@ function ProposalActions({
   }
   return (
     <>
-      <DropdownMenu>
-        <DropdownMenuTrigger
-          render={
+      <TableRow>
+        <TableCell>
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={`Acciones de ${version.toLowerCase()}`}
+                />
+              }
+            >
+              <EllipsisIcon />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              {recover && (
+                <DropdownMenuItem onClick={() => setView("prepare")}>
+                  <ClipboardCheckIcon />
+                  Preparar criterios
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuItem
+                disabled={!record?.canRun || running}
+                onClick={() => setView("run")}
+              >
+                <PlayIcon />
+                {running ? "Evaluación en curso" : "Evaluar modelos"}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={!record?.canCancel}
+                onClick={() => {
+                  setError("")
+                  setView("cancel")
+                }}
+              >
+                <BanIcon />
+                Cancelar autorización
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                variant="destructive"
+                disabled={
+                  !["submitted", "in_review"].includes(submission.status)
+                }
+                onClick={() => {
+                  setError("")
+                  setView("withdraw")
+                }}
+              >
+                <Trash2Icon />
+                Retirar propuesta
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </TableCell>
+        <TableCell className="font-medium">
+          <Button
+            variant="link"
+            size="sm"
+            className="h-auto p-0 no-underline hover:no-underline"
+            aria-label={`Ver detalle de ${descriptor.toLowerCase()}`}
+            onClick={() => setView("details")}
+          >
+            {descriptor}
+          </Button>
+        </TableCell>
+        <TableCell>
+          <ProposalStatusBadge status={status} />
+        </TableCell>
+        <TableCell className="whitespace-normal">
+          {record?.criteria.length ? (
             <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              aria-label={`Acciones de la propuesta ${submission.number}`}
-            />
-          }
-        >
-          <EllipsisIcon />
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" className="w-56">
-          <DropdownMenuItem onClick={() => setView("review")}>
-            <ClipboardCheckIcon />
-            Revisar versión
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            disabled={!record?.canCancel}
-            onClick={() => {
-              setError("")
-              setView("cancel")
-            }}
-          >
-            <BanIcon />
-            Cancelar autorización
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem
-            variant="destructive"
-            disabled={!canWithdraw}
-            onClick={() => {
-              setError("")
-              setView("withdraw")
-            }}
-          >
-            <Trash2Icon />
-            Retirar propuesta
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-      {view === "review" &&
-      record?.status === "criteria_ready" &&
-      record.canEdit &&
-      record.criteria.length > 0 ? (
+              variant={!confirmed && record.canEdit ? "default" : "link"}
+              size="sm"
+              className="h-auto whitespace-normal"
+              aria-label={`${!confirmed && record.canEdit ? "Confirmar" : "Ver"} criterios de ${version.toLowerCase()}`}
+              onClick={() => setView("criteria")}
+            >
+              {!confirmed && record.canEdit ? "Confirmar" : "Ver"}
+            </Button>
+          ) : (
+            <span className="text-sm text-muted-foreground">
+              {status === "in_progress" &&
+              record &&
+              ["queued", "preparing"].includes(record.status)
+                ? "Preparando…"
+                : "—"}
+            </span>
+          )}
+        </TableCell>
+        <TableCell>
+          {record?.batches.length ? (
+            <Button
+              variant="link"
+              className="h-auto whitespace-nowrap"
+              onClick={() => setView("results")}
+            >
+              {running ? "Ver progreso" : modelResultsLabel(record)}
+            </Button>
+          ) : record?.canRun && !running ? (
+            <Button
+              variant="link"
+              className="h-auto whitespace-nowrap"
+              aria-label={`Evaluar modelos de ${version.toLowerCase()}`}
+              onClick={() => setView("run")}
+            >
+              Evaluar
+            </Button>
+          ) : (
+            <span className="text-sm text-muted-foreground">—</span>
+          )}
+        </TableCell>
+      </TableRow>
+      <Dialog
+        open={view === "details"}
+        onOpenChange={(open) => {
+          if (!open) setView(null)
+        }}
+      >
+        <DialogContent className="max-w-2xl">
+          <ProposalDialogHeader
+            section="Propuesta"
+            agentName={agentName}
+            version={
+              record?.versionNumber ?? candidate?.number ?? candidate?.revision
+            }
+            revision={record?.revision}
+          />
+          <ProposalConfigurationSummary snapshot={candidate?.snapshot} />
+        </DialogContent>
+      </Dialog>
+      {record && view === "criteria" && (
         <ReviewCriteriaDialog
           record={record}
           action={action}
           initialOpen
           onClose={() => setView(null)}
         />
-      ) : (
-        <Dialog
-          open={view === "review"}
-          onOpenChange={(open) => {
-            if (!open) setView(null)
-          }}
-        >
-          <DialogContent className="max-w-4xl gap-6">
-            <div className="space-y-2">
-              <DialogTitle>
-                Revisión de la propuesta {submission.number}
-              </DialogTitle>
-              <DialogDescription>
-                Consulta el estado, los criterios y los resultados de esta
-                versión.
-              </DialogDescription>
-            </div>
-            <ProposalReceipt
-              submission={submission}
-              record={record}
-              agentName={agentName}
-              versionNumber={versionNumber}
-            />
-            {canPrepare && (
-              <AgentSettingsCard
-                title="Preparar la evaluación"
-                icon={<SparklesIcon />}
-                description="Autoriza la preparación de situaciones con IA para esta versión. Podrás revisarlas antes de ejecutar las pruebas."
-              >
-                <PreparationForm submissionId={submission.id} action={action} />
-              </AgentSettingsCard>
-            )}
-            {!record && !canPrepare && canWithdraw && (
-              <p className="text-sm text-muted-foreground">
-                La preparación estará disponible cuando el servicio de
-                evaluación esté habilitado para esta versión.
-              </p>
-            )}
-            {records.length > 1 && (
-              <details>
-                <summary className="cursor-pointer text-sm font-medium">
-                  Revisiones anteriores
-                </summary>
-                <div className="mt-4 space-y-6">
-                  {records.slice(1).map((p) => (
-                    <Preparation key={p.id} record={p} showCancel={false} />
-                  ))}
-                </div>
-              </details>
-            )}
-          </DialogContent>
-        </Dialog>
       )}
+      {record && view === "results" && (
+        <ModelResultsDialog
+          record={record}
+          open
+          onClose={() => setView(null)}
+        />
+      )}
+      {record && view === "run" && (
+        <RunModelEvaluationDialog
+          record={record}
+          action={action}
+          onClose={() => setView(null)}
+          onStarted={() => setView("results")}
+        />
+      )}
+      <Dialog
+        open={view === "prepare"}
+        onOpenChange={(open) => {
+          if (!open) setView(null)
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Preparar criterios · {version}</DialogTitle>
+            <DialogDescription>
+              Prepararemos situaciones con IA para que las revises y confirmes.
+            </DialogDescription>
+          </DialogHeader>
+          <PreparationForm
+            submissionId={submission.id}
+            action={async (input) => {
+              const result = await action(input)
+              if (result.ok) setView(null)
+              return result
+            }}
+          />
+        </DialogContent>
+      </Dialog>
       <AlertDialog
         open={view === "cancel" || view === "withdraw"}
         onOpenChange={(open) => {
@@ -235,12 +336,12 @@ function ProposalActions({
             <AlertDialogTitle>
               {view === "cancel"
                 ? "Cancelar autorización"
-                : `Retirar propuesta ${submission.number}`}
+                : `Retirar ${version.toLowerCase()} de revisión`}
             </AlertDialogTitle>
             <AlertDialogDescription>
               {view === "cancel"
-                ? "Se detendrá la evaluación autorizada y dejarán de estar disponibles sus criterios y resultados. El consumo realizado se conserva."
-                : "Se detendrá la revisión y se revocará el acceso del equipo. La versión y el historial se conservan; para reenviar, prepara otra versión."}
+                ? "Se detendrán las evaluaciones y dejarán de estar disponibles sus criterios y resultados. El consumo realizado se conserva."
+                : "Se detendrá la revisión y se revocará el acceso del equipo. La versión y el historial se conservan."}
             </AlertDialogDescription>
           </AlertDialogHeader>
           {error && (
@@ -251,10 +352,9 @@ function ProposalActions({
           <AlertDialogFooter>
             <AlertDialogCancel disabled={pending}>Volver</AlertDialogCancel>
             <Button
-              type="button"
               variant="destructive"
               disabled={pending}
-              onClick={() => void run()}
+              onClick={() => void revoke()}
             >
               {pending ? "Procesando…" : "Confirmar"}
             </Button>
@@ -264,37 +364,28 @@ function ProposalActions({
     </>
   )
 }
-export function AgentProposals({
-  agentName,
-  candidates,
-  submissions,
-  state,
-  action,
-  withdraw,
-}: ProposalProps) {
+export function AgentProposals(props: ProposalProps) {
   const router = useRouter()
-  const active = state.preparations.some((p) =>
-    ["queued", "preparing", "evaluating"].includes(p.status)
+  const active = props.state.preparations.some(
+    (p) =>
+      ["queued", "preparing"].includes(p.status) || batchRunning(p.batches[0])
   )
   useEffect(() => {
-    const timer = setInterval(() => router.refresh(), active ? 4000 : 15000)
+    const timer = setInterval(() => router.refresh(), active ? 3000 : 15000)
     return () => clearInterval(timer)
   }, [active, router])
   return (
     <AgentSettingsCard
       title="Propuestas"
-      description="Consulta tus envíos y revisa las situaciones antes de autorizar la evaluación."
+      icon={<ClipboardCheckIcon />}
+      description="Confirma los criterios y compara el desempeño de los modelos para cada versión."
     >
-      {!submissions.length ? (
+      {!props.submissions.length ? (
         <CardEmptyState title="Sin propuestas">
-          Prepara una versión y envíala a revisión para comenzar.
+          Envía una versión desde Configuración para iniciar su revisión.
         </CardEmptyState>
       ) : (
-        <Table
-          aria-label="Propuestas"
-          className="min-w-[700px] table-fixed"
-          containerClassName="border-t"
-        >
+        <Table aria-label="Propuestas" className="[&_td]:py-3">
           <TableHeader>
             <TableRow>
               <TableHead className="w-12">
@@ -302,85 +393,14 @@ export function AgentProposals({
               </TableHead>
               <TableHead>Propuesta</TableHead>
               <TableHead>Estado</TableHead>
-              <TableHead className="whitespace-normal">
-                Revisión de la versión
-              </TableHead>
-              <TableHead>Comentarios</TableHead>
+              <TableHead>Criterios</TableHead>
+              <TableHead>Resultados</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {submissions.map((s) => {
-              const record = state.preparations.find(
-                (p) => p.submissionId === s.id
-              )
-              const count =
-                record?.criteria.filter(criterionReviewed).length ?? 0
-              return (
-                <TableRow key={s.id}>
-                  <TableCell className="py-3 align-top">
-                    <ProposalActions
-                      submission={s}
-                      agentName={agentName}
-                      candidates={candidates}
-                      state={state}
-                      action={action}
-                      withdraw={withdraw}
-                    />
-                  </TableCell>
-                  <TableCell className="py-4 align-top font-medium">
-                    Propuesta {s.number}
-                  </TableCell>
-                  <TableCell className="py-4 align-top">
-                    <SubmissionStatusBadge status={s.status} />
-                  </TableCell>
-                  <TableCell className="py-4 align-top whitespace-normal">
-                    <div className="space-y-2">
-                      <span className="text-sm text-muted-foreground">
-                        {record
-                          ? record.status === "criteria_ready"
-                            ? `${count}/${record.criteria.length} revisadas`
-                            : reviewFlowLabels[record.status]
-                          : "Sin iniciar"}
-                      </span>
-                      {record?.status === "criteria_ready" && (
-                        <p className="text-xs text-muted-foreground">
-                          {count === record.criteria.length
-                            ? "Pendiente de confirmar"
-                            : "Revisión del cliente pendiente"}
-                        </p>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell className="space-y-3 py-4 align-top whitespace-normal">
-                    <div className="space-y-3 break-words">
-                      {s.note && (
-                        <p className="whitespace-pre-wrap">{s.note}</p>
-                      )}
-                      {s.decisions.map((d) => (
-                        <div
-                          key={d.number}
-                          className="space-y-1 border-l-2 pl-3"
-                        >
-                          <p className="font-medium">
-                            {submissionLabels[d.decision] ?? d.decision}
-                          </p>
-                          {d.feedback && (
-                            <p className="whitespace-pre-wrap text-muted-foreground">
-                              {d.feedback}
-                            </p>
-                          )}
-                        </div>
-                      ))}
-                      {!s.note && !s.decisions.length && (
-                        <span className="text-muted-foreground">
-                          Sin comentarios
-                        </span>
-                      )}
-                    </div>
-                  </TableCell>
-                </TableRow>
-              )
-            })}
+            {props.submissions.map((s) => (
+              <ProposalRow key={s.id} submission={s} {...props} />
+            ))}
           </TableBody>
         </Table>
       )}

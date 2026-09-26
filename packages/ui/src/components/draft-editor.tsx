@@ -198,7 +198,7 @@ export function DraftEditor({
             icon={<LibraryBigIcon />}
             description="Selecciona las colecciones de documentos que tu agente necesitará consultar."
             action={
-              <span className="text-sm text-muted-foreground">
+              <span className="text-sm text-muted-foreground tabular-nums">
                 {collectionIds.length} seleccionadas
               </span>
             }

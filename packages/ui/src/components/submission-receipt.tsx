@@ -1,3 +1,5 @@
+import { DomainStatus } from "@workspace/ui/components/status-badge"
+import { ApprovedModelResults } from "@workspace/ui/components/model-evaluation-dialog"
 import { approvalLabels } from "@agentonic/contracts/lifecycle"
 import {
   ClipboardCheckIcon,
@@ -40,6 +42,13 @@ export function SubmissionReceipt({
       <BackRow href={backHref} />
       <RecordHeader
         title={r.agentName}
+        actions={
+          <DomainStatus
+            domain="approval"
+            status={r.approval.valid ? "valid" : "invalid"}
+            appearance="badge"
+          />
+        }
         description={`Versión ${r.versionNumber} · Revisión ${r.number} · Comprobante de aprobación.`}
       />
       <AgentSettingsCard
@@ -123,6 +132,15 @@ export function SubmissionReceipt({
             El detalle de las respuestas ya no está disponible por los límites
             de autorización o conservación de la evidencia.
           </CardEmptyState>
+        ) : r.modelBatch ? (
+          <ApprovedModelResults
+            agentName={r.agentName}
+            batch={r.modelBatch}
+            versionNumber={r.versionNumber}
+            history={r.reviewBatches}
+            currentRevision={r.currentCriteriaRevision}
+            totalCommittedMicrousd={r.totalCommittedMicrousd}
+          />
         ) : (
           <>
             <EvaluationSummary

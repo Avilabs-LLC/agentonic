@@ -23,6 +23,7 @@ import { Checkbox } from "@base-ui/react/checkbox"
 import {
   Dialog,
   DialogContent,
+  DialogHeader,
   DialogTitle,
   DialogDescription,
 } from "@workspace/ui/components/dialog"
@@ -278,12 +279,14 @@ export function GmailConnection({
       </AgentSettingsCard>
       <Dialog open={connecting} onOpenChange={setConnecting}>
         <DialogContent>
-          <DialogTitle>Conectar Gmail</DialogTitle>
-          <DialogDescription>
-            Google te pedirá permiso para leer correos y administrar borradores.
-            Su permiso de borradores también permite enviar; Agentonic exigirá
-            una confirmación por cada cambio.
-          </DialogDescription>
+          <DialogHeader>
+            <DialogTitle>Conectar Gmail</DialogTitle>
+            <DialogDescription>
+              Google te pedirá permiso para leer correos y administrar
+              borradores. Su permiso de borradores también permite enviar;
+              Agentonic exigirá una confirmación por cada cambio.
+            </DialogDescription>
+          </DialogHeader>
           <p className="text-sm text-muted-foreground">
             Después elegirás las herramientas de este agente. Los adjuntos y la
             importación del buzón no están incluidos.
@@ -313,11 +316,13 @@ export function GmailConnection({
       </Dialog>
       <Dialog open={!!remove} onOpenChange={(open) => !open && setRemove(null)}>
         <DialogContent>
-          <DialogTitle>Desconectar Gmail</DialogTitle>
-          <DialogDescription>
-            El agente perderá acceso inmediatamente y las acciones pendientes se
-            cancelarán. Las versiones anteriores conservarán su historial.
-          </DialogDescription>
+          <DialogHeader>
+            <DialogTitle>Desconectar Gmail</DialogTitle>
+            <DialogDescription>
+              El agente perderá acceso inmediatamente y las acciones pendientes
+              se cancelarán. Las versiones anteriores conservarán su historial.
+            </DialogDescription>
+          </DialogHeader>
           <div className="flex justify-end gap-3">
             <Button
               type="button"

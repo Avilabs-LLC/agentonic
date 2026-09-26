@@ -23,7 +23,7 @@ try {
   assert.match(proof.runtimeSha256, /^[a-f0-9]{64}$/)
   assert.ok(Date.now() - Date.parse(proof.verifiedAt) < 3600000)
   assert.ok(
-    proof.verification.reviewProtocol === 2 &&
+    proof.verification.reviewProtocol === 3 &&
       proof.verification.isolation &&
       proof.verification.recovery &&
       proof.verification.artifactIntegrity
