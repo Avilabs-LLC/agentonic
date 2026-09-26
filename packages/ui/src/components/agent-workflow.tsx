@@ -37,12 +37,14 @@ import {
 } from "@workspace/ui/components/card"
 import { Field, FieldLabel, FieldError } from "@workspace/ui/components/field"
 import { Button } from "@workspace/ui/components/button"
+import { Input } from "@workspace/ui/components/input"
 import { Textarea } from "@workspace/ui/components/textarea"
 import { Badge } from "@workspace/ui/components/badge"
 import {
   Dialog,
   DialogTrigger,
   DialogContent,
+  DialogHeader,
   DialogTitle,
   DialogDescription,
 } from "@workspace/ui/components/dialog"
@@ -106,12 +108,13 @@ function VersionCards({
   pendingAction: "prepare" | "preview" | "submit" | null
 }) {
   const [reviewOpen, setReviewOpen] = useState(false)
+  const [submissionRequest] = useState(() => crypto.randomUUID())
   const { current } = reviewPreparation(
     base.draft,
     base.candidates,
     base.availableCodeIds[0] ?? null
   )
-  const candidate = current ?? base.candidates[0]
+  const candidate = base.candidates[0]
   const [expiredPreview, setExpiredPreview] = useState<string | null>(null)
   const hasActivePreview =
     !!candidate?.previewExpiresAt &&
@@ -137,7 +140,12 @@ function VersionCards({
   } = useForm<z.infer<typeof submissionForm>>({
     resolver: zodResolver(submissionForm),
     mode: "onChange",
-    defaultValues: { candidateId: current?.id ?? "", note: "", consent: false },
+    defaultValues: {
+      candidateId: current?.id ?? "",
+      note: "",
+      budgetUsd: 0.25,
+      consent: false,
+    },
   })
   const note = useWatch({ control, name: "note" })
   const consent = useWatch({ control, name: "consent" })
@@ -318,13 +326,15 @@ function VersionCards({
                       Enviar a revisión
                     </DialogTrigger>
                     <DialogContent showCloseButton={!locked}>
-                      <DialogTitle>
-                        Enviar {label.toLowerCase()} a revisión
-                      </DialogTitle>
-                      <DialogDescription>
-                        El equipo revisará esta versión exacta. Autoriza el
-                        acceso y añade una nota si lo necesitas.
-                      </DialogDescription>
+                      <DialogHeader>
+                        <DialogTitle>
+                          Enviar {label.toLowerCase()} a revisión
+                        </DialogTitle>
+                        <DialogDescription>
+                          Prepararemos los criterios con IA. Podrás revisarlos y
+                          confirmarlos antes de ejecutar las pruebas.
+                        </DialogDescription>
+                      </DialogHeader>
                       <form
                         noValidate
                         className="space-y-4"
@@ -335,6 +345,8 @@ function VersionCards({
                           form.set("revision", String(base.draft.revision))
                           form.set("note", values.note)
                           form.set("consent", "on")
+                          form.set("budgetUsd", String(values.budgetUsd))
+                          form.set("requestId", submissionRequest)
                           await run("submit", form)
                         })}
                       >
@@ -351,6 +363,26 @@ function VersionCards({
                           />
                           <FieldError errors={[errors.note]} />
                         </Field>
+                        <Field data-invalid={!!errors.budgetUsd}>
+                          <FieldLabel htmlFor="review-budget">
+                            Límite para preparar criterios (USD)
+                          </FieldLabel>
+                          <Input
+                            id="review-budget"
+                            type="number"
+                            min="0.05"
+                            max="1"
+                            step="0.01"
+                            className="max-w-48"
+                            disabled={locked}
+                            {...register("budgetUsd", { valueAsNumber: true })}
+                          />
+                          <FieldError errors={[errors.budgetUsd]} />
+                          <p className="text-xs text-muted-foreground">
+                            Cubre la preparación de criterios con IA.
+                            Autorizarás cada evaluación por separado.
+                          </p>
+                        </Field>
                         <Controller
                           control={control}
                           name="consent"
@@ -359,7 +391,15 @@ function VersionCards({
                               checked={field.value}
                               onCheckedChange={field.onChange}
                               disabled={locked || !clean}
-                            />
+                            >
+                              Autorizo durante 7 días la revisión de esta
+                              versión por el equipo y el uso de IA con sus
+                              instrucciones y conocimiento seleccionado, dentro
+                              de este límite. El equipo podrá consultar los
+                              criterios y resultados. Confirmaré los criterios
+                              antes de ejecutar las pruebas. Puedo retirar la
+                              propuesta para revocar el acceso.
+                            </ConsentCheckbox>
                           )}
                         />
                         {message && (

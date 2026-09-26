@@ -1,4 +1,5 @@
 "use client"
+import type { ComponentProps } from "react"
 import { Dialog as Primitive } from "@base-ui/react/dialog"
 import { XIcon } from "lucide-react"
 import { cn } from "@workspace/ui/lib/utils"
@@ -40,6 +41,15 @@ export function DialogContent({
         )}
       </Primitive.Popup>
     </Primitive.Portal>
+  )
+}
+export function DialogHeader({ className, ...props }: ComponentProps<"div">) {
+  return (
+    <div
+      data-slot="dialog-header"
+      className={cn("flex shrink-0 flex-col gap-2", className)}
+      {...props}
+    />
   )
 }
 export function DialogTitle({ className, ...props }: Primitive.Title.Props) {

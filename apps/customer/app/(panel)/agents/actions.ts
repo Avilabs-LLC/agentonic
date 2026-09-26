@@ -1,4 +1,5 @@
 "use server"
+import { submitAgentForReview } from "@agentonic/server/submission"
 import { runLifecycle } from "@agentonic/server/lifecycle"
 import { runReviewFlow } from "@agentonic/server/review-flow"
 import { runEvaluationCommand } from "@agentonic/server/evaluation"
@@ -8,11 +9,9 @@ import {
   openAgentPreview,
 } from "@agentonic/server/preparation"
 import { runAccessCommand, createCustomerAgent } from "@agentonic/server/access"
-import { runAuthoringCommand, loadAgent } from "@agentonic/server/authoring"
+import { runAuthoringCommand } from "@agentonic/server/authoring"
 import {
   systemPromptInput,
-  editableDraftContent,
-  requestedAccess,
   type FormResult,
 } from "@agentonic/contracts/authoring"
 const value = (data: FormData, key: string) => String(data.get(key) ?? "")
@@ -46,7 +45,11 @@ export async function saveDraft(
   if (!prompt.success)
     return { ok: false, message: prompt.error.issues[0]!.message }
   let tools: unknown
-  try { tools = JSON.parse(value(data, "tools") || "[]") } catch { return failed }
+  try {
+    tools = JSON.parse(value(data, "tools") || "[]")
+  } catch {
+    return failed
+  }
   const names = data.getAll("skillName")
   const instructions = data.getAll("skillInstructions")
   const r = await runAuthoringCommand("customer", {
@@ -109,44 +112,16 @@ export async function sendSubmission(
   agentId: string,
   data: FormData
 ): Promise<FormResult> {
-  const agent = await loadAgent(workspaceId, agentId)
-  if (
-    !agent ||
-    !editableDraftContent.safeParse(agent.draft.content).success ||
-    !requestedAccess.safeParse(agent.draft.requestedAccess).success
-  )
-    return failed
-  const candidate = agent.candidates.find(
-    (item) => item.id === value(data, "candidateId")
-  )
-  if (
-    !candidate?.canSubmit ||
-    candidate.revision !== agent.draft.revision ||
-    Number(value(data, "revision")) !== agent.draft.revision ||
-    agent.submissions.some((item) => item.candidateId === candidate.id)
-  )
-    return {
-      ok: false,
-      message:
-        "Guarda y congela la revisión actual; la versión seleccionada no está disponible para enviar.",
-    }
-  const r = await runAuthoringCommand("customer", {
-    workspaceId,
-    operation: "submission.send",
-    payload: {
-      candidateId: value(data, "candidateId"),
-      note: value(data, "note"),
-      consent: data.get("consent") === "on",
-    },
+  const result = await submitAgentForReview(workspaceId, agentId, {
+    candidateId: value(data, "candidateId"),
+    revision: Number(value(data, "revision")),
+    note: value(data, "note"),
+    consent: data.get("consent") === "on",
+    budgetUsd: Number(value(data, "budgetUsd")),
+    requestId: value(data, "requestId"),
   })
-  if (!r.ok)
-    return {
-      ok: false,
-      message:
-        "No se pudo enviar. Comprueba los permisos y que esta versión no se haya enviado antes.",
-    }
   revalidatePath(`/agents/${agentId}`)
-  return { ok: true, message: "Propuesta enviada para revisión." }
+  return result
 }
 export async function withdrawSubmission(
   workspaceId: string,

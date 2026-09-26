@@ -1,4 +1,9 @@
 import { z } from "zod"
+import { evaluationModels } from "./models"
+export const reviewFlowResult = z.discriminatedUnion("ok", [
+  z.object({ ok: z.literal(true), id: z.uuid() }),
+  z.object({ ok: z.literal(false), code: z.string().optional() }),
+])
 const text = (max: number) =>
   z.string().trim().max(max, `Usa como máximo ${max} caracteres.`)
 export const reviewCriterion = z
@@ -69,6 +74,21 @@ export const reviewFlowCommand = z.discriminatedUnion("operation", [
     .strict(),
   z
     .object({
+      operation: z.literal("run"),
+      payload: z
+        .object({
+          preparationId: z.uuid(),
+          revision: z.number().int().nonnegative(),
+          models: evaluationModels,
+          budgetUsd: z.number().min(0.05).max(50),
+          consent: z.literal(true),
+          requestId: z.uuid(),
+        })
+        .strict(),
+    })
+    .strict(),
+  z
+    .object({
       operation: z.literal("cancel"),
       payload: z.object({ preparationId: z.uuid() }).strict(),
     })
@@ -79,6 +99,73 @@ export const originalReviewCriterion = z.object({
   question: z.string(),
   expectedAnswer: z.string(),
 })
+export const reviewResults = z.array(
+  z.object({
+    key: z.string(),
+    question: z.string(),
+    expectedAnswer: z.string(),
+    kind: z.enum(["business", "platform"]),
+    outcome: z.string(),
+    answer: z.string(),
+    explanation: z.string(),
+    suggestion: z.string(),
+    sources: z.array(z.object({ id: z.uuid(), text: z.string() })),
+  })
+)
+export const modelEvaluation = z.object({
+  id: z.uuid(),
+  model: z.string(),
+  reasoning: z.string().nullable(),
+  status: z.string(),
+  total: z.number(),
+  completed: z.number(),
+  passed: z.number(),
+  committedMicrousd: z.number(),
+  grader: z.string().nullable(),
+  errorCode: z.string().nullable(),
+  results: reviewResults,
+})
+export const evaluationBatch = z.object({
+  id: z.uuid(),
+  revision: z.number(),
+  createdAt: z.string(),
+  budgetUsd: z.number(),
+  models: z.array(modelEvaluation),
+})
+export type EvaluationBatch = z.infer<typeof evaluationBatch>
+export function batchRunning(batch: EvaluationBatch | undefined) {
+  return !!batch?.models.some((m) =>
+    ["queued", "running", "awaiting_consent"].includes(m.status)
+  )
+}
+export function batchModelGroups(batch: EvaluationBatch) {
+  return [...new Set(batch.models.map((m) => m.model))].map((model) => {
+    const configurations = batch.models.filter((m) => m.model === model)
+    const passed = configurations.every(
+      (m) => m.status === "passed" && m.total > 0 && m.passed === m.total
+    )
+    return {
+      model,
+      configurations,
+      passed: configurations.reduce((sum, m) => sum + m.passed, 0),
+      total: configurations.reduce((sum, m) => sum + m.total, 0),
+      status: configurations.some((m) => m.status === "running")
+        ? "running"
+        : configurations.some((m) => m.status === "queued")
+          ? "queued"
+          : passed
+            ? "passed"
+            : configurations.some((m) =>
+                  ["error", "cancelled"].includes(m.status)
+                )
+              ? "error"
+              : "failed",
+    }
+  })
+}
+export function batchPassed(batch: EvaluationBatch) {
+  return batchModelGroups(batch).filter((m) => m.status === "passed").length
+}
 export const reviewPreparation = z.object({
   agentName: z.string().nullable().optional(),
   versionNumber: z.number().int().positive().nullable().optional(),
@@ -99,6 +186,9 @@ export const reviewPreparation = z.object({
     "expired",
   ]),
   revision: z.number(),
+  confirmedRevision: z.number().nullable().default(null),
+  canRun: z.boolean().nullable().default(false).transform(Boolean),
+  batches: z.array(evaluationBatch).default([]),
   criteria: z.array(reviewCriterion),
   budgetUsd: z.number(),
   committedMicrousd: z.number(),
@@ -109,19 +199,7 @@ export const reviewPreparation = z.object({
   canApprove: z.boolean(),
   evidenceHash: z.string().nullable(),
   summary: z.string(),
-  results: z.array(
-    z.object({
-      key: z.string(),
-      question: z.string(),
-      expectedAnswer: z.string(),
-      kind: z.enum(["business", "platform"]),
-      outcome: z.string(),
-      answer: z.string(),
-      explanation: z.string(),
-      suggestion: z.string(),
-      sources: z.array(z.object({ id: z.uuid(), text: z.string() })),
-    })
-  ),
+  results: reviewResults,
   sources: z.array(z.object({ id: z.uuid(), text: z.string() })),
 })
 export type ReviewCriterion = z.infer<typeof reviewCriterion>
@@ -151,8 +229,8 @@ export function criterionDecisionLabel(
 }
 export type ReviewFlowState = z.infer<typeof reviewFlowState>
 export const reviewFlowLabels: Record<ReviewPreparation["status"], string> = {
-  queued: "Preparando revisión",
-  preparing: "Preparando revisión",
+  queued: "Preparando criterios",
+  preparing: "Preparando criterios",
   criteria_ready: "Confirma qué debe hacer tu agente",
   evaluating: "Evaluando la versión",
   approved: "Versión aprobada",

@@ -94,14 +94,17 @@ export async function openAgentPreview(
       message:
         "El borrador cambió. Recarga la página antes de probar una versión.",
     }
-  if (!agent.candidates.some((c) => c.id === candidateId && c.canPreview))
+  if (
+    agent.candidates[0]?.id !== candidateId ||
+    !agent.candidates[0].canPreview
+  )
     return {
       ok: false,
       message: "Esta versión ya no está disponible para probar.",
     }
   const result = await runPreviewCommand(workspaceId, {
     operation: "start",
-    payload: { agentId, candidateId },
+    payload: { agentId, candidateId, enableTools: true },
   })
   const started = previewStartResult.safeParse(result)
   if (!started.success || !started.data.ok) {

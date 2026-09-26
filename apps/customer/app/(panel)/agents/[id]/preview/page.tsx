@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation"
+import { notFound, redirect } from "next/navigation"
 import { loadAgent } from "@agentonic/server/authoring"
 import { loadCandidatePreview } from "@agentonic/server/preview"
 import { preparedVersionLabel } from "@agentonic/contracts/workflow"
@@ -21,10 +21,10 @@ export default async function Page({
   const data = await loadAgent(selected.id, id)
   if (!data) notFound()
   const query = await searchParams
-  const candidate = query.candidate
-    ? data.candidates.find((c) => c.id === query.candidate && c.canPreview)
-    : data.candidates.find((c) => c.canPreview)
-  if (query.candidate && !candidate) notFound()
+  const latest = data.candidates[0]
+  const candidate = latest?.canPreview ? latest : undefined
+  if (query.candidate && query.candidate !== candidate?.id)
+    redirect(`/agents/${id}/preview?workspace=${selected.id}`)
   const initialState =
     candidate && query.preview
       ? await loadCandidatePreview(selected.id, id, candidate.id, query.preview)
@@ -34,24 +34,18 @@ export default async function Page({
       <BackRow href={`/agents/${id}?workspace=${selected.id}`} />
       <RecordHeader
         title={`Probar ${data.agent.name}`}
-        description="Conversa con una versión congelada. Los cambios del borrador no afectan esta prueba."
-        actions={
-          <span className="text-sm text-muted-foreground">Prueba privada</span>
+        description={
+          candidate
+            ? `${preparedVersionLabel(candidate)} · 10 minutos · Hasta 10 mensajes`
+            : "Prepara una versión para comenzar."
         }
       />
       <AgentPreview
         key={`${candidate?.id ?? "none"}:${initialState?.id ?? "none"}`}
         workspaceId={selected.id}
         agentId={id}
-        initialCandidateId={candidate?.id}
+        candidateId={candidate?.id}
         initialState={initialState}
-        candidates={data.candidates
-          .filter((c) => c.canPreview)
-          .map((c) => ({
-            id: c.id,
-            version: preparedVersionLabel(c),
-            hash: c.hash,
-          }))}
       />
     </div>
   )
