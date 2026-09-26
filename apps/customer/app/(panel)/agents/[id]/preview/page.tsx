@@ -1,3 +1,4 @@
+import { LockKeyholeIcon } from "lucide-react"
 import { notFound, redirect } from "next/navigation"
 import { loadAgent } from "@agentonic/server/authoring"
 import { loadCandidatePreview } from "@agentonic/server/preview"
@@ -34,6 +35,12 @@ export default async function Page({
       <BackRow href={`/agents/${id}?workspace=${selected.id}`} />
       <RecordHeader
         title={`Probar ${data.agent.name}`}
+        actions={
+          <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
+            <LockKeyholeIcon aria-hidden="true" className="size-4" />
+            Prueba privada
+          </span>
+        }
         description={
           candidate
             ? `${preparedVersionLabel(candidate)} · 10 minutos · Hasta 10 mensajes`

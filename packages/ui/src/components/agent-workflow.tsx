@@ -39,7 +39,6 @@ import { Field, FieldLabel, FieldError } from "@workspace/ui/components/field"
 import { Button } from "@workspace/ui/components/button"
 import { Input } from "@workspace/ui/components/input"
 import { Textarea } from "@workspace/ui/components/textarea"
-import { Badge } from "@workspace/ui/components/badge"
 import {
   Dialog,
   DialogTrigger,
@@ -191,7 +190,7 @@ function VersionCards({
           <div className="overflow-hidden rounded-lg border bg-muted/20">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b p-4">
               <div className="flex items-center gap-3">
-                <div className="flex size-10 shrink-0 items-center justify-center rounded-md border border-amber-200 bg-amber-100 text-amber-800 shadow-xs dark:border-amber-400/25 dark:bg-amber-400/15 dark:text-amber-300">
+                <div className="flex shrink-0 items-center text-muted-foreground">
                   <PackageIcon className="size-5" aria-hidden="true" />
                 </div>
                 <div className="space-y-0.5">
@@ -201,13 +200,13 @@ function VersionCards({
                   </p>
                 </div>
               </div>
-              <Badge variant={!clean ? "warning" : current ? "slate" : "sky"}>
+              <span className="text-sm text-muted-foreground">
                 {!clean
                   ? "Cambios sin guardar"
                   : current
                     ? "Sin cambios nuevos"
                     : "Por preparar"}
-              </Badge>
+              </span>
             </div>
             <p className="p-4 text-sm leading-relaxed text-muted-foreground">
               {!clean
@@ -250,7 +249,7 @@ function VersionCards({
               <div className="overflow-hidden rounded-lg border bg-muted/20">
                 <div className="flex flex-wrap items-center justify-between gap-3 border-b p-4">
                   <div className="flex items-center gap-3">
-                    <div className="flex size-10 shrink-0 items-center justify-center rounded-md border border-emerald-200 bg-emerald-100 text-emerald-800 shadow-xs dark:border-emerald-400/25 dark:bg-emerald-400/15 dark:text-emerald-300">
+                    <div className="flex shrink-0 items-center text-muted-foreground">
                       <PackageIcon className="size-5" aria-hidden="true" />
                     </div>
                     <div className="space-y-0.5">
@@ -260,21 +259,13 @@ function VersionCards({
                       </p>
                     </div>
                   </div>
-                  <Badge
-                    variant={
-                      submitted
-                        ? "violet"
-                        : candidate.canPreview
-                          ? "sky"
-                          : "slate"
-                    }
-                  >
+                  <span className="text-sm text-muted-foreground">
                     {submitted
                       ? "Enviada a revisión"
                       : candidate.canPreview
                         ? "Preparada"
                         : "Prueba no disponible"}
-                  </Badge>
+                  </span>
                 </div>
                 <div className="p-4">
                   {candidate.createdAt && (

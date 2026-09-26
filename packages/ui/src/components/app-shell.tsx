@@ -251,7 +251,8 @@ export function AppShell({
               )}
             </BreadcrumbList>
           </Breadcrumb>
-          <span className="ml-auto text-xs text-muted-foreground">
+          <span className="ml-auto inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+            <MonitorIcon aria-hidden="true" className="size-3.5" />
             Desarrollo
           </span>
         </header>

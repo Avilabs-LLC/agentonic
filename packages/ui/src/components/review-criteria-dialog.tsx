@@ -1,5 +1,5 @@
 "use client"
-import { ReviewResultStatus } from "@workspace/ui/components/review-result-status"
+import { CriterionStatus } from "@workspace/ui/components/status-badge"
 import { useId, useState } from "react"
 import { useRouter } from "next/navigation"
 import {
@@ -16,7 +16,6 @@ import {
 import {
   reviewCriteria,
   criterionReviewed,
-  criterionDecisionLabel,
   type ReviewCriterion,
   type ReviewPreparation,
 } from "@agentonic/contracts/review-flow"
@@ -290,18 +289,12 @@ export function ReviewCriteriaDialog({
                 <span className="text-sm font-medium">
                   Situación {index + 1} de {criteria.length}
                 </span>
-                <ReviewResultStatus
-                  outcome={
-                    current.reviewDecision === "not_applicable"
-                      ? "excluded"
-                      : criterionReviewed(current)
-                        ? "passed"
-                        : "pending"
+                <CriterionStatus
+                  criterion={current}
+                  confirmed={
+                    record.confirmedRevision === revision ||
+                    (!!record.evaluationId && !record.batches.length)
                   }
-                  label={criterionDecisionLabel(
-                    current,
-                    record.status !== "criteria_ready"
-                  )}
                 />
               </div>
               <div className="flex w-full flex-wrap items-center justify-between gap-2 sm:w-auto">

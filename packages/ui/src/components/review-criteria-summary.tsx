@@ -1,9 +1,8 @@
 "use client"
-import { ReviewResultStatus } from "@workspace/ui/components/review-result-status"
+import { CriterionStatus } from "@workspace/ui/components/status-badge"
 import { LoaderCircleIcon } from "lucide-react"
 import {
   criterionWasEdited,
-  criterionDecisionLabel,
   type ReviewCriterion,
   type ReviewPreparation,
 } from "@agentonic/contracts/review-flow"
@@ -94,16 +93,7 @@ export function ReviewCriteriaSummary({
                   </TableCell>
                   <TableCell>{c.notes.trim() ? "Sí" : "No"}</TableCell>
                   <TableCell>
-                    <ReviewResultStatus
-                      outcome={
-                        c.excluded
-                          ? "excluded"
-                          : c.reviewDecision === "approved"
-                            ? "passed"
-                            : "pending"
-                      }
-                      label={criterionDecisionLabel(c)}
-                    />
+                    <CriterionStatus criterion={c} confirmed={confirmed} />
                   </TableCell>
                 </TableRow>
               )

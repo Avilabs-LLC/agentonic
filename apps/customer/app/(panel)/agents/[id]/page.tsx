@@ -1,3 +1,4 @@
+import { ServerIcon } from "lucide-react"
 import { loadGmail } from "@agentonic/server/gmail"
 import { loadLifecycle } from "@agentonic/server/lifecycle"
 import { AgentLifecycle } from "@workspace/ui/components/agent-lifecycle"
@@ -52,7 +53,8 @@ export default async function Page({
           "Personaliza tu agente y prepara una propuesta."
         }
         actions={
-          <span className="text-sm text-muted-foreground">
+          <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
+            <ServerIcon aria-hidden="true" className="size-4" />
             {lifecycle.deployments.some((d) => d.online)
               ? "Activo en pruebas"
               : lifecycle.deployments.some((d) => d.status === "running")

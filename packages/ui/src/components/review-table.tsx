@@ -1,4 +1,6 @@
 "use client"
+import { approvalBadgeVariants } from "@workspace/ui/lib/badge-status"
+import { Badge } from "@workspace/ui/components/badge"
 
 import {
   approvalLabels,
@@ -41,8 +43,6 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
 } from "@workspace/ui/components/dropdown-menu"
-import { approvalBadgeVariants } from "@workspace/ui/lib/badge-status"
-import { Badge } from "@workspace/ui/components/badge"
 import { notify } from "@workspace/ui/lib/toast"
 import { RevokeApprovalDialog } from "@workspace/ui/components/revoke-approval-dialog"
 
@@ -158,7 +158,7 @@ export function ReviewTable({
             <DropdownMenuItem disabled>
               <UserRoundIcon />
               Ver usuario
-              <span className="ml-auto text-xs text-muted-foreground tabular-nums">
+              <span className="ml-auto text-xs text-muted-foreground">
                 Pronto
               </span>
             </DropdownMenuItem>
@@ -182,7 +182,7 @@ export function ReviewTable({
             <DropdownMenuItem disabled>
               <ArrowRightLeftIcon />
               Cambiar estado
-              <span className="ml-auto text-xs text-muted-foreground tabular-nums">
+              <span className="ml-auto text-xs text-muted-foreground">
                 Pronto
               </span>
             </DropdownMenuItem>
@@ -351,7 +351,7 @@ export function ReviewTable({
               .map((state) => (
                 <TabsTrigger key={state.value} value={state.value}>
                   {state.label}
-                  <span className="ml-auto text-xs text-muted-foreground tabular-nums">
+                  <span className="text-xs text-muted-foreground tabular-nums">
                     {
                       reviews.filter((review) => review.status === state.value)
                         .length

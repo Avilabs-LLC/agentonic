@@ -1,3 +1,4 @@
+import { DomainStatus } from "@workspace/ui/components/status-badge"
 import { ApprovedModelResults } from "@workspace/ui/components/model-evaluation-dialog"
 import { approvalLabels } from "@agentonic/contracts/lifecycle"
 import {
@@ -41,6 +42,13 @@ export function SubmissionReceipt({
       <BackRow href={backHref} />
       <RecordHeader
         title={r.agentName}
+        actions={
+          <DomainStatus
+            domain="approval"
+            status={r.approval.valid ? "valid" : "invalid"}
+            appearance="badge"
+          />
+        }
         description={`Versión ${r.versionNumber} · Revisión ${r.number} · Comprobante de aprobación.`}
       />
       <AgentSettingsCard
