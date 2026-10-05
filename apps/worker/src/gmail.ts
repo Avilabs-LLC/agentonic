@@ -110,10 +110,6 @@ export async function executeGmail(
     ...payload,
     id,
     hash: digest(JSON.stringify(call.arguments)),
-    argumentsCiphertext: seal(
-      call.arguments,
-      `invocation:${id}`,
-      config.keys
-    ),
+    argumentsCiphertext: seal(call.arguments, `invocation:${id}`, config.keys),
   })
 }

@@ -1,38 +1,56 @@
-// The database gateway: one process per staging host holds the database
-// connections for every agent copy on it. Copies hold no database password.
-// They send one of four fixed function calls over a local socket, each with
-// their own deployment secret, and the database checks every call exactly as
-// it did when copies connected directly. Connections therefore stay fixed
-// however many agents a host runs.
+// The host gateway: one process per staging host holds the database
+// connections and the provider keys for every agent copy on it. Copies hold
+// neither. They send one of four fixed database calls, or a provider call,
+// over a local socket, each with their own deployment secret. The database
+// checks every call exactly as it did when copies connected directly, and the
+// gateway makes provider calls with that copy's credentials (providers.ts).
+// Connections and keys therefore stay fixed however many agents a host runs.
 //
 // Protocol: one JSON object per line. A request is {id, call, args}; the reply
 // is {id, result} or {id, error} where error is a database or network code,
-// never message text. Requests and replies are never logged.
+// never message text. {cancel: id} stops a provider call the copy no longer
+// needs. Requests and replies are never logged.
 import { createConnection, createServer, type Socket } from "node:net"
 import { z } from "zod"
 
-/** The only calls a copy can make, with their number of arguments. */
-export const GATEWAY_CALLS = {
+/** The database calls a copy can make, with their number of arguments. */
+export const DATABASE_CALLS = {
   deployment_service: 4,
   staging_worker: 6,
   web_staging: 6,
   gmail_staging: 6,
 } as const
+/** Every call a copy can make: the database calls and provider calls (operation, deployment, secret, job, token, payload). */
+export const GATEWAY_CALLS = { ...DATABASE_CALLS, provider: 6 } as const
 export type GatewayCall = keyof typeof GATEWAY_CALLS
+export type DatabaseCall = keyof typeof DATABASE_CALLS
 export type GatewayArgs = (string | null)[]
-const statements = Object.fromEntries(
-  Object.entries(GATEWAY_CALLS).map(([call, count]) => [
+export const statements = Object.fromEntries(
+  Object.entries(DATABASE_CALLS).map(([call, count]) => [
     call,
     `SELECT agentonic.${call}(${Array.from({ length: count }, (_, i) => `$${i + 1}`).join(",")}) result`,
   ])
-) as Record<GatewayCall, string>
+) as Record<DatabaseCall, string>
+/** The database call that carries one job operation. */
+export const jobCall = (operation: string): DatabaseCall =>
+  operation.startsWith("web-")
+    ? "web_staging"
+    : operation.startsWith("gmail-")
+      ? "gmail_staging"
+      : "staging_worker"
 
 /** A request line longer than this closes the connection. */
 export const MAX_LINE = 4 * 1024 * 1024
-/** Calls one copy may have in flight; a copy makes at most three at once. */
+/** Database calls one copy may have in flight; a copy makes at most three at once. */
 export const PER_CONNECTION = 4
+/** Provider calls one copy may have in flight; a copy's turn makes one at a time. */
+export const PROVIDER_PER_CONNECTION = 2
+/** Provider calls in flight across the host before new ones are turned away as busy. */
+export const MAX_PROVIDER_CALLS = 64
 /** Calls waiting for a database connection before new ones are turned away as busy. */
 export const MAX_WAITING = 256
+/** A reply line longer than this closes the copy's connection. */
+export const MAX_REPLY = 16 * 1024 * 1024
 /** Codes the gateway itself returns: a malformed request, an unknown call, too many calls. */
 export const INVALID = "22023"
 export const REFUSED = "42501"
@@ -45,6 +63,7 @@ const request = z.object({
   call: z.string(),
   args: z.array(z.string().nullable()),
 })
+const cancel = z.object({ cancel: z.number().int().nonnegative() }).strict()
 const uuid = z.uuid()
 const secret = /^[a-f0-9]{64}$/
 const operation = /^[a-z][a-z-]{1,40}$/
@@ -53,7 +72,8 @@ const operation = /^[a-z][a-z-]{1,40}$/
 export function parseRequest(
   line: string
 ):
-  | { ok: true; id: number; text: string; values: GatewayArgs }
+  | { ok: true; id: number; call: GatewayCall; values: GatewayArgs }
+  | { ok: true; cancel: number }
   | { ok: false; id?: number; error: string } {
   let raw: unknown
   try {
@@ -61,6 +81,8 @@ export function parseRequest(
   } catch {
     return { ok: false, error: INVALID }
   }
+  const stop = cancel.safeParse(raw)
+  if (stop.success) return { ok: true, cancel: stop.data.cancel }
   const parsed = request.safeParse(raw)
   if (!parsed.success) {
     // Answer a readable id at once so the copy is not left waiting for a timeout.
@@ -80,7 +102,7 @@ export function parseRequest(
     !secret.test(args[2] ?? "")
   )
     return { ok: false, id, error: INVALID }
-  return { ok: true, id, text: statements[known], values: args }
+  return { ok: true, id, call: known, values: args }
 }
 
 /** The error code a copy receives: a database code or a network code, never text. */
@@ -107,45 +129,77 @@ export type GatewayReport = {
   failed(code: string): void
   succeeded(): void
 }
+/** Runs one provider call (its six arguments); a host without provider keys passes none. */
+export type GatewayProvider = (
+  args: GatewayArgs,
+  signal: AbortSignal
+) => Promise<unknown>
 
 /** Serves copies on a socket server; `waiting` reports calls queued for a database connection. */
 export function createGateway(
   query: GatewayQuery,
   report: GatewayReport,
-  waiting: () => number = () => 0
+  waiting: () => number = () => 0,
+  provider?: GatewayProvider
 ) {
   const sockets = new Set<Socket>()
+  let providerCalls = 0
   const server = createServer((socket) => {
     sockets.add(socket)
-    socket.once("close", () => sockets.delete(socket))
     socket.on("error", () => socket.destroy())
     let buffer = ""
     let inFlight = 0
+    // A provider call stops when its copy cancels it or goes away.
+    const running = new Map<number, AbortController>()
+    socket.once("close", () => {
+      sockets.delete(socket)
+      for (const controller of running.values()) controller.abort()
+    })
     const reply = (message: Record<string, unknown>) => {
       if (!socket.destroyed) socket.write(JSON.stringify(message) + "\n")
     }
+    const settle = (id: number, work: Promise<unknown>) =>
+      work.then(
+        (result) => {
+          report.succeeded()
+          reply({ id, result })
+        },
+        (error: unknown) => {
+          const code = codeOf(error)
+          if (code !== REFUSED) report.failed(code)
+          reply({ id, error: code })
+        }
+      )
     const handle = (line: string) => {
       const parsed = parseRequest(line)
       if (!parsed.ok)
         return reply({ id: parsed.id ?? null, error: parsed.error })
-      if (inFlight >= PER_CONNECTION || waiting() >= MAX_WAITING)
-        return reply({ id: parsed.id, error: BUSY })
-      inFlight++
-      query(parsed.text, parsed.values)
-        .then(
-          (result) => {
-            report.succeeded()
-            reply({ id: parsed.id, result })
-          },
-          (error: unknown) => {
-            const code = codeOf(error)
-            if (code !== REFUSED) report.failed(code)
-            reply({ id: parsed.id, error: code })
-          }
+      if ("cancel" in parsed) return running.get(parsed.cancel)?.abort()
+      const { id, call, values } = parsed
+      if (call === "provider") {
+        if (!provider) return reply({ id, error: REFUSED })
+        if (
+          running.size >= PROVIDER_PER_CONNECTION ||
+          providerCalls >= MAX_PROVIDER_CALLS ||
+          running.has(id) ||
+          waiting() >= MAX_WAITING
         )
-        .finally(() => {
-          inFlight--
+          return reply({ id, error: BUSY })
+        const controller = new AbortController()
+        running.set(id, controller)
+        providerCalls++
+        void settle(id, provider(values, controller.signal)).finally(() => {
+          running.delete(id)
+          providerCalls--
         })
+        return
+      }
+      if (inFlight >= PER_CONNECTION || waiting() >= MAX_WAITING)
+        return reply({ id, error: BUSY })
+      inFlight++
+      void settle(id, query(statements[call], values)).finally(() => {
+        inFlight--
+      })
     }
     socket.setEncoding("utf8")
     socket.on("data", (chunk: string) => {
@@ -187,15 +241,39 @@ export class GatewayClient {
     private readonly timeoutMs = 40_000
   ) {}
 
-  call(call: GatewayCall, args: GatewayArgs): Promise<unknown> {
+  /** A cancelled or timed-out provider call is also stopped at the gateway. */
+  call(
+    call: GatewayCall,
+    args: GatewayArgs,
+    options: { signal?: AbortSignal; timeoutMs?: number } = {}
+  ): Promise<unknown> {
     const socket = this.connect()
     const id = this.next++
+    const { signal, timeoutMs = this.timeoutMs } = options
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
-        this.pending.delete(id)
-        reject(failure("ETIMEDOUT"))
-      }, this.timeoutMs)
-      this.pending.set(id, { resolve, reject, timer })
+      const stop = (code: string) => {
+        if (!this.pending.delete(id)) return
+        clearTimeout(timer)
+        signal?.removeEventListener("abort", aborted)
+        if (call === "provider" && !socket.destroyed)
+          socket.write(JSON.stringify({ cancel: id }) + "\n")
+        reject(failure(code))
+      }
+      const aborted = () => stop("ECANCELED")
+      const timer = setTimeout(() => stop("ETIMEDOUT"), timeoutMs)
+      this.pending.set(id, {
+        resolve: (value) => {
+          signal?.removeEventListener("abort", aborted)
+          resolve(value)
+        },
+        reject: (error) => {
+          signal?.removeEventListener("abort", aborted)
+          reject(error)
+        },
+        timer,
+      })
+      if (signal?.aborted) return aborted()
+      signal?.addEventListener("abort", aborted, { once: true })
       socket.write(JSON.stringify({ id, call, args }) + "\n")
     })
   }
@@ -223,6 +301,10 @@ export class GatewayClient {
     socket.once("close", drop)
     socket.on("data", (chunk: string) => {
       this.buffer += chunk
+      if (this.buffer.length > MAX_REPLY) {
+        socket.destroy()
+        return
+      }
       let end: number
       while ((end = this.buffer.indexOf("\n")) >= 0) {
         const line = this.buffer.slice(0, end)

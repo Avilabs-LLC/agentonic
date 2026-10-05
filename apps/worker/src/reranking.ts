@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto"
 import { z } from "zod"
 import type { Execute, Lease } from "./pipeline"
+import type { Providers } from "./providers"
 
 export const RERANK_MODEL = "rerank-2.5-lite"
 export const RETRIEVAL_PROFILE =
@@ -160,18 +161,17 @@ export async function rerankJob(
   query: string,
   job: Lease,
   execute: Execute,
-  key: string,
+  providers: Pick<Providers, "rerank">,
   signal: AbortSignal
 ) {
   const context = z
     .object({ passages: passagesSchema })
     .parse(await execute("rerank-context", job))
-  const selected = await rerank(
+  const selected = await providers.rerank(
     query,
     context.passages,
     job,
     execute,
-    key,
     signal
   )
   await execute("select-matches", job, { ids: selected.map((p) => p.id) })

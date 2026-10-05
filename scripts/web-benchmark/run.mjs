@@ -14,6 +14,7 @@ mkdirSync(".local/web", { recursive: true })
 import { randomUUID } from "node:crypto"
 import { loadLocal, connect, bootstrapConfig } from "../local-config.mjs"
 import { runPreview } from "../../apps/worker/src/runtime.ts"
+import { directProviders } from "../../apps/worker/src/providers.ts"
 const env = loadLocal(".env.database.local"),
   worker = loadLocal("apps/worker/.env.local")
 let db, customer, broker, agentId, previewId, job
@@ -196,10 +197,11 @@ try {
         manifest: release.execution_manifest,
       },
       process.cwd() + "/.local/runtime",
-      worker.OPENAI_API_KEY,
-      new globalThis.AbortController().signal,
-      undefined,
-      "synthetic-provider"
+      directProviders({
+        openaiKey: worker.OPENAI_API_KEY,
+        browserbaseKey: "synthetic-provider",
+      }),
+      new globalThis.AbortController().signal
     )
     const state = await command(
       "state",

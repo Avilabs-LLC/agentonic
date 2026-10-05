@@ -1,5 +1,6 @@
 import { afterEach, expect, it, vi } from "vitest"
 import { chunkPages } from "../apps/worker/src/chunking"
+import { directProviders } from "../apps/worker/src/providers"
 import {
   embed,
   processJob,
@@ -109,7 +110,7 @@ it("storage failure leaves purge records available for retry", async () => {
       {
         supabaseUrl: "https://example.supabase.co",
         storageKey: "sb_secret_fixture",
-        voyageKey: "",
+        providers: directProviders({}),
       },
       signal
     )
@@ -129,7 +130,7 @@ it("successful blob removal precedes database hard purge", async () => {
     {
       supabaseUrl: "https://example.supabase.co",
       storageKey: "sb_secret_fixture",
-      voyageKey: "",
+      providers: directProviders({}),
     },
     signal
   )
@@ -220,7 +221,7 @@ it("runs opt-in candidate search and reranking before publishing retrieval", asy
     {
       supabaseUrl: "",
       storageKey: "",
-      voyageKey: "fixture",
+      providers: directProviders({ voyageKey: "fixture" }),
       rerankEnabled: true,
     },
     signal

@@ -27,11 +27,12 @@ import {
   stagingReleases,
   stagingUnits,
 } from "./staging-units.mjs"
-// Installs the private staging deployment controller, the host's database gateway and
-// an agent service template for the packaged broker. Brokers install side by side:
-// running deployments keep their copies, and the new controller moves them to this
-// broker one at a time without interrupting a turn. Agent copies started from this
-// broker reach the database only through the gateway and hold no database password.
+// Installs the private staging deployment controller, the host's gateway and an agent
+// service template for the packaged broker. Brokers install side by side: running
+// deployments keep their copies, and the new controller moves them to this broker one
+// at a time without interrupting a turn. Agent copies started from this broker reach
+// the database and every provider only through the gateway: they hold no database
+// password, provider key or Gmail key, and run without network access.
 // Existing evaluators, Corby services, public ports and provider budgets are untouched.
 const azure = process.argv.includes("--azure"),
   local = process.argv.includes("--local")
@@ -81,13 +82,37 @@ const caPath = azure
   : credentials.AGENTONIC_DATABASE_CA_FILE
 const suffix = azure ? "AZURE" : "LOCAL"
 const socketPath = azure ? gatewaySocket : join(workspace, "gateway.sock")
-// Every agent copy's configuration starts from broker.env: provider keys, never the database.
+// Every agent copy's configuration starts from broker.env: no password and no key.
 const broker = {
   AGENTONIC_GATEWAY_SOCKET: socketPath,
   AGENTONIC_RUNTIME_ROOT: runtimeRoot,
   AGENTONIC_INSTANCE_ROOT: instanceRoot,
   AGENTONIC_BROKER_SHA256: packaged.brokerHash,
+  AGENTONIC_RERANK_ENABLED:
+    keys.AGENTONIC_RERANK_ENABLED === "true" ? "true" : "false",
+}
+const manager = {
+  DATABASE_URL: credentials[`AGENTONIC_DEPLOYER_${suffix}_DATABASE_URL`],
+  AGENTONIC_DATABASE_CA_FILE: caPath,
+  AGENTONIC_RUNTIME_ROOT: runtimeRoot,
+  AGENTONIC_INSTANCE_ROOT: instanceRoot,
+  AGENTONIC_BROKER_SHA256: packaged.brokerHash,
+  AGENTONIC_SERVICE_CONFIG_ROOT: serviceRoot,
+  AGENTONIC_BROKER_CONFIG: join(configRoot, "broker.env"),
+}
+// The gateway holds the runtime role's connections and the provider keys for every
+// copy on the host. Optional providers are left out when not configured.
+const gateway = {
+  DATABASE_URL: credentials[`AGENTONIC_RUNTIME_${suffix}_DATABASE_URL`],
+  AGENTONIC_DATABASE_CA_FILE: caPath,
+  AGENTONIC_BROKER_SHA256: packaged.brokerHash,
+  AGENTONIC_GATEWAY_CONNECTIONS: "5",
+  // On Azure systemd hands the gateway its socket; locally it binds this private path.
+  ...(local ? { AGENTONIC_GATEWAY_SOCKET: socketPath } : {}),
   OPENAI_API_KEY: keys.OPENAI_API_KEY,
+  VOYAGE_API_KEY: keys.VOYAGE_API_KEY,
+}
+const optional = {
   ...(credentials.BROWSERBASE_API_KEY
     ? { BROWSERBASE_API_KEY: credentials.BROWSERBASE_API_KEY }
     : {}),
@@ -105,30 +130,10 @@ const broker = {
           : {}),
       }
     : {}),
-  VOYAGE_API_KEY: keys.VOYAGE_API_KEY,
-  AGENTONIC_RERANK_ENABLED:
-    keys.AGENTONIC_RERANK_ENABLED === "true" ? "true" : "false",
-}
-const manager = {
-  DATABASE_URL: credentials[`AGENTONIC_DEPLOYER_${suffix}_DATABASE_URL`],
-  AGENTONIC_DATABASE_CA_FILE: caPath,
-  AGENTONIC_RUNTIME_ROOT: runtimeRoot,
-  AGENTONIC_INSTANCE_ROOT: instanceRoot,
-  AGENTONIC_BROKER_SHA256: packaged.brokerHash,
-  AGENTONIC_SERVICE_CONFIG_ROOT: serviceRoot,
-  AGENTONIC_BROKER_CONFIG: join(configRoot, "broker.env"),
-}
-// The gateway holds the runtime role's connections for every copy on the host.
-const gateway = {
-  DATABASE_URL: credentials[`AGENTONIC_RUNTIME_${suffix}_DATABASE_URL`],
-  AGENTONIC_DATABASE_CA_FILE: caPath,
-  AGENTONIC_BROKER_SHA256: packaged.brokerHash,
-  AGENTONIC_GATEWAY_CONNECTIONS: "5",
-  // On Azure systemd hands the gateway its socket; locally it binds this private path.
-  ...(local ? { AGENTONIC_GATEWAY_SOCKET: socketPath } : {}),
 }
 for (const value of Object.values({ ...broker, ...manager, ...gateway }))
   assert.ok(value, "Complete staging configuration required")
+Object.assign(gateway, optional)
 const staging = join(workspace, azure ? "azure-install" : "local-install")
 mkdirSync(staging, { recursive: true, mode: 0o700 })
 writeLocal(join(staging, "broker.env"), broker)

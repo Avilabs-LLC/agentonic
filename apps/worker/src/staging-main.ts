@@ -42,10 +42,19 @@ import {
   type ControllerSystem,
   type Deployment,
 } from "./staging-controller"
-import { GatewayClient, createGateway, type GatewayCall } from "./gateway"
-import { connectionKeys } from "@agentonic/connectors/secrets"
+import { GatewayClient, createGateway, jobCall } from "./gateway"
+import {
+  directProviders,
+  gatewayCapabilities,
+  gatewayProviders,
+  gatewaySend,
+  providerGateway,
+  providerKeys,
+  type Providers,
+} from "./providers"
 // One program, three services: the host's deployment controller (--manager),
-// its database gateway (--gateway) and one agent copy per deployment.
+// its gateway (--gateway: database connections and provider keys) and one agent
+// copy per deployment, which holds neither.
 const manager = process.argv.includes("--manager")
 const gateway = process.argv.includes("--gateway")
 const self = fileURLToPath(import.meta.url)
@@ -80,7 +89,7 @@ function configure() {
       runtimeRoot = env.AGENTONIC_RUNTIME_ROOT ?? ""
     if (!gateway && (!root || !runtimeRoot))
       throw new Error("configuration_invalid")
-    // Agent copies reach the database only through the host's gateway.
+    // Agent copies reach the database and providers only through the host's gateway.
     if (!manager && !gateway) {
       const socket = env.AGENTONIC_GATEWAY_SOCKET ?? ""
       if (!socketPath(socket)) throw new Error("configuration_invalid")
@@ -465,13 +474,8 @@ async function serviceLoop() {
       code?: string
       draining?: boolean
     }
-  const execute: Execute = async (operation, job, payload = {}) => {
-    const call: GatewayCall = operation.startsWith("web-")
-      ? "web_staging"
-      : operation.startsWith("gmail-")
-        ? "gmail_staging"
-        : "staging_worker"
-    return (await calls.call(call, [
+  const execute: Execute = async (operation, job, payload = {}) =>
+    (await calls.call(jobCall(operation), [
       operation,
       id,
       secret,
@@ -479,13 +483,17 @@ async function serviceLoop() {
       job.token,
       JSON.stringify(payload),
     ])) as Record<string, unknown>
-  }
+  // Provider calls run at the gateway, which holds the keys and uses this copy's credentials.
+  const send = gatewaySend(calls, id, secret)
   // A refused secret never becomes valid again and an unavailable deployment is
   // the controller's to handle: both end this copy cleanly. Outages are waited out.
+  let providers: Providers | undefined
   while (!stopping) {
     try {
+      const available = await gatewayCapabilities(send)
       const ready = await service("ready")
       if (!ready.ok) return life.stopped(ready.code ?? "unavailable")
+      providers = gatewayProviders(send, available)
       life.recovered()
       break
     } catch (error) {
@@ -493,6 +501,7 @@ async function serviceLoop() {
       await pause(life.waiting(reasonOf(error)))
     }
   }
+  if (!providers) return life.stopped("stop_requested")
   life.started()
   // Claims run every two seconds, reports every ten. An idle copy rests: the
   // controller starts it again when a turn waits for it.
@@ -558,23 +567,8 @@ async function serviceLoop() {
           supabaseUrl: "",
           storageKey: "",
           runtimeRoot,
-          voyageKey: env.VOYAGE_API_KEY ?? "",
           rerankEnabled: env.AGENTONIC_RERANK_ENABLED === "true",
-          openaiKey: env.OPENAI_API_KEY ?? "",
-          browserbaseKey: env.BROWSERBASE_API_KEY,
-          google:
-            env.AGENTONIC_CONNECTION_KEY &&
-            env.GOOGLE_CLIENT_ID &&
-            env.GOOGLE_CLIENT_SECRET
-              ? {
-                  clientId: env.GOOGLE_CLIENT_ID,
-                  clientSecret: env.GOOGLE_CLIENT_SECRET,
-                  keys: connectionKeys(env),
-                  redirectUri:
-                    env.GOOGLE_REDIRECT_URI ??
-                    "http://localhost:3101/api/connections/google/callback",
-                }
-              : undefined,
+          providers,
         },
         controller.signal
       )
@@ -598,8 +592,13 @@ async function gatewayLoop() {
     connections,
   })
   const db = database()
+  // The host's provider keys stay in this process. Each provider call runs with
+  // the calling copy's own deployment credentials (providers.ts).
+  const query = async (text: string, values: unknown[]) =>
+    (await db.query(text, values)).rows[0]?.result
+  const provider = providerGateway(directProviders(providerKeys(env)), query)
   const server = createGateway(
-    async (text, values) => (await db.query(text, values)).rows[0]?.result,
+    query,
     {
       // Only the database being unreachable or busy is the gateway's state; a
       // refused or malformed call is the calling copy's own outcome.
@@ -610,7 +609,8 @@ async function gatewayLoop() {
       },
       succeeded: () => life.recovered(),
     },
-    () => db.waitingCount
+    () => db.waitingCount,
+    provider
   )
   // systemd passes the listening socket (socket activation); local runs bind a private path.
   const activated =

@@ -1,6 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest"
 import { answer } from "../apps/worker/src/answer"
 import type { Execute, Lease } from "../apps/worker/src/pipeline"
+import { directProviders } from "../apps/worker/src/providers"
 const id = "10000000-0000-4000-8000-000000000001"
 const job: Lease = { id, token: id, kind: "retrieve" },
   signal = new AbortController().signal
@@ -23,7 +24,7 @@ it("does not call a model without evidence", async () => {
   execute.mockResolvedValue({ query: "Warranty?", passages: [] })
   const fetch = vi.fn()
   vi.stubGlobal("fetch", fetch)
-  await answer(job, execute, "", signal)
+  await answer(job, execute, directProviders({ openaiKey: "" }), signal)
   expect(fetch).not.toHaveBeenCalled()
   expect(execute.mock.calls.at(-1)?.[2]).toMatchObject({
     insufficientEvidence: true,
@@ -32,31 +33,29 @@ it("does not call a model without evidence", async () => {
 })
 it("reserves before generation, disables stored responses and publishes validated citations", async () => {
   context()
-  const fetch = vi
-    .fn()
-    .mockResolvedValue(
-      Response.json({
-        status: "completed",
-        usage: { input_tokens: 40, output_tokens: 20 },
-        output: [
-          {
-            type: "message",
-            content: [
-              {
-                type: "output_text",
-                text: JSON.stringify({
-                  text: "Three years.",
-                  citations: [id],
-                  insufficientEvidence: false,
-                }),
-              },
-            ],
-          },
-        ],
-      })
-    )
+  const fetch = vi.fn().mockResolvedValue(
+    Response.json({
+      status: "completed",
+      usage: { input_tokens: 40, output_tokens: 20 },
+      output: [
+        {
+          type: "message",
+          content: [
+            {
+              type: "output_text",
+              text: JSON.stringify({
+                text: "Three years.",
+                citations: [id],
+                insufficientEvidence: false,
+              }),
+            },
+          ],
+        },
+      ],
+    })
+  )
   vi.stubGlobal("fetch", fetch)
-  await answer(job, execute, "fixture", signal)
+  await answer(job, execute, directProviders({ openaiKey: "fixture" }), signal)
   expect(JSON.parse(fetch.mock.calls[0]![1].body)).toMatchObject({
     store: false,
     max_output_tokens: 1000,
@@ -74,33 +73,31 @@ it("cannot fabricate a citation to unpublished knowledge", async () => {
   context()
   vi.stubGlobal(
     "fetch",
-    vi
-      .fn()
-      .mockResolvedValue(
-        Response.json({
-          status: "completed",
-          usage: { input_tokens: 40, output_tokens: 20 },
-          output: [
-            {
-              type: "message",
-              content: [
-                {
-                  type: "output_text",
-                  text: JSON.stringify({
-                    text: "Three years.",
-                    citations: ["20000000-0000-4000-8000-000000000001"],
-                    insufficientEvidence: false,
-                  }),
-                },
-              ],
-            },
-          ],
-        })
-      )
+    vi.fn().mockResolvedValue(
+      Response.json({
+        status: "completed",
+        usage: { input_tokens: 40, output_tokens: 20 },
+        output: [
+          {
+            type: "message",
+            content: [
+              {
+                type: "output_text",
+                text: JSON.stringify({
+                  text: "Three years.",
+                  citations: ["20000000-0000-4000-8000-000000000001"],
+                  insufficientEvidence: false,
+                }),
+              },
+            ],
+          },
+        ],
+      })
+    )
   )
-  await expect(answer(job, execute, "fixture", signal)).rejects.toThrow(
-    "provider_unavailable"
-  )
+  await expect(
+    answer(job, execute, directProviders({ openaiKey: "fixture" }), signal)
+  ).rejects.toThrow("provider_unavailable")
   expect(execute.mock.calls.some((c) => c[0] === "answer")).toBe(false)
 })
 it("does not call OpenAI if the reservation exceeds its budget", async () => {
@@ -111,8 +108,8 @@ it("does not call OpenAI if the reservation exceeds its budget", async () => {
   )
   const fetch = vi.fn()
   vi.stubGlobal("fetch", fetch)
-  await expect(answer(job, execute, "fixture", signal)).rejects.toThrow(
-    "budget_exhausted"
-  )
+  await expect(
+    answer(job, execute, directProviders({ openaiKey: "fixture" }), signal)
+  ).rejects.toThrow("budget_exhausted")
   expect(fetch).not.toHaveBeenCalled()
 })

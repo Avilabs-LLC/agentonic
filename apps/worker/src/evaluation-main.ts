@@ -4,6 +4,7 @@ import { setTimeout as delay } from "node:timers/promises"
 import pg from "pg"
 import { prepareCriteria, gradeAnswer } from "./review-ai"
 import { processJob, type Execute, type Lease } from "./pipeline"
+import { directProviders } from "./providers"
 import { FAST, ServiceState, categorize, reasonOf } from "./service-state"
 const life = new ServiceState("evaluator")
 // A configuration problem cannot fix itself: report it and exit so systemd's
@@ -79,13 +80,16 @@ for (const signal of ["SIGINT", "SIGTERM"] as const)
 /** Waits, but returns at once when the service is asked to stop. */
 const pause = (ms: number) =>
   delay(ms, undefined, { signal: halt.signal }).catch(() => {})
+const openaiKey = env.OPENAI_API_KEY ?? ""
 const config = {
   allowTools: false,
   supabaseUrl: "",
   storageKey: "",
-  voyageKey: env.VOYAGE_API_KEY ?? "",
+  providers: directProviders({
+    openaiKey,
+    voyageKey: env.VOYAGE_API_KEY ?? "",
+  }),
   rerankEnabled: env.AGENTONIC_RERANK_ENABLED === "true",
-  openaiKey: env.OPENAI_API_KEY ?? "",
   runtimeRoot,
 }
 async function run() {
@@ -131,7 +135,7 @@ async function run() {
               context,
               job,
               broker,
-              config.openaiKey,
+              openaiKey,
               controller.signal
             )
             await broker("prepared", job, criteria)
@@ -159,7 +163,7 @@ async function run() {
                   { context, answer },
                   job,
                   execute,
-                  config.openaiKey,
+                  openaiKey,
                   controller.signal
                 )
                 await execute("answer", job, { ...answer, assessment })

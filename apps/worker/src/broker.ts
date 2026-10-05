@@ -1,13 +1,9 @@
-import { randomUUID } from "node:crypto"
 import { fork } from "node:child_process"
 import { z } from "zod"
 import { gmailArguments, gmailReads } from "@agentonic/contracts/gmail"
 import type { gmailGrant } from "@agentonic/contracts/gmail"
 import { webArguments, type WebOperation } from "@agentonic/contracts/web"
-import {
-  DEFAULT_PREVIEW_MODEL,
-  type PreviewModel,
-} from "@agentonic/contracts/preview-models"
+import type { PreviewModel } from "@agentonic/contracts/preview-models"
 import {
   runtimeMessage,
   toolName,
@@ -20,16 +16,10 @@ import {
   type TurnAnswer,
   type TurnSpec,
 } from "@agentonic/contracts/runtime-protocol"
-import { GoogleError, type GoogleConfig } from "@agentonic/connectors/google"
-import { executeGmail } from "./gmail"
-import { executeWeb } from "./web"
+import { GoogleError } from "@agentonic/connectors/google"
 import { PreviewFailure } from "./failure"
-import {
-  previewCost,
-  previewModelProfile,
-  previewReservation,
-} from "./preview-models"
 import type { Execute, Lease } from "./pipeline"
+import type { Providers } from "./providers"
 
 // Fixed outcomes the broker records itself: they describe platform state
 // (spend limits, pending confirmations), so no runtime can reword them.
@@ -41,11 +31,14 @@ export const PROPOSAL_ANSWER =
 type Options = {
   job: Lease
   execute: Execute
-  key: string
+  /** Every paid or credentialed call; an agent copy's go through its gateway. */
+  providers: Providers
   signal: AbortSignal
   turn: TurnSpec
-  gmail?: { grant: z.infer<typeof gmailGrant>; config: GoogleConfig }
-  webKey?: string
+  /** The live Gmail grant offered this turn, if any. */
+  gmail?: z.infer<typeof gmailGrant>
+  /** Public web tools are offered this turn. */
+  web: boolean
   passageIds: string[]
 }
 export type Operation =
@@ -110,14 +103,14 @@ export class TurnBroker {
 
   private operation(name: string): Operation | undefined {
     const gmail = this.o.turn.tools.gmail.find((op) => toolName(op) === name)
-    if (gmail && this.o.gmail?.grant.operations.includes(gmail))
+    if (gmail && this.o.gmail?.operations.includes(gmail))
       return { kind: "gmail", operation: gmail }
     const web = this.o.turn.tools.web
       ? (Object.keys(webArguments) as WebOperation[]).find(
           (op) => toolName(op) === name
         )
       : undefined
-    return web && this.o.webKey ? { kind: "web", operation: web } : undefined
+    return web && this.o.web ? { kind: "web", operation: web } : undefined
   }
 
   private async model(request: ModelRequest): Promise<BrokerReply | undefined> {
@@ -154,38 +147,25 @@ export class TurnBroker {
       if (!this.calls.has(entry.call_id)) throw mismatch()
       return entry
     })
-    const model = turn.model as PreviewModel
-    const profile = previewModelProfile(model, turn.reasoning)
-    const body = JSON.stringify({
-      model,
-      store: false,
-      input,
-      text: { format: request.format },
-      ...(model === DEFAULT_PREVIEW_MODEL
-        ? { temperature: 0, max_output_tokens: 1000 }
-        : {
-            reasoning: { effort: turn.reasoning },
-            max_output_tokens: profile.maxOutput,
-            include: ["reasoning.encrypted_content"],
-          }),
-      ...(tools.length
-        ? {
-            tools,
-            parallel_tool_calls: false,
-            tool_choice: request.toolChoice,
-          }
-        : {}),
-    })
-    if (Buffer.byteLength(body) > turnCeilings.requestBytes) throw mismatch()
-    const id = randomUUID()
-    const reserved = await execute("reserve", job, {
-      id,
-      provider: "openai",
-      model,
-      microusd: previewReservation(model, body, turn.reasoning),
-    })
-    if (!reserved.ok) {
-      if (!this.o.webKey) throw new Error("budget_exhausted")
+    const outcome = await this.o.providers.respond(
+      {
+        model: turn.model as PreviewModel,
+        reasoning: turn.reasoning,
+        input,
+        format: request.format,
+        tools,
+        toolChoice: request.toolChoice,
+        timeoutMs: Math.min(
+          request.timeoutMs ?? turnCeilings.modelTimeoutMs,
+          turnCeilings.modelTimeoutMs
+        ),
+      },
+      job,
+      execute,
+      signal
+    )
+    if (outcome.kind === "budget") {
+      if (!this.o.web) throw new Error("budget_exhausted")
       await execute("web-check", job)
       await this.finish({
         text: BUDGET_STOP_ANSWER,
@@ -194,28 +174,7 @@ export class TurnBroker {
       })
       return undefined
     }
-    await execute("heartbeat", job)
-    let response: Response
-    try {
-      response = await fetch("https://api.openai.com/v1/responses", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${this.o.key}`,
-          "Content-Type": "application/json",
-        },
-        body,
-        signal: AbortSignal.any([
-          signal,
-          AbortSignal.timeout(
-            Math.min(
-              request.timeoutMs ?? turnCeilings.modelTimeoutMs,
-              turnCeilings.modelTimeoutMs
-            )
-          ),
-        ]),
-      })
-    } catch {
-      if (signal.aborted) throw new Error("lease_lost")
+    if (outcome.kind === "uncertain") {
       if (this.unknownOutcome || request.toolChoice === "none")
         throw new Error("provider_unavailable")
       this.unknownOutcome = "research"
@@ -226,34 +185,14 @@ export class TurnBroker {
         code: "provider_unavailable",
       }
     }
-    if (!response.ok) throw new Error("provider_unavailable")
-    const output = (await response.json()) as {
-      status?: string
-      usage?: { input_tokens: number; output_tokens: number }
-      output?: Record<string, unknown>[]
-    }
-    const usage = output.usage
-    if (
-      !usage ||
-      !Number.isSafeInteger(usage.input_tokens) ||
-      !Number.isSafeInteger(usage.output_tokens) ||
-      usage.input_tokens < 0 ||
-      usage.output_tokens < 0
-    )
-      throw new Error("provider_unavailable")
-    await execute("settle", job, {
-      id,
-      tokens: usage.input_tokens,
-      outputTokens: usage.output_tokens,
-      microusd: previewCost(model, usage.input_tokens, usage.output_tokens),
-    })
+    const output = outcome
     if (output.status !== "completed")
       throw new PreviewFailure("response_incomplete")
     if (this.unknownOutcome) this.unknownOutcome = "final"
     this.offered = names
     this.latestCalls = new Set()
     const items: { ref: string; item: ProviderItem }[] = []
-    for (const item of output.output ?? []) {
+    for (const item of output.output) {
       const view = this.view(item)
       if (!view) continue
       const ref = `r${this.items.size + 1}`
@@ -320,12 +259,11 @@ export class TurnBroker {
       throw mismatch()
     }
     if (op.kind === "web") {
-      const result = await executeWeb(
+      const result = await this.o.providers.webTool(
         op.operation,
         args,
         job,
         execute,
-        this.o.webKey!,
         signal,
         Math.min(
           request.timeoutMs ?? turnCeilings.toolTimeoutMs,
@@ -338,13 +276,12 @@ export class TurnBroker {
       return { type: "tool", id: request.id, output: result }
     }
     if (++this.gmailCalls > turn.limits.gmailCalls) throw mismatch()
-    const result = await executeGmail(
+    const result = await this.o.providers.gmailTool(
       op.operation,
       args,
-      this.o.gmail!.grant,
+      this.o.gmail!,
       job,
-      execute,
-      this.o.gmail!.config
+      execute
     )
     if (!gmailReads.some((read) => read === op.operation)) {
       await this.finish({

@@ -19,13 +19,11 @@ export type Execute = (
 export type Configuration = {
   supabaseUrl: string
   storageKey: string
-  voyageKey: string
+  /** Paid and credentialed calls; an agent copy's go through its gateway. */
+  providers: import("./providers").Providers
   allowTools?: boolean
-  browserbaseKey?: string
-  google?: import("@agentonic/connectors/google").GoogleConfig
   rerankEnabled?: boolean
   runtimeRoot?: string
-  openaiKey?: string
 }
 const microusd = (tokens: number) => Math.ceil(tokens * 0.06) // voyage-4: USD 0.06 / 1M tokens; 2026-09-14 list price, no free-credit assumption.
 export async function embed(
@@ -173,12 +171,11 @@ export async function processJob(
     if (data.preview && !data.hasCollections) {
       await execute("empty-search", job)
     } else {
-      const vectors = await embed(
+      const vectors = await config.providers.embed(
         [String(data.retrievalQuery ?? data.query)],
         "query",
         job,
         execute,
-        config.voyageKey,
         signal
       )
       await execute("search", job, {
@@ -190,7 +187,7 @@ export async function processJob(
           String(data.retrievalQuery ?? data.query),
           job,
           execute,
-          config.voyageKey,
+          config.providers,
           signal
         )
     }
@@ -201,14 +198,12 @@ export async function processJob(
         data.runtime,
         config.runtimeRoot ??
           fileURLToPath(new URL("../../../.local/runtime/", import.meta.url)),
-        config.openaiKey ?? "",
+        config.providers,
         signal,
-        config.google,
-        config.browserbaseKey,
         config.allowTools
       )
     else if (data.generateAnswer)
-      await answer(job, execute, config.openaiKey ?? "", signal)
+      await answer(job, execute, config.providers, signal)
     return
   }
   const key = String(data.objectKey)
@@ -276,12 +271,11 @@ export async function processJob(
   for (let start = 0; start < chunks.length; start += 16) {
     await execute("heartbeat", job)
     const batch = chunks.slice(start, start + 16)
-    const vectors = await embed(
+    const vectors = await config.providers.embed(
       batch.map((c) => c.text),
       "document",
       job,
       execute,
-      config.voyageKey,
       signal
     )
     embedded.push(

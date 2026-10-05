@@ -24,6 +24,7 @@ import {
 import { runPreview, verifyRuntime } from "../apps/worker/src/runtime"
 import type { Execute, Lease } from "../apps/worker/src/pipeline"
 import { keyring } from "../packages/connectors/src/secrets"
+import { directProviders } from "../apps/worker/src/providers"
 // @ts-expect-error untyped build script
 import { buildRuntimeArtifact } from "../scripts/runtime-artifact.mjs"
 
@@ -44,6 +45,11 @@ const google = {
   redirectUri: "http://localhost",
   keys: keyring("a".repeat(64)),
 }
+const providers = directProviders({
+  openaiKey: "synthetic",
+  browserbaseKey: "synthetic-web",
+  google,
+})
 const roots: string[] = []
 afterEach(() => {
   vi.unstubAllGlobals()
@@ -110,11 +116,11 @@ async function turnInProcess(
   const broker = new TurnBroker({
     job,
     execute,
-    key: "synthetic",
+    providers,
     signal: new AbortController().signal,
     turn,
     passageIds: env.passages.map((p) => p.id),
-    webKey: turn.tools.web ? "synthetic-web" : undefined,
+    web: turn.tools.web,
     ...options,
   })
   let id = 0
@@ -407,10 +413,7 @@ describe("runtime-driven turns", () => {
       spec({ tools: { gmail: ["gmail.send"], web: false } }),
       execute,
       {
-        gmail: {
-          grant: { connectionId: connection, operations: ["gmail.send"] },
-          config: google,
-        },
+        gmail: { connectionId: connection, operations: ["gmail.send"] },
       },
       envelope([{ connectionId: connection, operations: ["gmail.send"] }])
     )
@@ -465,11 +468,11 @@ describe("runtime-driven turns", () => {
     const broker = new TurnBroker({
       job,
       execute: vi.fn<Execute>().mockResolvedValue({ ok: true }),
-      key: "synthetic",
+      providers,
       signal: new AbortController().signal,
       turn,
       passageIds: [],
-      webKey: "synthetic-web",
+      web: true,
     })
     let id = 0
     const result = await runAgentTurn(
@@ -516,10 +519,11 @@ describe("broker refuses what the model did not ask for", () => {
     new TurnBroker({
       job,
       execute: vi.fn<Execute>().mockResolvedValue({ ok: true }),
-      key: "synthetic",
+      providers,
       signal: new AbortController().signal,
       turn,
       passageIds: [passage],
+      web: false,
       ...options,
     })
   it("rejects provider controls, ungranted tools and invented transcript items before spending", async () => {
@@ -553,10 +557,7 @@ describe("broker refuses what the model did not ask for", () => {
     const gmailOnly = spec({ tools: { gmail: ["gmail.read"], web: false } })
     await expect(
       broker(gmailOnly, {
-        gmail: {
-          grant: { connectionId: connection, operations: ["gmail.read"] },
-          config: google,
-        },
+        gmail: { connectionId: connection, operations: ["gmail.read"] },
       }).handle({
         ...request,
         tools: [{ name: "gmail_send", description: "x" }],
@@ -575,13 +576,13 @@ describe("broker refuses what the model did not ask for", () => {
       )
     )
     const b = broker(spec({ tools: { gmail: [], web: true } }), {
-      webKey: "synthetic-web",
+      web: true,
     })
     await expect(
       b.handle({ type: "tool", id: 1, callId: "call_1" })
     ).rejects.toThrow("runtime_mismatch")
     const b2 = broker(spec({ tools: { gmail: [], web: true } }), {
-      webKey: "synthetic-web",
+      web: true,
     })
     await b2.handle({
       ...request,
@@ -605,7 +606,7 @@ describe("broker refuses what the model did not ask for", () => {
       "provider_unavailable"
     )
     const research = broker(spec({ tools: { gmail: [], web: true } }), {
-      webKey: "synthetic-web",
+      web: true,
     })
     const auto = {
       ...request,
@@ -738,10 +739,11 @@ describe("packaged runtime artifact", () => {
         gitCommit: built.gitCommit,
       },
       join(built.directory, ".."),
-      "synthetic-openai",
-      new AbortController().signal,
-      undefined,
-      "synthetic-browserbase"
+      directProviders({
+        openaiKey: "synthetic-openai",
+        browserbaseKey: "synthetic-browserbase",
+      }),
+      new AbortController().signal
     )
     const recorded = execute.mock.calls.find(([op]) => op === "answer")![2]
     expect(recorded).toEqual({
@@ -778,10 +780,11 @@ describe("packaged runtime artifact", () => {
         gitCommit: built.gitCommit,
       },
       join(built.directory, ".."),
-      "synthetic-openai",
+      directProviders({
+        openaiKey: "synthetic-openai",
+        browserbaseKey: "synthetic-browserbase",
+      }),
       new AbortController().signal,
-      undefined,
-      "synthetic-browserbase",
       false
     )
     expect(execute.mock.calls.some(([op]) => op.startsWith("web-"))).toBe(false)
@@ -824,7 +827,7 @@ describe("packaged runtime artifact", () => {
           gitCommit: built.gitCommit,
         },
         join(built.directory, ".."),
-        "synthetic-openai",
+        directProviders({ openaiKey: "synthetic-openai" }),
         new AbortController().signal
       )
     ).rejects.toMatchObject({ diagnostic: "answer_json_invalid" })

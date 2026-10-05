@@ -7,6 +7,7 @@ import {
   distinctPassages,
 } from "../apps/worker/src/reranking"
 import type { Execute, Lease } from "../apps/worker/src/pipeline"
+import { directProviders } from "../apps/worker/src/providers"
 import { retrievalMetrics } from "../scripts/rag-benchmark/metrics"
 const job: Lease = {
   id: "10000000-0000-4000-8000-000000000001",
@@ -33,7 +34,13 @@ afterEach(() => {
 it("reranks a wider pool, retains original citation IDs, and settles real usage", async () => {
   const fetch = vi.fn().mockResolvedValue(Response.json(response()))
   vi.stubGlobal("fetch", fetch)
-  await rerankJob("Pregunta", job, execute, "fixture", signal)
+  await rerankJob(
+    "Pregunta",
+    job,
+    execute,
+    directProviders({ voyageKey: "fixture" }),
+    signal
+  )
   expect(execute).toHaveBeenLastCalledWith("select-matches", job, {
     ids: passages
       .slice(0, 8)
@@ -126,7 +133,13 @@ it.each(["timeout", "http", "usage"])(
             )
     )
     await expect(
-      rerankJob("query", job, execute, "fixture", signal)
+      rerankJob(
+        "query",
+        job,
+        execute,
+        directProviders({ voyageKey: "fixture" }),
+        signal
+      )
     ).rejects.toThrow("provider_unavailable")
     expect(
       execute.mock.calls.some(
@@ -145,7 +158,13 @@ it.each(["duplicate", "out-of-range", "nonfinite", "missing"])(
     if (failure === "missing") body.data.pop()
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json(body)))
     await expect(
-      rerankJob("query", job, execute, "fixture", signal)
+      rerankJob(
+        "query",
+        job,
+        execute,
+        directProviders({ voyageKey: "fixture" }),
+        signal
+      )
     ).rejects.toThrow("provider_unavailable")
     expect(execute.mock.calls.filter((c) => c[0] === "settle")).toHaveLength(1)
     expect(execute.mock.calls.some((c) => c[0] === "select-matches")).toBe(

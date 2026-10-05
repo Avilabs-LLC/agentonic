@@ -9,6 +9,12 @@ import {
 import { executeWeb } from "../apps/worker/src/web"
 import type { Execute, Lease } from "../apps/worker/src/pipeline"
 import { generatePreview } from "../apps/worker/src/runtime"
+import { directProviders } from "../apps/worker/src/providers"
+
+const direct = (
+  openaiKey: string,
+  more: Parameters<typeof directProviders>[0] = {}
+) => directProviders({ openaiKey, ...more })
 vi.mock("node:dns/promises", () => ({
   lookup: vi.fn().mockResolvedValue([{ address: "93.184.216.34", family: 4 }]),
 }))
@@ -169,7 +175,7 @@ it("does not offer web tools without the broker-authorized capability", async ()
     },
     job,
     vi.fn<Execute>().mockResolvedValue({ ok: true }),
-    "synthetic",
+    direct("synthetic"),
     signal,
     undefined,
     []
@@ -245,11 +251,11 @@ it("completes search → read → answer with verified source links and separate
     },
     job,
     execute,
-    "synthetic-openai",
+    direct("synthetic-openai", { browserbaseKey: "synthetic-browserbase" }),
     signal,
     undefined,
     [],
-    "synthetic-browserbase"
+    true
   )
   expect(answer.text).toContain("Fuentes web:\n• https://docs.browserbase.com/")
   expect(answer.citations).toEqual([])
@@ -422,11 +428,11 @@ it("recovers from an unreadable page, suppresses duplicate retries and continues
     modelRequest,
     job,
     vi.fn<Execute>().mockResolvedValue({ ok: true }),
-    "synthetic",
+    direct("synthetic", { browserbaseKey: "synthetic" }),
     signal,
     undefined,
     [],
-    "synthetic",
+    true,
     8
   )
   expect(reads).toBe(2)
@@ -461,11 +467,11 @@ it("allows eight research calls then forces an honest final answer", async () =>
     modelRequest,
     job,
     vi.fn<Execute>().mockResolvedValue({ ok: true }),
-    "synthetic",
+    direct("synthetic", { browserbaseKey: "synthetic" }),
     signal,
     undefined,
     [],
-    "synthetic",
+    true,
     8
   )
   expect(tools).toBe(8)
@@ -493,11 +499,11 @@ it("reserves a final-answer phase when the research deadline has elapsed", async
     modelRequest,
     job,
     vi.fn<Execute>().mockResolvedValue({ ok: true }),
-    "synthetic",
+    direct("synthetic", { browserbaseKey: "synthetic" }),
     signal,
     undefined,
     [],
-    "synthetic",
+    true,
     8
   )
   expect(models).toBe(2)
@@ -514,11 +520,11 @@ it("reports exhausted model budget without another provider request", async () =
     modelRequest,
     job,
     execute,
-    "synthetic",
+    direct("synthetic", { browserbaseKey: "synthetic" }),
     signal,
     undefined,
     [],
-    "synthetic",
+    true,
     8
   )
   expect(answer.text).toContain("presupuesto disponible")
@@ -544,11 +550,11 @@ it("uses only the final-answer phase after a research model timeout and retains 
     modelRequest,
     job,
     execute,
-    "synthetic",
+    direct("synthetic", { browserbaseKey: "synthetic" }),
     signal,
     undefined,
     [],
-    "synthetic",
+    true,
     8
   )
   expect(calls).toBe(2)
