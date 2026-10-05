@@ -38,6 +38,8 @@ import { restartWindowUnits, stagingUnits } from "../staging-units.mjs"
 import {
   NODE,
   TARGETS,
+  backupFindings,
+  backupNote,
   azureEvaluatorChecks,
   azureHostChecks,
   failedChecks,
@@ -75,91 +77,9 @@ for (const target of only ?? [])
   assert.ok(TARGETS.includes(target), `Unknown target ${target}`)
 const sha = (value) => createHash("sha256").update(value).digest("hex")
 
-if (flag("schedule") || flag("unschedule")) {
-  schedule(flag("schedule"))
-  process.exit(0)
-}
-
 const lockPath = join(root, ".local/staging/reverify.lock")
 let db,
   locked = false
-try {
-  assert.equal(bootstrapConfig().ref, "jkgdxkacariasunhentd")
-  if (flag("renew")) lock()
-  const env = loadLocal(".env.database.local")
-  db = await connect(
-    env.AGENTONIC_MIGRATION_DATABASE_URL,
-    env.AGENTONIC_DATABASE_CA_FILE
-  )
-  const registrations = await load()
-  const now = new Date()
-  const entries = []
-  for (const target of TARGETS) {
-    const registration = registrations[target]
-    const current = registration
-      ? validUntil(registration.verifiedAt).toISOString()
-      : null
-    const plan = planRenewal({
-      target,
-      registration,
-      now,
-      selected: only,
-      anyTime: flag("now"),
-    })
-    if (!flag("renew") && !flag("verify")) {
-      entries.push({
-        name: target,
-        validUntil: current,
-        outcome: standing(registration, now),
-      })
-      continue
-    }
-    const act = flag("verify")
-      ? !["missing", "revoked", "retired", "not_selected"].includes(plan.reason)
-      : plan.renew
-    if (!act) {
-      entries.push({
-        name: target,
-        validUntil: current,
-        outcome: standing(registration, now),
-        ...(plan.reason === "expired_local"
-          ? { detail: `renew with --renew --only=${target}` }
-          : {}),
-      })
-      continue
-    }
-    entries.push(
-      await reverify(target, registration, current).catch((error) => {
-        // Keep going so the report still publishes and the alert fires.
-        if (process.env.REVERIFY_DEBUG) console.error(error)
-        return {
-          name: target,
-          validUntil: current,
-          outcome: "failed",
-          detail: "unexpected error in the re-verification script",
-        }
-      })
-    )
-  }
-  // Health is read last, after any renewal had its chance to bring services back.
-  const machine = health(registrations, entries, now)
-  const report = {
-    version: 1,
-    generatedAt: new Date().toISOString(),
-    registrations: entries,
-    ...(machine.length ? { machine } : {}),
-  }
-  print(entries, now, machine)
-  if (flag("publish")) publish(report)
-  const found = problems(report, new Date())
-  if (found.length || entries.some((entry) => entry.outcome === "failed"))
-    process.exitCode = 1
-} catch (error) {
-  fail(error)
-} finally {
-  await db?.end()
-  if (locked) unlinkSync(lockPath)
-}
 
 function standing(registration, now) {
   if (!registration) return "missing"
@@ -536,6 +456,8 @@ function health(registrations, entries, now) {
     (target) => registrations[target] && !standingEnded(registrations[target])
   )
   if (!targets.length) return []
+  // The VM's backups are reported with the host.
+  const backup = targets.includes("azure-host") ? vmBackup() : null
   let facts = null
   try {
     facts = parseFacts(
@@ -552,6 +474,7 @@ function health(registrations, entries, now) {
           serviceSha256: sha(window.service),
         })
       : ["could not reach vm-agents-01 with sudo"]
+    if (target === "azure-host") found.push(...backupFindings(backup, now))
     const missing = missingLocally(target, registrations[target])
     if (missing.length)
       found.push(
@@ -560,7 +483,45 @@ function health(registrations, entries, now) {
     const entry = entries.find((e) => e.name === target)
     if (entry && found.length) entry.health = found
   }
-  return facts ? machineNotes(facts, now) : []
+  const note = backupNote(backup)
+  return [...(facts ? machineNotes(facts, now) : []), ...(note ? [note] : [])]
+}
+
+/** The VM's backup item as Azure reports it, read with the owner's Azure CLI sign-in; null if unreadable. */
+function vmBackup() {
+  const group = "rg-agents-prod",
+    vault = "rsv-agents-spaincentral",
+    vm = "vm-agents-01"
+  try {
+    return JSON.parse(
+      execFileSync(
+        "az",
+        [
+          "backup",
+          "item",
+          "show",
+          "-g",
+          group,
+          "-v",
+          vault,
+          "--container-name",
+          vm,
+          "--name",
+          vm,
+          "--backup-management-type",
+          "AzureIaasVM",
+          "--query",
+          "properties.{protectionState:protectionState,lastBackupStatus:lastBackupStatus,lastBackupTime:lastBackupTime}",
+          "--only-show-errors",
+          "-o",
+          "json",
+        ],
+        { stdio: ["ignore", "pipe", "ignore"], timeout: 120_000 }
+      ).toString()
+    )
+  } catch {
+    return null
+  }
 }
 
 function standingEnded(registration) {
@@ -707,6 +668,13 @@ function schedule(install) {
     return
   }
   const gh = execFileSync("/usr/bin/which", ["gh"]).toString().trim()
+  // The backup check needs the Azure CLI on the job's PATH when it is installed.
+  let az = null
+  try {
+    az = execFileSync("/usr/bin/which", ["az"]).toString().trim()
+  } catch {
+    /* Not installed: the report says the backups could not be checked. */
+  }
   const log = join(root, ".local/staging/reverify.log")
   const xml = (value) =>
     value
@@ -726,6 +694,7 @@ function schedule(install) {
     ...new Set([
       dirname(process.execPath),
       dirname(gh),
+      ...(az ? [dirname(az)] : []),
       "/usr/bin",
       "/bin",
       "/usr/sbin",
@@ -760,4 +729,88 @@ function schedule(install) {
   console.log(
     `Scheduled at 09:00 and 21:00 local time (runs on wake if missed). Log: ${log}`
   )
+}
+
+// Runs last, so every declaration above is initialized before any of it executes.
+if (flag("schedule") || flag("unschedule")) {
+  schedule(flag("schedule"))
+  process.exit(0)
+}
+
+try {
+  assert.equal(bootstrapConfig().ref, "jkgdxkacariasunhentd")
+  if (flag("renew")) lock()
+  const env = loadLocal(".env.database.local")
+  db = await connect(
+    env.AGENTONIC_MIGRATION_DATABASE_URL,
+    env.AGENTONIC_DATABASE_CA_FILE
+  )
+  const registrations = await load()
+  const now = new Date()
+  const entries = []
+  for (const target of TARGETS) {
+    const registration = registrations[target]
+    const current = registration
+      ? validUntil(registration.verifiedAt).toISOString()
+      : null
+    const plan = planRenewal({
+      target,
+      registration,
+      now,
+      selected: only,
+      anyTime: flag("now"),
+    })
+    if (!flag("renew") && !flag("verify")) {
+      entries.push({
+        name: target,
+        validUntil: current,
+        outcome: standing(registration, now),
+      })
+      continue
+    }
+    const act = flag("verify")
+      ? !["missing", "revoked", "retired", "not_selected"].includes(plan.reason)
+      : plan.renew
+    if (!act) {
+      entries.push({
+        name: target,
+        validUntil: current,
+        outcome: standing(registration, now),
+        ...(plan.reason === "expired_local"
+          ? { detail: `renew with --renew --only=${target}` }
+          : {}),
+      })
+      continue
+    }
+    entries.push(
+      await reverify(target, registration, current).catch((error) => {
+        // Keep going so the report still publishes and the alert fires.
+        if (process.env.REVERIFY_DEBUG) console.error(error)
+        return {
+          name: target,
+          validUntil: current,
+          outcome: "failed",
+          detail: "unexpected error in the re-verification script",
+        }
+      })
+    )
+  }
+  // Health is read last, after any renewal had its chance to bring services back.
+  const machine = health(registrations, entries, now)
+  const report = {
+    version: 1,
+    generatedAt: new Date().toISOString(),
+    registrations: entries,
+    ...(machine.length ? { machine } : {}),
+  }
+  print(entries, now, machine)
+  if (flag("publish")) publish(report)
+  const found = problems(report, new Date())
+  if (found.length || entries.some((entry) => entry.outcome === "failed"))
+    process.exitCode = 1
+} catch (error) {
+  fail(error)
+} finally {
+  await db?.end()
+  if (locked) unlinkSync(lockPath)
 }

@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest"
 import {
   DAY,
   HOUR,
+  backupFindings,
+  backupNote,
   ISSUE_MARKER,
   NODE,
   azureEvaluatorChecks,
@@ -429,6 +431,48 @@ describe("service health", () => {
     ).toContain(
       "The planned restart window applies them on 2026-10-11 03:00 UTC."
     )
+  })
+})
+
+describe("VM backups", () => {
+  const backup = (ageMs: number | null, extra = {}) => ({
+    protectionState: "Protected",
+    lastBackupStatus: "Completed",
+    lastBackupTime:
+      ageMs === null
+        ? "2001-01-01T00:00:00+00:00"
+        : new Date(now.getTime() - ageMs).toISOString(),
+    ...extra,
+  })
+  it("stays quiet while daily backups complete", () => {
+    expect(backupFindings(backup(10 * HOUR), now)).toEqual([])
+    expect(backupNote(backup(10 * HOUR))).toBe(
+      "Last VM backup: 2026-10-10 02:00 UTC."
+    )
+  })
+  it("alerts on a missed day, a failure, stopped protection or a lost sign-in", () => {
+    expect(backupFindings(backup(40 * HOUR), now)).toEqual([
+      "the last VM backup is from 2026-10-08 20:00 UTC",
+    ])
+    expect(
+      backupFindings(backup(10 * HOUR, { lastBackupStatus: "Failed" }), now)
+    ).toEqual(["the last VM backup failed"])
+    expect(
+      backupFindings(
+        backup(10 * HOUR, { protectionState: "ProtectionStopped" }),
+        now
+      )
+    ).toEqual(["VM backups are not active (ProtectionStopped)"])
+    expect(
+      backupFindings(
+        backup(null, { protectionState: "IRPending", lastBackupStatus: "" }),
+        now
+      )
+    ).toEqual(["no VM backup has completed yet"])
+    expect(backupNote(backup(null))).toBeNull()
+    expect(backupFindings(null, now)).toEqual([
+      "could not check the VM backups; sign in again with `az login` on the Mac",
+    ])
   })
 })
 
