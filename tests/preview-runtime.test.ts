@@ -6,6 +6,12 @@ import { join } from "node:path"
 import { verifyRuntime, generatePreview } from "../apps/worker/src/runtime"
 import type { Execute, Lease } from "../apps/worker/src/pipeline"
 import { keyring } from "../packages/connectors/src/secrets"
+import { directProviders } from "../apps/worker/src/providers"
+
+const direct = (
+  openaiKey: string,
+  more: Parameters<typeof directProviders>[0] = {}
+) => directProviders({ openaiKey, ...more })
 const roots: string[] = []
 const model = "gpt-4.1-mini-2025-04-14"
 const job: Lease = {
@@ -71,7 +77,7 @@ it("blocks model controls or tools and insufficient budget before making a provi
         body,
         job,
         execute,
-        "fixture",
+        direct("fixture"),
         new AbortController().signal
       )
     ).rejects.toThrow()
@@ -81,7 +87,7 @@ it("blocks model controls or tools and insufficient budget before making a provi
       request,
       job,
       execute,
-      "fixture",
+      direct("fixture"),
       new AbortController().signal
     )
   ).rejects.toThrow("budget_exhausted")
@@ -115,7 +121,7 @@ it("reserves before generation and settles actual usage; retains unknown reserva
     request,
     job,
     execute,
-    "fixture",
+    direct("fixture"),
     new AbortController().signal
   )
   expect(execute.mock.calls.map((c) => c[0])).toEqual([
@@ -135,7 +141,7 @@ it("reserves before generation and settles actual usage; retains unknown reserva
       request,
       job,
       execute,
-      "fixture",
+      direct("fixture"),
       new AbortController().signal
     )
   ).rejects.toThrow("provider_unavailable")
@@ -169,17 +175,16 @@ it("Gmail model calls are bounded and metered, and write tools only persist a pr
     request,
     job,
     execute,
-    "fixture",
-    new AbortController().signal,
-    {
-      grant: { connectionId: job.id, operations: ["gmail.send"] },
-      config: {
+    direct("fixture", {
+      google: {
         clientId: "test",
         clientSecret: "test",
         keys: keyring("a".repeat(64)),
         redirectUri: "http://localhost",
       },
-    }
+    }),
+    new AbortController().signal,
+    { connectionId: job.id, operations: ["gmail.send"] }
   )
   expect(result).toMatchObject({ insufficientEvidence: true })
   expect(fetch).toHaveBeenCalledTimes(1)
@@ -220,17 +225,16 @@ it("rejects a model request for an ungranted Gmail operation after settling prov
       request,
       job,
       execute,
-      "fixture",
-      new AbortController().signal,
-      {
-        grant: { connectionId: job.id, operations: ["gmail.read"] },
-        config: {
+      direct("fixture", {
+        google: {
           clientId: "test",
           clientSecret: "test",
           keys: keyring("a".repeat(64)),
           redirectUri: "http://localhost",
         },
-      }
+      }),
+      new AbortController().signal,
+      { connectionId: job.id, operations: ["gmail.read"] }
     )
   ).rejects.toThrow("runtime_mismatch")
   expect(execute.mock.calls.map((c) => c[0])).toEqual([
@@ -309,17 +313,16 @@ it("derives KB citation coverage after a successful Gmail read instead of reject
     request,
     job,
     execute,
-    "fixture",
-    new AbortController().signal,
-    {
-      grant: { connectionId: job.id, operations: ["gmail.read"] },
-      config: {
+    direct("fixture", {
+      google: {
         clientId: "test",
         clientSecret: "test",
         keys: keyring(encryptionKey),
         redirectUri: "http://localhost",
       },
-    }
+    }),
+    new AbortController().signal,
+    { connectionId: job.id, operations: ["gmail.read"] }
   )
   expect(result).toEqual({
     text: "Synthetic email subject",
@@ -334,17 +337,16 @@ it("derives KB citation coverage after a successful Gmail read instead of reject
       request,
       job,
       execute,
-      "fixture",
-      new AbortController().signal,
-      {
-        grant: { connectionId: job.id, operations: ["gmail.read"] },
-        config: {
+      direct("fixture", {
+        google: {
           clientId: "test",
           clientSecret: "test",
           keys: keyring(encryptionKey),
           redirectUri: "http://localhost",
         },
-      }
+      }),
+      new AbortController().signal,
+      { connectionId: job.id, operations: ["gmail.read"] }
     )
   ).toMatchObject({ insufficientEvidence: false })
 })
@@ -381,7 +383,7 @@ it("constrains mailbox-only output to no KB citations and rejects fabricated doc
     request,
     job,
     execute,
-    "fixture",
+    direct("fixture"),
     new AbortController().signal,
     undefined,
     []
@@ -394,7 +396,7 @@ it("constrains mailbox-only output to no KB citations and rejects fabricated doc
     request,
     job,
     execute,
-    "fixture",
+    direct("fixture"),
     new AbortController().signal,
     undefined,
     [job.id]
@@ -408,7 +410,7 @@ it("constrains mailbox-only output to no KB citations and rejects fabricated doc
       request,
       job,
       execute,
-      "fixture",
+      direct("fixture"),
       new AbortController().signal,
       undefined,
       [job.id]
@@ -419,7 +421,7 @@ it("constrains mailbox-only output to no KB citations and rejects fabricated doc
       request,
       job,
       execute,
-      "fixture",
+      direct("fixture"),
       new AbortController().signal,
       undefined,
       []
@@ -492,10 +494,8 @@ it("automatic evaluation can execute a web-capable runtime without requesting to
     execute,
     { manifest, artifactSha256, gitCommit: manifest.gitCommit },
     root,
-    "synthetic",
+    direct("synthetic", { browserbaseKey: "synthetic-web" }),
     new AbortController().signal,
-    undefined,
-    "synthetic-web",
     false
   )
   expect(execute.mock.calls.some(([op]) => op.startsWith("web-"))).toBe(false)
@@ -536,7 +536,7 @@ it.each([
       request,
       job,
       execute,
-      "fixture",
+      direct("fixture"),
       new AbortController().signal,
       undefined,
       [],

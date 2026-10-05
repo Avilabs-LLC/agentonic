@@ -15,6 +15,7 @@ import { answer as generateAnswer } from "../../apps/worker/src/answer"
 import { setTimeout as delay } from "node:timers/promises"
 import { chunkPages } from "../../apps/worker/src/chunking"
 import { embed, type Execute, type Lease } from "../../apps/worker/src/pipeline"
+import { directProviders } from "../../apps/worker/src/providers"
 import {
   RETRIEVAL_PROFILE,
   RERANK_MODEL,
@@ -34,6 +35,10 @@ const env = live
   : {}
 if (live && (!env.VOYAGE_API_KEY || (answers && !env.OPENAI_API_KEY)))
   throw new Error("Provider configuration required; no credentials are printed")
+const providers = directProviders({
+  openaiKey: env.OPENAI_API_KEY,
+  voyageKey: env.VOYAGE_API_KEY,
+})
 const cap = 250_000 // $0.25 maximum reservations across both providers, per invocation.
 const directory = `.local/rag-benchmark/${new Date().toISOString().replaceAll(":", "-")}`
 mkdirSync(directory, { recursive: true, mode: 0o700 })
@@ -242,9 +247,8 @@ try {
         ).recall
       }
       if (mode === "reranked")
-        await rerankJob(test.query, job, execute, env.VOYAGE_API_KEY!, signal)
-      if (answers)
-        await generateAnswer(job, execute, env.OPENAI_API_KEY!, signal)
+        await rerankJob(test.query, job, execute, providers, signal)
+      if (answers) await generateAnswer(job, execute, providers, signal)
       const elapsed = performance.now() - started
       await actor()
       const result = await rag("result", { id: queued.id })

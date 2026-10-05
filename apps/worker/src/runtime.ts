@@ -4,11 +4,10 @@ import {
   WEB_RESEARCH_CALLS,
   WEB_RESEARCH_MS,
 } from "./web-policy"
-import { executeWeb } from "./web"
 import { webArguments, type WebOperation } from "@agentonic/contracts/web"
 import { toolGrants, gmailGrants, hasWeb } from "@agentonic/contracts/tools"
 import { readFileSync } from "node:fs"
-import { createHash, randomUUID } from "node:crypto"
+import { createHash } from "node:crypto"
 import { fork } from "node:child_process"
 import { resolve } from "node:path"
 import { z } from "zod"
@@ -17,20 +16,15 @@ import {
   gmailGrant,
   gmailReads,
 } from "@agentonic/contracts/gmail"
-import { executeGmail } from "./gmail"
 import { PreviewFailure } from "./failure"
 import {
   previewModel,
   DEFAULT_PREVIEW_MODEL,
   type PreviewModel,
 } from "@agentonic/contracts/preview-models"
-import {
-  previewCost,
-  previewModelProfile,
-  previewReservation,
-} from "./preview-models"
-import { GoogleError, type GoogleConfig } from "@agentonic/connectors/google"
+import { GoogleError } from "@agentonic/connectors/google"
 import type { Execute, Lease } from "./pipeline"
+import type { Providers } from "./providers"
 import {
   BROKER_PROTOCOL,
   turnSpec,
@@ -142,16 +136,16 @@ export async function generatePreview(
   value: unknown,
   job: Lease,
   execute: Execute,
-  key: string,
+  providers: Providers,
   signal: AbortSignal,
-  gmailOptions?: { grant: z.infer<typeof gmailGrant>; config: GoogleConfig },
+  grant?: z.infer<typeof gmailGrant>,
   passageIds?: string[],
-  webKey?: string,
+  web = false,
   webCallLimit = 3,
   selectedModel: PreviewModel = DEFAULT_PREVIEW_MODEL,
   selectedReasoning?: string | null
 ) {
-  if (!key) throw new Error("configuration_required")
+  if (!providers.models) throw new Error("configuration_required")
   const request = requestSchema.parse(value)
   const model = previewModel.parse(selectedModel)
   const reasoning =
@@ -159,19 +153,6 @@ export async function generatePreview(
       ? modelCatalog.find((m) => m.id === model)!.defaultLevel
       : selectedReasoning
   modelConfiguration.parse({ model, reasoning })
-  const profile = previewModelProfile(model, reasoning)
-  const modelRequest =
-    model === DEFAULT_PREVIEW_MODEL
-      ? request
-      : {
-          store: request.store,
-          input: request.input,
-          text: request.text,
-          model,
-          reasoning: { effort: reasoning },
-          max_output_tokens: profile.maxOutput,
-          include: ["reasoning.encrypted_content"],
-        }
   const allowedCitations =
     passageIds === undefined
       ? undefined
@@ -209,12 +190,11 @@ export async function generatePreview(
   const input: unknown[] = [...request.input]
   let usedToolEvidence = false
   const webSources = new Map<string, string>()
-  if (webKey)
+  if (web)
     input.push({
       role: "system",
       content: WEB_RESEARCH_POLICY,
     })
-  const grant = gmailOptions?.grant
   const definitions = [
     ...(grant?.operations.map((operation) => ({
       type: "function",
@@ -225,7 +205,7 @@ export async function generatePreview(
       parameters: z.toJSONSchema(gmailArguments[operation]),
       strict: true,
     })) ?? []),
-    ...(webKey
+    ...(web
       ? Object.entries(webArguments).map(([operation, schema]) => ({
           type: "function",
           name: operation.replaceAll(".", "_"),
@@ -238,7 +218,7 @@ export async function generatePreview(
         }))
       : []),
   ]
-  const maxCalls = webKey
+  const maxCalls = web
     ? Math.min(WEB_RESEARCH_CALLS, Math.max(3, webCallLimit))
     : 3
   const researchDeadline = Date.now() + WEB_RESEARCH_MS
@@ -247,13 +227,11 @@ export async function generatePreview(
   const failedRequests = new Set<string>()
   for (let step = 0; step <= maxCalls; step++) {
     const finalOnly =
-      stopTools ||
-      step === maxCalls ||
-      (Boolean(webKey) && Date.now() >= researchDeadline)
+      stopTools || step === maxCalls || (web && Date.now() >= researchDeadline)
     const activeDefinitions = definitions.filter(
       (d) => !d.name.startsWith("gmail_") || gmailCalls < 3
     )
-    if (webKey)
+    if (web)
       input.push({
         role: "system",
         content: finalOnly
@@ -261,28 +239,31 @@ export async function generatePreview(
           : `At most ${maxCalls - step} tool calls remain this turn. Search only as needed; stop early once you have a useful, supported answer.`,
       })
 
-    const body = JSON.stringify({
-      ...modelRequest,
-      input,
-      text: { format: responseFormat },
-      ...(definitions.length
-        ? {
-            tools: activeDefinitions,
-            parallel_tool_calls: false,
-            tool_choice: finalOnly ? "none" : "auto",
-          }
-        : {}),
-    })
-    if (Buffer.byteLength(body) > 750000) throw new Error("runtime_mismatch")
-    const id = randomUUID()
-    const reserved = await execute("reserve", job, {
-      id,
-      provider: "openai",
-      model,
-      microusd: previewReservation(model, body, reasoning),
-    })
-    if (!reserved.ok) {
-      if (!webKey) throw new Error("budget_exhausted")
+    const outcome = await providers.respond(
+      {
+        model,
+        reasoning,
+        input: [...input],
+        format: responseFormat,
+        ...(definitions.length
+          ? {
+              tools: activeDefinitions,
+              toolChoice: finalOnly ? ("none" as const) : ("auto" as const),
+            }
+          : {}),
+        timeoutMs:
+          web && !finalOnly
+            ? Math.max(1, Math.min(45000, researchDeadline - Date.now()))
+            : web
+              ? 35000
+              : 45000,
+      },
+      job,
+      execute,
+      signal
+    )
+    if (outcome.kind === "budget") {
+      if (!web) throw new Error("budget_exhausted")
       await execute("web-check", job)
       return {
         text: BUDGET_STOP_ANSWER,
@@ -290,30 +271,8 @@ export async function generatePreview(
         insufficientEvidence: true,
       }
     }
-    await execute("heartbeat", job)
-    let response: Response
-    try {
-      response = await fetch("https://api.openai.com/v1/responses", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${key}`,
-          "Content-Type": "application/json",
-        },
-        body,
-        signal: AbortSignal.any([
-          signal,
-          AbortSignal.timeout(
-            webKey && !finalOnly
-              ? Math.max(1, Math.min(45000, researchDeadline - Date.now()))
-              : webKey
-                ? 35000
-                : 45000
-          ),
-        ]),
-      })
-    } catch {
-      if (signal.aborted) throw new Error("lease_lost")
-      if (webKey && !finalOnly && Date.now() >= researchDeadline) {
+    if (outcome.kind === "uncertain") {
+      if (web && !finalOnly && Date.now() >= researchDeadline) {
         // The incomplete request is not replayed; its reservation remains.
         // Use the final-answer phase with the evidence already collected.
         stopTools = true
@@ -321,35 +280,17 @@ export async function generatePreview(
       }
       throw new Error("provider_unavailable")
     }
-    if (!response.ok) throw new Error("provider_unavailable")
-    const output = (await response.json()) as {
-      status?: string
-      usage?: { input_tokens: number; output_tokens: number }
-      output?: {
+    if (outcome.status !== "completed")
+      throw new PreviewFailure("response_incomplete")
+    const output = {
+      output: outcome.output as {
         type: string
         name?: string
         call_id?: string
         arguments?: string
         content?: { type: string; text?: string }[]
-      }[]
+      }[],
     }
-    const usage = output.usage
-    if (
-      !usage ||
-      !Number.isSafeInteger(usage.input_tokens) ||
-      !Number.isSafeInteger(usage.output_tokens) ||
-      usage.input_tokens < 0 ||
-      usage.output_tokens < 0
-    )
-      throw new Error("provider_unavailable")
-    await execute("settle", job, {
-      id,
-      tokens: usage.input_tokens,
-      outputTokens: usage.output_tokens,
-      microusd: previewCost(model, usage.input_tokens, usage.output_tokens),
-    })
-    if (output.status !== "completed")
-      throw new PreviewFailure("response_incomplete")
     const calls = output.output?.filter((x) => x.type === "function_call") ?? []
     if (calls.length) {
       if (calls.length !== 1 || finalOnly) throw new Error("runtime_mismatch")
@@ -360,10 +301,10 @@ export async function generatePreview(
           ...(output.output?.filter((x) => x.type === "reasoning") ?? [])
         )
       const call = calls[0]!
-      const operation = gmailOptions?.grant.operations.find(
+      const operation = grant?.operations.find(
         (op) => op.replaceAll(".", "_") === call.name
       )
-      const webOperation = webKey
+      const webOperation = web
         ? (Object.keys(webArguments) as WebOperation[]).find(
             (op) => op.replaceAll(".", "_") === call.name
           )
@@ -375,19 +316,18 @@ export async function generatePreview(
         call.arguments.length > 30000
       )
         throw new Error("runtime_mismatch")
-      if (webOperation && webKey) {
+      if (webOperation && web) {
         const args = JSON.parse(call.arguments)
         const requestKey = webOperation + JSON.stringify(args)
         const result = failedRequests.has(requestKey)
           ? { ok: false, error: "already_failed", untrusted: true }
           : Date.now() >= researchDeadline
             ? { ok: false, error: "time_limit", stop: true, untrusted: true }
-            : await executeWeb(
+            : await providers.webTool(
                 webOperation,
                 args,
                 job,
                 execute,
-                webKey,
                 signal,
                 Math.min(20000, researchDeadline - Date.now())
               )
@@ -403,15 +343,14 @@ export async function generatePreview(
         })
         continue
       }
-      if (!gmailOptions || !operation) throw new Error("runtime_mismatch")
+      if (!grant || !operation) throw new Error("runtime_mismatch")
       if (++gmailCalls > 3) throw new Error("runtime_mismatch")
-      const result = await executeGmail(
+      const result = await providers.gmailTool(
         operation,
         JSON.parse(call.arguments),
-        gmailOptions.grant,
+        grant,
         job,
-        execute,
-        gmailOptions.config
+        execute
       )
       if (!gmailReads.some((op) => op === operation))
         return {
@@ -474,10 +413,8 @@ export async function runPreview(
   execute: Execute,
   value: unknown,
   root: string,
-  key: string,
+  providers: Providers,
   signal: AbortSignal,
-  google?: GoogleConfig,
-  browserbaseKey?: string,
   allowTools = true
 ) {
   const entry = verifyRuntime(value, root)
@@ -494,19 +431,17 @@ export async function runPreview(
     typeof context.accessJson === "string"
       ? (JSON.parse(context.accessJson) as { tools?: unknown[] })
       : {}
-  let gmailOptions:
-    { grant: z.infer<typeof gmailGrant>; config: GoogleConfig } | undefined
+  let grant: z.infer<typeof gmailGrant> | undefined
   if (
     allowTools &&
     manifest.gmailContract === "1" &&
     access.tools?.length &&
-    google
+    providers.gmail
   ) {
     const authorized = await execute("gmail-tools", job)
-    const grants = gmailGrants(toolGrants.parse(authorized.tools))
-    if (grants[0]) gmailOptions = { grant: grants[0], config: google }
+    grant = gmailGrants(toolGrants.parse(authorized.tools))[0]
   }
-  let webKey: string | undefined
+  let web = false
   if (
     allowTools &&
     manifest.webContract === "1" &&
@@ -514,37 +449,37 @@ export async function runPreview(
   ) {
     const authority = await execute("web-tools", job)
     if (authority.enabled === true) {
-      if (!browserbaseKey) throw new Error("configuration_required")
-      webKey = browserbaseKey
+      if (!providers.web) throw new Error("configuration_required")
+      web = true
     }
   }
   await execute("heartbeat", job)
   if (manifest.brokerProtocol === BROKER_PROTOCOL) {
     // Protocol 2: the frozen runtime runs the loop; this broker decides.
-    if (!key) throw new Error("configuration_required")
+    if (!providers.models) throw new Error("configuration_required")
     const reasoning =
       reasoningLevel === undefined
         ? modelCatalog.find((m) => m.id === model)!.defaultLevel
         : (reasoningLevel as string | null)
     const configuration = modelConfiguration.parse({ model, reasoning })
-    const toolCalls = webKey ? (manifest.webResearch === "1" ? 8 : 3) : 3
+    const toolCalls = web ? (manifest.webResearch === "1" ? 8 : 3) : 3
     const turn = turnSpec.parse({
       model,
       reasoning: configuration.reasoning,
       tools: {
-        gmail: gmailOptions?.grant.operations ?? [],
-        web: Boolean(webKey),
+        gmail: grant?.operations ?? [],
+        web,
       },
       limits: { modelCalls: toolCalls + 1, toolCalls, gmailCalls: 3 },
     })
     const broker = new TurnBroker({
       job,
       execute,
-      key,
+      providers,
       signal,
       turn,
-      gmail: gmailOptions,
-      webKey,
+      gmail: grant,
+      web,
       passageIds: z
         .array(z.object({ id: z.uuid() }))
         .max(8)
@@ -556,7 +491,7 @@ export async function runPreview(
       { envelope: context, turn },
       broker,
       signal,
-      gmailOptions || webKey ? 110000 : 60000
+      grant || web ? 110000 : 60000
     )
     return
   }
@@ -587,7 +522,7 @@ export async function runPreview(
     const abort = () => finish("lease_lost")
     const timer = setTimeout(
       () => finish("provider_unavailable"),
-      gmailOptions || webKey ? 110000 : 60000
+      grant || web ? 110000 : 60000
     )
     signal.addEventListener("abort", abort, { once: true })
     child.on("error", () => finish("runtime_mismatch"))
@@ -610,15 +545,15 @@ export async function runPreview(
             event.request,
             job,
             execute,
-            key,
+            providers,
             AbortSignal.any([signal, controller.signal]),
-            gmailOptions,
+            grant,
             z
               .array(z.object({ id: z.uuid() }))
               .max(8)
               .parse(context.passages)
               .map((p) => p.id),
-            webKey,
+            web,
             manifest.webResearch === "1" ? WEB_RESEARCH_CALLS : 3,
             model,
             reasoningLevel as string | null | undefined

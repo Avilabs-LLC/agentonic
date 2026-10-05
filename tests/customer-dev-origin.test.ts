@@ -27,7 +27,10 @@ it("keeps the default same-origin policy without a configured tunnel", async () 
 })
 
 it("never carries development exceptions into production", async () => {
-  const config = await configuration("production", "https://mobile.example.test")
+  const config = await configuration(
+    "production",
+    "https://mobile.example.test"
+  )
   expect(config.allowedDevOrigins).toBeUndefined()
   expect(config.experimental?.serverActions).toBeUndefined()
 })

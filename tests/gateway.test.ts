@@ -14,6 +14,7 @@ import {
   codeOf,
   createGateway,
   parseRequest,
+  statements,
   type GatewayArgs,
 } from "../apps/worker/src/gateway"
 import { categorize } from "../apps/worker/src/service-state"
@@ -40,9 +41,12 @@ describe("gateway requests", () => {
     ).toEqual({
       ok: true,
       id: 1,
-      text: "SELECT agentonic.deployment_service($1,$2,$3,$4) result",
+      call: "deployment_service",
       values: serviceArgs(),
     })
+    expect(statements.deployment_service).toBe(
+      "SELECT agentonic.deployment_service($1,$2,$3,$4) result"
+    )
     expect(
       parseRequest(
         JSON.stringify({
@@ -51,10 +55,25 @@ describe("gateway requests", () => {
           args: ["gmail-check", deployment, secret, null, null, "{}"],
         })
       )
-    ).toMatchObject({
+    ).toMatchObject({ ok: true, call: "gmail_staging" })
+    expect(statements.gmail_staging).toBe(
+      "SELECT agentonic.gmail_staging($1,$2,$3,$4,$5,$6) result"
+    )
+    // Provider calls carry the same identity; a cancel names an earlier call.
+    expect(
+      parseRequest(
+        JSON.stringify({
+          id: 3,
+          call: "provider",
+          args: ["respond", deployment, secret, null, null, "{}"],
+        })
+      )
+    ).toMatchObject({ ok: true, call: "provider" })
+    expect(parseRequest(JSON.stringify({ cancel: 3 }))).toEqual({
       ok: true,
-      text: "SELECT agentonic.gmail_staging($1,$2,$3,$4,$5,$6) result",
+      cancel: 3,
     })
+    expect(Object.keys(statements)).not.toContain("provider")
   })
   it("refuses anything else without reaching the database", () => {
     const parse = (value: unknown) =>

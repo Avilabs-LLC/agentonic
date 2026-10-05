@@ -306,12 +306,23 @@ export function azureHostChecks(input: {
       key: `env:${config}/gateway.env#AGENTONIC_BROKER_SHA256`,
       expect: (value) => unquote(value) === current,
     },
-    // Agent copies start from broker.env; the database password stays with the gateway.
+    // Agent copies start from broker.env. The database password and every provider
+    // and Gmail key stay with the gateway; probes count names and never read values.
     {
-      name: "agent copies get no database password",
-      key: `env:${config}/broker.env#DATABASE_URL`,
-      expect: "",
+      name: "agent copies get no password or key",
+      key: `secrets:${config}/broker.env`,
+      expect: "0",
     },
+    {
+      name: "current broker's copies hold no password or key",
+      key: `secrets:${config}/agents/${current}`,
+      expect: "0",
+    },
+    ...(["OPENAI_API_KEY", "VOYAGE_API_KEY"] as const).map((name): Check => ({
+      name: `gateway holds ${name}`,
+      key: `defines:${config}/gateway.env#${name}`,
+      expect: "yes",
+    })),
     {
       name: "no shared agent service template",
       key: "sha:/etc/systemd/system/agentonic-staging@.service",
@@ -715,6 +726,17 @@ export function failedChecks(checks: Check[], facts: Facts) {
 
 const quote = (path: string) => `'${assertPath(path)}'`
 /** Shell lines that print `key<TAB>value` for each fact, run as root on the VM. */
+/** Configuration names that hold a password or key. Probes may count them, never print them. */
+export const SECRET_NAMES = [
+  "DATABASE_URL",
+  "OPENAI_API_KEY",
+  "VOYAGE_API_KEY",
+  "BROWSERBASE_API_KEY",
+  "GOOGLE_CLIENT_SECRET",
+  "AGENTONIC_CONNECTION_KEY",
+  "AGENTONIC_CONNECTION_STANDBY_KEYS",
+  "SUPABASE_SECRET_KEY",
+]
 export function gatherScript(checks: readonly { key: string }[]) {
   const lines = [
     "set -u",
@@ -740,7 +762,20 @@ export function gatherScript(checks: readonly { key: string }[]) {
     else if (kind === "env") {
       const [file, name] = arg.split("#")
       if (!/^[A-Z0-9_]+$/.test(name ?? "")) throw new Error("Unsafe key")
+      if (SECRET_NAMES.includes(name!)) throw new Error("Secret value")
       out(`sed -n 's/^${name}=//p' ${quote(file!)} 2>/dev/null | head -1`)
+    } else if (kind === "defines") {
+      // Whether a file sets a non-empty value, never the value.
+      const [file, name] = arg.split("#")
+      if (!/^[A-Z0-9_]+$/.test(name ?? "")) throw new Error("Unsafe key")
+      out(
+        `grep -qsE '^${name}="?[^"]' -- ${quote(file!)} && echo yes || echo no`
+      )
+    } else if (kind === "secrets") {
+      // How many files under a path set any password or key.
+      out(
+        `grep -rlsE '^(${SECRET_NAMES.join("|")})="?[^"]' -- ${quote(arg)} | wc -l`
+      )
     } else if (kind === "unit") {
       if (!/^[a-z@.-]+\.(service|socket)$/.test(arg))
         throw new Error("Unsafe unit")

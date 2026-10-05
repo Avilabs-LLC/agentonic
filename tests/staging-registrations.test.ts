@@ -1,4 +1,10 @@
 import { describe, expect, it } from "vitest"
+import { execFileSync } from "node:child_process"
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
+// @ts-expect-error -- plain ESM script without type declarations
+import * as units from "../scripts/staging-units.mjs"
 import {
   DAY,
   HOUR,
@@ -281,6 +287,74 @@ describe("installation checks", () => {
     expect(
       failedChecks(evaluator, healthy(evaluator, { listeners: "1" }))
     ).toEqual(["no listening Node process"])
+    // Passwords and keys stay with the gateway; agent configuration holds none.
+    const config = "/etc/agentonic/staging"
+    expect(
+      failedChecks(
+        host,
+        healthy(host, { [`secrets:${config}/broker.env`]: "1" })
+      )
+    ).toEqual(["agent copies get no password or key"])
+    expect(
+      failedChecks(
+        host,
+        healthy(host, { [`secrets:${config}/agents/${hash("a")}`]: "2" })
+      )
+    ).toEqual(["current broker's copies hold no password or key"])
+    expect(
+      failedChecks(
+        host,
+        healthy(host, {
+          [`defines:${config}/gateway.env#OPENAI_API_KEY`]: "no",
+        })
+      )
+    ).toEqual(["gateway holds OPENAI_API_KEY"])
+  })
+  it("counts passwords and keys without ever reading them", () => {
+    const dir = mkdtempSync(join(tmpdir(), "secrets-"))
+    try {
+      mkdirSync(join(dir, "agents"))
+      writeFileSync(
+        join(dir, "broker.env"),
+        'AGENTONIC_RERANK_ENABLED="false"\nOPENAI_API_KEY="zz-visible-zz"\n'
+      )
+      writeFileSync(join(dir, "agents", "a.env"), 'DATABASE_URL=""\nX="1"\n')
+      writeFileSync(
+        join(dir, "agents", "b.env"),
+        'GOOGLE_CLIENT_SECRET="zz-hidden-zz"\n'
+      )
+      writeFileSync(
+        join(dir, "gateway.env"),
+        'OPENAI_API_KEY="zz-gateway-zz"\nVOYAGE_API_KEY=""\n'
+      )
+      const keys = [
+        `secrets:${dir}/broker.env`,
+        `secrets:${dir}/agents`,
+        `secrets:${dir}/missing`,
+        `defines:${dir}/gateway.env#OPENAI_API_KEY`,
+        `defines:${dir}/gateway.env#VOYAGE_API_KEY`,
+      ]
+      const output = execFileSync("bash", [
+        "-c",
+        gatherScript(keys.map((key) => ({ key }))),
+      ]).toString()
+      expect(output).not.toMatch(/zz-/)
+      expect(parseFacts(output)).toEqual({
+        [keys[0]!]: "1",
+        [keys[1]!]: "1",
+        [keys[2]!]: "0",
+        [keys[3]!]: "yes",
+        [keys[4]!]: "no",
+      })
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+    // The probe that prints a value refuses every password and key name.
+    expect(() =>
+      gatherScript([
+        { key: "env:/etc/agentonic/staging/gateway.env#DATABASE_URL" },
+      ])
+    ).toThrow("Secret value")
   })
   it("fails closed when a fact is missing", () => {
     const facts = healthy(evaluator)
@@ -700,5 +774,37 @@ describe("alerts", () => {
       )
     ).toContain("**vm-agents-01**\n- vm-agents-01 has been up since X.")
     expect(body).not.toMatch(/[a-f0-9]{64}/)
+  })
+})
+
+describe("agent service templates", () => {
+  const unitsFor = (broker: string) =>
+    units.stagingUnits({
+      broker,
+      serviceRoot: "/etc/agentonic/staging/agents",
+      caPath: "/etc/agentonic/staging/database-ca.crt",
+      configRoot: "/etc/agentonic/staging",
+    }) as Record<string, string>
+  it("runs new copies without network, password or key", () => {
+    const { runtime, gateway } = unitsFor(hash("a"))
+    expect(runtime).toContain("PrivateNetwork=yes\n")
+    expect(runtime).toContain("IPAddressDeny=any\n")
+    expect(runtime).toContain("RestrictAddressFamilies=AF_UNIX\n")
+    expect(runtime).not.toMatch(/AF_INET|LoadCredential=ca:|DATABASE/)
+    // The gateway reaches the database and providers, never private networks or host endpoints.
+    expect(gateway).toContain("IPAddressDeny=10.0.0.0/8 ")
+    expect(gateway).toMatch(
+      /IPAddressDeny=.* 169\.254\.0\.0\/16 168\.63\.129\.16 /
+    )
+  })
+  it("keeps the template of brokers whose copies still call providers themselves", () => {
+    for (const broker of units.directProviderBrokers as Set<string>) {
+      const { runtime } = unitsFor(broker)
+      expect(runtime).toContain(
+        "RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6\n"
+      )
+      expect(runtime).toContain("LoadCredential=ca:")
+      expect(runtime).not.toContain("PrivateNetwork")
+    }
   })
 })
