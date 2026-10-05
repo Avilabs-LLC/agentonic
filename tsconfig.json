@@ -10,6 +10,7 @@
     "tests/**/*.ts",
     "scripts/check-prisma.ts",
     "vitest.config.ts",
-    "scripts/rag-benchmark/**/*.ts"
+    "scripts/rag-benchmark/**/*.ts",
+    "scripts/staging-registrations/**/*.ts"
   ]
 }

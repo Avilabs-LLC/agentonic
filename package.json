@@ -41,6 +41,7 @@
     "setup:staging": "node scripts/setup-staging.mjs",
     "package:staging": "node scripts/package-staging.mjs",
     "dev:staging": "node scripts/start-staging.mjs",
+    "staging:reverify": "node --import tsx scripts/staging-registrations/run.mjs",
     "rag:benchmark": "tsx scripts/rag-benchmark/run.ts",
     "web:benchmark": "node --import tsx scripts/web-benchmark/run.mjs --live",
     "models:benchmark": "node --import tsx scripts/model-benchmark/run.mjs --live"
