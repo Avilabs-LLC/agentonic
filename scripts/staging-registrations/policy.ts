@@ -596,6 +596,49 @@ export function machineNotes(facts: Facts, now: Date): string[] {
   return notes
 }
 
+// ---------------------------------------------------------------------------
+// VM backups (Azure Backup, read through the Azure CLI on the Mac)
+
+/** Backups run daily; one missed day raises an alert at the next run after this age. */
+export const BACKUP_STALE_MS = 36 * HOUR
+/** What Azure reports for the VM's backup item; null when it could not be read. */
+export type VmBackup = {
+  protectionState: string
+  lastBackupStatus: string
+  lastBackupTime: string | null
+} | null
+const backupTime = (backup: NonNullable<VmBackup>) => {
+  // Azure reports 2001-01-01 until the first backup completes.
+  const time = Date.parse(backup.lastBackupTime ?? "")
+  return time > Date.parse("2020-01-01T00:00:00Z") ? time : null
+}
+/** Content-free problems with the VM's backups. */
+export function backupFindings(backup: VmBackup, now: Date): string[] {
+  if (!backup)
+    return [
+      "could not check the VM backups; sign in again with `az login` on the Mac",
+    ]
+  const out: string[] = []
+  if (!["Protected", "IRPending"].includes(backup.protectionState))
+    out.push(
+      `VM backups are not active (${/^[A-Za-z]{1,40}$/.test(backup.protectionState) ? backup.protectionState : "unknown"})`
+    )
+  if (backup.lastBackupStatus === "Failed")
+    out.push("the last VM backup failed")
+  const last = backupTime(backup)
+  if (last === null) out.push("no VM backup has completed yet")
+  else if (now.getTime() - last > BACKUP_STALE_MS)
+    out.push(`the last VM backup is from ${utc(new Date(last).toISOString())}`)
+  return out
+}
+/** A note for the issue body with the time of the last backup. */
+export function backupNote(backup: VmBackup): string | null {
+  const last = backup && backupTime(backup)
+  return last
+    ? `Last VM backup: ${utc(new Date(last).toISOString())}${backup.lastBackupStatus === "Completed" ? "" : ` (${backup.lastBackupStatus || "status unknown"})`}.`
+    : null
+}
+
 /** Names of failed checks. Missing facts fail. */
 export function failedChecks(checks: Check[], facts: Facts) {
   return checks
