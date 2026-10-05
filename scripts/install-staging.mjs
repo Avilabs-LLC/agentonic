@@ -97,6 +97,12 @@ const broker = {
         GOOGLE_CLIENT_SECRET: credentials.GOOGLE_CLIENT_SECRET,
         GOOGLE_REDIRECT_URI: credentials.GOOGLE_REDIRECT_URI,
         AGENTONIC_CONNECTION_KEY: credentials.AGENTONIC_CONNECTION_KEY,
+        ...(credentials.AGENTONIC_CONNECTION_STANDBY_KEYS
+          ? {
+              AGENTONIC_CONNECTION_STANDBY_KEYS:
+                credentials.AGENTONIC_CONNECTION_STANDBY_KEYS,
+            }
+          : {}),
       }
     : {}),
   VOYAGE_API_KEY: keys.VOYAGE_API_KEY,

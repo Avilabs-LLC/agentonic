@@ -6,7 +6,7 @@ import {
   exchange,
   GOOGLE_SCOPES,
 } from "../packages/connectors/src/google"
-import { seal, unseal } from "../packages/connectors/src/secrets"
+import { keyring, seal, unseal } from "../packages/connectors/src/secrets"
 import { executeGmail } from "../apps/worker/src/gmail"
 const key = "a".repeat(64),
   id = "10000000-0000-4000-8000-000000000001"
@@ -65,7 +65,7 @@ it("requires both scopes and offline refresh authority", async () => {
         clientId: "test",
         clientSecret: "test",
         redirectUri: "http://localhost:3101/api/connections/google/callback",
-        encryptionKey: key,
+        keys: keyring(key),
       },
       "code",
       "verifier"
@@ -127,7 +127,7 @@ it("proposes a write without accessing Google or exposing credentials", async ()
       clientId: "test",
       clientSecret: "test",
       redirectUri: "http://localhost",
-      encryptionKey: key,
+      keys: keyring(key),
     }
   )
   expect(fetch).not.toHaveBeenCalled()
@@ -159,7 +159,7 @@ it("rechecks authorization before a read and before returning its result", async
       clientId: "test",
       clientSecret: "test",
       redirectUri: "http://localhost",
-      encryptionKey: key,
+      keys: keyring(key),
     }
   )
   expect(execute.mock.calls.map((c) => c[0])).toEqual([
@@ -209,7 +209,7 @@ it("returns five bounded email summaries only with read permission and rechecks 
       clientId: "test",
       clientSecret: "test",
       redirectUri: "http://localhost",
-      encryptionKey: key,
+      keys: keyring(key),
     }
   )
   expect(result).toMatchObject({
@@ -252,7 +252,7 @@ it("does not expand email content when only search is enabled", async () => {
         clientId: "test",
         clientSecret: "test",
         redirectUri: "http://localhost",
-        encryptionKey: key,
+        keys: keyring(key),
       }
     )
   ).toEqual({ messages: [{ id: "m1", threadId: "t1" }] })

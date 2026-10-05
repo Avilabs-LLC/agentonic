@@ -10,7 +10,12 @@ import {
   parseGmailCall,
 } from "@agentonic/contracts/gmail"
 import { uuid } from "@agentonic/contracts/identity"
-import { digest, seal, unseal } from "@agentonic/connectors/secrets"
+import {
+  connectionKeys,
+  digest,
+  seal,
+  unseal,
+} from "@agentonic/connectors/secrets"
 import {
   exchange,
   refresh,
@@ -24,23 +29,22 @@ import {
 
 export function googleConfig(): GoogleConfig {
   const clientId = process.env.GOOGLE_CLIENT_ID,
-    clientSecret = process.env.GOOGLE_CLIENT_SECRET,
-    encryptionKey = process.env.AGENTONIC_CONNECTION_KEY
+    clientSecret = process.env.GOOGLE_CLIENT_SECRET
   const redirectUri =
     process.env.GOOGLE_REDIRECT_URI ??
     "http://localhost:3101/api/connections/google/callback"
   const url = new URL(redirectUri)
+  // Throws for a missing or malformed key.
+  const keys = connectionKeys(process.env)
   if (
     !clientId ||
     !clientSecret ||
-    !encryptionKey ||
-    !/^[a-f0-9]{64}$/.test(encryptionKey) ||
     (url.protocol !== "https:" &&
       !(url.protocol === "http:" && url.hostname === "localhost")) ||
     url.pathname !== "/api/connections/google/callback"
   )
     throw new Error("gmail_configuration_required")
-  return { clientId, clientSecret, encryptionKey, redirectUri }
+  return { clientId, clientSecret, keys, redirectUri }
 }
 async function command(
   workspace: string,
@@ -79,12 +83,12 @@ export async function startGmail(workspace: string, agentId: string) {
     agentId,
     connectionId,
     state: digest(state),
-    verifier: seal(verifier, `oauth:${digest(state)}`, config.encryptionKey),
+    verifier: seal(verifier, `oauth:${digest(state)}`, config.keys),
   })
   const jar = await cookies()
   jar.set(
     "agentonic-google-oauth",
-    seal({ state, workspace }, "oauth-cookie", config.encryptionKey),
+    seal({ state, workspace }, "oauth-cookie", config.keys),
     {
       httpOnly: true,
       sameSite: "lax",
@@ -120,7 +124,7 @@ export async function finishGmail(url: URL) {
     path: "/api/connections/google/callback",
   })
   if (!cookie) throw new Error("oauth_invalid")
-  const stored = unseal(cookie, "oauth-cookie", config.encryptionKey) as {
+  const stored = unseal(cookie, "oauth-cookie", config.keys) as {
     state: string
     workspace: string
   }
@@ -148,7 +152,7 @@ export async function finishGmail(url: URL) {
   const verifier = unseal(
     String(pending.verifier),
     `oauth:${digest(state)}`,
-    config.encryptionKey
+    config.keys
   )
   if (typeof verifier !== "string") throw new Error("oauth_invalid")
   const tokens = await exchange(config, code, verifier)
@@ -160,7 +164,7 @@ export async function finishGmail(url: URL) {
       credential: seal(
         { refreshToken: tokens.refresh_token },
         `gmail:${pending.connectionId}`,
-        config.encryptionKey
+        config.keys
       ),
     })
   } catch {
@@ -193,7 +197,7 @@ export async function disconnectGmail(workspace: string, connectionId: string) {
     const secret = unseal(
       String(r.credential),
       `gmail:${connectionId}`,
-      config.encryptionKey
+      config.keys
     ) as { refreshToken: string }
     return { revoked: await revoke(secret.refreshToken).catch(() => false) }
   }
@@ -216,7 +220,7 @@ export async function gmailInvocations(
         ? unseal(
             String(v.argumentsCiphertext),
             `invocation:${v.id}`,
-            config.encryptionKey
+            config.keys
           )
         : null,
     })
@@ -238,7 +242,7 @@ export async function confirmGmail(
   const secret = unseal(
     String(inspected.credential),
     `gmail:${inspected.connectionId}`,
-    config.encryptionKey
+    config.keys
   ) as { refreshToken: string }
   let access: string
   try {
@@ -253,7 +257,7 @@ export async function confirmGmail(
   const args = unseal(
     String(inspected.argumentsCiphertext),
     `invocation:${id}`,
-    config.encryptionKey
+    config.keys
   )
   const call = parseGmailCall(String(inspected.operation), args)
   if (digest(JSON.stringify(call.arguments)) !== hash)

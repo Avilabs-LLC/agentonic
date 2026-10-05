@@ -23,6 +23,7 @@ import {
 } from "../apps/worker/src/broker"
 import { runPreview, verifyRuntime } from "../apps/worker/src/runtime"
 import type { Execute, Lease } from "../apps/worker/src/pipeline"
+import { keyring } from "../packages/connectors/src/secrets"
 // @ts-expect-error untyped build script
 import { buildRuntimeArtifact } from "../scripts/runtime-artifact.mjs"
 
@@ -41,7 +42,7 @@ const google = {
   clientId: "test",
   clientSecret: "test",
   redirectUri: "http://localhost",
-  encryptionKey: "a".repeat(64),
+  keys: keyring("a".repeat(64)),
 }
 const roots: string[] = []
 afterEach(() => {

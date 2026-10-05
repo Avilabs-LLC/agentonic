@@ -5,6 +5,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { verifyRuntime, generatePreview } from "../apps/worker/src/runtime"
 import type { Execute, Lease } from "../apps/worker/src/pipeline"
+import { keyring } from "../packages/connectors/src/secrets"
 const roots: string[] = []
 const model = "gpt-4.1-mini-2025-04-14"
 const job: Lease = {
@@ -175,7 +176,7 @@ it("Gmail model calls are bounded and metered, and write tools only persist a pr
       config: {
         clientId: "test",
         clientSecret: "test",
-        encryptionKey: "a".repeat(64),
+        keys: keyring("a".repeat(64)),
         redirectUri: "http://localhost",
       },
     }
@@ -226,7 +227,7 @@ it("rejects a model request for an ungranted Gmail operation after settling prov
         config: {
           clientId: "test",
           clientSecret: "test",
-          encryptionKey: "a".repeat(64),
+          keys: keyring("a".repeat(64)),
           redirectUri: "http://localhost",
         },
       }
@@ -315,7 +316,7 @@ it("derives KB citation coverage after a successful Gmail read instead of reject
       config: {
         clientId: "test",
         clientSecret: "test",
-        encryptionKey,
+        keys: keyring(encryptionKey),
         redirectUri: "http://localhost",
       },
     }
@@ -340,7 +341,7 @@ it("derives KB citation coverage after a successful Gmail read instead of reject
         config: {
           clientId: "test",
           clientSecret: "test",
-          encryptionKey,
+          keys: keyring(encryptionKey),
           redirectUri: "http://localhost",
         },
       }

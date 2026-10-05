@@ -41,13 +41,14 @@ The Admin app has **Revisiones** (submissions, receipts, renewal and activation)
 - **Connections.** An agent with nothing to do rests: its service stops and uses no connection, and the controller wakes it when a message arrives. Awake agents reach the database through the host's single gateway, so with one instance of each app the platform needs 18 connections however many agents are activated (architecture §43).
 - **Upgrades.** New runtimes (`pnpm runtime:install`) and new worker releases (`install-staging`) install next to the running ones. Running agents move over one at a time without stopping.
 - **Restarts.** The VM restarts on Sundays at 04:00 Canary time, only when installed updates require it (`pnpm staging:restart-window`).
+- **Keys.** Stored Gmail secrets name the key that sealed them. `pnpm connections:rotate-key` replaces that key in four steps without breaking any holder (architecture §44).
 - **Backups.** Azure Backup takes a daily VM backup at 02:00 UTC and keeps it 14 days (vault `rsv-agents-spaincentral`). It doesn't cover the database. Rebuilding the VM from the Mac is documented in architecture §41.
 
 ## Not built yet
 
 - Hosted beta: hosted web apps, TLS and domains, hosted sign-in URLs, SMTP and invitations, a paid Supabase plan (and transaction pooling once apps run several instances), release packaging, and a deploy workflow. No production build has been verified.
 - Production: a separate project and keys, ongoing operating authorization instead of the 7-day staging limit, budgets per period, backups with a restore drill.
-- Product: Admin Agents and Activity screens, the general connections and tools model (Gmail is feature-specific), external channels, automation, agent memory, Gmail key rotation and Google verification.
+- Product: Admin Agents and Activity screens, the general connections and tools model (Gmail is feature-specific), external channels, automation, agent memory and Google verification.
 - Scale: multiple hosts, the 250-agent synthetic load test, and a tested path to 500 agents.
 
 The ordered plan is architecture §37; the owner's audit brief tracks progress. [Outstanding actions](outstanding-actions.md) lists every open item, who acts next and when it counts as done.
@@ -63,5 +64,6 @@ The ordered plan is architecture §37; the owner's audit brief tracks progress. 
 | Side-by-side workers, services that report, restarts, backups, rebuild | §41                  |
 | Admin expiry view and customer availability wording                    | §42                  |
 | Resting agents, the database gateway and the connection budget         | §43                  |
+| Where secrets live; key names and rotation                             | §44                  |
 
 Presentation rules are in the [UI contract](ui/ui-contract.md). The [target schema](schema.dbml) describes 79 tables; 53 exist in the 41 checked-in migrations.

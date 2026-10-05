@@ -1,5 +1,6 @@
 import { z } from "zod"
 import { parseGmailCall, gmailMessage } from "@agentonic/contracts/gmail"
+import type { Keyring } from "./secrets"
 export const GOOGLE_SCOPES = [
   "https://www.googleapis.com/auth/gmail.readonly",
   "https://www.googleapis.com/auth/gmail.compose",
@@ -8,7 +9,7 @@ export type GoogleConfig = {
   clientId: string
   clientSecret: string
   redirectUri: string
-  encryptionKey: string
+  keys: Keyring
 }
 export class GoogleError extends Error {
   constructor(
