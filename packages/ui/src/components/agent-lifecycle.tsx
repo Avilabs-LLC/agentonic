@@ -1,5 +1,10 @@
 "use client"
-import { formatUtcDateTime } from "@agentonic/contracts/format"
+import { formatUtcDateTime, formatUtcMinute } from "@agentonic/contracts/format"
+import {
+  customerAvailability,
+  customerEnvironmentLabels,
+  deploymentDisplayStatus,
+} from "@agentonic/contracts/availability"
 import { useEffect, useId, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import {
@@ -46,12 +51,20 @@ export function AgentLifecycle({
   workspaceId,
   submissionId,
   action,
+  audience,
+  now,
 }: {
   state: LifecycleState
   workspaceId: string
   submissionId?: string
   action: (input: unknown) => Promise<FormResult>
+  // Customers read availability in plain language; staff keep operational terms.
+  audience: "customer" | "staff"
+  // Server render time, so expiry checks match between server and browser.
+  now: string
 }) {
+  const customer = audience === "customer"
+  const places = customer ? customerEnvironmentLabels : environmentLabels
   const router = useRouter(),
     fieldId = useId()
   const [pending, startTransition] = useTransition()
@@ -112,7 +125,11 @@ export function AgentLifecycle({
       <AgentSettingsCard
         title="Aprobación y activación"
         icon={<RocketIcon />}
-        description="La revisión, la autorización para activar y el despliegue tienen estados independientes."
+        description={
+          customer
+            ? "La aprobación, tu autorización de uso y la activación tienen estados independientes."
+            : "La revisión, la autorización para activar y el despliegue tienen estados independientes."
+        }
       >
         {submissions.length === 0 ? (
           <CardEmptyState title="Sin versiones para activar">
@@ -154,7 +171,11 @@ export function AgentLifecycle({
                   )}
                   {s.expiresAt && (
                     <p className="text-xs text-muted-foreground">
-                      Plazo para activar: {formatUtcDateTime(s.expiresAt)} UTC.
+                      {customer && s.reason === "valid"
+                        ? `Puedes autorizar su uso hasta el ${formatUtcMinute(s.expiresAt)}; el equipo de Agentonic debe activarlo antes de esa fecha.`
+                        : customer
+                          ? `Plazo para activar: ${formatUtcMinute(s.expiresAt)}.`
+                          : `Plazo para activar: ${formatUtcDateTime(s.expiresAt)} UTC.`}
                     </p>
                   )}
                   {s.renewedSubmissionId ? (
@@ -217,30 +238,26 @@ export function AgentLifecycle({
         )}
       </AgentSettingsCard>
       <AgentSettingsCard
-        title="Despliegues de pruebas"
+        title={customer ? "Uso en pruebas" : "Despliegues de pruebas"}
         icon={<RocketIcon />}
         description="Uso privado y de solo lectura. La autorización dura hasta siete días y conserva su propio límite de consumo."
       >
         {!deployments.length ? (
-          <CardEmptyState title="Sin despliegues de pruebas">
-            El cliente debe autorizar el uso de pruebas y el equipo debe activar
-            la versión.
-          </CardEmptyState>
+          customer ? (
+            <CardEmptyState title="Sin uso en pruebas">
+              Autoriza el uso de una versión aprobada y el equipo de Agentonic
+              la activará.
+            </CardEmptyState>
+          ) : (
+            <CardEmptyState title="Sin despliegues de pruebas">
+              El cliente debe autorizar el uso de pruebas y el equipo debe
+              activar la versión.
+            </CardEmptyState>
+          )
         ) : (
           <div className="space-y-5">
             {deployments.map((d) => {
-              const status =
-                !d.authorized &&
-                [
-                  "running",
-                  "awaiting_activation",
-                  "queued",
-                  "preparing",
-                ].includes(d.status)
-                  ? "unauthorized"
-                  : d.status === "running" && !d.online
-                    ? "offline"
-                    : d.status
+              const status = deploymentDisplayStatus(d)
               return (
                 <div
                   key={d.id}
@@ -248,7 +265,7 @@ export function AgentLifecycle({
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <p className="text-sm font-medium">
-                      {environmentLabels[d.environment]}
+                      {places[d.environment]}
                     </p>
                     <Badge variant={deploymentBadgeVariants[status] ?? "slate"}>
                       {status === "unauthorized"
@@ -256,11 +273,24 @@ export function AgentLifecycle({
                         : deploymentLabels[status]}
                     </Badge>
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    Uso y reservas: USD {(d.committedMicrousd / 1e6).toFixed(4)}{" "}
-                    de USD {d.budgetUsd.toFixed(2)} · Hasta{" "}
-                    {formatUtcDateTime(d.expiresAt)} UTC.
-                  </p>
+                  {customer ? (
+                    <div className="space-y-1">
+                      <p className="text-sm">
+                        {customerAvailability(d, state, new Date(now))}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Consumo: USD {(d.committedMicrousd / 1e6).toFixed(4)} de
+                        USD {d.budgetUsd.toFixed(2)} autorizados.
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      Uso y reservas: USD{" "}
+                      {(d.committedMicrousd / 1e6).toFixed(4)} de USD{" "}
+                      {d.budgetUsd.toFixed(2)} · Hasta{" "}
+                      {formatUtcDateTime(d.expiresAt)} UTC.
+                    </p>
+                  )}
                   <div className="flex flex-wrap gap-2">
                     {d.canActivate && (
                       <Button
@@ -340,6 +370,7 @@ export function AgentLifecycle({
                 </FieldLabel>
                 <Select
                   value={environment}
+                  items={places}
                   onValueChange={(value) =>
                     setEnvironment(value as typeof environment)
                   }
@@ -358,11 +389,13 @@ export function AgentLifecycle({
                           )
                         }
                       >
-                        {environmentLabels[value]}
+                        {places[value]}
                         {!state.hosts.some(
                           (h) => h.environment === value && h.available
                         )
-                          ? " · No disponible"
+                          ? customer
+                            ? " · No disponible por ahora"
+                            : " · No disponible"
                           : ""}
                       </SelectItem>
                     ))}

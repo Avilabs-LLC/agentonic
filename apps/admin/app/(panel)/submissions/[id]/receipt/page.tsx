@@ -34,6 +34,8 @@ export default async function Page({
           workspaceId={workspace}
           submissionId={id}
           action={lifecycleAction.bind(null, workspace)}
+          audience="staff"
+          now={new Date().toISOString()}
         />
       </div>
     </div>

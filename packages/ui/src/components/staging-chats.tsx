@@ -7,7 +7,11 @@ import {
 import { ModelConfigurationSelect } from "@workspace/ui/components/model-configuration-select"
 import { AgentAnswer } from "@workspace/ui/components/agent-answer"
 import { GmailApprovals } from "@workspace/ui/components/gmail-approvals"
-import { formatUtcDateTime } from "@agentonic/contracts/format"
+import { formatUtcMinute } from "@agentonic/contracts/format"
+import {
+  customerEnvironmentLabels,
+  unavailableOnOurSide,
+} from "@agentonic/contracts/availability"
 import { CardEmptyState } from "@workspace/ui/components/card-empty-state"
 import { useCallback, useEffect, useId, useRef, useState } from "react"
 import type { z } from "zod"
@@ -15,7 +19,6 @@ import { MessageSquareIcon, SendIcon, Loader2Icon } from "lucide-react"
 import {
   chatList,
   chatState,
-  environmentLabels,
   lifecycleErrors,
   type ChatState,
 } from "@agentonic/contracts/lifecycle"
@@ -32,6 +35,8 @@ import {
 } from "@workspace/ui/components/select"
 import { AgentSettingsCard } from "@workspace/ui/components/agent-settings-card"
 import { RecordHeader } from "@workspace/ui/components/record-header"
+const agentLabel = (agent: z.infer<typeof chatList>["agents"][number]) =>
+  `${agent.name} · ${customerEnvironmentLabels[agent.environment]}`
 export function StagingChats({
   workspaceId,
   initial,
@@ -264,6 +269,10 @@ export function StagingChats({
                   <FieldLabel htmlFor={`${fieldId}-agent`}>Agente</FieldLabel>
                   <Select
                     value={deployment}
+                    items={listing.agents.map((a) => ({
+                      value: a.id,
+                      label: agentLabel(a),
+                    }))}
                     onValueChange={(v) => setDeployment(v ?? "")}
                   >
                     <SelectTrigger id={`${fieldId}-agent`}>
@@ -276,7 +285,7 @@ export function StagingChats({
                         )
                         .map((a) => (
                           <SelectItem key={a.id} value={a.id}>
-                            {a.name} · {environmentLabels[a.environment]}
+                            {agentLabel(a)}
                           </SelectItem>
                         ))}
                     </SelectContent>
@@ -311,7 +320,7 @@ export function StagingChats({
           action={
             state ? (
               <span className="text-sm text-muted-foreground">
-                {state.online ? "Disponible" : "Sin conexión"}
+                {state.online ? "Disponible" : "No disponible por ahora"}
               </span>
             ) : undefined
           }
@@ -369,6 +378,12 @@ export function StagingChats({
                   </div>
                 ))}
               </div>
+              {!state.online && (
+                <p className="mt-6 text-sm text-muted-foreground">
+                  {unavailableOnOurSide} Podrás escribir cuando vuelva a estar
+                  disponible; esta conversación se conserva.
+                </p>
+              )}
               <form
                 className="mt-6 space-y-3"
                 onSubmit={(e) => {
@@ -419,10 +434,10 @@ export function StagingChats({
                 </div>
               </form>
               <p className="mt-4 text-xs text-muted-foreground">
-                Uso y reservas del despliegue: USD{" "}
-                {(state.committedMicrousd / 1e6).toFixed(4)} de USD{" "}
-                {state.budgetUsd.toFixed(2)}. Mensajes disponibles hasta{" "}
-                {formatUtcDateTime(state.expiresAt)} UTC.
+                Consumo: USD {(state.committedMicrousd / 1e6).toFixed(4)} de USD{" "}
+                {state.budgetUsd.toFixed(2)} autorizados. Esta conversación y
+                sus mensajes están disponibles hasta el{" "}
+                {formatUtcMinute(state.expiresAt)}.
               </p>
             </>
           )}

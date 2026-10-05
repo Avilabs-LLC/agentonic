@@ -2,6 +2,7 @@ import { ServerIcon } from "lucide-react"
 import { loadGmail } from "@agentonic/server/gmail"
 import { loadLifecycle } from "@agentonic/server/lifecycle"
 import { AgentLifecycle } from "@workspace/ui/components/agent-lifecycle"
+import { customerAgentAvailability } from "@agentonic/contracts/availability"
 import { loadReviewFlow } from "@agentonic/server/review-flow"
 import { loadEvaluations } from "@agentonic/server/evaluation"
 import { EvaluationPanel } from "@workspace/ui/components/evaluation-panel"
@@ -55,11 +56,7 @@ export default async function Page({
         actions={
           <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
             <ServerIcon aria-hidden="true" className="size-4" />
-            {lifecycle.deployments.some((d) => d.online)
-              ? "Activo en pruebas"
-              : lifecycle.deployments.some((d) => d.status === "running")
-                ? "Sin conexión"
-                : "Sin despliegue activo"}
+            {customerAgentAvailability(lifecycle)}
           </span>
         }
       />
@@ -69,6 +66,8 @@ export default async function Page({
             state={lifecycle}
             workspaceId={selected.id}
             action={lifecycleAction.bind(null, selected.id)}
+            audience="customer"
+            now={new Date().toISOString()}
           />
         }
         configuration={
