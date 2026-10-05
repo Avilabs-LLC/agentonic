@@ -1,6 +1,6 @@
 # Agentonic
 
-Read `docs/agentonic-architecture.md` for accepted architecture and the stepwise implementation plan. Read `docs/ui/ui-contract.md` before any UI work; it is the authoritative presentation contract for both apps. `docs/schema.dbml` is the full target; only checked-in Prisma migrations describe implemented slices.
+Read `docs/current-state.md` first for what runs where today, and keep it current when a change alters that. Read `docs/agentonic-architecture.md` for accepted architecture and the stepwise implementation plan. Read `docs/ui/ui-contract.md` before any UI work; it is the authoritative presentation contract for both apps. `docs/schema.dbml` is the full target; only checked-in Prisma migrations describe implemented slices.
 
 - Admin and customer are separate Next.js apps. Share UI and services; never trust a client-supplied user, staff role or workspace as authorization.
 - Supabase owns Auth and Storage. Prisma is the only application migration authority, including reviewed SQL policies/triggers.

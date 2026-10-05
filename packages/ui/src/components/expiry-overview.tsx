@@ -1,6 +1,9 @@
 "use client"
 import type { ColumnDef } from "@tanstack/react-table"
-import { formatUtcParts } from "@agentonic/contracts/format"
+import {
+  formatUtcMinute as utc,
+  formatUtcParts,
+} from "@agentonic/contracts/format"
 import {
   expiryActorLabels,
   registrationNames,
@@ -41,10 +44,6 @@ import {
   ItemTitle,
 } from "@workspace/ui/components/item"
 
-const utc = (value: string) => {
-  const { date, time } = formatUtcParts(value)
-  return `${date}, ${time}`
-}
 const past = (value: string, now: string) =>
   Date.parse(value) <= Date.parse(now)
 

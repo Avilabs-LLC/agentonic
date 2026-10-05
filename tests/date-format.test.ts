@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest"
 import {
   formatUtcDateTime,
+  formatUtcMinute,
   formatUtcParts,
 } from "../packages/contracts/src/format"
 
@@ -47,5 +48,9 @@ describe("hydration-safe UTC timestamps", () => {
       date: "16/9/2026",
       time: "12:00 p. m. UTC",
     })
+    expect(formatUtcMinute("2026-09-16T23:05:09-04:00")).toBe(
+      "17/9/2026, 3:05 a. m. UTC"
+    )
+    expect(formatUtcMinute("invalid")).toBe("No disponible")
   })
 })

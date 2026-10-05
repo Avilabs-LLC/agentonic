@@ -44,3 +44,9 @@ export function formatUtcParts(value: string | Date) {
     time: `${hour % 12 || 12}:${minute} ${hour < 12 ? "a. m." : "p. m."} UTC`,
   }
 }
+
+/** One line, to the minute: "9/10/2026, 7:40 p. m. UTC". */
+export function formatUtcMinute(value: string | Date) {
+  const { date, time } = formatUtcParts(value)
+  return time ? `${date}, ${time}` : date
+}

@@ -2,7 +2,7 @@
 
 Platform monorepo for the staff admin app, customer app, platform workers and the agent runtime (`packages/runtime`). The runtime is packaged as an immutable, content-addressed artifact that runs the agent loop in a credential-free child process; the worker broker holds credentials and executes provider and tool calls (architecture §40). Releases up to 0.3.0 came from the frozen `Avilabs-LLC/agentonic-runtime` repository.
 
-The authoritative design is in [docs/agentonic-architecture.md](docs/agentonic-architecture.md), including the UI contract (§21) and implementation status (§§22–29). [docs/schema.dbml](docs/schema.dbml) describes the complete target model. Twenty-eight tables support identity/access, customer authoring, private uploads and consented staff review. Paid preview, ingestion, approval and deployment remain unavailable.
+**Start with [docs/current-state.md](docs/current-state.md)**: a short summary of what runs where, what works end to end and what isn't built yet. The authoritative design and dated implementation checkpoints are in [docs/agentonic-architecture.md](docs/agentonic-architecture.md) (§§22–43), and presentation rules are in [docs/ui/ui-contract.md](docs/ui/ui-contract.md). [docs/schema.dbml](docs/schema.dbml) describes the complete target model; 53 of its 79 tables exist so far. Everything runs against one nonproduction Supabase project: customers can author, preview, submit, get approval and chat with a privately activated agent, but nothing is hosted for outside users yet.
 
 ## Local development
 
@@ -38,7 +38,7 @@ URIs. A localhost callback returns to the phone, not this Mac.
 
 Both apps use the same Base UI/shadcn Mira preset (`b1GfVg2Oe`), Figtree font and shared UI package. Authentication cookies are separate per app, host-only and HTTP-only. Customer membership never grants staff access.
 
-The local bootstrap has already provisioned dedicated roles and applied the first six migrations to the configured nonproduction Supabase project. The three confirmed Auth users are now linked: one staff administrator and two customer owners, each with a separate test workspace. Their actual access boundaries have been verified; interactive sign-in uses the private passwords chosen in Supabase. App `.env.local` files contain only their restricted database credentials and public Supabase configuration. No bootstrap or migration URL belongs in either app's environment.
+The configured nonproduction Supabase project has its dedicated roles and every checked-in migration applied. The three confirmed Auth users are linked: one staff administrator and two customer owners, each with a separate test workspace. Their actual access boundaries have been verified; interactive sign-in uses the private passwords chosen in Supabase. App `.env.local` files contain only their restricted database credentials and public Supabase configuration. No bootstrap or migration URL belongs in either app's environment.
 
 For a fresh authorized nonproduction setup, fill `.env.bootstrap.local` from its example, provide the verified Supabase CA, and run:
 
@@ -50,7 +50,7 @@ pnpm setup:accounts
 pnpm setup:template
 ```
 
-Create the private `agentonic-documents` Storage bucket (10 MB maximum) before migration. The authoring-template command also requires the clean adjacent runtime checkout at the published authoring tag and GitHub CLI read access to its private release.
+Create the private `agentonic-documents` Storage bucket (10 MB maximum) before migration. The authoring-template command publishes the original `v0.1.0-authoring` template; it still requires the clean adjacent `agentonic-runtime` checkout at that tag and GitHub CLI read access to its private release. Executable runtimes now come from `packages/runtime` (see "Local frozen-version preview" below).
 
 These are explicit remote setup commands. `setup:accounts` only links the three configured, already-confirmed Supabase Auth users. It sends no emails and creates no Auth users. It creates two clearly named nonproduction workspaces with finite test retention and a separate staff role; it does not grant staff customer membership. Keep passwords private and create/confirm the Auth users in the Supabase dashboard before running it. Re-running does not restore disabled staff or overwrite an existing workspace's owner.
 
@@ -84,17 +84,29 @@ Every page has a matching loading skeleton. After reviewing any affected visual 
 ```text
 apps/admin/             Staff Next.js app
 apps/customer/          Customer Next.js app
-apps/worker/            Knowledge processing and private preview broker
+apps/worker/            Knowledge processing, previews, evaluator, staging controller and broker
+packages/runtime/       Credential-free agent runtime (packaged as frozen artifacts)
+packages/connectors/    Provider clients (Google, Browserbase)
 packages/ui/            Shared preset, primitives, forms, tables and shell
 packages/contracts/     Validation, formatting and domain contracts
 packages/server/        Server-only authentication and application access
 packages/database/      Prisma model, generated client and SQL migrations
-scripts/                Explicit setup, verification and skeleton tooling
+scripts/                Explicit setup, packaging, staging operations and verification
 ```
 
 App roles are non-owner and non-BYPASSRLS. Tables remain SELECT-only; validated command functions handle authorized writes and audit them atomically. Tenant queries require a verified actor, transaction-local workspace and current resource authority as well as active membership. A restricted discovery function returns only the caller's active workspace IDs. The restricted worker uses leased command functions for knowledge and private previews.
 
-The VM has been inspected only. No Azure packages, services, firewall rules or deployment files have been installed. Future releases use systemd and fixed release directories as described in the architecture.
+## Staging on `vm-agents-01`
+
+The Azure VM runs the evaluator, the staging deployment controller and one database gateway as systemd services from fixed, content-addressed release directories; activated agents rest while idle (architecture §§36, 40–41, 43). The web apps and the knowledge worker still run only on the Mac. Hosts and evaluators stay trusted for seven days; the Mac renews them by re-measuring the installation, never by rebuilding:
+
+```sh
+pnpm staging:reverify            # read-only: expiry, releases and service health
+pnpm staging:reverify --verify   # run every check, change nothing
+pnpm staging:reverify --renew    # re-verify and renew what expires within 2 days
+```
+
+`--schedule` installs the twice-daily launchd job (with `--publish`, which feeds the GitHub alert workflow). `pnpm staging:restart-window` manages the Sunday restart window. Runtimes install side by side with `pnpm runtime:install`; new worker releases install next to running ones with `install-staging`. Never change the VM or live Corby incidentally. See [docs/current-state.md](docs/current-state.md) for alerts, backups and the rebuild procedure.
 
 ## Identity and resource access services
 
@@ -115,7 +127,7 @@ This explicit nonproduction check temporarily exercises resource creation, invit
 
 Customer `/agents` supports creation, revisioned prompts/skills, exact candidate freezing, consented submission and feedback history. `/knowledge` supports private PDF/text/Markdown uploads, up to 10 MB each. Documents are processed locally; removal immediately removes derived knowledge and queues physical cleanup. A 500 MB workspace inventory ceiling includes retained and failed reservations.
 
-Admin `/submissions` exposes consented proposals and audited configuration review. Staff may return comments, request changes or reject. Private frozen-version previews are available locally; production approval and deployment remain unavailable.
+Submitted versions are evaluated on the VM against criteria the customer confirms, then approved automatically (routine versions) or by staff (versions with tools). Admin `/submissions` shows consented proposals, receipts and the approval, renewal and activation controls; staff may return comments, request changes or reject. Admin `/expirations` lists what expires, when and who must act. After approval, the customer authorizes private staging use (up to seven days and US$1), staff activate it, and the customer chats with it in `/chats`. Production deployment remains unavailable.
 
 OpenAI is selected for the next execution milestone, with an authorized **US$25 total development cap**. Store the key in ignored `apps/worker/.env.local` as `OPENAI_API_KEY`. The worker uses its ignored environment file and reserves paid calls against the shared accumulated ledger. See architecture §§30–31 for the implemented boundary.
 

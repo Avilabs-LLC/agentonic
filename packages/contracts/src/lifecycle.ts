@@ -208,10 +208,11 @@ export const lifecycleErrors: Record<string, string> = {
   approval_required:
     "La aprobación no está vigente. Renueva la revisión antes de activar.",
   host_unavailable:
-    "El servicio de activación no está disponible. Inténtalo más tarde.",
+    "No se puede activar en este momento por un problema de nuestro lado. Inténtalo más tarde.",
   still_valid: "Esta aprobación todavía está vigente.",
   unavailable: "La conversación no está disponible con la autorización actual.",
-  offline: "El agente está sin conexión. Inténtalo más tarde.",
+  offline:
+    "El agente no está disponible por ahora por un problema de nuestro lado. Inténtalo más tarde.",
   busy: "Espera a que termine la respuesta anterior.",
   rate_limit: "Has enviado varias solicitudes. Espera un minuto.",
   turn_limit: "Esta conversación alcanzó su límite. Abre una nueva.",
