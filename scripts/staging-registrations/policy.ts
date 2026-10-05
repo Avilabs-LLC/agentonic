@@ -459,20 +459,28 @@ export function localHostChecks(input: {
       expect: broker,
     })),
     ...localArtifactChecks(input),
-    ...(["broker.env", "manager.env", "gateway.env"] as const).flatMap(
-      (file): Check[] => [
-        {
-          name: `${file} private`,
-          key: `mode:${config}/${file}`,
-          expect: "600",
-        },
-        {
-          name: `${file} pins the current broker`,
-          key: `env:${config}/${file}#AGENTONIC_BROKER_SHA256`,
-          expect: (value) => unquote(value) === current,
-        },
-      ]
-    ),
+    ...(["broker.env", "manager.env"] as const).flatMap((file): Check[] => [
+      { name: `${file} private`, key: `mode:${config}/${file}`, expect: "600" },
+      {
+        name: `${file} pins the current broker`,
+        key: `env:${config}/${file}#AGENTONIC_BROKER_SHA256`,
+        expect: (value) => unquote(value) === current,
+      },
+    ]),
+    // Installations from before the gateway have no gateway.env. When present it holds
+    // the runtime role's password, so it must be private and match the current broker.
+    {
+      name: "gateway.env private",
+      key: `mode:${config}/gateway.env`,
+      expect: (value) => value === "missing" || value === "600",
+    },
+    {
+      name: "gateway.env pins the current broker",
+      key: `env:${config}/gateway.env#AGENTONIC_BROKER_SHA256`,
+      expect: (value, facts) =>
+        facts[`mode:${config}/gateway.env`] === "missing" ||
+        unquote(value) === current,
+    },
   ]
 }
 export function localEvaluatorChecks(input: {
