@@ -1,5 +1,7 @@
 // Re-verifies the existing staging installations and renews their seven-day registrations.
-// Never rebuilds, reinstalls, resets usage or revives a revoked registration.
+// Never rebuilds, reinstalls, resets usage or revives a revoked registration. Every run
+// also reports the health of the Azure services (waiting, failed or restarting) and
+// whether this Mac still holds the bytes needed to rebuild vm-agents-01.
 //
 //   pnpm staging:reverify                      show registrations and expiry (read-only)
 //   pnpm staging:reverify --verify             run every check, change nothing
@@ -40,9 +42,12 @@ import {
   azureHostChecks,
   failedChecks,
   gatherScript,
+  healthFindings,
+  healthProbes,
   isEvaluator,
   localEvaluatorChecks,
   localHostChecks,
+  machineNotes,
   parseFacts,
   planRenewal,
   problems,
@@ -54,15 +59,7 @@ const REPO = "Avilabs-LLC/agentonic"
 const VARIABLE = "STAGING_REGISTRATIONS"
 const WORKFLOW = "staging-registrations.yml"
 const LABEL = "com.avilabs.agentonic.staging-reverify"
-const FLAGS = [
-  "verify",
-  "renew",
-  "now",
-  "publish",
-  "schedule",
-  "unschedule",
-  "allow-pending-approval",
-]
+const FLAGS = ["verify", "renew", "now", "publish", "schedule", "unschedule"]
 const args = process.argv.slice(2)
 for (const arg of args)
   assert.ok(
@@ -118,7 +115,7 @@ try {
       continue
     }
     const act = flag("verify")
-      ? !["missing", "revoked", "not_selected"].includes(plan.reason)
+      ? !["missing", "revoked", "retired", "not_selected"].includes(plan.reason)
       : plan.renew
     if (!act) {
       entries.push({
@@ -144,12 +141,15 @@ try {
       })
     )
   }
-  print(entries, now)
+  // Health is read last, after any renewal had its chance to bring services back.
+  const machine = health(registrations, entries, now)
   const report = {
     version: 1,
     generatedAt: new Date().toISOString(),
     registrations: entries,
+    ...(machine.length ? { machine } : {}),
   }
+  print(entries, now, machine)
   if (flag("publish")) publish(report)
   const found = problems(report, new Date())
   if (found.length || entries.some((entry) => entry.outcome === "failed"))
@@ -164,6 +164,7 @@ try {
 function standing(registration, now) {
   if (!registration) return "missing"
   if (registration.revokedAt) return "revoked"
+  if (registration.retiredAt) return "retired"
   return validUntil(registration.verifiedAt) > now ? "valid" : "expired"
 }
 
@@ -173,16 +174,22 @@ async function load() {
       "SELECT id,environment,broker_sha256,verified_at,revoked_at FROM agentonic.runtime_hosts"
     )
   ).rows
+  // Broker releases side by side; retired and revoked ones run no copies.
+  const brokers = (
+    await db.query(
+      "SELECT host_id,broker_sha256 FROM agentonic.runtime_host_brokers WHERE retired_at IS NULL AND revoked_at IS NULL ORDER BY broker_sha256"
+    )
+  ).rows
   // Runtime artifacts served side by side; retired ones are no longer checked.
   const artifacts = (
     await db.query(
       "SELECT host_id,runtime_sha256 FROM agentonic.runtime_host_artifacts WHERE retired_at IS NULL ORDER BY runtime_sha256"
     )
   ).rows
-  // Latest registration per evaluator role: the active one if any, otherwise the last revoked.
+  // Latest registration per evaluator role: the active one if any, otherwise the last ended one.
   const workers = (
     await db.query(
-      "SELECT DISTINCT ON (database_role) id,database_role,worker_sha256,verified_at,revoked_at,verification FROM agentonic.evaluation_workers ORDER BY database_role,(revoked_at IS NULL) DESC,created_at DESC"
+      "SELECT DISTINCT ON (database_role) id,database_role,worker_sha256,verified_at,revoked_at,retired_at,verification FROM agentonic.evaluation_workers ORDER BY database_role,(revoked_at IS NULL AND retired_at IS NULL) DESC,created_at DESC"
     )
   ).rows
   const workerRuntimes = (
@@ -198,6 +205,9 @@ async function load() {
         verifiedAt: row.verified_at.toISOString(),
         revokedAt: row.revoked_at?.toISOString() ?? null,
         codeSha256: row.broker_sha256,
+        brokers: brokers
+          .filter((b) => b.host_id === row.id)
+          .map((b) => b.broker_sha256),
         runtimes: artifacts
           .filter((a) => a.host_id === row.id)
           .map((a) => a.runtime_sha256),
@@ -211,6 +221,7 @@ async function load() {
         id: row.id,
         verifiedAt: row.verified_at.toISOString(),
         revokedAt: row.revoked_at?.toISOString() ?? null,
+        retiredAt: row.retired_at?.toISOString() ?? null,
         codeSha256: row.worker_sha256,
         runtimes: workerRuntimes
           .filter((r) => r.worker_id === row.id)
@@ -244,17 +255,21 @@ function checksFor(target, registration) {
     })),
   }
   if (target === "azure-host") {
-    const units = stagingUnits({
-      release: `/opt/agentonic/staging/releases/${registration.codeSha256}`,
-      serviceRoot: "/etc/agentonic/staging/agents",
-      caPath: "/etc/agentonic/staging/database-ca.crt",
-      configRoot: "/etc/agentonic/staging",
-    })
+    const units = (broker) =>
+      stagingUnits({
+        broker,
+        serviceRoot: "/etc/agentonic/staging/agents",
+        caPath: "/etc/agentonic/staging/database-ca.crt",
+        configRoot: "/etc/agentonic/staging",
+      })
     return azureHostChecks({
       ...common,
       brokerSha256: registration.codeSha256,
-      runtimeUnitSha256: sha(units.runtime),
-      controllerUnitSha256: sha(units.controller),
+      brokers: registration.brokers.map((broker) => ({
+        sha256: broker,
+        templateSha256: sha(units(broker).runtime),
+      })),
+      controllerUnitSha256: sha(units(registration.codeSha256).controller),
     })
   }
   if (target === "azure-evaluator") {
@@ -273,6 +288,7 @@ function checksFor(target, registration) {
       ...common,
       root,
       brokerSha256: registration.codeSha256,
+      brokers: registration.brokers,
     })
   return localEvaluatorChecks({
     ...common,
@@ -374,8 +390,13 @@ async function reverify(target, registration, current) {
 
 async function renewHost(target, registration, entry) {
   const updated = await db.query(
-    "UPDATE agentonic.runtime_hosts h SET verified_at=clock_timestamp() WHERE id=$1 AND revoked_at IS NULL AND broker_sha256=$2 AND coalesce((SELECT array_agg(runtime_sha256 ORDER BY runtime_sha256) FROM agentonic.runtime_host_artifacts WHERE host_id=h.id AND retired_at IS NULL),'{}')=$3::text[] RETURNING verified_at",
-    [registration.id, registration.codeSha256, registration.runtimes]
+    "UPDATE agentonic.runtime_hosts h SET verified_at=clock_timestamp() WHERE id=$1 AND revoked_at IS NULL AND broker_sha256=$2 AND coalesce((SELECT array_agg(runtime_sha256 ORDER BY runtime_sha256) FROM agentonic.runtime_host_artifacts WHERE host_id=h.id AND retired_at IS NULL),'{}')=$3::text[] AND coalesce((SELECT array_agg(broker_sha256 ORDER BY broker_sha256) FROM agentonic.runtime_host_brokers WHERE host_id=h.id AND retired_at IS NULL AND revoked_at IS NULL),'{}')=$4::text[] RETURNING verified_at",
+    [
+      registration.id,
+      registration.codeSha256,
+      registration.runtimes,
+      registration.brokers,
+    ]
   )
   if (updated.rowCount !== 1)
     throw new Error("registration_changed_during_check")
@@ -422,16 +443,7 @@ async function renewEvaluator(target, registration, names, entry) {
     azure ? [] : [registration.id]
   )
   if (busy.rows[0].n) return entry("deferred", "an evaluation is in progress")
-  // Approval evidence is bound to the registration that produced it; renewing revokes it.
-  const evidence = await db.query(
-    "SELECT count(*)::int n FROM agentonic.evaluation_runs e JOIN agentonic.agent_submissions s ON s.id=e.submission_id WHERE e.worker_id=$1 AND e.status='passed' AND e.finished_at>clock_timestamp()-interval '24 hours' AND s.status IN ('submitted','in_review')",
-    [registration.id]
-  )
-  if (evidence.rows[0].n && !flag("allow-pending-approval"))
-    return entry(
-      "deferred",
-      "a passed evaluation is awaiting a review decision"
-    )
+  // Renewal retires the registration: approval evidence it produced stays valid.
   let restart = false
   if (azure) {
     const release = `/opt/agentonic/evaluation/releases/${registration.codeSha256}`
@@ -452,7 +464,7 @@ async function renewEvaluator(target, registration, names, entry) {
   await db.query("BEGIN")
   try {
     const locked = await db.query(
-      "SELECT * FROM agentonic.evaluation_workers WHERE id=$1 AND revoked_at IS NULL FOR UPDATE",
+      "SELECT * FROM agentonic.evaluation_workers WHERE id=$1 AND revoked_at IS NULL AND retired_at IS NULL FOR UPDATE",
       [registration.id]
     )
     const row = locked.rows[0]
@@ -474,7 +486,7 @@ async function renewEvaluator(target, registration, names, entry) {
     )
     if (leased.rows[0].n) throw new Error("evaluation_started_during_check")
     await db.query(
-      "UPDATE agentonic.evaluation_workers SET revoked_at=clock_timestamp() WHERE id=$1",
+      "UPDATE agentonic.evaluation_workers SET retired_at=clock_timestamp() WHERE id=$1",
       [row.id]
     )
     // Registrations are immutable; renewal records a new one carrying the installation's
@@ -514,7 +526,83 @@ async function renewEvaluator(target, registration, names, entry) {
   }
 }
 
-function print(entries, now) {
+/**
+ * Gathers service health for the Azure targets in one SSH session and checks that this
+ * Mac still holds every program and runtime the VM serves, so it could be rebuilt.
+ * Adds findings to the entries; returns notes about the machine.
+ */
+function health(registrations, entries, now) {
+  const targets = ["azure-host", "azure-evaluator"].filter(
+    (target) => registrations[target] && !standingEnded(registrations[target])
+  )
+  if (!targets.length) return []
+  let facts = null
+  try {
+    facts = parseFacts(
+      ssh(gatherScript(targets.flatMap((target) => healthProbes(target))))
+    )
+  } catch {
+    /* Reported per target below. */
+  }
+  for (const target of targets) {
+    const found = facts
+      ? healthFindings(target, facts)
+      : ["could not reach vm-agents-01 with sudo"]
+    const missing = missingLocally(target, registrations[target])
+    if (missing.length)
+      found.push(
+        `this Mac no longer holds what rebuilding it needs: ${summarize(missing)}`
+      )
+    const entry = entries.find((e) => e.name === target)
+    if (entry && found.length) entry.health = found
+  }
+  return facts ? machineNotes(facts, now) : []
+}
+
+const standingEnded = (registration) =>
+  !!(registration.revokedAt || registration.retiredAt)
+
+/** Program and runtime bytes the VM serves that are missing or altered on this Mac. */
+function missingLocally(target, registration) {
+  const programs =
+    target === "azure-host"
+      ? registration.brokers.map((broker) => [
+          `broker ${broker.slice(0, 12)}`,
+          join(root, ".local/staging/releases", broker, "broker.mjs"),
+          broker,
+        ])
+      : [
+          [
+            `evaluator ${registration.codeSha256.slice(0, 12)}`,
+            join(
+              root,
+              ".local/evaluation/releases",
+              registration.codeSha256,
+              "worker.mjs"
+            ),
+            registration.codeSha256,
+          ],
+        ]
+  const missing = programs
+    .filter(
+      ([, path, hash]) => !existsSync(path) || sha(readFileSync(path)) !== hash
+    )
+    .map(([name]) => name)
+  for (const runtime of registration.runtimes)
+    try {
+      for (const [path, hash] of Object.entries(runtimeFiles(runtime)))
+        if (
+          sha(readFileSync(join(root, ".local/runtime", runtime, path))) !==
+          hash
+        )
+          throw new Error("changed")
+    } catch {
+      missing.push(`runtime ${runtime.slice(0, 12)}`)
+    }
+  return missing
+}
+
+function print(entries, now, machine = []) {
   const left = (until) => {
     if (!until) return "—"
     const ms = Date.parse(until) - now.getTime()
@@ -532,6 +620,7 @@ function print(entries, now) {
         entry.outcome + (entry.detail ? `: ${entry.detail}` : ""),
       ].join("  ")
     )
+  for (const note of machine) console.log(`  ${note}`)
   for (const line of problems(
     { version: 1, generatedAt: now.toISOString(), registrations: entries },
     now

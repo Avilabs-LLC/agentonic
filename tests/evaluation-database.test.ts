@@ -15,6 +15,12 @@ vi.mock("../packages/server/src/auth", () => ({
 import { submitAgentForReview } from "../packages/server/src/submission"
 import { reviewReceipt } from "../packages/contracts/src/review-receipt"
 import { vector } from "@electric-sql/pglite-pgvector"
+import {
+  Controller,
+  metadata,
+  pollResult,
+  type ControllerSystem,
+} from "../apps/worker/src/staging-controller"
 let db: PGlite
 const id = (n: number) =>
   `10000000-0000-4000-8000-${String(n).padStart(12, "0")}`
@@ -2416,6 +2422,7 @@ async function modelReview() {
     "202609190036_chat_model_levels",
     "202609190037_model_review_receipt_history",
     "202610050038_side_by_side_runtimes",
+    "202610050039_side_by_side_brokers",
   ])
     await db.exec(
       readFileSync(
@@ -2658,7 +2665,7 @@ it("model review approvals expose only the approved models and levels in live ch
   expect(report.modelBatch?.models).toHaveLength(2)
   expect(report.criteria).toHaveLength(1)
   await sql(
-    "WITH h AS (INSERT INTO agentonic.runtime_hosts(environment,database_role,broker_sha256,verified_at,heartbeat_at) VALUES('local','agentonic_deployer_local',repeat('f',64),clock_timestamp(),clock_timestamp()) RETURNING id) INSERT INTO agentonic.runtime_host_artifacts(host_id,runtime_sha256) SELECT id,repeat('b',64) FROM h"
+    "WITH h AS (INSERT INTO agentonic.runtime_hosts(environment,database_role,broker_sha256,verified_at,heartbeat_at) VALUES('local','agentonic_deployer_local',repeat('f',64),clock_timestamp(),clock_timestamp()) RETURNING id), b AS (INSERT INTO agentonic.runtime_host_brokers(host_id,broker_sha256) SELECT id,repeat('f',64) FROM h) INSERT INTO agentonic.runtime_host_artifacts(host_id,runtime_sha256) SELECT id,repeat('b',64) FROM h"
   )
   await actor()
   const d = await lifecycleCall("deployment_command", "authorize", {
@@ -2743,6 +2750,10 @@ it("serves several frozen runtimes side by side and never retires one a deployme
     )
   ).rows[0] as { id: string }
   await sql(
+    "INSERT INTO agentonic.runtime_host_brokers(host_id,broker_sha256) VALUES($1,repeat('f',64))",
+    [host.id]
+  )
+  await sql(
     "INSERT INTO agentonic.runtime_host_artifacts(host_id,runtime_sha256) VALUES($1,repeat('c',64))",
     [host.id]
   )
@@ -2793,4 +2804,534 @@ it("serves several frozen runtimes side by side and never retires one a deployme
     db.query("SELECT * FROM agentonic.runtime_host_artifacts")
   ).rejects.toThrow()
   await db.exec("ROLLBACK TO SAVEPOINT direct")
+})
+const brokers = { f: "f".repeat(64), e: "e".repeat(64), d: "d".repeat(64) }
+async function callAs(role: string, query: string, params: unknown[]) {
+  await db.exec(`RESET ROLE;SET LOCAL ROLE ${role};SAVEPOINT copy_call`)
+  try {
+    const r = await db.query<{ result: Record<string, unknown> | null }>(
+      query,
+      params
+    )
+    await db.exec("RELEASE SAVEPOINT copy_call")
+    return r.rows[0]!.result
+  } catch (e) {
+    await db.exec("ROLLBACK TO SAVEPOINT copy_call;RELEASE SAVEPOINT copy_call")
+    throw e
+  }
+}
+const controller = (
+  broker: string,
+  operation: string,
+  deploymentId: string | null,
+  secret = serviceSecret
+) =>
+  callAs(
+    "agentonic_deployer_local",
+    "SELECT agentonic.deployment_host($1,$2,jsonb_build_object('brokerHash',$3::text,'tokenHash',encode(sha256(convert_to($4,'UTF8')),'hex'))) result",
+    [operation, deploymentId, broker, secret]
+  )
+const copy = (
+  operation: string,
+  deploymentId: string,
+  secret: string,
+  payload: Record<string, unknown> = {}
+) =>
+  callAs(
+    "agentonic_runtime_local",
+    "SELECT agentonic.deployment_service($1,$2,$3,$4) result",
+    [operation, deploymentId, secret, JSON.stringify(payload)]
+  )
+const work = (
+  deploymentId: string,
+  secret: string,
+  operation: string,
+  job: Job | null = null,
+  payload: Record<string, unknown> = {}
+) =>
+  callAs(
+    "agentonic_runtime_local",
+    "SELECT agentonic.staging_worker($1,$2,$3,$4,$5,$6) result",
+    [
+      operation,
+      deploymentId,
+      secret,
+      job?.id ?? null,
+      job?.token ?? null,
+      JSON.stringify(payload),
+    ]
+  )
+async function rejectsSql(statement: string, params: unknown[] = []) {
+  await db.exec("SAVEPOINT rejected_sql")
+  await expect(sql(statement, params)).rejects.toThrow()
+  await db.exec("ROLLBACK TO SAVEPOINT rejected_sql")
+}
+async function installBroker(hostId: string, broker: string) {
+  await sql(
+    "INSERT INTO agentonic.runtime_host_brokers(host_id,broker_sha256) VALUES($1,$2)",
+    [hostId, broker]
+  )
+  await sql("UPDATE agentonic.runtime_hosts SET broker_sha256=$2 WHERE id=$1", [
+    hostId,
+    broker,
+  ])
+}
+const brokerLive = async (broker: string) =>
+  (
+    await sql(
+      "SELECT retired_at IS NULL AND revoked_at IS NULL live FROM agentonic.runtime_host_brokers WHERE broker_sha256=$1",
+      [broker]
+    )
+  ).rows[0]
+/** A running staging deployment whose serving copy runs broker f, with one leased turn. */
+async function servingOnBroker() {
+  const p = await modelReview()
+  const model = { model: "gpt-5.4-mini", reasoning: "medium" }
+  await actor()
+  await flow("run", {
+    preparationId: p.preparationId,
+    revision: 1,
+    models: [model],
+    budgetUsd: 3,
+    consent: true,
+    requestId: id(990),
+  })
+  await finishFlow((await evalClaim())!, "passed", true, model.model)
+  const hostId = (
+    (
+      await sql(
+        "WITH h AS (INSERT INTO agentonic.runtime_hosts(environment,database_role,broker_sha256,verified_at,heartbeat_at) VALUES('local','agentonic_deployer_local',repeat('f',64),clock_timestamp(),clock_timestamp()) RETURNING id), b AS (INSERT INTO agentonic.runtime_host_brokers(host_id,broker_sha256) SELECT id,repeat('f',64) FROM h), r AS (INSERT INTO agentonic.runtime_host_artifacts(host_id,runtime_sha256) SELECT id,repeat('b',64) FROM h) SELECT id FROM h"
+      )
+    ).rows[0] as { id: string }
+  ).id
+  await actor()
+  const d = await lifecycleCall("deployment_command", "authorize", {
+    submissionId: p.submissionId,
+    environment: "local",
+    budgetUsd: 0.25,
+    consent: true,
+    requestId: id(992),
+  })
+  const deploymentId = String(d.id)
+  await readyStaging({ ...p, deploymentId })
+  await actor()
+  const conversation = await chat("start", {
+    deploymentId,
+    title: "Synthetic broker move",
+  })
+  const ask = async (n: number) => {
+    await actor()
+    expect(
+      await chat("turn", {
+        conversationId: conversation.id,
+        query: "Synthetic question",
+        requestId: id(n),
+        ...model,
+      })
+    ).toMatchObject({ ok: true })
+  }
+  await ask(982)
+  const leased = (await work(deploymentId, serviceSecret, "claim")) as Job
+  expect(leased).toMatchObject({ kind: "retrieve" })
+  return { deploymentId, hostId, leased, ask }
+}
+it("moves a running deployment to a new broker while the old copy finishes its leased turn", async () => {
+  const { deploymentId: dep, hostId, leased } = await servingOnBroker()
+  const next = "b".repeat(64)
+  await installBroker(hostId, brokers.e)
+  // Only the current broker's controller is accepted; it sees every registered broker.
+  await expect(controller(brokers.f, "poll", null)).rejects.toMatchObject({
+    code: "42501",
+  })
+  const polled = await controller(brokers.e, "poll", null)
+  expect(polled!.brokers).toEqual([
+    { sha256: brokers.f, live: true },
+    { sha256: brokers.e, live: true },
+  ])
+  expect(polled!.deployments).toEqual([
+    expect.objectContaining({
+      id: dep,
+      broker: brokers.f,
+      successorBroker: null,
+      drainingBroker: null,
+    }),
+  ])
+  const moved = (await controller(brokers.e, "move", dep, next))!
+  expect(moved).toMatchObject({ ok: true, manifestHash: expect.any(String) })
+  await expect(controller(brokers.e, "move", dep, next)).rejects.toThrow()
+  // A starting successor cannot work and must run the broker it was assigned.
+  await expect(work(dep, next, "claim")).rejects.toMatchObject({
+    code: "42501",
+  })
+  expect(await copy("heartbeat", dep, next)).toEqual({ ok: true })
+  await expect(
+    copy("ready", dep, next, {
+      manifestHash: moved.manifestHash,
+      brokerHash: brokers.f,
+    })
+  ).rejects.toMatchObject({ code: "42501" })
+  expect(
+    await copy("ready", dep, next, {
+      manifestHash: moved.manifestHash,
+      brokerHash: brokers.e,
+    })
+  ).toEqual({ ok: true })
+  // The replaced copy drains: it finishes its leased turn and claims nothing new,
+  // even with another conversation's turn waiting.
+  expect(await copy("heartbeat", dep, serviceSecret)).toEqual({
+    ok: true,
+    draining: true,
+  })
+  await actor()
+  const second = await chat("start", {
+    deploymentId: dep,
+    title: "Synthetic second chat",
+  })
+  expect(
+    await chat("turn", {
+      conversationId: second.id,
+      query: "Synthetic question",
+      requestId: id(984),
+      model: "gpt-5.4-mini",
+      reasoning: "medium",
+    })
+  ).toMatchObject({ ok: true })
+  await expect(
+    copy("ready", dep, serviceSecret, { manifestHash: moved.manifestHash })
+  ).rejects.toMatchObject({ code: "42501" })
+  expect(await work(dep, serviceSecret, "heartbeat", leased)).toEqual({
+    ok: true,
+  })
+  expect(await work(dep, serviceSecret, "claim")).toBeNull()
+  expect(
+    await work(dep, serviceSecret, "fail", leased, {
+      code: "provider_unavailable",
+    })
+  ).toEqual({ ok: true })
+  expect(await work(dep, next, "claim")).toMatchObject({ kind: "retrieve" })
+  // The earlier broker stays live while its copy drains, then retires.
+  await controller(brokers.e, "poll", null)
+  expect(await brokerLive(brokers.f)).toEqual({ live: true })
+  expect(await controller(brokers.e, "drained", dep)).toEqual({ ok: true })
+  await expect(copy("heartbeat", dep, serviceSecret)).rejects.toMatchObject({
+    code: "42501",
+  })
+  await controller(brokers.e, "poll", null)
+  expect(await brokerLive(brokers.f)).toEqual({ live: false })
+  expect(
+    (
+      await sql(
+        "SELECT broker_sha256,draining_token_sha256 FROM agentonic.deployments WHERE id=$1",
+        [dep]
+      )
+    ).rows
+  ).toEqual([{ broker_sha256: brokers.e, draining_token_sha256: null }])
+  expect(
+    (
+      await sql(
+        "SELECT count(*)::int n FROM agentonic.audit_events WHERE action='deployment.broker_moved' AND resource_id=$1",
+        [dep]
+      )
+    ).rows
+  ).toEqual([{ n: 1 }])
+  // Already on the current broker: nothing to move.
+  await expect(
+    controller(brokers.e, "move", dep, "c".repeat(64))
+  ).rejects.toMatchObject({ code: "42501" })
+})
+it("refuses a revoked broker's copies at once, restores them and ends every copy on stop", async () => {
+  const { deploymentId: dep, hostId, leased } = await servingOnBroker()
+  const next = "b".repeat(64),
+    restored = "c".repeat(64),
+    later = "9".repeat(64)
+  await installBroker(hostId, brokers.e)
+  // An abandoned move leaves the serving copy in place.
+  await controller(brokers.e, "move", dep, next)
+  expect(await controller(brokers.e, "abandon", dep)).toEqual({ ok: true })
+  await expect(copy("heartbeat", dep, next)).rejects.toMatchObject({
+    code: "42501",
+  })
+  expect(await copy("heartbeat", dep, serviceSecret)).toEqual({ ok: true })
+  // Retiring a broker in use is refused; revocation is the emergency path.
+  await rejectsSql(
+    "UPDATE agentonic.runtime_host_brokers SET retired_at=clock_timestamp() WHERE broker_sha256=$1",
+    [brokers.f]
+  )
+  await sql(
+    "UPDATE agentonic.runtime_host_brokers SET revoked_at=clock_timestamp() WHERE broker_sha256=$1",
+    [brokers.f]
+  )
+  await expect(copy("heartbeat", dep, serviceSecret)).rejects.toMatchObject({
+    code: "42501",
+  })
+  await expect(
+    work(dep, serviceSecret, "heartbeat", leased)
+  ).rejects.toMatchObject({ code: "42501" })
+  const replacement = (await controller(brokers.e, "restore", dep, restored))!
+  expect(
+    await copy("ready", dep, restored, {
+      manifestHash: replacement.manifestHash,
+      brokerHash: brokers.e,
+    })
+  ).toEqual({ ok: true })
+  // The revoked copy's turn stays leased until it expires; nothing else is queued.
+  expect(await work(dep, restored, "claim")).toBeNull()
+  for (const statement of [
+    "UPDATE agentonic.runtime_host_brokers SET revoked_at=NULL WHERE broker_sha256=repeat('f',64)",
+    "UPDATE agentonic.runtime_host_brokers SET retired_at=clock_timestamp() WHERE broker_sha256=repeat('f',64)",
+    "UPDATE agentonic.runtime_host_brokers SET revoked_at=clock_timestamp() WHERE broker_sha256=repeat('e',64)",
+    "UPDATE agentonic.runtime_host_brokers SET installed_at=installed_at-interval '1 day'",
+    "DELETE FROM agentonic.runtime_host_brokers",
+  ])
+    await rejectsSql(statement)
+  // Stopping the deployment ends a move in progress with it.
+  await installBroker(hostId, brokers.d)
+  await controller(brokers.d, "move", dep, later)
+  await actor()
+  expect(
+    await lifecycleCall("deployment_command", "stop", { deploymentId: dep })
+  ).toMatchObject({ ok: true })
+  expect(
+    (
+      await sql(
+        "SELECT successor_token_sha256,draining_token_sha256,service_token_sha256 FROM agentonic.deployments WHERE id=$1",
+        [dep]
+      )
+    ).rows
+  ).toEqual([
+    {
+      successor_token_sha256: null,
+      draining_token_sha256: null,
+      service_token_sha256: null,
+    },
+  ])
+  await expect(copy("heartbeat", dep, later)).rejects.toMatchObject({
+    code: "42501",
+  })
+  // A host's current broker must be registered and live.
+  await sql("SET CONSTRAINTS ALL IMMEDIATE")
+  await rejectsSql(
+    "UPDATE agentonic.runtime_hosts SET broker_sha256=repeat('f',64) WHERE id=$1",
+    [hostId]
+  )
+})
+it("keeps evidence from a retired evaluator registration and withdraws it on revocation", async () => {
+  const p = await modelReview()
+  const model = { model: "gpt-5.4-mini", reasoning: "medium" }
+  await actor()
+  await flow("run", {
+    preparationId: p.preparationId,
+    revision: 1,
+    models: [model],
+    budgetUsd: 3,
+    consent: true,
+    requestId: id(990),
+  })
+  await finishFlow((await evalClaim())!, "passed", true, model.model)
+  const run = (
+    await sql(
+      "SELECT id,worker_id FROM agentonic.evaluation_runs WHERE preparation_id=$1 AND status='passed'",
+      [p.preparationId]
+    )
+  ).rows[0] as { id: string; worker_id: string }
+  const approvable = async () =>
+    (
+      (
+        await sql(
+          "SELECT agentonic.evaluation_approvable(e,true) ok FROM agentonic.evaluation_runs e WHERE id=$1",
+          [run.id]
+        )
+      ).rows[0] as { ok: boolean }
+    ).ok
+  expect(await approvable()).toBe(true)
+  // Renewal retires the registration: it takes no more work...
+  await sql(
+    "UPDATE agentonic.evaluation_workers SET retired_at=clock_timestamp() WHERE id=$1",
+    [run.worker_id]
+  )
+  await db.exec("SAVEPOINT retired_claim")
+  await expect(evalClaim()).rejects.toMatchObject({ code: "42501" })
+  await db.exec("ROLLBACK TO SAVEPOINT retired_claim")
+  // ...but what it produced while active stays valid for approval.
+  expect(await approvable()).toBe(true)
+  await sql(
+    "WITH w AS (INSERT INTO agentonic.evaluation_workers(database_role,environment,worker_sha256,verified_at,verification) VALUES('agentonic_eval_azure','azure_staging',repeat('d',64),now(),'{\"reviewProtocol\":3,\"isolation\":true,\"recovery\":true,\"artifactIntegrity\":true}') RETURNING id) INSERT INTO agentonic.evaluation_worker_runtimes(worker_id,runtime_sha256) SELECT id,repeat('b',64) FROM w"
+  )
+  expect(await evalClaim()).toBeNull()
+  await rejectsSql(
+    "UPDATE agentonic.evaluation_workers SET retired_at=NULL WHERE id=$1",
+    [run.worker_id]
+  )
+  // Revocation withdraws trust from everything the registration produced.
+  await sql(
+    "UPDATE agentonic.evaluation_workers SET revoked_at=clock_timestamp() WHERE id=$1",
+    [run.worker_id]
+  )
+  expect(await approvable()).toBe(false)
+})
+
+/** The machine side of a staging host, in memory: copy configurations and running processes. */
+function machine(
+  brokerHash: string,
+  clock: { now: number },
+  state = {
+    configs: new Map<string, Record<string, string>>(),
+    processes: new Set<string>(),
+    log: [] as string[],
+  }
+) {
+  let secrets = 0
+  const key = (broker: string, id: string) => `${broker}:${id}`
+  const system: ControllerSystem = {
+    brokerHash,
+    host: (operation, id, payload = {}) =>
+      callAs(
+        "agentonic_deployer_local",
+        "SELECT agentonic.deployment_host($1,$2,$3) result",
+        [operation, id, JSON.stringify({ ...payload, brokerHash })]
+      ),
+    brokerConfig: () => ({ AGENTONIC_BROKER_SHA256: brokerHash }),
+    install: (prepared) => ({
+      destination: "/instances/synthetic",
+      manifestHash: (prepared as { manifestHash: string }).manifestHash,
+    }),
+    switchCurrent: () => {},
+    removeAssets: () => {},
+    configure: (broker, id, settings) => {
+      if (state.configs.has(key(broker, id))) throw new Error("exists")
+      state.configs.set(key(broker, id), settings)
+    },
+    running: (broker, id) => state.processes.has(key(broker, id)),
+    start: (broker, id) => {
+      state.processes.add(key(broker, id))
+      state.log.push(`start ${broker[0]}`)
+    },
+    remove: (broker, id) => {
+      state.processes.delete(key(broker, id))
+      state.configs.delete(key(broker, id))
+      state.log.push(`remove ${broker[0]}`)
+    },
+    secret: () => String(++secrets).repeat(64),
+    now: () => clock.now,
+  }
+  const failures: string[] = []
+  const controller = new Controller(system)
+  /** One controller pass, exactly as the deployment controller runs it. */
+  const pass = async () => {
+    const state_ = pollResult.parse(await controllerPoll(brokerHash))
+    const onDisk = new Map<string, Set<string>>()
+    for (const name of state.configs.keys()) {
+      const [broker, id] = name.split(":") as [string, string]
+      onDisk.set(id, (onDisk.get(id) ?? new Set()).add(broker))
+    }
+    await controller.pass(
+      state_.deployments.map((raw) => metadata.parse(raw)),
+      state_.brokers,
+      onDisk,
+      {
+        due: () => true,
+        ok: () => {},
+        fail: (_d, failure) => {
+          failures.push(`${failure.step}:${failure.reason}`)
+        },
+      }
+    )
+  }
+  return { ...state, pass, failures }
+}
+const controllerPoll = (broker: string) => controller(broker, "poll", null)
+const copySecret = (
+  m: { configs: Map<string, Record<string, string>> },
+  broker: string,
+  id: string
+) => m.configs.get(`${broker}:${id}`)!
+it("upgrades running copies through the controller: move, drain, retire, restore, abandon, stop", async () => {
+  const { deploymentId: dep, hostId, leased } = await servingOnBroker()
+  const clock = { now: Date.now() }
+  // The host already runs broker f's serving copy; broker e is installed next to it.
+  await installBroker(hostId, brokers.e)
+  const m = machine(brokers.e, clock)
+  m.configs.set(`${brokers.f}:${dep}`, {
+    AGENTONIC_DEPLOYMENT_SECRET: serviceSecret,
+  })
+  m.processes.add(`${brokers.f}:${dep}`)
+  await m.pass()
+  expect(m.log).toEqual(["start e"])
+  // The successor reports ready; the replaced copy drains and finishes its turn.
+  const successor = copySecret(m, brokers.e, dep)
+  expect(
+    await copy("ready", dep, successor.AGENTONIC_DEPLOYMENT_SECRET!, {
+      manifestHash: successor.AGENTONIC_MANIFEST_HASH,
+      brokerHash: brokers.e,
+    })
+  ).toEqual({ ok: true })
+  await m.pass()
+  expect(m.log).toEqual(["start e"])
+  expect(
+    await work(dep, serviceSecret, "fail", leased, { code: "lease_lost" })
+  ).toEqual({ ok: true })
+  expect(await copy("heartbeat", dep, serviceSecret)).toMatchObject({
+    draining: true,
+  })
+  m.processes.delete(`${brokers.f}:${dep}`)
+  await m.pass()
+  expect(m.log).toEqual(["start e", "remove f"])
+  await m.pass()
+  expect(await brokerLive(brokers.f)).toEqual({ live: false })
+  expect(m.failures).toEqual([])
+  // Emergency: broker e is revoked once d is installed. The new controller restores at once.
+  await installBroker(hostId, brokers.d)
+  await sql(
+    "UPDATE agentonic.runtime_host_brokers SET revoked_at=clock_timestamp() WHERE broker_sha256=$1",
+    [brokers.e]
+  )
+  const n = machine(brokers.d, clock, m)
+  await n.pass()
+  expect(n.log.slice(2)).toEqual(["remove e", "start d"])
+  const restored = copySecret(n, brokers.d, dep)
+  expect(
+    await copy("ready", dep, restored.AGENTONIC_DEPLOYMENT_SECRET!, {
+      manifestHash: restored.AGENTONIC_MANIFEST_HASH,
+      brokerHash: brokers.d,
+    })
+  ).toEqual({ ok: true })
+  // A copy that stops right after starting is a failure; it is restarted after a pause.
+  const since = (from: number) => n.log.slice(from)
+  let mark = n.log.length
+  n.processes.delete(`${brokers.d}:${dep}`)
+  await n.pass()
+  expect(since(mark)).toEqual([])
+  expect(n.failures).toEqual(["start:copy_exited"])
+  clock.now += 31_000
+  await n.pass()
+  expect(since(mark)).toEqual(["start d"])
+  // A successor that never becomes ready is abandoned; the serving copy keeps serving.
+  const seven = "7".repeat(64)
+  await installBroker(hostId, seven)
+  const o = machine(seven, clock, m)
+  mark = o.log.length
+  await o.pass()
+  expect(since(mark)).toEqual(["start 7"])
+  clock.now += 121_000
+  await o.pass()
+  expect(since(mark)).toEqual(["start 7", "remove 7"])
+  expect(o.failures).toEqual(["move:successor_not_ready"])
+  expect(
+    await copy("heartbeat", dep, restored.AGENTONIC_DEPLOYMENT_SECRET!)
+  ).toEqual({ ok: true })
+  clock.now += 60_000
+  await o.pass()
+  expect(since(mark)).toEqual(["start 7", "remove 7"])
+  clock.now += 10 * 60_000
+  await o.pass()
+  expect(since(mark)).toEqual(["start 7", "remove 7", "start 7"])
+  // Stopping the deployment removes every copy.
+  await actor()
+  expect(
+    await lifecycleCall("deployment_command", "stop", { deploymentId: dep })
+  ).toMatchObject({ ok: true })
+  mark = o.log.length
+  await o.pass()
+  expect(since(mark).sort()).toEqual(["remove 7", "remove d"])
+  expect([...o.configs.keys(), ...o.processes]).toEqual([])
 })

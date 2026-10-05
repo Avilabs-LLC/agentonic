@@ -1,6 +1,13 @@
 import assert from "node:assert/strict"
 import { execFileSync, spawn } from "node:child_process"
-import { readFileSync, mkdirSync, writeFileSync, existsSync } from "node:fs"
+import {
+  readFileSync,
+  mkdirSync,
+  writeFileSync,
+  existsSync,
+  readdirSync,
+  rmSync,
+} from "node:fs"
 import { join } from "node:path"
 import { createHash } from "node:crypto"
 import {
@@ -11,9 +18,17 @@ import {
   bootstrapConfig,
   fail,
 } from "./local-config.mjs"
-import { stagingNode, stagingUnits } from "./staging-units.mjs"
-// Installs only the private staging deployment controller and its runtime template.
-// Existing evaluators, Corby services, public ports and provider budgets are untouched.
+import {
+  agentTemplate,
+  stagingNode,
+  stagingReleases,
+  stagingUnits,
+} from "./staging-units.mjs"
+// Installs the private staging deployment controller and an agent service template for
+// the packaged broker. Brokers install side by side: running deployments keep their
+// copies, and the new controller moves them to this broker one at a time without
+// interrupting a turn. Existing evaluators, Corby services, public ports and provider
+// budgets are untouched.
 const azure = process.argv.includes("--azure"),
   local = process.argv.includes("--local")
 assert.ok(azure !== local, "Choose --local or --azure")
@@ -55,7 +70,7 @@ const runtimeRoot = azure
 const configRoot = azure ? "/etc/agentonic/staging" : join(workspace, "config")
 const serviceRoot = join(configRoot, "agents")
 const release = azure
-  ? `/opt/agentonic/staging/releases/${packaged.brokerHash}`
+  ? `${stagingReleases}/${packaged.brokerHash}`
   : packaged.directory
 const caPath = azure
   ? join(configRoot, "database-ca.crt")
@@ -106,6 +121,8 @@ const ssh = (script) =>
   )
     .toString()
     .trim()
+const UUID_ENV =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.env$/
 let db
 try {
   const migration = loadLocal(".env.database.local")
@@ -117,31 +134,58 @@ try {
     "SELECT id,broker_sha256 FROM agentonic.runtime_hosts WHERE environment=$1",
     [azure ? "azure_staging" : "local"]
   )
-  // Runtimes install side by side (see install-runtime.mjs); only the broker
-  // program is still single per host and needs its deployments stopped first.
-  const installedRuntimes = existing.rowCount
+  const hostId = existing.rows[0]?.id
+  const registered = hostId
+    ? (
+        await db.query(
+          "SELECT broker_sha256,retired_at,revoked_at FROM agentonic.runtime_host_brokers WHERE host_id=$1",
+          [hostId]
+        )
+      ).rows
+    : []
+  assert.ok(
+    !registered.some(
+      (b) => b.broker_sha256 === packaged.brokerHash && b.revoked_at
+    ),
+    "This broker was revoked on this host and cannot return"
+  )
+  const retired = registered
+    .filter((b) => b.retired_at && b.broker_sha256 !== packaged.brokerHash)
+    .map((b) => b.broker_sha256)
+  for (const hash of retired) assert.match(hash, /^[a-f0-9]{64}$/)
+  // Runtimes install side by side (see install-runtime.mjs).
+  const installedRuntimes = hostId
     ? (
         await db.query(
           "SELECT runtime_sha256 FROM agentonic.runtime_host_artifacts WHERE host_id=$1 AND retired_at IS NULL",
-          [existing.rows[0].id]
+          [hostId]
         )
       ).rows.map((r) => r.runtime_sha256)
     : []
   for (const hash of installedRuntimes) assert.match(hash, /^[a-f0-9]{64}$/)
-  if (
-    existing.rowCount &&
-    existing.rows[0].broker_sha256 !== packaged.brokerHash
-  ) {
-    const active = await db.query(
-      "SELECT count(*)::int n FROM agentonic.deployments WHERE host_id=$1 AND status IN ('queued','preparing','running')",
-      [existing.rows[0].id]
-    )
+  const activeDeployments = hostId
+    ? (
+        await db.query(
+          "SELECT count(*)::int n FROM agentonic.deployments WHERE host_id=$1 AND status IN ('queued','preparing','running')",
+          [hostId]
+        )
+      ).rows[0].n
+    : 0
+  // Before side-by-side brokers every agent service shared one template and kept its
+  // configuration directly in the service directory. Replacing that layout still needs
+  // its deployments stopped; later broker releases install next to running copies.
+  const legacy = azure
+    ? ssh(
+        `test -e /etc/systemd/system/agentonic-staging@.service && echo legacy || true\n`
+      ) === "legacy"
+    : existsSync(serviceRoot) &&
+      readdirSync(serviceRoot).some((name) => UUID_ENV.test(name))
+  if (legacy)
     assert.equal(
-      active.rows[0].n,
+      activeDeployments,
       0,
-      "Stop deployments before replacing a broker"
+      "Stop deployments before the first side-by-side broker installation"
     )
-  }
   if (azure) {
     const upload = execFileSync(
       "ssh",
@@ -156,23 +200,10 @@ try {
       .toString()
       .trim()
     assert.match(upload, /^\/tmp\/agentonic-staging-install\.[a-zA-Z0-9]{8}$/)
-    execFileSync(
-      "scp",
-      [
-        "-q",
-        join(packaged.directory, "broker.mjs"),
-        join(staging, "broker.env"),
-        join(staging, "manager.env"),
-        credentials.AGENTONIC_DATABASE_CA_FILE,
-        `vm-agents-01:${upload}/`,
-      ],
-      { stdio: "ignore" }
-    )
     const caName = credentials.AGENTONIC_DATABASE_CA_FILE.split("/").at(-1)
     assert.match(caName, /^[a-zA-Z0-9._-]+$/)
-    const node = stagingNode
     const { runtime: service, controller } = stagingUnits({
-      release,
+      broker: packaged.brokerHash,
       serviceRoot,
       caPath,
       configRoot,
@@ -183,15 +214,50 @@ try {
       "scp",
       [
         "-q",
+        join(packaged.directory, "broker.mjs"),
+        join(staging, "broker.env"),
+        join(staging, "manager.env"),
+        credentials.AGENTONIC_DATABASE_CA_FILE,
         join(staging, "runtime.service"),
         join(staging, "controller.service"),
         `vm-agents-01:${upload}/`,
       ],
       { stdio: "ignore" }
     )
+    const node = stagingNode
+    const template = agentTemplate(packaged.brokerHash)
     // Only fixed paths, UUID/hash-derived destinations and reviewed program bytes are installed.
     ssh(
-      `test -x ${node}\n${[...new Set([runtimeHash, ...installedRuntimes])].map((hash) => `test "$(sha256sum ${runtimeRoot}/${hash}/manifest.json | cut -d' ' -f1)" = '${hash}'\n`).join("")}test "$(sha256sum ${upload}/broker.mjs | cut -d' ' -f1)" = '${packaged.brokerHash}'\ninstall -d -m 755 ${release}\ninstall -d -m 700 ${instanceRoot} ${configRoot} ${serviceRoot}\ninstall -m 444 ${upload}/broker.mjs ${release}/broker.mjs\ninstall -m 600 ${upload}/broker.env ${configRoot}/broker.env\ninstall -m 600 ${upload}/manager.env ${configRoot}/manager.env\ninstall -m 644 ${upload}/${caName} ${caPath}\ninstall -m 644 ${upload}/runtime.service /etc/systemd/system/agentonic-staging@.service\ninstall -m 644 ${upload}/controller.service /etc/systemd/system/agentonic-deployer-staging.service\nsystemctl daemon-reload\nrm -rf ${upload}\n`
+      [
+        `test -x ${node}`,
+        ...[...new Set([runtimeHash, ...installedRuntimes])].map(
+          (hash) =>
+            `test "$(sha256sum ${runtimeRoot}/${hash}/manifest.json | cut -d' ' -f1)" = '${hash}'`
+        ),
+        `test "$(sha256sum ${upload}/broker.mjs | cut -d' ' -f1)" = '${packaged.brokerHash}'`,
+        `install -d -m 755 ${release}`,
+        `install -d -m 700 ${instanceRoot} ${configRoot} ${serviceRoot}`,
+        `install -m 444 ${upload}/broker.mjs ${release}/broker.mjs`,
+        `install -m 600 ${upload}/broker.env ${configRoot}/broker.env`,
+        `install -m 600 ${upload}/manager.env ${configRoot}/manager.env`,
+        `install -m 644 ${upload}/${caName} ${caPath}`,
+        `install -m 644 ${upload}/runtime.service /etc/systemd/system/${template}`,
+        `install -m 644 ${upload}/controller.service /etc/systemd/system/agentonic-deployer-staging.service`,
+        // Retired brokers run no copies; their templates and empty configuration directories go.
+        ...retired.map(
+          (hash) =>
+            `rm -f /etc/systemd/system/${agentTemplate(hash)}; rmdir ${serviceRoot}/${hash} 2>/dev/null || true`
+        ),
+        ...(legacy
+          ? [
+              "rm -f /etc/systemd/system/agentonic-staging@.service",
+              `find ${serviceRoot} -maxdepth 1 -type f -name '*.env' -delete`,
+            ]
+          : []),
+        "systemctl daemon-reload",
+        `rm -rf ${upload}`,
+        "",
+      ].join("\n")
     )
     assert.equal(
       ssh(`sha256sum ${release}/broker.mjs | cut -d' ' -f1`),
@@ -200,11 +266,14 @@ try {
   } else {
     mkdirSync(serviceRoot, { recursive: true, mode: 0o700 })
     mkdirSync(instanceRoot, { recursive: true, mode: 0o700 })
+    if (legacy)
+      for (const name of readdirSync(serviceRoot))
+        if (UUID_ENV.test(name)) rmSync(join(serviceRoot, name))
     writeLocal(join(configRoot, "broker.env"), broker)
     writeLocal(join(configRoot, "manager.env"), manager)
   }
   await db.query("BEGIN")
-  const hostId = (
+  const host = (
     await db.query(
       `INSERT INTO agentonic.runtime_hosts(environment,database_role,broker_sha256,verified_at) VALUES($1,$2,$3,clock_timestamp())
  ON CONFLICT(environment) DO UPDATE SET broker_sha256=excluded.broker_sha256,verified_at=excluded.verified_at,revoked_at=NULL RETURNING id`,
@@ -215,15 +284,20 @@ try {
       ]
     )
   ).rows[0].id
+  // Reinstalling a retired release brings it back; a revoked one never returns.
+  await db.query(
+    "INSERT INTO agentonic.runtime_host_brokers(host_id,broker_sha256) VALUES($1,$2) ON CONFLICT(host_id,broker_sha256) DO UPDATE SET retired_at=NULL WHERE runtime_host_brokers.revoked_at IS NULL",
+    [host, packaged.brokerHash]
+  )
   await db.query(
     "INSERT INTO agentonic.runtime_host_artifacts(host_id,runtime_sha256) VALUES($1,$2) ON CONFLICT DO NOTHING",
-    [hostId, runtimeHash]
+    [host, runtimeHash]
   )
   assert.equal(
     (
       await db.query(
         "SELECT count(*)::int n FROM agentonic.runtime_host_artifacts WHERE host_id=$1 AND runtime_sha256=$2 AND retired_at IS NULL",
-        [hostId, runtimeHash]
+        [host, runtimeHash]
       )
     ).rows[0].n,
     1,
@@ -276,9 +350,16 @@ try {
       environment: azure ? "azure_staging" : "local",
       brokerHash: packaged.brokerHash,
       runtimeHash,
+      runningDeployments: activeDeployments,
+      ...(activeDeployments && !legacy
+        ? {
+            note: "The controller moves running deployments to this broker one at a time.",
+          }
+        : {}),
     })
   )
 } catch (error) {
+  await db?.query("ROLLBACK").catch(() => {})
   fail(error)
 } finally {
   await db?.end()

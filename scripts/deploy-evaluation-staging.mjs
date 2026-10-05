@@ -99,10 +99,14 @@ writeFileSync(
   readFileSync(env.AGENTONIC_DATABASE_CA_FILE),
   { mode: 0o600 }
 )
+// The evaluator waits out refusals and outages itself and exits only for configuration
+// problems, so five failed starts in ten minutes leave the unit visibly failed.
 const unit = `[Unit]
 Description=Agentonic isolated staging evaluator
 After=network-online.target
 Wants=network-online.target
+StartLimitIntervalSec=600
+StartLimitBurst=5
 [Service]
 Type=simple
 User=agentonic-eval
