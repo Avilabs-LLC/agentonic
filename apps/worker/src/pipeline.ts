@@ -17,8 +17,8 @@ export type Execute = (
   payload?: Record<string, unknown>
 ) => Promise<Record<string, unknown>>
 export type Configuration = {
-  supabaseUrl: string
-  storageKey: string
+  /** Document Storage for ingestion and purge; only the knowledge worker has it. */
+  storage?: Pick<import("./storage-session").StorageSession, "url" | "headers">
   /** Paid and credentialed calls; an agent copy's go through its gateway. */
   providers: import("./providers").Providers
   allowTools?: boolean
@@ -140,16 +140,10 @@ async function storage(
   init: RequestInit,
   signal: AbortSignal
 ) {
-  if (!config.storageKey) throw new Error("configuration_required")
-  const response = await fetch(`${config.supabaseUrl}/storage/v1/${path}`, {
+  if (!config.storage) throw new Error("configuration_required")
+  const response = await fetch(`${config.storage.url}/storage/v1/${path}`, {
     ...init,
-    headers: {
-      ...init.headers,
-      apikey: config.storageKey,
-      ...(config.storageKey.startsWith("sb_secret_")
-        ? {}
-        : { Authorization: `Bearer ${config.storageKey}` }),
-    },
+    headers: { ...init.headers, ...(await config.storage.headers(signal)) },
     signal: AbortSignal.any([signal, AbortSignal.timeout(30000)]),
   })
   return response

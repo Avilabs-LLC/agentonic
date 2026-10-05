@@ -1278,3 +1278,24 @@ The packaged gateway was also run on the Mac against the nonproduction database.
 - **Failures and limits:** named failures (budget, provider, Google and answer diagnostics) cross as names and are rethrown as the same errors; database and network errors cross as codes. A lost lease cancels the call at the gateway. Each copy may have two provider calls in flight and a host 64; replies are limited to 16 MiB.
 - **Re-verification** adds three checks. `broker.env` and the current broker's copy configurations hold no password or key. `gateway.env` defines the OpenAI and Voyage keys. New probes count these names and never read a value, and the probe that prints a value refuses every password and key name.
 - **Tests** run a real gateway socket with the real handler and the copy's providers. They cover the host's key and the copy's credentials on every step, gateway-owned reservations, refused provider controls, missing leases, budget, unknown and refused outcomes, Gmail failures, cancellation at the gateway, per-copy limits, and hosts without keys. Deliberately breaking strict request checks, the copy's credentials, cancellation or the budget outcome each fails a test. The templates, and the probes' output on real files, are tested too.
+
+**The worker without the Supabase secret key (migration 42).** The knowledge worker signs in to Storage as its own Auth account, `storage-worker@agentonic.invalid`, whose `app_metadata` carries `agentonic_service=storage_worker`; only the Auth admin can set `app_metadata`. It holds the publishable key and that account's password, and refuses to start if `SUPABASE_SECRET_KEY` is in its configuration.
+
+- **Rule:** `agentonic_storage.allowed` lets that account read a document object only while an ingestion or purge job for it holds a live lease, and delete one only while a purge job does and the object is already erased. Any other service name is refused, and customer rules are unchanged. The bootstrap bridge (`storage-boundary.sql`, version 2) adds the purge delete policy and keeps every other document object immutable. Migration 42 refuses to run until `pnpm setup:storage` has installed version 2.
+- **Setup:** `pnpm setup:storage-identity` creates the account, or sets a new password if it exists, and confirms it signs in carrying its service name. It writes the account to the worker's configuration and moves the secret key to `.env.bootstrap.local`. The secret key is now used only by bootstrap and by the owner's live checks.
+- **Tests:** in the replayed database, the account cannot read a queued object, can read it during ingestion, cannot read it after the lease expires, and cannot write. It can delete only during a purge: not under an ingestion lease even after erasure, not as a customer, not under another service name, and not with the name in `user_metadata`. The session signs in once per token with the publishable key and maps failures to `storage_unavailable`.
+
+**Who holds what, after these changes:**
+
+| Secret | Held by |
+|---|---|
+| Runtime database role | each host's gateway |
+| Other database roles | their own process only: apps, knowledge worker, evaluator, controller |
+| OpenAI and Voyage keys | knowledge worker, evaluator, each host's gateway |
+| Browserbase key | knowledge worker, each host's gateway |
+| Google client secret and connection keys | customer app (OAuth and confirmed sends), knowledge worker (previews), each host's gateway |
+| Worker's Storage account | knowledge worker |
+| Supabase secret key | the owner's bootstrap configuration only |
+| Agent services | their own deployment secret only |
+
+Not adopted: Supabase Vault for these keys. Sealed values with named keys keep the key outside the database, which a Vault in the same database would not. Each holder above is a single platform process that makes the calls the key is for. Azure Key Vault remains an option for production hosts (§5); it would replace the configuration files above, not change who holds what.

@@ -206,7 +206,7 @@ try {
       {
         method: "POST",
         headers: {
-          apikey: worker.SUPABASE_SECRET_KEY,
+          apikey: e.SUPABASE_SECRET_KEY,
           "Content-Type": "text/markdown",
           "x-upsert": "false",
         },

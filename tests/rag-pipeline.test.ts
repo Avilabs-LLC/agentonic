@@ -14,6 +14,10 @@ const job: Lease = {
 }
 const signal = new AbortController().signal
 const execute = vi.fn<Execute>()
+const storage = {
+  url: "https://example.supabase.co",
+  headers: async () => ({ apikey: "publishable", Authorization: "Bearer t" }),
+}
 afterEach(() => {
   vi.unstubAllGlobals()
   vi.resetAllMocks()
@@ -108,8 +112,7 @@ it("storage failure leaves purge records available for retry", async () => {
       { ...job, kind: "purge" },
       execute,
       {
-        supabaseUrl: "https://example.supabase.co",
-        storageKey: "sb_secret_fixture",
+        storage,
         providers: directProviders({}),
       },
       signal
@@ -128,8 +131,7 @@ it("successful blob removal precedes database hard purge", async () => {
     { ...job, kind: "purge" },
     execute,
     {
-      supabaseUrl: "https://example.supabase.co",
-      storageKey: "sb_secret_fixture",
+      storage,
       providers: directProviders({}),
     },
     signal
@@ -137,6 +139,11 @@ it("successful blob removal precedes database hard purge", async () => {
   expect(fetch.mock.calls[0]![0]).toBe(
     "https://example.supabase.co/storage/v1/object/agentonic-documents"
   )
+  // The worker's own account, never a secret key.
+  expect(fetch.mock.calls[0]![1].headers).toMatchObject({
+    apikey: "publishable",
+    Authorization: "Bearer t",
+  })
   expect(execute.mock.calls.at(-1)?.[0]).toBe("purged")
 })
 function syntheticPdf(pageCount = 1, linesPerPage = 1) {
@@ -219,8 +226,6 @@ it("runs opt-in candidate search and reranking before publishing retrieval", asy
     { ...job, kind: "retrieve" },
     execute,
     {
-      supabaseUrl: "",
-      storageKey: "",
       providers: directProviders({ voyageKey: "fixture" }),
       rerankEnabled: true,
     },

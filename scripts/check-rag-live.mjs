@@ -17,7 +17,7 @@ try {
     env = loadLocal(".env.database.local"),
     worker = loadLocal("apps/worker/.env.local")
   assert.ok(
-    worker.VOYAGE_API_KEY && worker.SUPABASE_SECRET_KEY && worker.OPENAI_API_KEY
+    worker.VOYAGE_API_KEY && e.SUPABASE_SECRET_KEY && worker.OPENAI_API_KEY
   )
   if (rerankCheck) assert.equal(worker.AGENTONIC_RERANK_ENABLED, "true")
   admin = await connect(
@@ -111,7 +111,7 @@ try {
     {
       method: "POST",
       headers: {
-        apikey: worker.SUPABASE_SECRET_KEY,
+        apikey: e.SUPABASE_SECRET_KEY,
         "Content-Type": "text/markdown",
         "x-upsert": "false",
       },
@@ -263,7 +263,7 @@ try {
   const download = await globalThis.fetch(
     `${worker.SUPABASE_URL}/storage/v1/object/agentonic-documents/${fixture.key}`,
     {
-      headers: { apikey: worker.SUPABASE_SECRET_KEY },
+      headers: { apikey: e.SUPABASE_SECRET_KEY },
       signal: globalThis.AbortSignal.timeout(30000),
     }
   )
