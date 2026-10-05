@@ -8,6 +8,7 @@ import {
   NODE,
   azureEvaluatorChecks,
   azureHostChecks,
+  localHostChecks,
   failedChecks,
   gatherScript,
   healthFindings,
@@ -329,6 +330,37 @@ describe("installation checks", () => {
         gatewaySocketSha256: hash("2"),
       })
     ).toThrow()
+  })
+  it("checks the local gateway configuration only where it exists", () => {
+    const local = localHostChecks({
+      root: "/repo",
+      brokerSha256: hash("a"),
+      brokers: [hash("a")],
+      runtimes: [],
+    })
+    const config = "/repo/.local/staging/config"
+    const facts: Facts = {
+      [`sha:/repo/.local/staging/releases/${hash("a")}/broker.mjs`]: hash("a"),
+    }
+    for (const file of ["broker.env", "manager.env", "gateway.env"]) {
+      facts[`mode:${config}/${file}`] = "600"
+      facts[`env:${config}/${file}#AGENTONIC_BROKER_SHA256`] = `"${hash("a")}"`
+    }
+    expect(failedChecks(local, facts)).toEqual([])
+    // An installation from before the gateway has no gateway.env.
+    const older = {
+      ...facts,
+      [`mode:${config}/gateway.env`]: "missing",
+      [`env:${config}/gateway.env#AGENTONIC_BROKER_SHA256`]: undefined,
+    } as Facts
+    expect(failedChecks(local, older)).toEqual([])
+    expect(
+      failedChecks(local, {
+        ...facts,
+        [`mode:${config}/gateway.env`]: "644",
+        [`env:${config}/gateway.env#AGENTONIC_BROKER_SHA256`]: `"${hash("b")}"`,
+      })
+    ).toEqual(["gateway.env private", "gateway.env pins the current broker"])
   })
   it("parses gathered output", () => {
     expect(
