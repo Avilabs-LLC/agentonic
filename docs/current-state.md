@@ -50,7 +50,7 @@ The Admin app has **Revisiones** (submissions, receipts, renewal and activation)
 - Product: Admin Agents and Activity screens, the general connections and tools model (Gmail is feature-specific), external channels, automation, agent memory, Gmail key rotation and Google verification.
 - Scale: multiple hosts, the 250-agent synthetic load test, and a tested path to 500 agents.
 
-The ordered plan is architecture §37; the owner's audit brief tracks progress.
+The ordered plan is architecture §37; the owner's audit brief tracks progress. [Outstanding actions](outstanding-actions.md) lists every open item, who acts next and when it counts as done.
 
 ## Where to read more
 
