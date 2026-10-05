@@ -14,6 +14,8 @@ vi.mock("../packages/server/src/auth", () => ({
 }))
 import { submitAgentForReview } from "../packages/server/src/submission"
 import { reviewReceipt } from "../packages/contracts/src/review-receipt"
+import { runtimeRegistrations } from "../packages/contracts/src/expiry"
+import { reviewQueue } from "../packages/contracts/src/authoring"
 import { vector } from "@electric-sql/pglite-pgvector"
 import {
   Controller,
@@ -2423,6 +2425,7 @@ async function modelReview() {
     "202609190037_model_review_receipt_history",
     "202610050038_side_by_side_runtimes",
     "202610050039_side_by_side_brokers",
+    "202610050040_admin_expiry_view",
   ])
     await db.exec(
       readFileSync(
@@ -3334,4 +3337,150 @@ it("upgrades running copies through the controller: move, drain, retire, restore
   await o.pass()
   expect(since(mark).sort()).toEqual(["remove 7", "remove d"])
   expect([...o.configs.keys(), ...o.processes]).toEqual([])
+})
+
+it("shows staff each expiry as its own fact and keeps registrations from customers", async () => {
+  const p = await modelReview()
+  const model = { model: "gpt-5.4-mini", reasoning: "medium" }
+  await actor()
+  await flow("run", {
+    preparationId: p.preparationId,
+    revision: 1,
+    models: [model],
+    budgetUsd: 3,
+    consent: true,
+    requestId: id(990),
+  })
+  await finishFlow((await evalClaim())!, "passed", true, model.model)
+  const host = (
+    await sql(
+      "INSERT INTO agentonic.runtime_hosts(environment,database_role,broker_sha256,verified_at,heartbeat_at) VALUES('local','agentonic_deployer_local',repeat('f',64),clock_timestamp(),clock_timestamp()) RETURNING id"
+    )
+  ).rows[0] as { id: string }
+  await sql(
+    "INSERT INTO agentonic.runtime_host_brokers(host_id,broker_sha256) VALUES($1,repeat('f',64))",
+    [host.id]
+  )
+  await sql(
+    "INSERT INTO agentonic.runtime_host_artifacts(host_id,runtime_sha256) VALUES($1,repeat('b',64))",
+    [host.id]
+  )
+  await actor()
+  const d = await lifecycleCall("deployment_command", "authorize", {
+    submissionId: p.submissionId,
+    environment: "local",
+    budgetUsd: 0.25,
+    consent: true,
+    requestId: id(992),
+  })
+  expect(d.ok).toBe(true)
+  await readyStaging({ ...p, deploymentId: String(d.id) })
+  // The queue reads submitter emails through the bootstrap Auth bridge.
+  await sql(
+    "ALTER TABLE auth.users ADD COLUMN email text, ADD COLUMN email_confirmed_at timestamptz, ADD COLUMN deleted_at timestamptz"
+  )
+  await db.exec(
+    readFileSync("scripts/sql/review-identity-boundary.sql", "utf8")
+  )
+  const registrations = async () => {
+    await actor(staff, w, "agentonic_admin")
+    const r = await db.query<{ result: unknown }>(
+      "SELECT agentonic.runtime_registrations() result"
+    )
+    return runtimeRegistrations.parse(r.rows[0]!.result)
+  }
+  const queued = async () => {
+    await actor(staff, w, "agentonic_admin")
+    const r = await db.query<{ result: unknown }>(
+      "SELECT agentonic.review_queue() result"
+    )
+    return reviewQueue
+      .parse(r.rows[0]!.result)
+      .find((row) => row.id === p.submissionId)!
+  }
+  // Host verification lasts seven days from the last verified installation.
+  const fresh = await registrations()
+  expect(fresh.hosts).toEqual([
+    {
+      environment: "local",
+      verifiedAt: expect.any(String),
+      expiresAt: expect.any(String),
+      state: "valid",
+    },
+  ])
+  expect(
+    Date.parse(fresh.hosts[0]!.expiresAt) -
+      Date.parse(fresh.hosts[0]!.verifiedAt)
+  ).toBe(7 * 24 * 3600_000)
+  expect(fresh.evaluators).toContainEqual(
+    expect.objectContaining({ environment: "azure_staging", state: "valid" })
+  )
+  // The queue keeps the approval deadline and adds the customer's consent.
+  const consent = (
+    await sql(
+      "SELECT authorized_until FROM agentonic.deployments WHERE id=$1",
+      [d.id]
+    )
+  ).rows[0] as { authorized_until: Date }
+  const row = await queued()
+  expect(row).toMatchObject({
+    status: "approved",
+    approvalReason: "valid",
+    deploymentStatus: "running",
+    deploymentEnvironment: "local",
+    deploymentAuthorized: true,
+  })
+  expect(
+    Math.abs(
+      Date.parse(row.consentExpiresAt!) - consent.authorized_until.getTime()
+    )
+  ).toBeLessThan(1)
+  expect(row.approvalExpiresAt).not.toBe(row.consentExpiresAt)
+  // Customers and the other application roles cannot read registrations.
+  for (const role of ["agentonic_customer", "agentonic_worker"]) {
+    await actor(owner, w, role)
+    await db.exec("SAVEPOINT registrations")
+    await expect(
+      db.query("SELECT agentonic.runtime_registrations()")
+    ).rejects.toMatchObject({ code: "42501" })
+    await db.exec("ROLLBACK TO SAVEPOINT registrations")
+  }
+  // Within a day of expiry the host shows as expiring and still authorizes.
+  await sql(
+    "UPDATE agentonic.runtime_hosts SET verified_at=clock_timestamp()-interval '6 days 12 hours' WHERE id=$1",
+    [host.id]
+  )
+  expect((await registrations()).hosts[0]).toMatchObject({ state: "expiring" })
+  expect(await queued()).toMatchObject({ deploymentAuthorized: true })
+  // Past seven days the deployment loses authorization with it.
+  await sql(
+    "UPDATE agentonic.runtime_hosts SET verified_at=clock_timestamp()-interval '7 days 1 second' WHERE id=$1",
+    [host.id]
+  )
+  expect((await registrations()).hosts[0]).toMatchObject({ state: "expired" })
+  expect(await queued()).toMatchObject({ deploymentAuthorized: false })
+  await sql(
+    "UPDATE agentonic.runtime_hosts SET revoked_at=clock_timestamp() WHERE id=$1",
+    [host.id]
+  )
+  expect((await registrations()).hosts[0]).toMatchObject({ state: "revoked" })
+  // After a renewal the active registration is reported, not the retired one.
+  await sql(
+    "UPDATE agentonic.evaluation_workers SET retired_at=clock_timestamp() WHERE database_role='agentonic_eval_azure' AND revoked_at IS NULL AND retired_at IS NULL"
+  )
+  await sql(
+    "INSERT INTO agentonic.evaluation_workers(database_role,environment,worker_sha256,verified_at,verification) VALUES('agentonic_eval_azure','azure_staging',repeat('e',64),clock_timestamp()-interval '6 days 12 hours','{\"reviewProtocol\":3,\"isolation\":true,\"recovery\":true,\"artifactIntegrity\":true}')"
+  )
+  expect(
+    (await registrations()).evaluators.filter(
+      (e) => e.environment === "azure_staging"
+    )
+  ).toEqual([expect.objectContaining({ state: "expiring" })])
+  expect(
+    (
+      await sql(
+        "SELECT agentonic.registration_state(clock_timestamp(),NULL,clock_timestamp()) retired,agentonic.registration_state(clock_timestamp(),clock_timestamp(),clock_timestamp()) revoked"
+      )
+    ).rows[0]
+  ).toEqual({ retired: "retired", revoked: "revoked" })
 })

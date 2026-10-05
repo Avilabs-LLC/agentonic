@@ -11,6 +11,7 @@ import {
   LibraryIcon,
   PlugIcon,
   ActivityIcon,
+  CalendarClockIcon,
   ChevronsUpDownIcon,
   UserIcon,
   LogOutIcon,
@@ -65,6 +66,7 @@ const icons = {
   knowledge: LibraryIcon,
   connections: PlugIcon,
   activity: ActivityIcon,
+  expiry: CalendarClockIcon,
 }
 export function AppShell({
   app,

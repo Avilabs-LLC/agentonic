@@ -114,6 +114,36 @@ export function DashboardSkeleton({
     </div>
   )
 }
+// Vencimientos: header, servers-and-evaluators card (four registrations) and
+// the seven-column deadlines table.
+export function ExpirySkeleton() {
+  return (
+    <div aria-label="Cargando vencimientos" role="status" className="space-y-6">
+      <PageHeaderSkeleton />
+      <Card>
+        <CardHeader className="space-y-2">
+          <Skeleton className="h-5 w-48" />
+          <Skeleton className="h-4 w-full max-w-2xl" />
+        </CardHeader>
+        <CardContent className="divide-y">
+          {[1, 2, 3, 4].map((i) => (
+            <div
+              key={i}
+              className="flex items-center justify-between gap-4 py-5 first:pt-2.5 last:pb-2.5"
+            >
+              <div className="space-y-1.5">
+                <Skeleton className="h-4 w-56" />
+                <Skeleton className="h-4 w-80 max-w-full" />
+              </div>
+              <Skeleton className="h-5 w-20 rounded-full" />
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+      <TableSkeleton columns={7} />
+    </div>
+  )
+}
 export function AccountSkeleton() {
   return (
     <div aria-label="Cargando cuenta" role="status" className="space-y-6">

@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from "vitest"
-import { formatUtcDateTime } from "../packages/contracts/src/format"
+import {
+  formatUtcDateTime,
+  formatUtcParts,
+} from "../packages/contracts/src/format"
 
 describe("hydration-safe UTC timestamps", () => {
   it("renders the reported expiry identically without engine locale formatting", () => {
@@ -30,5 +33,19 @@ describe("hydration-safe UTC timestamps", () => {
   )
   it("handles invalid dates without rendering Invalid Date", () => {
     expect(formatUtcDateTime("invalid")).toBe("No disponible")
+    expect(formatUtcParts("invalid")).toEqual({
+      date: "No disponible",
+      time: "",
+    })
+  })
+  it("splits the same UTC timestamp to the minute for compact cells", () => {
+    expect(formatUtcParts("2026-09-16T23:05:09-04:00")).toEqual({
+      date: "17/9/2026",
+      time: "3:05 a. m. UTC",
+    })
+    expect(formatUtcParts(new Date("2026-09-16T12:00:59Z"))).toEqual({
+      date: "16/9/2026",
+      time: "12:00 p. m. UTC",
+    })
   })
 })
