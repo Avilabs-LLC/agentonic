@@ -83,8 +83,6 @@ const pause = (ms: number) =>
 const openaiKey = env.OPENAI_API_KEY ?? ""
 const config = {
   allowTools: false,
-  supabaseUrl: "",
-  storageKey: "",
   providers: directProviders({
     openaiKey,
     voyageKey: env.VOYAGE_API_KEY ?? "",

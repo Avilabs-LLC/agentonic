@@ -24,7 +24,7 @@ try {
     env = loadLocal(".env.database.local"),
     worker = loadLocal("apps/worker/.env.local")
   assert.ok(
-    worker.VOYAGE_API_KEY && worker.SUPABASE_SECRET_KEY && worker.OPENAI_API_KEY
+    worker.VOYAGE_API_KEY && e.SUPABASE_SECRET_KEY && worker.OPENAI_API_KEY
   )
   admin = await connect(
     env.AGENTONIC_MIGRATION_DATABASE_URL,
@@ -215,7 +215,7 @@ try {
       {
         method: "POST",
         headers: {
-          apikey: worker.SUPABASE_SECRET_KEY,
+          apikey: e.SUPABASE_SECRET_KEY,
           "Content-Type": "text/markdown",
           "x-upsert": "false",
         },

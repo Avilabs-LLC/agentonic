@@ -41,7 +41,10 @@ The Admin app has **Revisiones** (submissions, receipts, renewal and activation)
 - **Connections.** An agent with nothing to do rests: its service stops and uses no connection, and the controller wakes it when a message arrives. Awake agents reach the database through the host's single gateway, so with one instance of each app the platform needs 18 connections however many agents are activated (architecture §43).
 - **Upgrades.** New runtimes (`pnpm runtime:install`) and new worker releases (`install-staging`) install next to the running ones. Running agents move over one at a time without stopping.
 - **Restarts.** The VM restarts on Sundays at 04:00 Canary time, only when installed updates require it (`pnpm staging:restart-window`).
-- **Keys.** Agent services hold no password or key and have no network: the host's gateway makes their provider and Gmail calls with their own credentials. Stored Gmail secrets name the key that sealed them, and `pnpm connections:rotate-key` replaces that key in four steps without breaking any holder (architecture §44).
+- **Secrets.** Each secret lives only in the processes that make the calls it is for (table in architecture §44).
+  - Agent services hold no password or key and have no network: the host's gateway makes their provider and Gmail calls with their own credentials.
+  - The knowledge worker reaches Storage with its own account, limited to documents whose ingestion or purge it is running. The Supabase secret key is bootstrap-only.
+  - Stored Gmail secrets name the key that sealed them, and `pnpm connections:rotate-key` replaces that key in four steps without breaking any holder.
 - **Backups.** Azure Backup takes a daily VM backup at 02:00 UTC and keeps it 14 days (vault `rsv-agents-spaincentral`). It doesn't cover the database. Rebuilding the VM from the Mac is documented in architecture §41.
 
 ## Not built yet
@@ -66,4 +69,4 @@ The ordered plan is architecture §37; the owner's audit brief tracks progress. 
 | Resting agents, the database gateway and the connection budget         | §43                  |
 | Where secrets live; key rotation; agent services without secrets       | §44                  |
 
-Presentation rules are in the [UI contract](ui/ui-contract.md). The [target schema](schema.dbml) describes 79 tables; 53 exist in the 41 checked-in migrations.
+Presentation rules are in the [UI contract](ui/ui-contract.md). The [target schema](schema.dbml) describes 79 tables; 53 exist in the 42 checked-in migrations.

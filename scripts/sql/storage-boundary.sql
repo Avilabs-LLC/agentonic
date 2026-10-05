@@ -19,13 +19,21 @@ BEGIN
  CREATE POLICY agentonic_document_gate ON storage.objects AS RESTRICTIVE FOR ALL TO authenticated
  USING(bucket_id<>'agentonic-documents' OR agentonic_storage.allowed(name,'read'))
  WITH CHECK(bucket_id<>'agentonic-documents' OR agentonic_storage.allowed(name,'upload'));
- -- Even if another permissive policy grants updates/deletes, uploaded artifacts are immutable.
+ -- Uploaded artifacts are immutable. Only the knowledge worker's storage account may
+ -- delete one, while a purge job for it holds a live lease (agentonic_storage.allowed).
  DROP POLICY IF EXISTS agentonic_document_anon_gate ON storage.objects;
  CREATE POLICY agentonic_document_anon_gate ON storage.objects AS RESTRICTIVE FOR ALL TO anon USING(bucket_id<>'agentonic-documents') WITH CHECK(bucket_id<>'agentonic-documents');
  DROP POLICY IF EXISTS agentonic_document_no_update ON storage.objects;
  DROP POLICY IF EXISTS agentonic_document_no_delete ON storage.objects;
+ DROP POLICY IF EXISTS agentonic_document_delete ON storage.objects;
  CREATE POLICY agentonic_document_no_update ON storage.objects AS RESTRICTIVE FOR UPDATE TO authenticated USING(bucket_id<>'agentonic-documents');
- CREATE POLICY agentonic_document_no_delete ON storage.objects AS RESTRICTIVE FOR DELETE TO authenticated USING(bucket_id<>'agentonic-documents');
+ CREATE POLICY agentonic_document_no_delete ON storage.objects AS RESTRICTIVE FOR DELETE TO authenticated USING(bucket_id<>'agentonic-documents' OR agentonic_storage.allowed(name,'delete'));
+ CREATE POLICY agentonic_document_delete ON storage.objects FOR DELETE TO authenticated USING(bucket_id='agentonic-documents' AND agentonic_storage.allowed(name,'delete'));
 END $$;
 REVOKE ALL ON FUNCTION agentonic_bootstrap.install_storage_boundary() FROM PUBLIC,anon,authenticated,service_role,agentonic_admin,agentonic_customer,agentonic_worker;
 GRANT EXECUTE ON FUNCTION agentonic_bootstrap.install_storage_boundary() TO agentonic_migrator;
+-- Migrations that need a newer boundary check this before installing it.
+CREATE OR REPLACE FUNCTION agentonic_bootstrap.storage_boundary_version() RETURNS integer
+LANGUAGE sql IMMUTABLE SET search_path='' AS $$ SELECT 2 $$;
+REVOKE ALL ON FUNCTION agentonic_bootstrap.storage_boundary_version() FROM PUBLIC,anon,authenticated,service_role,agentonic_admin,agentonic_customer,agentonic_worker;
+GRANT EXECUTE ON FUNCTION agentonic_bootstrap.storage_boundary_version() TO agentonic_migrator;

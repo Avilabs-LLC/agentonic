@@ -4,6 +4,7 @@ import pg from "pg"
 import { workerFailure } from "./failure"
 import { processJob, type Lease, type Execute } from "./pipeline"
 import { directProviders, providerKeys } from "./providers"
+import { storageSession } from "./storage-session"
 const env = {
   ...(existsSync(new URL("../.env.local", import.meta.url))
     ? parse(readFileSync(new URL("../.env.local", import.meta.url)))
@@ -12,6 +13,11 @@ const env = {
 }
 if (!env.DATABASE_URL || !env.AGENTONIC_DATABASE_CA_FILE || !env.SUPABASE_URL)
   throw new Error("Worker configuration required")
+// The secret key bypasses every Storage and Auth rule; it belongs to bootstrap only.
+if (env.SUPABASE_SECRET_KEY)
+  throw new Error(
+    "Remove SUPABASE_SECRET_KEY from the worker; run scripts/setup-storage-identity.mjs"
+  )
 const url = new URL(env.DATABASE_URL),
   supabase = new URL(env.SUPABASE_URL)
 if (
@@ -40,9 +46,9 @@ const pool = new pg.Pool({
 pool.on("error", () => {
   console.error(JSON.stringify({ event: "knowledge_worker_connection_lost" }))
 })
+// Storage through the worker's own account; it holds no Supabase secret key.
 const config = {
-  supabaseUrl: supabase.origin,
-  storageKey: env.SUPABASE_SECRET_KEY ?? "",
+  storage: storageSession(env),
   rerankEnabled: env.AGENTONIC_RERANK_ENABLED === "true",
   runtimeRoot: env.AGENTONIC_RUNTIME_ROOT,
   providers: directProviders(providerKeys(env)),
@@ -73,7 +79,7 @@ async function run() {
     JSON.stringify({
       event: "knowledge_worker_started",
       providerConfigured: config.providers.embeddings,
-      storageConfigured: !!config.storageKey,
+      storageConfigured: !!config.storage,
     })
   )
   try {

@@ -564,8 +564,6 @@ async function serviceLoop() {
         lease,
         execute,
         {
-          supabaseUrl: "",
-          storageKey: "",
           runtimeRoot,
           rerankEnabled: env.AGENTONIC_RERANK_ENABLED === "true",
           providers,
