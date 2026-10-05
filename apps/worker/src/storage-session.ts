@@ -12,6 +12,7 @@ const session = z.object({
 
 export class StorageSession {
   private token: { value: string; until: number } | undefined
+  private signingIn: Promise<void> | undefined
   constructor(
     readonly url: string,
     private readonly publishableKey: string,
@@ -23,44 +24,53 @@ export class StorageSession {
   /** Request headers for Storage; signs in again shortly before the token expires. */
   async headers(signal: AbortSignal): Promise<Record<string, string>> {
     if (!this.token || this.now() >= this.token.until) {
-      let response: Response
-      try {
-        response = await fetch(
-          `${this.url}/auth/v1/token?grant_type=password`,
-          {
-            method: "POST",
-            headers: {
-              apikey: this.publishableKey,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              email: this.email,
-              password: this.password,
-            }),
-            signal: AbortSignal.any([signal, AbortSignal.timeout(15000)]),
-          }
+      // Jobs running side by side wait for one sign-in rather than each making one.
+      this.signingIn ??= this.signIn().finally(() => {
+        this.signingIn = undefined
+      })
+      await new Promise<void>((resolve, reject) => {
+        const stop = () => reject(new Error("storage_unavailable"))
+        if (signal.aborted) return stop()
+        signal.addEventListener("abort", stop, { once: true })
+        this.signingIn!.then(resolve, reject).finally(() =>
+          signal.removeEventListener("abort", stop)
         )
-      } catch {
-        throw new Error("storage_unavailable")
-      }
-      const parsed = session.safeParse(
-        response.ok ? await response.json().catch(() => null) : null
-      )
-      if (!parsed.success) throw new Error("storage_unavailable")
-      this.token = {
-        value: parsed.data.access_token,
-        // Two minutes' margin, never less than half the token's life.
-        until:
-          this.now() +
-          Math.max(
-            parsed.data.expires_in * 500,
-            (parsed.data.expires_in - 120) * 1000
-          ),
-      }
+      })
     }
     return {
       apikey: this.publishableKey,
-      Authorization: `Bearer ${this.token.value}`,
+      Authorization: `Bearer ${this.token!.value}`,
+    }
+  }
+
+  private async signIn() {
+    let response: Response
+    try {
+      response = await fetch(`${this.url}/auth/v1/token?grant_type=password`, {
+        method: "POST",
+        headers: {
+          apikey: this.publishableKey,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email: this.email, password: this.password }),
+        signal: AbortSignal.timeout(15000),
+      })
+    } catch {
+      throw new Error("storage_unavailable")
+    }
+    const parsed = session.safeParse(
+      response.ok ? await response.json().catch(() => null) : null
+    )
+    if (!parsed.success) throw new Error("storage_unavailable")
+    this.token = {
+      value: parsed.data.access_token,
+      // Two minutes' margin, never less than half the token's life.
+      until:
+        this.now() +
+        Math.max(
+          parsed.data.expires_in * 500,
+          (parsed.data.expires_in - 120) * 1000
+        ),
     }
   }
 }

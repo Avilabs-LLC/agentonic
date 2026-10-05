@@ -68,3 +68,30 @@ it("needs the complete account configuration", () => {
     storageSession({ ...env, AGENTONIC_STORAGE_PASSWORD: "" })
   ).toBeUndefined()
 })
+
+it("lets jobs running side by side share one sign-in", async () => {
+  let release = () => {}
+  const fetch = vi.fn(
+    () =>
+      new Promise<Response>((resolve) => {
+        release = () =>
+          resolve(Response.json({ access_token: "shared", expires_in: 3600 }))
+      })
+  )
+  vi.stubGlobal("fetch", fetch)
+  const session = new StorageSession(
+    "https://example.supabase.co",
+    "k",
+    "e@x.invalid",
+    "p"
+  )
+  const leaving = new AbortController()
+  const first = session.headers(leaving.signal)
+  const second = session.headers(signal)
+  // A job that stops while waiting leaves the sign-in to the others.
+  leaving.abort()
+  await expect(first).rejects.toThrow("storage_unavailable")
+  release()
+  expect((await second).Authorization).toBe("Bearer shared")
+  expect(fetch).toHaveBeenCalledTimes(1)
+})
