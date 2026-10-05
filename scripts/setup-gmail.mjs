@@ -19,8 +19,11 @@ try {
       "GOOGLE_CLIENT_SECRET",
       "GOOGLE_REDIRECT_URI",
       "AGENTONIC_CONNECTION_KEY",
+      // Present only while a key rotation is under way (rotate-connection-key.mjs).
+      "AGENTONIC_CONNECTION_STANDBY_KEYS",
     ])
-      customer[name] = credentials[name]
+      if (credentials[name]) customer[name] = credentials[name]
+      else delete customer[name]
     writeLocal(resolve(source, target), customer)
   }
   console.log(

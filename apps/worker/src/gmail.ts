@@ -33,7 +33,7 @@ export async function executeGmail(
         unseal(
           String(credential.credential),
           `gmail:${g.connectionId}`,
-          config.encryptionKey
+          config.keys
         )
       )
     let token: string
@@ -113,7 +113,7 @@ export async function executeGmail(
     argumentsCiphertext: seal(
       call.arguments,
       `invocation:${id}`,
-      config.encryptionKey
+      config.keys
     ),
   })
 }

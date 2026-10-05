@@ -1252,3 +1252,18 @@ Deliberately breaking each of these fails a test:
 - the controller's resting and wake handling.
 
 The packaged gateway was also run on the Mac against the nonproduction database. Calls crossed TLS and the pool, and the database refused an unknown deployment, as expected. It stopped cleanly. That run found two defects, both fixed. macOS silently shortens socket paths longer than 104 bytes, and the gateway now refuses them. A failure after the gateway started listening could leave the process alive.
+
+## 44. Where secrets live — 5 October 2026
+
+**Why.** The audit found secrets spread too widely. The Gmail token key and the Google client secret were in the customer app, the knowledge worker and every agent service. Every agent service also held the OpenAI, Voyage and Browserbase keys, and the worker held the Supabase secret key, which bypasses every Storage rule. Stored Gmail secrets did not say which key sealed them, so the key could not be replaced without a format change. The principle now: a secret lives only in the processes whose own calls need it, and every stored secret names its key.
+
+**Key names and rotation.** Stored Gmail secrets (refresh tokens, proposed arguments, OAuth verifiers) and the OAuth cookie are sealed as `v2.<key name>.<iv>.<tag>.<ciphertext>`. The key name is the first 16 hex characters of a domain-separated SHA-256 of the key, so it identifies the key without revealing it. Associated data still binds each value to its record and purpose. Values sealed earlier (`v1`, no key name) still open with whichever configured key authenticates them.
+
+- **Configuration:** `AGENTONIC_CONNECTION_KEY` is the active key and seals everything new. `AGENTONIC_CONNECTION_STANDBY_KEYS` (comma-separated, present only during a rotation) lists keys that still open values but seal nothing.
+- **Rotation:** `pnpm connections:rotate-key` replaces the key in four steps, each followed by restarting the customer app and the worker and reinstalling each staging host:
+  1. `add` — a new key goes everywhere as a standby key, so every holder can open what it will seal;
+  2. `activate --key=<name>` — the new key seals; the old one becomes standby;
+  3. `rekey` — every stored value the active key did not seal is re-sealed with it. The update applies only if the stored value is unchanged, so a disconnect or a finished OAuth in between is left alone; rerun until nothing is skipped;
+  4. `retire` — refused while any stored value still needs another key; then only the active key remains.
+- `status` prints key names and counts of stored values per key, never keys or values. The step refuses to run unless `.env.staging.local` and the customer and worker configurations hold the same keys.
+- **Tests** cover the format, standby opening, `v1` compatibility, a renamed key name failing to open a value, the configuration steps, and re-sealing real connection, proposal and OAuth rows in the replayed database. A ring missing the needed key stops before anything changes.

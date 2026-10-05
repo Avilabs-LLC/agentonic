@@ -3,6 +3,7 @@ import { parse } from "dotenv"
 import pg from "pg"
 import { workerFailure } from "./failure"
 import { processJob, type Lease, type Execute } from "./pipeline"
+import { connectionKeys } from "@agentonic/connectors/secrets"
 const env = {
   ...(existsSync(new URL("../.env.local", import.meta.url))
     ? parse(readFileSync(new URL("../.env.local", import.meta.url)))
@@ -54,7 +55,7 @@ const config = {
       ? {
           clientId: env.GOOGLE_CLIENT_ID,
           clientSecret: env.GOOGLE_CLIENT_SECRET,
-          encryptionKey: env.AGENTONIC_CONNECTION_KEY,
+          keys: connectionKeys(env),
           redirectUri:
             env.GOOGLE_REDIRECT_URI ??
             "http://localhost:3101/api/connections/google/callback",

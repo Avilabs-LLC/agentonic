@@ -43,6 +43,7 @@ import {
   type Deployment,
 } from "./staging-controller"
 import { GatewayClient, createGateway, type GatewayCall } from "./gateway"
+import { connectionKeys } from "@agentonic/connectors/secrets"
 // One program, three services: the host's deployment controller (--manager),
 // its database gateway (--gateway) and one agent copy per deployment.
 const manager = process.argv.includes("--manager")
@@ -568,7 +569,7 @@ async function serviceLoop() {
               ? {
                   clientId: env.GOOGLE_CLIENT_ID,
                   clientSecret: env.GOOGLE_CLIENT_SECRET,
-                  encryptionKey: env.AGENTONIC_CONNECTION_KEY,
+                  keys: connectionKeys(env),
                   redirectUri:
                     env.GOOGLE_REDIRECT_URI ??
                     "http://localhost:3101/api/connections/google/callback",
