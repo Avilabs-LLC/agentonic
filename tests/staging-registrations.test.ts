@@ -372,6 +372,38 @@ describe("service health", () => {
       "could not read the state of the deployment controller",
     ])
   })
+  it("checks the planned restart window against the reviewed units", () => {
+    const window = { timerSha256: hash("1"), serviceSha256: hash("2") }
+    const timer = "agentonic-restart-window.timer"
+    const facts = {
+      [`state:${unit}`]: "ActiveState=active|Result=success|NRestarts=0|",
+      failedagents: "0",
+      [`sha:/etc/systemd/system/${timer}`]: hash("1"),
+      "sha:/etc/systemd/system/agentonic-restart-window.service": hash("2"),
+      [`state:${timer}`]: "ActiveState=active|Result=success|NRestarts=0|",
+    }
+    expect(healthFindings("azure-host", facts, window)).toEqual([])
+    expect(
+      healthFindings(
+        "azure-host",
+        { ...facts, [`sha:/etc/systemd/system/${timer}`]: "" },
+        window
+      )
+    ).toEqual([
+      "the planned restart window is not installed as reviewed (`pnpm staging:restart-window`)",
+    ])
+    expect(
+      healthFindings(
+        "azure-host",
+        { ...facts, [`state:${timer}`]: "ActiveState=inactive|" },
+        window
+      )
+    ).toEqual(["the planned restart window is not active"])
+    expect(() => gatherScript([{ key: "next:x;reboot.service" }])).toThrow()
+    expect(gatherScript([{ key: `next:${timer}` }])).toContain(
+      `NextElapseUSecRealtime --value ${timer}`
+    )
+  })
   it("notes restarts and pending updates without alerting", () => {
     const boot = String(Math.floor((now.getTime() - 3 * HOUR) / 1000))
     expect(machineNotes({ boot, reboot: "none" }, now)).toEqual([
@@ -386,6 +418,17 @@ describe("service health", () => {
         now
       )[1]
     ).toContain("waiting for a restart since 2026-10-08 12:00 UTC")
+    expect(
+      machineNotes(
+        {
+          reboot: String(Math.floor((now.getTime() - DAY) / 1000)),
+          "next:agentonic-restart-window.timer": "2026-10-11T03:00:00Z",
+        },
+        now
+      )[0]
+    ).toContain(
+      "The planned restart window applies them on 2026-10-11 03:00 UTC."
+    )
   })
 })
 
