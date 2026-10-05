@@ -1,6 +1,6 @@
 # Agentonic
 
-Platform monorepo for the staff admin app, customer app and platform workers. Agent execution code belongs in the separate `Avilabs-LLC/agentonic-runtime` repository.
+Platform monorepo for the staff admin app, customer app, platform workers and the agent runtime (`packages/runtime`). The runtime is packaged as an immutable, content-addressed artifact that runs the agent loop in a credential-free child process; the worker broker holds credentials and executes provider and tool calls (architecture §40). Releases up to 0.3.0 came from the frozen `Avilabs-LLC/agentonic-runtime` repository.
 
 The authoritative design is in [docs/agentonic-architecture.md](docs/agentonic-architecture.md), including the UI contract (§21) and implementation status (§§22–29). [docs/schema.dbml](docs/schema.dbml) describes the complete target model. Twenty-eight tables support identity/access, customer authoring, private uploads and consented staff review. Paid preview, ingestion, approval and deployment remain unavailable.
 
@@ -136,6 +136,6 @@ For an authorized release directly on `main`, use `node scripts/versioning.mjs b
 
 ## Local frozen-version preview
 
-After reviewing and committing the sibling runtime checkout, run `pnpm setup:preview` to package and register its exact executable artifact for the configured nonproduction workspaces. Select that code release when freezing a new candidate, then open **Probar versión** from the agent. Existing candidates keep their original code. `pnpm dev` starts the apps and broker; do not start a duplicate worker.
+After committing reviewed changes to `packages/runtime`, run `pnpm setup:preview` to package and register its exact executable artifact for the configured nonproduction workspaces, then `pnpm runtime:install --local|--azure --runtime-sha256=<hash>` to install it next to the runtimes already on that host and evaluator. Select that code release when freezing a new candidate, then open **Probar versión** from the agent. Existing candidates keep their original code. `pnpm dev` starts the apps and broker; do not start a duplicate worker.
 
 Previews are private, last ten minutes, accept ten messages and cap spending at US$0.25 within the accumulated Voyage/OpenAI development allowances. They use frozen instructions/skills and authorized staging sources; tools and production actions remain disabled. `pnpm preview:check-live` makes paid synthetic calls and is excluded from routine CI. Its `--keep-fixture` option retains a labeled synthetic agent for browser QA; `node scripts/check-preview-live.mjs --cleanup` removes it while preserving usage. The architecture records VM staging, recovery and production gates still pending.

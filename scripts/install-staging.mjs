@@ -114,13 +114,23 @@ try {
     migration.AGENTONIC_DATABASE_CA_FILE
   )
   const existing = await db.query(
-    "SELECT id,broker_sha256,runtime_sha256 FROM agentonic.runtime_hosts WHERE environment=$1",
+    "SELECT id,broker_sha256 FROM agentonic.runtime_hosts WHERE environment=$1",
     [azure ? "azure_staging" : "local"]
   )
+  // Runtimes install side by side (see install-runtime.mjs); only the broker
+  // program is still single per host and needs its deployments stopped first.
+  const installedRuntimes = existing.rowCount
+    ? (
+        await db.query(
+          "SELECT runtime_sha256 FROM agentonic.runtime_host_artifacts WHERE host_id=$1 AND retired_at IS NULL",
+          [existing.rows[0].id]
+        )
+      ).rows.map((r) => r.runtime_sha256)
+    : []
+  for (const hash of installedRuntimes) assert.match(hash, /^[a-f0-9]{64}$/)
   if (
     existing.rowCount &&
-    (existing.rows[0].broker_sha256 !== packaged.brokerHash ||
-      existing.rows[0].runtime_sha256 !== runtimeHash)
+    existing.rows[0].broker_sha256 !== packaged.brokerHash
   ) {
     const active = await db.query(
       "SELECT count(*)::int n FROM agentonic.deployments WHERE host_id=$1 AND status IN ('queued','preparing','running')",
@@ -181,7 +191,7 @@ try {
     )
     // Only fixed paths, UUID/hash-derived destinations and reviewed program bytes are installed.
     ssh(
-      `test -x ${node}\ntest "$(sha256sum ${runtimeRoot}/${runtimeHash}/manifest.json | cut -d' ' -f1)" = '${runtimeHash}'\ntest "$(sha256sum ${upload}/broker.mjs | cut -d' ' -f1)" = '${packaged.brokerHash}'\ninstall -d -m 755 ${release}\ninstall -d -m 700 ${instanceRoot} ${configRoot} ${serviceRoot}\ninstall -m 444 ${upload}/broker.mjs ${release}/broker.mjs\ninstall -m 600 ${upload}/broker.env ${configRoot}/broker.env\ninstall -m 600 ${upload}/manager.env ${configRoot}/manager.env\ninstall -m 644 ${upload}/${caName} ${caPath}\ninstall -m 644 ${upload}/runtime.service /etc/systemd/system/agentonic-staging@.service\ninstall -m 644 ${upload}/controller.service /etc/systemd/system/agentonic-deployer-staging.service\nsystemctl daemon-reload\nrm -rf ${upload}\n`
+      `test -x ${node}\n${[...new Set([runtimeHash, ...installedRuntimes])].map((hash) => `test "$(sha256sum ${runtimeRoot}/${hash}/manifest.json | cut -d' ' -f1)" = '${hash}'\n`).join("")}test "$(sha256sum ${upload}/broker.mjs | cut -d' ' -f1)" = '${packaged.brokerHash}'\ninstall -d -m 755 ${release}\ninstall -d -m 700 ${instanceRoot} ${configRoot} ${serviceRoot}\ninstall -m 444 ${upload}/broker.mjs ${release}/broker.mjs\ninstall -m 600 ${upload}/broker.env ${configRoot}/broker.env\ninstall -m 600 ${upload}/manager.env ${configRoot}/manager.env\ninstall -m 644 ${upload}/${caName} ${caPath}\ninstall -m 644 ${upload}/runtime.service /etc/systemd/system/agentonic-staging@.service\ninstall -m 644 ${upload}/controller.service /etc/systemd/system/agentonic-deployer-staging.service\nsystemctl daemon-reload\nrm -rf ${upload}\n`
     )
     assert.equal(
       ssh(`sha256sum ${release}/broker.mjs | cut -d' ' -f1`),
@@ -193,16 +203,33 @@ try {
     writeLocal(join(configRoot, "broker.env"), broker)
     writeLocal(join(configRoot, "manager.env"), manager)
   }
+  await db.query("BEGIN")
+  const hostId = (
+    await db.query(
+      `INSERT INTO agentonic.runtime_hosts(environment,database_role,broker_sha256,verified_at) VALUES($1,$2,$3,clock_timestamp())
+ ON CONFLICT(environment) DO UPDATE SET broker_sha256=excluded.broker_sha256,verified_at=excluded.verified_at,revoked_at=NULL RETURNING id`,
+      [
+        azure ? "azure_staging" : "local",
+        azure ? "agentonic_deployer_azure" : "agentonic_deployer_local",
+        packaged.brokerHash,
+      ]
+    )
+  ).rows[0].id
   await db.query(
-    `INSERT INTO agentonic.runtime_hosts(environment,database_role,broker_sha256,runtime_sha256,verified_at) VALUES($1,$2,$3,$4,clock_timestamp())
- ON CONFLICT(environment) DO UPDATE SET broker_sha256=excluded.broker_sha256,runtime_sha256=excluded.runtime_sha256,verified_at=excluded.verified_at,revoked_at=NULL`,
-    [
-      azure ? "azure_staging" : "local",
-      azure ? "agentonic_deployer_azure" : "agentonic_deployer_local",
-      packaged.brokerHash,
-      runtimeHash,
-    ]
+    "INSERT INTO agentonic.runtime_host_artifacts(host_id,runtime_sha256) VALUES($1,$2) ON CONFLICT DO NOTHING",
+    [hostId, runtimeHash]
   )
+  assert.equal(
+    (
+      await db.query(
+        "SELECT count(*)::int n FROM agentonic.runtime_host_artifacts WHERE host_id=$1 AND runtime_sha256=$2 AND retired_at IS NULL",
+        [hostId, runtimeHash]
+      )
+    ).rows[0].n,
+    1,
+    "This runtime was retired on this host"
+  )
+  await db.query("COMMIT")
   if (azure)
     ssh(
       "systemctl enable --now agentonic-deployer-staging.service\nsystemctl restart agentonic-deployer-staging.service\nsystemctl is-active agentonic-deployer-staging.service\n"

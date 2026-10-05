@@ -876,14 +876,25 @@ model EvaluationWorker {
   databaseRole  String          @map("database_role")
   environment   String
   workerSha256  String          @map("worker_sha256")
-  runtimeSha256 String          @map("runtime_sha256")
   verifiedAt    DateTime        @map("verified_at") @db.Timestamptz
   verification  Json
   revokedAt     DateTime?       @map("revoked_at") @db.Timestamptz
   createdAt     DateTime        @default(now()) @map("created_at") @db.Timestamptz
   runs          EvaluationRun[]
+  runtimes      EvaluationWorkerRuntime[]
 
   @@map("evaluation_workers")
+  @@schema("agentonic")
+}
+
+model EvaluationWorkerRuntime {
+  workerId      String           @map("worker_id") @db.Uuid
+  runtimeSha256 String           @map("runtime_sha256")
+  verifiedAt    DateTime         @default(dbgenerated("clock_timestamp()")) @map("verified_at") @db.Timestamptz
+  worker        EvaluationWorker @relation(fields: [workerId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@id([workerId, runtimeSha256])
+  @@map("evaluation_worker_runtimes")
   @@schema("agentonic")
 }
 
@@ -1044,11 +1055,21 @@ model RuntimeHost {
  environment String @unique
  databaseRole String @unique @map("database_role")
  brokerSha256 String @map("broker_sha256")
- runtimeSha256 String @map("runtime_sha256")
  verifiedAt DateTime @map("verified_at") @db.Timestamptz
  revokedAt DateTime? @map("revoked_at") @db.Timestamptz
  heartbeatAt DateTime? @map("heartbeat_at") @db.Timestamptz
+ artifacts RuntimeHostArtifact[]
  @@map("runtime_hosts")
+ @@schema("agentonic")
+}
+model RuntimeHostArtifact {
+ hostId String @map("host_id") @db.Uuid
+ runtimeSha256 String @map("runtime_sha256")
+ installedAt DateTime @default(dbgenerated("clock_timestamp()")) @map("installed_at") @db.Timestamptz
+ retiredAt DateTime? @map("retired_at") @db.Timestamptz
+ host RuntimeHost @relation(fields: [hostId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+ @@id([hostId, runtimeSha256])
+ @@map("runtime_host_artifacts")
  @@schema("agentonic")
 }
 model Deployment {

@@ -66,33 +66,47 @@ try {
     )
     existing.rowCount = 0
   }
+  // A registration lists every runtime it serves; the measured one is added
+  // to an existing registration of the same worker program.
+  const serve = (workerId) =>
+    db.query(
+      "INSERT INTO agentonic.evaluation_worker_runtimes(worker_id,runtime_sha256,verified_at) VALUES($1,$2,$3) ON CONFLICT DO NOTHING",
+      [workerId, proof.runtimeSha256, proof.verifiedAt]
+    )
   if (existing.rowCount) {
     assert.equal(existing.rows[0].worker_sha256, proof.workerSha256)
-    assert.equal(existing.rows[0].runtime_sha256, proof.runtimeSha256)
+    await serve(existing.rows[0].id)
   } else
-    await db.query(
-      "INSERT INTO agentonic.evaluation_workers(database_role,environment,worker_sha256,runtime_sha256,verified_at,verification) VALUES($1,$2,$3,$4,$5,$6)",
-      [
-        role,
-        proof.environment,
-        proof.workerSha256,
-        proof.runtimeSha256,
-        proof.verifiedAt,
-        JSON.stringify(proof.verification),
-      ]
+    await serve(
+      (
+        await db.query(
+          "INSERT INTO agentonic.evaluation_workers(database_role,environment,worker_sha256,verified_at,verification) VALUES($1,$2,$3,$4,$5) RETURNING id",
+          [
+            role,
+            proof.environment,
+            proof.workerSha256,
+            proof.verifiedAt,
+            JSON.stringify(proof.verification),
+          ]
+        )
+      ).rows[0].id
     )
   // Local execution remains useful for development but can never supply Azure evidence.
   const local = await db.query(
-    "SELECT worker_sha256,runtime_sha256 FROM agentonic.evaluation_workers WHERE database_role='agentonic_eval_local' AND revoked_at IS NULL"
+    "SELECT id,worker_sha256 FROM agentonic.evaluation_workers WHERE database_role='agentonic_eval_local' AND revoked_at IS NULL"
   )
   if (!local.rowCount)
-    await db.query(
-      "INSERT INTO agentonic.evaluation_workers(database_role,environment,worker_sha256,runtime_sha256,verified_at,verification) VALUES('agentonic_eval_local','local',$1,$2,clock_timestamp(),'{\"artifactIntegrity\":true}')",
-      [proof.workerSha256, proof.runtimeSha256]
+    await serve(
+      (
+        await db.query(
+          "INSERT INTO agentonic.evaluation_workers(database_role,environment,worker_sha256,verified_at,verification) VALUES('agentonic_eval_local','local',$1,clock_timestamp(),'{\"artifactIntegrity\":true}') RETURNING id",
+          [proof.workerSha256]
+        )
+      ).rows[0].id
     )
   else {
     assert.equal(local.rows[0].worker_sha256, proof.workerSha256)
-    assert.equal(local.rows[0].runtime_sha256, proof.runtimeSha256)
+    await serve(local.rows[0].id)
   }
   await db.query("COMMIT")
   const credentials = loadLocal(".env.evaluation.local"),

@@ -36,7 +36,8 @@ export type Registration = {
   id: string
   verifiedAt: string
   revokedAt: string | null
-  runtimeSha256: string
+  /** Runtime artifacts this registration serves side by side. */
+  runtimes: string[]
   /** Broker hash for hosts, worker hash for evaluators. */
   codeSha256: string
   verification?: Record<string, unknown>
@@ -136,25 +137,31 @@ const rootNotWritable = (value: string | undefined) => {
   )
 }
 
-function artifactChecks(runtimeSha256: string, files: Record<string, string>) {
-  const dir = `${RUNTIME_ROOT}/${assertHash(runtimeSha256)}`
-  return [
-    {
-      name: "runtime manifest hash",
-      key: `sha:${dir}/manifest.json`,
-      expect: runtimeSha256,
-    },
-    ...Object.entries(files).map(([path, sha]) => ({
-      name: `runtime file ${path}`,
-      key: `sha:${assertPath(`${dir}/${path}`)}`,
-      expect: assertHash(sha),
-    })),
-    {
-      name: "runtime files root-owned and read-only",
-      key: `loose:${dir}`,
-      expect: "0",
-    },
-  ] satisfies Check[]
+/** One installed runtime artifact: its manifest hash and every file hash in it. */
+export type Runtime = { sha256: string; files: Record<string, string> }
+const runtimeName = (sha256: string) => `runtime ${sha256.slice(0, 12)}`
+function artifactChecks(runtimes: Runtime[]) {
+  return runtimes.flatMap(({ sha256, files }) => {
+    const dir = `${RUNTIME_ROOT}/${assertHash(sha256)}`
+    const name = runtimeName(sha256)
+    return [
+      {
+        name: `${name} manifest hash`,
+        key: `sha:${dir}/manifest.json`,
+        expect: sha256,
+      },
+      ...Object.entries(files).map(([path, sha]) => ({
+        name: `${name} file ${path}`,
+        key: `sha:${assertPath(`${dir}/${path}`)}`,
+        expect: assertHash(sha),
+      })),
+      {
+        name: `${name} files root-owned and read-only`,
+        key: `loose:${dir}`,
+        expect: "0",
+      },
+    ] satisfies Check[]
+  })
 }
 const baseChecks: Check[] = [
   { name: "host identity", key: "hostname", expect: "vm-agents-01" },
@@ -194,8 +201,7 @@ const runsCommand = (command: string) => (value: string | undefined) =>
 
 export function azureHostChecks(input: {
   brokerSha256: string
-  runtimeSha256: string
-  runtimeFiles: Record<string, string>
+  runtimes: Runtime[]
   runtimeUnitSha256: string
   controllerUnitSha256: string
 }): Check[] {
@@ -215,7 +221,7 @@ export function azureHostChecks(input: {
       expect: rootOwned("444"),
     },
     { name: "broker release protected", key: `loose:${release}`, expect: "0" },
-    ...artifactChecks(input.runtimeSha256, input.runtimeFiles),
+    ...artifactChecks(input.runtimes),
     ...unitChecks(
       "agentonic-deployer-staging.service",
       "/etc/systemd/system/agentonic-deployer-staging.service",
@@ -276,8 +282,7 @@ export function azureHostChecks(input: {
 
 export function azureEvaluatorChecks(input: {
   workerSha256: string
-  runtimeSha256: string
-  runtimeFiles: Record<string, string>
+  runtimes: Runtime[]
   unitSha256: string
 }): Check[] {
   const worker = assertHash(input.workerSha256)
@@ -300,7 +305,7 @@ export function azureEvaluatorChecks(input: {
       key: `loose:${release}`,
       expect: "0",
     },
-    ...artifactChecks(input.runtimeSha256, input.runtimeFiles),
+    ...artifactChecks(input.runtimes),
     ...unitChecks(
       "agentonic-evaluator-staging.service",
       "/etc/systemd/system/agentonic-evaluator-staging.service",
@@ -353,8 +358,7 @@ export function azureEvaluatorChecks(input: {
 export function localHostChecks(input: {
   root: string
   brokerSha256: string
-  runtimeSha256: string
-  runtimeFiles: Record<string, string>
+  runtimes: Runtime[]
 }): Check[] {
   const broker = assertHash(input.brokerSha256)
   const release = `${input.root}/.local/staging/releases/${broker}`
@@ -379,8 +383,7 @@ export function localHostChecks(input: {
 export function localEvaluatorChecks(input: {
   root: string
   workerSha256: string
-  runtimeSha256: string
-  runtimeFiles: Record<string, string>
+  runtimes: Runtime[]
 }): Check[] {
   const worker = assertHash(input.workerSha256)
   const profile = `${input.root}/apps/worker/.env.evaluation.local`
@@ -405,22 +408,24 @@ export function localEvaluatorChecks(input: {
 }
 function localArtifactChecks(input: {
   root: string
-  runtimeSha256: string
-  runtimeFiles: Record<string, string>
+  runtimes: Runtime[]
 }): Check[] {
-  const dir = `${input.root}/.local/runtime/${assertHash(input.runtimeSha256)}`
-  return [
-    {
-      name: "runtime manifest hash",
-      key: `sha:${dir}/manifest.json`,
-      expect: input.runtimeSha256,
-    },
-    ...Object.entries(input.runtimeFiles).map(([path, sha]) => ({
-      name: `runtime file ${path}`,
-      key: `sha:${assertPath(`${dir}/${path}`)}`,
-      expect: assertHash(sha),
-    })),
-  ]
+  return input.runtimes.flatMap(({ sha256, files }) => {
+    const dir = `${input.root}/.local/runtime/${assertHash(sha256)}`
+    const name = runtimeName(sha256)
+    return [
+      {
+        name: `${name} manifest hash`,
+        key: `sha:${dir}/manifest.json`,
+        expect: sha256,
+      },
+      ...Object.entries(files).map(([path, sha]) => ({
+        name: `${name} file ${path}`,
+        key: `sha:${assertPath(`${dir}/${path}`)}`,
+        expect: assertHash(sha),
+      })),
+    ]
+  })
 }
 
 /** Names of failed checks. Missing facts fail. */
