@@ -4,6 +4,7 @@ import {
   type WorkspaceView,
 } from "@agentonic/contracts/authoring"
 import { evaluationStatus } from "@agentonic/contracts/evaluation"
+import type { RegistrationState } from "@agentonic/contracts/expiry"
 import {
   reviewFlowLabels,
   type ReviewCriterion,
@@ -94,6 +95,15 @@ export const statusMaps = {
     valid: state("Aprobación vigente", "success", "check"),
     invalid: state("Aprobación no vigente", "warning", "alert"),
   },
+  // Host and evaluator verification. "Vence pronto" means within a day, when
+  // the twice-daily renewal should already have run.
+  registration: {
+    valid: state("Vigente", "success", "check"),
+    expiring: state("Vence pronto", "orange", "clock"),
+    expired: state("Vencida", "warning", "alert"),
+    revoked: state("Revocada", "error", "ban"),
+    retired: state("Retirada", "slate", "archive"),
+  } satisfies Record<RegistrationState, StatusDescriptor>,
 }
 export type StatusDomain = keyof typeof statusMaps
 export function statusDescriptor(

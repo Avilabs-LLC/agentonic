@@ -31,3 +31,16 @@ export function formatUtcDateTime(value: string | Date) {
   const second = String(date.getUTCSeconds()).padStart(2, "0")
   return `${date.getUTCDate()}/${date.getUTCMonth() + 1}/${date.getUTCFullYear()}, ${hour % 12 || 12}:${minute}:${second} ${hour < 12 ? "a. m." : "p. m."}`
 }
+
+/** The same UTC timestamp to the minute, split for compact table cells. */
+export function formatUtcParts(value: string | Date) {
+  const date = typeof value === "string" ? new Date(value) : value
+  if (!Number.isFinite(date.getTime()))
+    return { date: "No disponible", time: "" }
+  const hour = date.getUTCHours()
+  const minute = String(date.getUTCMinutes()).padStart(2, "0")
+  return {
+    date: `${date.getUTCDate()}/${date.getUTCMonth() + 1}/${date.getUTCFullYear()}`,
+    time: `${hour % 12 || 12}:${minute} ${hour < 12 ? "a. m." : "p. m."} UTC`,
+  }
+}

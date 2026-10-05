@@ -268,6 +268,9 @@ export const reviewQueue = z.array(
     approvalReason: z.string().optional(),
     approvalExpiresAt: z.string().nullable().optional(),
     deploymentStatus: z.string().optional(),
+    deploymentEnvironment: z.enum(["local", "azure_staging"]).optional(),
+    deploymentAuthorized: z.boolean().optional(),
+    consentExpiresAt: z.string().optional(),
     number: z.number(),
     status: z.string(),
   })

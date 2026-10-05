@@ -25,6 +25,14 @@ export const navigation = [
     icon: "review",
   },
   {
+    href: "/expirations",
+    title: "Vencimientos",
+    description: "Qué vence, cuándo y quién debe actuar.",
+    group: "Operación",
+    enabled: true,
+    icon: "expiry",
+  },
+  {
     href: "/activity",
     title: "Actividad",
     description: "Salud y consumo de los agentes.",
@@ -42,4 +50,7 @@ export const navigation = [
   },
 ] satisfies NavigationItem[]
 export const home = navigation[0]!
+export const expirations = navigation.find(
+  (item) => item.href === "/expirations"
+)!
 export const account = navigation[navigation.length - 1]!
