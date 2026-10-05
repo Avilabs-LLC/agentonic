@@ -943,7 +943,7 @@ Implementation areas: `scripts/install-staging.mjs`, `apps/worker/src/staging-ma
 - [ ] Expose host verification expiry, customer operating-consent expiry and activation-approval expiry as distinct facts in Admin; show customer-actionable availability without infrastructure jargon. Add an alert destination and tested advance-expiry alerts. Define who maintains verification and how failures are escalated; automated renewal must actually verify the installation. Progress 2026-10-05: verified automatic renewal and advance-expiry alerts (GitHub issue assigned to the owner) are implemented in §39.7; the Admin expiry view is implemented in §42. Customer-facing availability wording remains open.
 - [ ] Cover renewal before expiry and recovery after expiry, including controller authorization failure, service restart limits and stale deployment records. Avoid implying that a powered-on VM is an authorized runtime. Verify no accidental paid-work replay or consent extension.
 - [ ] Record completed/failed timestamps, queue delay, execution duration, error category and deployment/job correlation without storing message bodies or secrets in logs. Distinguish process liveness, dependency readiness and authorization.
-- [ ] Establish an initial database connection budget across both apps, ingestion/evaluation workers, controllers and brokers. Evaluate transaction pooling under the current role/context rules before changing endpoints. Reduce idle polling and repeated filesystem reconciliation while preserving timely revocation checks.
+- [x] Establish an initial database connection budget across both apps, ingestion/evaluation workers, controllers and brokers. Evaluate transaction pooling under the current role/context rules before changing endpoints. Reduce idle polling and repeated filesystem reconciliation while preserving timely revocation checks. *(§43: about 18 connections whatever the number of agents; transaction pooling is not needed for this budget.)*
 
 **Gate:** synthetic expiry/restart/renewal tests pass; the owner can see what will expire and who must act; unchanged frozen releases remain runnable without a rebuild. Apply live maintenance deliberately after preparing and reviewing the exact operation; this planning task itself makes no live changes.
 
@@ -1040,8 +1040,8 @@ Implementation areas: new release/package/install scripts, `.github/workflows`, 
 ### 37.10 P6 — capacity and multiple hosts
 
 - [ ] Replace the current one-host-per-environment registration constraint with explicit multiple-host identity, placement, capacity, leases/fencing and safe replacement-host recovery. Do not widen a role to every deployment to make scheduling easier.
-- [ ] Remove per-agent session-connection growth as the scaling model; benchmark a bounded pool/dispatch design under tenant isolation. Separate heartbeat frequency, queued work notification and cleanup cadence.
-- [ ] Make controller reconciliation incremental; avoid scanning all historical deployments, launching per-service checks and rewriting unchanged pointers every cycle. Review workspace-wide heartbeat locks, shared provider-budget contention and indexes for pending turns, host/deployment lookup and cleanup.
+- [ ] Remove per-agent session-connection growth as the scaling model; benchmark a bounded pool/dispatch design under tenant isolation. Separate heartbeat frequency, queued work notification and cleanup cadence. *(Built in §43: one gateway per host, resting agents, separate report, claim and cleanup cadences. The benchmark remains.)*
+- [ ] Make controller reconciliation incremental; avoid scanning all historical deployments, launching per-service checks and rewriting unchanged pointers every cycle. Review workspace-wide heartbeat locks, shared provider-budget contention and indexes for pending turns, host/deployment lookup and cleanup. *(Partly done in §43: two-second watches list only active deployments, one unit-state read per pass, the release pointer is set once, and conversations are indexed by deployment. Lock and budget contention remain to measure.)*
 - [ ] Add bounded concurrency across an agent's independent conversations while preserving serialization within each conversation and one-time side effects. Measure retrieval plans and corpus size separately from agent count; tune filtered vector search without weakening access checks.
 - [ ] Agree the workload: 500 configured agents, number simultaneously online, concurrent conversations/turns, corpus size, traffic bursts, acceptable queue/response percentiles, failure rate and spending ceiling. Test with synthetic data and mocked providers first; authorize any paid load separately.
 - [ ] Publish load/soak/failure results, connection and memory peaks, queue fairness, cost and recovery observations. Scale VM/database/provider capacity from that evidence, with explicit headroom; one service's observed memory is not a capacity guarantee.
@@ -1191,3 +1191,60 @@ Host and evaluator registrations still last seven days. `pnpm staging:reverify` 
 
 **Verification checkpoint.** A database test replays every migration and checks the seven-day expiry, the expiring, expired and revoked states, the deployment losing authorization with its host, the renewed evaluator being reported over the retired one, and refusal for customer and worker roles. Unit tests cover row selection, each next step and ordering. The page, loading state, empty state, dark theme and phone width were reviewed with synthetic data before the skeleton baseline was recorded. Customer-facing availability wording (§37.3) remains open.
 
+## 43. Resting agents and the database gateway — 5 October 2026
+
+**Why.** The audit's first capacity limit. Every activated agent kept a service running around the clock with its own pool of two session connections, asking the database for work every two seconds. On the Supabase Free plan (60 connections, 15 pooled per database role, 200 pooler clients) at most about seven agents could hold both connections, because all agent services share one role. At 250 agents that would have meant about 250 database calls a second with no customer activity, and about 21 GB of the VM's 32 GB for idle Node processes (85 MB each, measured). The beta needs at least 250 activated agents. The principle now: cost follows work, not activated agents.
+
+**Resting agents (migration 41).** A serving copy with nothing to do rests: ten minutes after its last turn, or one minute if it never had one (a copy started for a move or an activation). It calls `deployment_service('rest')`, which records `deployments.resting_since`, and exits 0, so systemd leaves it stopped. A turn already waiting refuses the rest (`pending`). The controller lists `resting` and `pending` for each deployment. It starts nothing for a resting deployment until a turn waits for it; then `deployment_host('wake')` clears the mark, vouches for the copy for one heartbeat interval, and the copy starts. A copy that reports (`ready` or `heartbeat`) is awake however it was started.
+
+- **Availability:** `agentonic.deployment_online()` replaces the copy-heartbeat checks in chats, the agent listing and lifecycle state. A deployment is online if its copy reported within 60 seconds, or if it rests on a host whose controller reported within 60 seconds with a valid registration and a live broker. If the controller stops reporting, its resting agents go offline, because nobody would start them.
+- **Failure:** a woken copy that never reports goes offline after 60 seconds like any silent copy, and its restarts back off as before.
+- **Upgrades:** a resting deployment moves to a new broker by starting the successor only. The successor swaps in awake, and the old copy, never started again, is removed.
+- **Waiting turns** are what the serving copy would claim next. The conversation check already includes the deployment's own authority, so a waiting turn whose authority lapsed wakes nothing.
+
+**Controller cadence.** A `watch` every two seconds updates the host's heartbeat, rechecks deployments still starting, and lists active deployments with `resting` and `pending`. A full `poll` every thirty seconds rechecks the authority of every active deployment, cleans up content, retires unused brokers and lists ended deployments, whose copies are then removed. Every copy call still enforces authority immediately. Unit states are read with one `systemctl list-units` per pass, not one call per deployment. The release pointer is set once per deployment per controller run. Running copies report every ten seconds and claim work every two. Conversations are indexed by deployment for claims, waiting-turn checks and cleanup.
+
+**Database gateway.** One `agentonic-gateway-staging` service per host runs the current broker program with `--gateway`. It holds the runtime role's database connections (five by default) for every agent copy on the host.
+
+- **Socket:** systemd owns `/run/agentonic-gateway/gateway.sock` (`root:agentonic-gateway`, mode 0660). Agent service templates add `SupplementaryGroups=agentonic-gateway`, so only copies and root can open it.
+- **No password in copies:** copies started from this broker hold no database password. `broker.env`, which seeds every copy's configuration, carries provider keys and the socket path. `gateway.env` holds the runtime role.
+- **Fixed calls:** a copy can send only four calls (`deployment_service`, `staging_worker`, `web_staging`, `gmail_staging`), always with its own deployment ID and secret. The gateway checks their shape (operation name, UUID, 64-character secret) and runs fixed statements. The database authorizes each call exactly as when copies connected directly. Replies carry database or network codes only, and nothing is logged per call.
+- **Limits:** four calls in flight per copy, 256 waiting for a connection, and 4 MiB per request.
+- **Restarts and outages:** systemd keeps the socket while the gateway restarts. Copies wait (`gateway_unreachable`) and reconnect. The gateway reports database outages as its own service state, so the twice-daily check sees them.
+- **Older brokers:** copies of brokers from before the gateway keep connecting directly until they are moved. The template keeps the database CA they read.
+
+**Connection budget.** Customer and admin apps use 3 connections per instance each, the knowledge worker 3, the evaluator 2, the controller 2 and the gateway 5. That is 18 with one instance of each app, whatever the number of activated agents. A resting agent uses no process, connection, memory or database call. An awake agent makes one claim every two seconds and one report every ten, through the gateway. Still open:
+
+- the Supabase plan upgrade before outside testers (an owner decision; the Free plan has no backups and pauses inactive projects);
+- transaction pooling, needed only once apps run several instances;
+- the 250-agent synthetic load test (§37.10);
+- push notification of new turns, replacing awake copies' claim polling.
+
+**Re-verification.** The twice-daily check also verifies:
+
+- the gateway's unit, socket unit and socket ownership;
+- that `gateway.env` is private and pins the current broker;
+- that `broker.env` carries no `DATABASE_URL`;
+- that the gateway runs the current broker.
+
+Its health report includes the gateway's state and last state line.
+
+**Verification checkpoint.** All tests pass. New tests cover:
+
+- in SQL: resting, waking, availability through the controller, offline without it, lapsed authority, `watch` versus `poll`, and moving a resting deployment;
+- the controller against the real database functions: a resting copy is started only for a waiting turn;
+- the controller with 250 resting agents: no starts, unit checks or per-agent calls per pass, and only the agent a turn waits for is woken;
+- the gateway: allowed calls only, shape checks, codes without messages, per-copy limits, oversized requests, and reconnecting after a restart.
+
+Deliberately breaking each of these fails a test:
+
+- availability for resting agents;
+- the waiting-turn refusal;
+- the serving-only rest;
+- the conversation authority check;
+- the `watch` listing;
+- waking;
+- clearing the mark on report and on a move;
+- the controller's resting and wake handling.
+
+The packaged gateway was also run on the Mac against the nonproduction database. Calls crossed TLS and the pool, and the database refused an unknown deployment, as expected. It stopped cleanly. That run found two defects, both fixed. macOS silently shortens socket paths longer than 104 bytes, and the gateway now refuses them. A failure after the gateway started listening could leave the process alive.

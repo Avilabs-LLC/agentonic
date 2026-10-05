@@ -20,15 +20,19 @@ import {
 } from "./local-config.mjs"
 import {
   agentTemplate,
+  gatewayGroup,
+  gatewaySocket,
+  gatewayUnit,
   stagingNode,
   stagingReleases,
   stagingUnits,
 } from "./staging-units.mjs"
-// Installs the private staging deployment controller and an agent service template for
-// the packaged broker. Brokers install side by side: running deployments keep their
-// copies, and the new controller moves them to this broker one at a time without
-// interrupting a turn. Existing evaluators, Corby services, public ports and provider
-// budgets are untouched.
+// Installs the private staging deployment controller, the host's database gateway and
+// an agent service template for the packaged broker. Brokers install side by side:
+// running deployments keep their copies, and the new controller moves them to this
+// broker one at a time without interrupting a turn. Agent copies started from this
+// broker reach the database only through the gateway and hold no database password.
+// Existing evaluators, Corby services, public ports and provider budgets are untouched.
 const azure = process.argv.includes("--azure"),
   local = process.argv.includes("--local")
 assert.ok(azure !== local, "Choose --local or --azure")
@@ -76,9 +80,10 @@ const caPath = azure
   ? join(configRoot, "database-ca.crt")
   : credentials.AGENTONIC_DATABASE_CA_FILE
 const suffix = azure ? "AZURE" : "LOCAL"
+const socketPath = azure ? gatewaySocket : join(workspace, "gateway.sock")
+// Every agent copy's configuration starts from broker.env: provider keys, never the database.
 const broker = {
-  DATABASE_URL: credentials[`AGENTONIC_RUNTIME_${suffix}_DATABASE_URL`],
-  AGENTONIC_DATABASE_CA_FILE: caPath,
+  AGENTONIC_GATEWAY_SOCKET: socketPath,
   AGENTONIC_RUNTIME_ROOT: runtimeRoot,
   AGENTONIC_INSTANCE_ROOT: instanceRoot,
   AGENTONIC_BROKER_SHA256: packaged.brokerHash,
@@ -107,12 +112,22 @@ const manager = {
   AGENTONIC_SERVICE_CONFIG_ROOT: serviceRoot,
   AGENTONIC_BROKER_CONFIG: join(configRoot, "broker.env"),
 }
-for (const value of Object.values({ ...broker, ...manager }))
+// The gateway holds the runtime role's connections for every copy on the host.
+const gateway = {
+  DATABASE_URL: credentials[`AGENTONIC_RUNTIME_${suffix}_DATABASE_URL`],
+  AGENTONIC_DATABASE_CA_FILE: caPath,
+  AGENTONIC_BROKER_SHA256: packaged.brokerHash,
+  AGENTONIC_GATEWAY_CONNECTIONS: "5",
+  // On Azure systemd hands the gateway its socket; locally it binds this private path.
+  ...(local ? { AGENTONIC_GATEWAY_SOCKET: socketPath } : {}),
+}
+for (const value of Object.values({ ...broker, ...manager, ...gateway }))
   assert.ok(value, "Complete staging configuration required")
 const staging = join(workspace, azure ? "azure-install" : "local-install")
 mkdirSync(staging, { recursive: true, mode: 0o700 })
 writeLocal(join(staging, "broker.env"), broker)
 writeLocal(join(staging, "manager.env"), manager)
+writeLocal(join(staging, "gateway.env"), gateway)
 const ssh = (script) =>
   execFileSync(
     "ssh",
@@ -153,6 +168,17 @@ try {
     .filter((b) => b.retired_at && b.broker_sha256 !== packaged.brokerHash)
     .map((b) => b.broker_sha256)
   for (const hash of retired) assert.match(hash, /^[a-f0-9]{64}$/)
+  // Earlier live brokers may still run copies; their templates are rewritten to the
+  // current text, which keeps everything those copies use.
+  const earlier = registered
+    .filter(
+      (b) =>
+        !b.retired_at &&
+        !b.revoked_at &&
+        b.broker_sha256 !== packaged.brokerHash
+    )
+    .map((b) => b.broker_sha256)
+  for (const hash of earlier) assert.match(hash, /^[a-f0-9]{64}$/)
   // Runtimes install side by side (see install-runtime.mjs).
   const installedRuntimes = hostId
     ? (
@@ -202,14 +228,18 @@ try {
     assert.match(upload, /^\/tmp\/agentonic-staging-install\.[a-zA-Z0-9]{8}$/)
     const caName = credentials.AGENTONIC_DATABASE_CA_FILE.split("/").at(-1)
     assert.match(caName, /^[a-zA-Z0-9._-]+$/)
-    const { runtime: service, controller } = stagingUnits({
-      broker: packaged.brokerHash,
-      serviceRoot,
-      caPath,
-      configRoot,
-    })
-    writeFileSync(join(staging, "runtime.service"), service)
-    writeFileSync(join(staging, "controller.service"), controller)
+    const units = (hash) =>
+      stagingUnits({ broker: hash, serviceRoot, caPath, configRoot })
+    const current = units(packaged.brokerHash)
+    writeFileSync(join(staging, "controller.service"), current.controller)
+    writeFileSync(join(staging, "gateway.service"), current.gateway)
+    writeFileSync(join(staging, "gateway.socket"), current.gatewaySocket)
+    const templates = [packaged.brokerHash, ...earlier]
+    for (const hash of templates)
+      writeFileSync(
+        join(staging, `runtime-${hash}.service`),
+        units(hash).runtime
+      )
     execFileSync(
       "scp",
       [
@@ -217,15 +247,17 @@ try {
         join(packaged.directory, "broker.mjs"),
         join(staging, "broker.env"),
         join(staging, "manager.env"),
+        join(staging, "gateway.env"),
         credentials.AGENTONIC_DATABASE_CA_FILE,
-        join(staging, "runtime.service"),
+        ...templates.map((hash) => join(staging, `runtime-${hash}.service`)),
         join(staging, "controller.service"),
+        join(staging, "gateway.service"),
+        join(staging, "gateway.socket"),
         `vm-agents-01:${upload}/`,
       ],
       { stdio: "ignore" }
     )
     const node = stagingNode
-    const template = agentTemplate(packaged.brokerHash)
     // Only fixed paths, UUID/hash-derived destinations and reviewed program bytes are installed.
     ssh(
       [
@@ -240,9 +272,17 @@ try {
         `install -m 444 ${upload}/broker.mjs ${release}/broker.mjs`,
         `install -m 600 ${upload}/broker.env ${configRoot}/broker.env`,
         `install -m 600 ${upload}/manager.env ${configRoot}/manager.env`,
+        `install -m 600 ${upload}/gateway.env ${configRoot}/gateway.env`,
         `install -m 644 ${upload}/${caName} ${caPath}`,
-        `install -m 644 ${upload}/runtime.service /etc/systemd/system/${template}`,
+        // Only agent copies (and root) may open the gateway's socket.
+        `getent group ${gatewayGroup} >/dev/null || groupadd --system ${gatewayGroup}`,
+        ...templates.map(
+          (hash) =>
+            `install -m 644 ${upload}/runtime-${hash}.service /etc/systemd/system/${agentTemplate(hash)}`
+        ),
         `install -m 644 ${upload}/controller.service /etc/systemd/system/agentonic-deployer-staging.service`,
+        `install -m 644 ${upload}/gateway.service /etc/systemd/system/${gatewayUnit}.service`,
+        `install -m 644 ${upload}/gateway.socket /etc/systemd/system/${gatewayUnit}.socket`,
         // Retired brokers run no copies; their templates and empty configuration directories go.
         ...retired.map(
           (hash) =>
@@ -271,6 +311,7 @@ try {
         if (UUID_ENV.test(name)) rmSync(join(serviceRoot, name))
     writeLocal(join(configRoot, "broker.env"), broker)
     writeLocal(join(configRoot, "manager.env"), manager)
+    writeLocal(join(configRoot, "gateway.env"), gateway)
   }
   await db.query("BEGIN")
   const host = (
@@ -304,9 +345,19 @@ try {
     "This runtime was retired on this host"
   )
   await db.query("COMMIT")
+  // The gateway starts first so the new controller's copies find it.
   if (azure)
     ssh(
-      "systemctl enable --now agentonic-deployer-staging.service\nsystemctl restart agentonic-deployer-staging.service\nsystemctl is-active agentonic-deployer-staging.service\n"
+      [
+        `systemctl enable --now ${gatewayUnit}.socket`,
+        `systemctl enable ${gatewayUnit}.service`,
+        `systemctl restart ${gatewayUnit}.service`,
+        `systemctl is-active ${gatewayUnit}.service`,
+        "systemctl enable --now agentonic-deployer-staging.service",
+        "systemctl restart agentonic-deployer-staging.service",
+        "systemctl is-active agentonic-deployer-staging.service",
+        "",
+      ].join("\n")
     )
   else {
     writeFileSync(
@@ -316,32 +367,38 @@ try {
       { mode: 0o600 }
     )
     if (process.argv.includes("--start")) {
-      // Fail if an existing controller is live instead of creating competing processes.
-      const pidFile = join(workspace, "manager.pid")
-      let alive = false
-      if (existsSync(pidFile)) {
+      // Fail if an existing gateway or controller is live instead of creating competing processes.
+      const alive = (pidFile) => {
+        if (!existsSync(pidFile)) return false
         try {
           process.kill(Number(readFileSync(pidFile, "utf8")), 0)
-          alive = true
+          return true
         } catch {
-          /* A stale PID file does not indicate a running controller. */
+          /* A stale PID file does not indicate a running process. */
+          return false
         }
       }
-      assert.ok(!alive, "Local staging controller already running")
-      const child = spawn(
-        process.execPath,
-        [join(release, "broker.mjs"), "--manager"],
-        {
-          env: {
-            PATH: process.env.PATH,
-            AGENTONIC_STAGING_CONFIG: join(configRoot, "manager.env"),
-          },
-          detached: true,
-          stdio: "ignore",
-        }
-      )
-      child.unref()
-      writeFileSync(pidFile, String(child.pid), { mode: 0o600 })
+      for (const [name, flag, config] of [
+        ["gateway", "--gateway", "gateway.env"],
+        ["manager", "--manager", "manager.env"],
+      ]) {
+        const pidFile = join(workspace, `${name}.pid`)
+        assert.ok(!alive(pidFile), `Local staging ${name} already running`)
+        const child = spawn(
+          process.execPath,
+          [join(release, "broker.mjs"), flag],
+          {
+            env: {
+              PATH: process.env.PATH,
+              AGENTONIC_STAGING_CONFIG: join(configRoot, config),
+            },
+            detached: true,
+            stdio: "ignore",
+          }
+        )
+        child.unref()
+        writeFileSync(pidFile, String(child.pid), { mode: 0o600 })
+      }
     }
   }
   console.log(

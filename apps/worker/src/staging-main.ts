@@ -6,8 +6,9 @@ import {
   rmSync,
   readdirSync,
   lstatSync,
+  chmodSync,
 } from "node:fs"
-import { dirname, join, resolve } from "node:path"
+import { dirname, isAbsolute, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import { spawn, execFileSync, type ChildProcess } from "node:child_process"
 import { randomBytes } from "node:crypto"
@@ -33,16 +34,31 @@ import {
 import {
   COPY,
   Controller,
+  FULL_POLL_MS,
+  HEARTBEAT_MS,
   metadata,
   pollResult,
+  restDue,
   type ControllerSystem,
   type Deployment,
 } from "./staging-controller"
+import { GatewayClient, createGateway, type GatewayCall } from "./gateway"
+// One program, three services: the host's deployment controller (--manager),
+// its database gateway (--gateway) and one agent copy per deployment.
 const manager = process.argv.includes("--manager")
+const gateway = process.argv.includes("--gateway")
 const self = fileURLToPath(import.meta.url)
 const packaged = self.endsWith("/broker.mjs")
 const hash = z.string().regex(/^[a-f0-9]{64}$/)
-const serviceName = manager ? "deployment-controller" : "agent-service"
+const serviceName = manager
+  ? "deployment-controller"
+  : gateway
+    ? "database-gateway"
+    : "agent-service"
+
+/** Socket paths longer than the platform limit (104 bytes on macOS) are silently cut short. */
+const socketPath = (path: string) =>
+  isAbsolute(path) && Buffer.byteLength(path) <= 100
 
 // A configuration or integrity problem cannot fix itself: report it and exit so
 // systemd's start limit turns it into a visible failed unit.
@@ -53,6 +69,22 @@ function configure() {
       : process.env.AGENTONIC_STAGING_CONFIG
     if (!configFile) throw new Error("configuration_invalid")
     const env = { ...parse(readFileSync(configFile)), ...process.env }
+    const brokerHash = env.AGENTONIC_BROKER_SHA256 ?? ""
+    if (!hash.safeParse(brokerHash).success)
+      throw new Error("configuration_invalid")
+    // Packaged execution verifies its own reviewed bytes before touching deployment state.
+    if (packaged && digest(readFileSync(self)) !== brokerHash)
+      throw new Error("broker_mismatch")
+    const root = env.AGENTONIC_INSTANCE_ROOT ?? "",
+      runtimeRoot = env.AGENTONIC_RUNTIME_ROOT ?? ""
+    if (!gateway && (!root || !runtimeRoot))
+      throw new Error("configuration_invalid")
+    // Agent copies reach the database only through the host's gateway.
+    if (!manager && !gateway) {
+      const socket = env.AGENTONIC_GATEWAY_SOCKET ?? ""
+      if (!socketPath(socket)) throw new Error("configuration_invalid")
+      return { env, root, runtimeRoot, brokerHash, socket, local: false }
+    }
     const url = new URL(env.DATABASE_URL ?? "")
     const role = decodeURIComponent(url.username).split(".")[0] ?? ""
     if (
@@ -63,19 +95,6 @@ function configure() {
       ).includes(role)
     )
       throw new Error("configuration_invalid")
-    const root = env.AGENTONIC_INSTANCE_ROOT,
-      runtimeRoot = env.AGENTONIC_RUNTIME_ROOT,
-      brokerHash = env.AGENTONIC_BROKER_SHA256
-    if (
-      !root ||
-      !runtimeRoot ||
-      !brokerHash ||
-      !hash.safeParse(brokerHash).success
-    )
-      throw new Error("configuration_invalid")
-    // Packaged execution verifies its own reviewed bytes before touching deployment state.
-    if (packaged && digest(readFileSync(self)) !== brokerHash)
-      throw new Error("broker_mismatch")
     const ca = readFileSync(env.AGENTONIC_DATABASE_CA_FILE ?? "", "utf8")
     return {
       env,
@@ -95,18 +114,36 @@ function configure() {
     process.exit(1)
   }
 }
-const { env, url, ca, root, runtimeRoot, brokerHash, local } = configure()
-const pool = new pg.Pool({
-  host: url.hostname,
-  port: Number(url.port || 5432),
-  user: decodeURIComponent(url.username),
-  password: decodeURIComponent(url.password),
-  database: decodeURIComponent(url.pathname.slice(1)),
-  ssl: { rejectUnauthorized: true, ca },
-  max: 2,
-  connectionTimeoutMillis: 10000,
-  statement_timeout: 30000,
-})
+const settings = configure()
+const { env, root, runtimeRoot, brokerHash, local } = settings
+// The gateway holds the connections for every copy on its host; the controller needs two.
+const connections = gateway
+  ? z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(12)
+      .catch(5)
+      .parse(env.AGENTONIC_GATEWAY_CONNECTIONS ?? 5)
+  : 2
+const pool =
+  "url" in settings && settings.url
+    ? new pg.Pool({
+        host: settings.url.hostname,
+        port: Number(settings.url.port || 5432),
+        user: decodeURIComponent(settings.url.username),
+        password: decodeURIComponent(settings.url.password),
+        database: decodeURIComponent(settings.url.pathname.slice(1)),
+        ssl: { rejectUnauthorized: true, ca: settings.ca },
+        max: connections,
+        connectionTimeoutMillis: 10000,
+        statement_timeout: 30000,
+      })
+    : undefined
+const database = () => {
+  if (!pool) throw new Error("configuration_invalid")
+  return pool
+}
 let stopping = false
 let active: AbortController | undefined
 const halt = new AbortController()
@@ -139,28 +176,42 @@ async function host(
   id: string | null = null,
   payload: Record<string, unknown> = {}
 ) {
-  const r = await pool.query(
+  const r = await database().query(
     "SELECT agentonic.deployment_host($1,$2,$3) result",
     [operation, id, JSON.stringify({ ...payload, brokerHash })]
   )
   return r.rows[0].result
+}
+// Active agent units, read with one systemctl call per pass instead of one per deployment.
+let activeUnits = new Set<string>()
+function readUnits() {
+  if (local) return
+  activeUnits = new Set(
+    execFileSync(
+      "systemctl",
+      [
+        "list-units",
+        "--type=service",
+        "--state=active",
+        "--plain",
+        "--no-legend",
+        "--no-pager",
+        "agentonic-staging-*",
+      ],
+      { stdio: ["ignore", "pipe", "ignore"], timeout: 20000 }
+    )
+      .toString()
+      .split("\n")
+      .map((line) => line.split(/\s+/)[0] ?? "")
+      .filter(Boolean)
+  )
 }
 function running(broker: string, id: string) {
   if (local) {
     const child = children.get(`${broker}:${id}`)
     return !!child && child.exitCode === null && child.signalCode === null
   }
-  try {
-    return (
-      execFileSync("systemctl", ["is-active", unitName(broker, id)], {
-        stdio: ["ignore", "pipe", "ignore"],
-      })
-        .toString()
-        .trim() === "active"
-    )
-  } catch {
-    return false
-  }
+  return activeUnits.has(unitName(broker, id))
 }
 const systemctl = (...args: string[]) =>
   execFileSync("systemctl", args, { stdio: "ignore", timeout: 20000 })
@@ -228,6 +279,7 @@ function start(broker: string, id: string) {
     /* Not in a failed state. */
   }
   systemctl("start", unit)
+  activeUnits.add(unit)
 }
 function remove(broker: string, id: string) {
   if (local) {
@@ -236,6 +288,7 @@ function remove(broker: string, id: string) {
   } else {
     const unit = unitName(broker, id)
     if (running(broker, id)) systemctl("stop", unit)
+    activeUnits.delete(unit)
     rmSync(join("/etc/systemd/system", `${unit}.d`), {
       recursive: true,
       force: true,
@@ -312,12 +365,18 @@ async function managerLoop() {
   const deployments = new Incidents("deployment")
   const controller = new Controller(system)
   life.started()
+  // A full poll every thirty seconds rechecks authority, cleans up content and
+  // lists ended deployments; a watch every two seconds finds waiting turns.
+  let polled = 0
   while (!stopping) {
     let state: z.infer<typeof pollResult>
     let parsed: Deployment[]
     try {
-      state = pollResult.parse(await host("poll"))
+      const full = Date.now() - polled >= FULL_POLL_MS
+      state = pollResult.parse(await host(full ? "poll" : "watch"))
       parsed = state.deployments.map((raw) => metadata.parse(raw))
+      readUnits()
+      if (full) polled = Date.now()
       life.recovered()
     } catch (error) {
       // Expired, revoked or replaced registrations are refused until renewed: wait, don't exit.
@@ -391,35 +450,34 @@ async function serviceLoop() {
     if (digest(readFileSync(path)) !== asset.sha256)
       throw new Error("asset_mismatch")
   }
-  const service = async (operation: string) => {
-    const r = await pool.query(
-      "SELECT agentonic.deployment_service($1,$2,$3,$4) result",
-      [
-        operation,
-        id,
-        secret,
-        JSON.stringify({
-          manifestHash: env.AGENTONIC_MANIFEST_HASH,
-          brokerHash,
-        }),
-      ]
-    )
-    return r.rows[0].result as {
+  const service = async (operation: string) =>
+    (await calls.call("deployment_service", [
+      operation,
+      id,
+      secret,
+      JSON.stringify({
+        manifestHash: env.AGENTONIC_MANIFEST_HASH,
+        brokerHash,
+      }),
+    ])) as {
       ok: boolean
       code?: string
       draining?: boolean
     }
-  }
   const execute: Execute = async (operation, job, payload = {}) => {
-    const r = await pool.query(
-      operation.startsWith("web-")
-        ? "SELECT agentonic.web_staging($1,$2,$3,$4,$5,$6) result"
-        : operation.startsWith("gmail-")
-          ? "SELECT agentonic.gmail_staging($1,$2,$3,$4,$5,$6) result"
-          : "SELECT agentonic.staging_worker($1,$2,$3,$4,$5,$6) result",
-      [operation, id, secret, job.id, job.token, JSON.stringify(payload)]
-    )
-    return r.rows[0].result
+    const call: GatewayCall = operation.startsWith("web-")
+      ? "web_staging"
+      : operation.startsWith("gmail-")
+        ? "gmail_staging"
+        : "staging_worker"
+    return (await calls.call(call, [
+      operation,
+      id,
+      secret,
+      job.id,
+      job.token,
+      JSON.stringify(payload),
+    ])) as Record<string, unknown>
   }
   // A refused secret never becomes valid again and an unavailable deployment is
   // the controller's to handle: both end this copy cleanly. Outages are waited out.
@@ -435,18 +493,36 @@ async function serviceLoop() {
     }
   }
   life.started()
+  // Claims run every two seconds, reports every ten. An idle copy rests: the
+  // controller starts it again when a turn waits for it.
+  let reported = 0
+  let lastWork = Date.now()
+  let served = false
   while (!stopping) {
     let job: Lease | null
     try {
-      const beat = await service("heartbeat")
-      if (!beat.ok) return life.stopped(beat.code ?? "unavailable")
-      // A copy on a newer broker serves now, and this one holds no lease.
-      if (beat.draining) return life.stopped("drained")
-      const next = await pool.query(
-        "SELECT agentonic.staging_worker('claim',$1,$2,NULL,NULL) result",
-        [id, secret]
-      )
-      job = next.rows[0].result as Lease | null
+      if (Date.now() - reported >= HEARTBEAT_MS) {
+        const beat = await service("heartbeat")
+        if (!beat.ok) return life.stopped(beat.code ?? "unavailable")
+        // A copy on a newer broker serves now, and this one holds no lease.
+        if (beat.draining) return life.stopped("drained")
+        reported = Date.now()
+      }
+      job = (await calls.call("staging_worker", [
+        "claim",
+        id,
+        secret,
+        null,
+        null,
+        "{}",
+      ])) as Lease | null
+      if (!job && restDue(Date.now() - lastWork, served)) {
+        const rest = await service("rest")
+        if (rest.ok) return life.stopped("resting")
+        // A turn arrived meanwhile ("pending"): claim it on the next round.
+        if (rest.code !== "pending")
+          return life.stopped(rest.code ?? "unavailable")
+      }
       life.recovered()
     } catch (error) {
       if (categorize(error) === "refused") return life.stopped("copy_refused")
@@ -457,6 +533,7 @@ async function serviceLoop() {
       await pause(2000)
       continue
     }
+    served = true
     const lease = job
     active = new AbortController()
     const controller = active
@@ -506,15 +583,70 @@ async function serviceLoop() {
     } finally {
       clearInterval(timer)
       active = undefined
+      lastWork = Date.now()
     }
   }
 }
+
+// ---------------------------------------------------------------------------
+// Database gateway: the host's connections, shared by every agent copy on it
+
+async function gatewayLoop() {
+  const life = new ServiceState(serviceName, {
+    broker: brokerHash.slice(0, 12),
+    connections,
+  })
+  const db = database()
+  const server = createGateway(
+    async (text, values) => (await db.query(text, values)).rows[0]?.result,
+    {
+      // Only the database being unreachable or busy is the gateway's state; a
+      // refused or malformed call is the calling copy's own outcome.
+      failed: (code) => {
+        const reason = categorize({ code })
+        if (reason === "database_unreachable" || reason === "database_busy")
+          life.waiting(reason, FAST)
+      },
+      succeeded: () => life.recovered(),
+    },
+    () => db.waitingCount
+  )
+  // systemd passes the listening socket (socket activation); local runs bind a private path.
+  const activated =
+    process.env.LISTEN_FDS === "1" &&
+    process.env.LISTEN_PID === String(process.pid)
+  const path = env.AGENTONIC_GATEWAY_SOCKET ?? ""
+  if (!activated) {
+    if (!socketPath(path)) throw new Error("configuration_invalid")
+    rmSync(path, { force: true })
+  }
+  // A listening server keeps the process alive, so it is closed on every way out.
+  try {
+    await new Promise<void>((resolve, reject) => {
+      server.once("error", reject)
+      server.listen(activated ? { fd: 3 } : { path }, () => resolve())
+    })
+    if (!activated) chmodSync(path, 0o600)
+    life.started()
+    await new Promise<void>((resolve) => {
+      if (halt.signal.aborted) resolve()
+      halt.signal.addEventListener("abort", () => resolve(), { once: true })
+    })
+  } finally {
+    server.shutdown()
+  }
+  life.stopped("stop_requested")
+}
+
+// Only agent copies call through the gateway; it connects on first use.
+const calls = new GatewayClient(settings.socket ?? "")
 try {
-  await (manager ? managerLoop() : serviceLoop())
+  await (manager ? managerLoop() : gateway ? gatewayLoop() : serviceLoop())
 } catch (error) {
   new ServiceState(serviceName).stopped(reasonOf(error))
   process.exitCode = 1
 } finally {
   for (const child of children.values()) child.kill("SIGTERM")
-  await pool.end()
+  calls.close()
+  await pool?.end()
 }

@@ -7,6 +7,7 @@
 /** Categories for errors raised while talking to the database. */
 export type Reason =
   | "refused"
+  | "gateway_unreachable"
   | "database_unreachable"
   | "database_busy"
   | "database_error"
@@ -37,6 +38,8 @@ export function categorize(error: unknown): Reason {
       : undefined
   // insufficient_privilege: every staging function raises it for a refused identity.
   if (code === "42501") return "refused"
+  // An agent copy could not reach its host's database gateway (gateway.ts).
+  if (code === "EGATEWAY") return "gateway_unreachable"
   if (code && (UNREACHABLE.has(code) || code.startsWith("08")))
     return "database_unreachable"
   if (code && BUSY.has(code)) return "database_busy"

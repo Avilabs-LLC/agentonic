@@ -190,6 +190,8 @@ function checksFor(target, registration) {
         templateSha256: sha(units(broker).runtime),
       })),
       controllerUnitSha256: sha(units(registration.codeSha256).controller),
+      gatewayUnitSha256: sha(units(registration.codeSha256).gateway),
+      gatewaySocketSha256: sha(units(registration.codeSha256).gatewaySocket),
     })
   }
   if (target === "azure-evaluator") {
