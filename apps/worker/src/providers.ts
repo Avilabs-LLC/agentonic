@@ -304,7 +304,8 @@ const payloads = {
     .object({
       operation: z.enum(Object.keys(webArguments) as [WebOperation]),
       args: z.unknown(),
-      timeoutMs: z.number().int().positive(),
+      // A research deadline can leave 0 ms; the web call allows at least 1.
+      timeoutMs: z.number().int().nonnegative(),
     })
     .strict(),
   gmail: z
