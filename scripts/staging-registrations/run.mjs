@@ -559,8 +559,9 @@ function health(registrations, entries, now) {
   return facts ? machineNotes(facts, now) : []
 }
 
-const standingEnded = (registration) =>
-  !!(registration.revokedAt || registration.retiredAt)
+function standingEnded(registration) {
+  return !!(registration.revokedAt || registration.retiredAt)
+}
 
 /** Program and runtime bytes the VM serves that are missing or altered on this Mac. */
 function missingLocally(target, registration) {
