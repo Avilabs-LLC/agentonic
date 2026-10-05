@@ -36,10 +36,14 @@ export type Registration = {
   id: string
   verifiedAt: string
   revokedAt: string | null
+  /** Evaluators only: normal succession ended this registration. */
+  retiredAt?: string | null
   /** Runtime artifacts this registration serves side by side. */
   runtimes: string[]
-  /** Broker hash for hosts, worker hash for evaluators. */
+  /** Current broker hash for hosts, worker hash for evaluators. */
   codeSha256: string
+  /** Hosts only: every live broker release, the current one included. */
+  brokers?: string[]
   verification?: Record<string, unknown>
 }
 
@@ -51,7 +55,12 @@ export type Plan =
   | {
       renew: false
       reason:
-        "not_due" | "missing" | "revoked" | "not_selected" | "expired_local"
+        | "not_due"
+        | "missing"
+        | "revoked"
+        | "retired"
+        | "not_selected"
+        | "expired_local"
     }
 
 /**
@@ -71,6 +80,7 @@ export function planRenewal(input: {
     return { renew: false, reason: "not_selected" }
   if (!registration) return { renew: false, reason: "missing" }
   if (registration.revokedAt) return { renew: false, reason: "revoked" }
+  if (registration.retiredAt) return { renew: false, reason: "retired" }
   const left = validUntil(registration.verifiedAt).getTime() - now.getTime()
   if (left <= 0) {
     if (!isWatched(target) && !selected)
@@ -199,28 +209,61 @@ function unitChecks(unit: string, path: string, sha256: string): Check[] {
 const runsCommand = (command: string) => (value: string | undefined) =>
   value === "none" || value === command
 
+/** One broker release installed on the host. */
+export type Broker = { sha256: string; templateSha256: string }
+const brokerName = (sha256: string) => `broker ${sha256.slice(0, 12)}`
+const brokerRelease = (sha256: string) =>
+  `/opt/agentonic/staging/releases/${assertHash(sha256)}`
+const AGENT_INSTANCE =
+  /^instance:agentonic-staging-([a-f0-9]{64})@[0-9a-f-]{36}\.service$/
+
 export function azureHostChecks(input: {
+  /** The current broker: it runs the controller and starts every new copy. */
   brokerSha256: string
+  /** Every live broker release, current included; older ones still run copies. */
+  brokers: Broker[]
   runtimes: Runtime[]
-  runtimeUnitSha256: string
   controllerUnitSha256: string
 }): Check[] {
-  const broker = assertHash(input.brokerSha256)
-  const release = `/opt/agentonic/staging/releases/${broker}`
+  const current = assertHash(input.brokerSha256)
+  if (!input.brokers.some((broker) => broker.sha256 === current))
+    throw new Error("Current broker not listed")
+  const live = new Set(input.brokers.map((broker) => assertHash(broker.sha256)))
   const config = "/etc/agentonic/staging"
   return [
     ...baseChecks,
-    {
-      name: "broker program hash",
-      key: `sha:${release}/broker.mjs`,
-      expect: broker,
-    },
-    {
-      name: "broker program read-only",
-      key: `stat:${release}/broker.mjs`,
-      expect: rootOwned("444"),
-    },
-    { name: "broker release protected", key: `loose:${release}`, expect: "0" },
+    ...input.brokers.flatMap(({ sha256, templateSha256 }): Check[] => {
+      const release = brokerRelease(sha256)
+      const name = brokerName(sha256)
+      const template = `/etc/systemd/system/agentonic-staging-${sha256}@.service`
+      return [
+        {
+          name: `${name} program hash`,
+          key: `sha:${release}/broker.mjs`,
+          expect: sha256,
+        },
+        {
+          name: `${name} program read-only`,
+          key: `stat:${release}/broker.mjs`,
+          expect: rootOwned("444"),
+        },
+        {
+          name: `${name} release protected`,
+          key: `loose:${release}`,
+          expect: "0",
+        },
+        {
+          name: `${name} agent service template`,
+          key: `sha:${template}`,
+          expect: assertHash(templateSha256),
+        },
+        {
+          name: `${name} agent service template protected`,
+          key: `stat:${template}`,
+          expect: rootOwned("644"),
+        },
+      ]
+    }),
     ...artifactChecks(input.runtimes),
     ...unitChecks(
       "agentonic-deployer-staging.service",
@@ -228,14 +271,9 @@ export function azureHostChecks(input: {
       assertHash(input.controllerUnitSha256)
     ),
     {
-      name: "agent service template",
+      name: "no shared agent service template",
       key: "sha:/etc/systemd/system/agentonic-staging@.service",
-      expect: assertHash(input.runtimeUnitSha256),
-    },
-    {
-      name: "agent service template protected",
-      key: "stat:/etc/systemd/system/agentonic-staging@.service",
-      expect: rootOwned("644"),
+      expect: "",
     },
     {
       name: "staging configuration private",
@@ -254,9 +292,9 @@ export function azureHostChecks(input: {
         expect: rootOwned("600"),
       },
       {
-        name: `${file} pins broker`,
+        name: `${file} pins the current broker`,
         key: `env:${config}/${file}#AGENTONIC_BROKER_SHA256`,
-        expect: (value) => unquote(value) === broker,
+        expect: (value) => unquote(value) === current,
       },
       {
         name: `${file} pins runtime root`,
@@ -265,17 +303,26 @@ export function azureHostChecks(input: {
       },
     ]),
     {
-      name: "controller runs verified program",
+      name: "controller runs the current broker",
       key: "cmdline:agentonic-deployer-staging.service",
-      expect: runsCommand(`${NODE} ${release}/broker.mjs --manager`),
+      expect: runsCommand(
+        `${NODE} ${brokerRelease(current)}/broker.mjs --manager`
+      ),
     },
     {
-      name: "agent services run verified program",
+      name: "agent services run registered brokers",
       key: "instances",
       expect: (_value, facts) =>
         Object.entries(facts)
           .filter(([key]) => key.startsWith("instance:"))
-          .every(([, command]) => command === `${NODE} ${release}/broker.mjs`),
+          .every(([key, command]) => {
+            const broker = AGENT_INSTANCE.exec(key)?.[1]
+            return (
+              !!broker &&
+              live.has(broker) &&
+              command === `${NODE} ${brokerRelease(broker)}/broker.mjs`
+            )
+          }),
     },
   ]
 }
@@ -358,24 +405,24 @@ export function azureEvaluatorChecks(input: {
 export function localHostChecks(input: {
   root: string
   brokerSha256: string
+  brokers: string[]
   runtimes: Runtime[]
 }): Check[] {
-  const broker = assertHash(input.brokerSha256)
-  const release = `${input.root}/.local/staging/releases/${broker}`
+  const current = assertHash(input.brokerSha256)
   const config = `${input.root}/.local/staging/config`
   return [
-    {
-      name: "broker program hash",
-      key: `sha:${release}/broker.mjs`,
+    ...input.brokers.map((broker) => ({
+      name: `${brokerName(broker)} program hash`,
+      key: `sha:${input.root}/.local/staging/releases/${assertHash(broker)}/broker.mjs`,
       expect: broker,
-    },
+    })),
     ...localArtifactChecks(input),
     ...(["broker.env", "manager.env"] as const).flatMap((file): Check[] => [
       { name: `${file} private`, key: `mode:${config}/${file}`, expect: "600" },
       {
-        name: `${file} pins broker`,
+        name: `${file} pins the current broker`,
         key: `env:${config}/${file}#AGENTONIC_BROKER_SHA256`,
-        expect: (value) => unquote(value) === broker,
+        expect: (value) => unquote(value) === current,
       },
     ]),
   ]
@@ -428,6 +475,93 @@ function localArtifactChecks(input: {
   })
 }
 
+// ---------------------------------------------------------------------------
+// Service health
+//
+// Gathered on every run, independent of renewal: a service that is waiting,
+// failed or restarting is reported even while its registration is valid.
+
+const SERVICE: Record<"azure-host" | "azure-evaluator", [string, string]> = {
+  "azure-host": [
+    "agentonic-deployer-staging.service",
+    "the deployment controller",
+  ],
+  "azure-evaluator": ["agentonic-evaluator-staging.service", "the evaluator"],
+}
+/** Facts to gather for one Azure target's health and the machine it runs on. */
+export function healthProbes(target: "azure-host" | "azure-evaluator") {
+  const [unit] = SERVICE[target]
+  return [
+    { key: `state:${unit}` },
+    { key: `event:${unit}` },
+    ...(target === "azure-host" ? [{ key: "failedagents" }] : []),
+    { key: "boot" },
+    { key: "reboot" },
+  ]
+}
+const WAITING: Record<string, string> = {
+  registration_refused:
+    "the database refuses its registration (expired, replaced or revoked)",
+  database_unreachable: "the database is unreachable",
+  database_busy: "the database is busy",
+  database_error: "database errors",
+}
+/** Content-free health problems for one Azure target. */
+export function healthFindings(
+  target: "azure-host" | "azure-evaluator",
+  facts: Facts
+): string[] {
+  const [unit, label] = SERVICE[target]
+  const raw = facts[`state:${unit}`]
+  if (raw === undefined) return [`could not read the state of ${label}`]
+  const out: string[] = []
+  const state = parseUnit(raw)
+  if (state.ActiveState !== "active")
+    out.push(
+      `${label} is not running (${state.ActiveState || "unknown"}, ${state.Result || "unknown"}, ${Number(state.NRestarts) || 0} restarts)`
+    )
+  let event: { event?: unknown; reason?: unknown; since?: unknown } = {}
+  try {
+    event = JSON.parse(facts[`event:${unit}`] || "{}")
+  } catch {
+    /* An unreadable line says nothing about the state. */
+  }
+  if (
+    event.event === "service_waiting" &&
+    typeof event.reason === "string" &&
+    /^[a-z_]{3,40}$/.test(event.reason)
+  ) {
+    const since =
+      typeof event.since === "string" && !Number.isNaN(Date.parse(event.since))
+        ? ` since ${utc(event.since)}`
+        : ""
+    out.push(
+      `${label} is waiting${since}: ${WAITING[event.reason] ?? event.reason.replaceAll("_", " ")}`
+    )
+  }
+  const failed = Number(facts.failedagents)
+  if (target === "azure-host" && failed > 0)
+    out.push(
+      `${failed} agent service${failed === 1 ? " has" : "s have"} failed`
+    )
+  return out
+}
+/** Notes about the machine for the issue body; they never raise an alert by themselves. */
+export function machineNotes(facts: Facts, now: Date): string[] {
+  const notes: string[] = []
+  const boot = Number(facts.boot) * 1000
+  if (boot > 0)
+    notes.push(
+      `vm-agents-01 has been up since ${utc(new Date(boot).toISOString())}${now.getTime() - boot < DAY ? " (restarted within the last day)" : ""}.`
+    )
+  const pending = Number(facts.reboot) * 1000
+  if (pending > 0)
+    notes.push(
+      `Installed updates have been waiting for a restart since ${utc(new Date(pending).toISOString())}; schedule one.`
+    )
+  return notes
+}
+
 /** Names of failed checks. Missing facts fail. */
 export function failedChecks(checks: Check[], facts: Facts) {
   return checks
@@ -442,7 +576,7 @@ export function failedChecks(checks: Check[], facts: Facts) {
 
 const quote = (path: string) => `'${assertPath(path)}'`
 /** Shell lines that print `key<TAB>value` for each fact, run as root on the VM. */
-export function gatherScript(checks: Check[]) {
+export function gatherScript(checks: readonly { key: string }[]) {
   const lines = [
     "set -u",
     `f() { printf '%s\\t%s\\n' "$1" "$(printf '%s' "$2" | tr '\\n\\t' '  ')"; }`,
@@ -479,10 +613,31 @@ export function gatherScript(checks: Check[]) {
         `pid=$(systemctl show -p MainPID --value ${arg}); if [ "\${pid:-0}" -gt 0 ]; then tr '\\0' ' ' < /proc/$pid/cmdline; else echo none; fi`
       )
     } else if (kind === "instances") {
+      // Every agent copy, under any broker release's template or the retired shared one.
       lines.push(
-        `for u in $(systemctl list-units --type=service --state=running --plain --no-legend 'agentonic-staging@*' | awk '{print $1}'); do pid=$(systemctl show -p MainPID --value "$u"); f "instance:$u" "$(tr '\\0' ' ' < /proc/$pid/cmdline)"; done`
+        `for u in $(systemctl list-units --type=service --state=running --plain --no-legend 'agentonic-staging*@*' | awk '{print $1}'); do pid=$(systemctl show -p MainPID --value "$u"); f "instance:$u" "$(tr '\\0' ' ' < /proc/$pid/cmdline)"; done`
       )
       out("echo listed")
+    } else if (kind === "state") {
+      if (!/^[a-z@.-]+\.service$/.test(arg)) throw new Error("Unsafe unit")
+      out(
+        `systemctl show -p ActiveState,Result,NRestarts ${arg} 2>/dev/null | tr '\\n' '|'`
+      )
+    } else if (kind === "event") {
+      if (!/^[a-z@.-]+\.service$/.test(arg)) throw new Error("Unsafe unit")
+      out(
+        `journalctl -u ${arg} -o cat --no-pager -n 400 2>/dev/null | grep -E '^\\{"event":"service_(started|waiting|recovered|stopped)"' | tail -1`
+      )
+    } else if (kind === "failedagents") {
+      out(
+        `systemctl list-units --type=service --state=failed --plain --no-legend 'agentonic-staging*@*' | wc -l`
+      )
+    } else if (kind === "boot") {
+      out(`awk '/^btime/{print $2}' /proc/stat`)
+    } else if (kind === "reboot") {
+      out(
+        "if [ -f /var/run/reboot-required ]; then stat -c %Y /var/run/reboot-required; else echo none; fi"
+      )
     } else if (kind === "shell") {
       if (arg !== EVAL_USER) throw new Error("Unexpected account")
       out(`getent passwd ${arg} | cut -d: -f7`)
@@ -520,6 +675,7 @@ export type Outcome =
   | "expired"
   | "missing"
   | "revoked"
+  | "retired"
   | "verified"
 export type Entry = {
   name: Target
@@ -527,12 +683,16 @@ export type Entry = {
   outcome: Outcome
   /** Content-free explanation: check names, counts and states only. */
   detail?: string
+  /** Content-free service health problems, gathered on every run. */
+  health?: string[]
 }
 export type Report = {
   version: 1
   generatedAt: string
   assignee?: string
   registrations: Entry[]
+  /** Machine notes for the issue body (uptime, pending restart). */
+  machine?: string[]
 }
 
 /** Problems that need a person, judged at `now`. Only Azure registrations alert. */
@@ -550,7 +710,11 @@ export function problems(report: Report | null, now: Date): string[] {
       out.push(
         `${entry.name}: verification failed${detail}. It was not renewed.`
       )
-    else if (entry.outcome === "missing" || entry.outcome === "revoked")
+    else if (
+      entry.outcome === "missing" ||
+      entry.outcome === "revoked" ||
+      entry.outcome === "retired"
+    )
       out.push(
         `${entry.name}: no active registration (${entry.outcome}). Reinstall and register it.`
       )
@@ -562,6 +726,7 @@ export function problems(report: Report | null, now: Date): string[] {
       out.push(`${entry.name}: expires at ${utc(entry.validUntil)}${detail}.`)
     else if (entry.detail && entry.outcome === "renewed")
       out.push(`${entry.name}: renewed, but ${entry.detail}.`)
+    for (const line of entry.health ?? []) out.push(`${entry.name}: ${line}.`)
   }
   return out
 }
@@ -579,7 +744,7 @@ export function issueBody(report: Report | null, found: string[], now: Date) {
   )
   return [
     ISSUE_MARKER,
-    "Staging on `vm-agents-01` stops working when its registrations expire. The renewal job on the Mac normally renews them automatically; something below needs a person.",
+    "Staging on `vm-agents-01` stops working when its registrations expire or its services stop. The renewal job on the Mac normally renews registrations automatically; something below needs a person.",
     "",
     "**Needs attention**",
     ...found.map((line) => `- ${line}`),
@@ -594,7 +759,10 @@ export function issueBody(report: Report | null, found: string[], now: Date) {
           "",
         ]
       : []),
-    "**To fix**, on the Mac: `pnpm staging:reverify` shows the state; `pnpm staging:reverify --renew --publish` re-verifies and renews. A failed check means the installation no longer matches what was reviewed: investigate before reinstalling.",
+    ...(report?.machine?.length
+      ? ["**vm-agents-01**", ...report.machine.map((note) => `- ${note}`), ""]
+      : []),
+    "**To fix**, on the Mac: `pnpm staging:reverify` shows the state; `pnpm staging:reverify --renew --publish` re-verifies and renews. A failed check means the installation no longer matches what was reviewed: investigate before reinstalling. For a waiting or failed service, read its journal on the VM (`journalctl -u <unit>`); every line names a category.",
     "",
     `_Checked ${utc(now.toISOString())}. This issue closes itself once everything is valid again._`,
   ].join("\n")

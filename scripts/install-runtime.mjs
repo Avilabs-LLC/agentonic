@@ -119,7 +119,7 @@ try {
       "This runtime was retired on this host"
     )
     const evaluator = await db.query(
-      "INSERT INTO agentonic.evaluation_worker_runtimes(worker_id,runtime_sha256) SELECT id,$2 FROM agentonic.evaluation_workers WHERE database_role=$1 AND revoked_at IS NULL ON CONFLICT DO NOTHING RETURNING worker_id",
+      "INSERT INTO agentonic.evaluation_worker_runtimes(worker_id,runtime_sha256) SELECT id,$2 FROM agentonic.evaluation_workers WHERE database_role=$1 AND revoked_at IS NULL AND retired_at IS NULL ON CONFLICT DO NOTHING RETURNING worker_id",
       [azure ? "agentonic_eval_azure" : "agentonic_eval_local", runtimeHash]
     )
     await db.query("COMMIT")

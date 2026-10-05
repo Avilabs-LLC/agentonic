@@ -879,6 +879,7 @@ model EvaluationWorker {
   verifiedAt    DateTime        @map("verified_at") @db.Timestamptz
   verification  Json
   revokedAt     DateTime?       @map("revoked_at") @db.Timestamptz
+  retiredAt     DateTime?       @map("retired_at") @db.Timestamptz
   createdAt     DateTime        @default(now()) @map("created_at") @db.Timestamptz
   runs          EvaluationRun[]
   runtimes      EvaluationWorkerRuntime[]
@@ -1059,6 +1060,7 @@ model RuntimeHost {
  revokedAt DateTime? @map("revoked_at") @db.Timestamptz
  heartbeatAt DateTime? @map("heartbeat_at") @db.Timestamptz
  artifacts RuntimeHostArtifact[]
+ brokers RuntimeHostBroker[]
  @@map("runtime_hosts")
  @@schema("agentonic")
 }
@@ -1070,6 +1072,17 @@ model RuntimeHostArtifact {
  host RuntimeHost @relation(fields: [hostId], references: [id], onDelete: NoAction, onUpdate: NoAction)
  @@id([hostId, runtimeSha256])
  @@map("runtime_host_artifacts")
+ @@schema("agentonic")
+}
+model RuntimeHostBroker {
+ hostId String @map("host_id") @db.Uuid
+ brokerSha256 String @map("broker_sha256")
+ installedAt DateTime @default(dbgenerated("clock_timestamp()")) @map("installed_at") @db.Timestamptz
+ retiredAt DateTime? @map("retired_at") @db.Timestamptz
+ revokedAt DateTime? @map("revoked_at") @db.Timestamptz
+ host RuntimeHost @relation(fields: [hostId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+ @@id([hostId, brokerSha256])
+ @@map("runtime_host_brokers")
  @@schema("agentonic")
 }
 model Deployment {
@@ -1099,6 +1112,12 @@ model Deployment {
  heartbeatAt DateTime? @map("heartbeat_at") @db.Timestamptz
  errorCode String? @map("error_code")
  manifestSha256 String? @map("manifest_sha256")
+ brokerSha256 String? @map("broker_sha256")
+ successorBrokerSha256 String? @map("successor_broker_sha256")
+ successorTokenSha256 String? @map("successor_token_sha256")
+ drainingBrokerSha256 String? @map("draining_broker_sha256")
+ drainingTokenSha256 String? @map("draining_token_sha256")
+ drainingSince DateTime? @map("draining_since") @db.Timestamptz
  @@unique([workspaceId,id])
  @@unique([workspaceId,agentId,id])
  @@unique([workspaceId,authorizedByMemberId,requestId])

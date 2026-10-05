@@ -4,36 +4,50 @@ import { setTimeout as delay } from "node:timers/promises"
 import pg from "pg"
 import { prepareCriteria, gradeAnswer } from "./review-ai"
 import { processJob, type Execute, type Lease } from "./pipeline"
-const env = {
-  ...(existsSync(new URL("../.env.evaluation.local", import.meta.url))
-    ? parse(readFileSync(new URL("../.env.evaluation.local", import.meta.url)))
-    : {}),
-  ...process.env,
+import { FAST, ServiceState, categorize, reasonOf } from "./service-state"
+const life = new ServiceState("evaluator")
+// A configuration problem cannot fix itself: report it and exit so systemd's
+// start limit turns it into a visible failed unit.
+function configure() {
+  try {
+    const env = {
+      ...(existsSync(new URL("../.env.evaluation.local", import.meta.url))
+        ? parse(
+            readFileSync(new URL("../.env.evaluation.local", import.meta.url))
+          )
+        : {}),
+      ...process.env,
+    }
+    const url = new URL(env.DATABASE_URL ?? "")
+    if (
+      !env.AGENTONIC_RUNTIME_ROOT ||
+      !env.AGENTONIC_EVALUATION_WORKER_SHA256 ||
+      !["agentonic_eval_local", "agentonic_eval_azure"].includes(
+        decodeURIComponent(url.username).split(".")[0] ?? ""
+      )
+    )
+      throw new Error("configuration_invalid")
+    const ca = readFileSync(env.AGENTONIC_DATABASE_CA_FILE ?? "", "utf8")
+    return {
+      env,
+      url,
+      ca,
+      runtimeRoot: env.AGENTONIC_RUNTIME_ROOT,
+      workerHash: env.AGENTONIC_EVALUATION_WORKER_SHA256,
+    }
+  } catch {
+    life.stopped("configuration_invalid")
+    process.exit(1)
+  }
 }
-if (
-  !env.DATABASE_URL ||
-  !env.AGENTONIC_DATABASE_CA_FILE ||
-  !env.AGENTONIC_RUNTIME_ROOT ||
-  !env.AGENTONIC_EVALUATION_WORKER_SHA256
-)
-  throw new Error("Evaluation configuration required")
-const url = new URL(env.DATABASE_URL)
-if (
-  !["agentonic_eval_local", "agentonic_eval_azure"].includes(
-    decodeURIComponent(url.username).split(".")[0] ?? ""
-  )
-)
-  throw new Error("Evaluation-only database role required")
+const { env, url, ca, runtimeRoot, workerHash } = configure()
 const pool = new pg.Pool({
   host: url.hostname,
   port: Number(url.port || 5432),
   user: decodeURIComponent(url.username),
   password: decodeURIComponent(url.password),
   database: decodeURIComponent(url.pathname.slice(1)),
-  ssl: {
-    rejectUnauthorized: true,
-    ca: readFileSync(env.AGENTONIC_DATABASE_CA_FILE, "utf8"),
-  },
+  ssl: { rejectUnauthorized: true, ca },
   max: 2,
   connectionTimeoutMillis: 10000,
   statement_timeout: 30000,
@@ -55,11 +69,16 @@ const prepareExecute: Execute = async (operation, job, payload = {}) => {
 }
 let stopping = false
 let active: AbortController | undefined
+const halt = new AbortController()
 for (const signal of ["SIGINT", "SIGTERM"] as const)
   process.once(signal, () => {
     stopping = true
     active?.abort()
+    halt.abort()
   })
+/** Waits, but returns at once when the service is asked to stop. */
+const pause = (ms: number) =>
+  delay(ms, undefined, { signal: halt.signal }).catch(() => {})
 const config = {
   allowTools: false,
   supabaseUrl: "",
@@ -67,16 +86,16 @@ const config = {
   voyageKey: env.VOYAGE_API_KEY ?? "",
   rerankEnabled: env.AGENTONIC_RERANK_ENABLED === "true",
   openaiKey: env.OPENAI_API_KEY ?? "",
-  runtimeRoot: env.AGENTONIC_RUNTIME_ROOT,
+  runtimeRoot,
 }
 async function run() {
-  console.log(JSON.stringify({ event: "evaluation_worker_started" }))
+  life.started({ worker: workerHash.slice(0, 12) })
   try {
     while (!stopping) {
       try {
         const result = await pool.query(
           "SELECT agentonic.evaluation_claim($1) result",
-          [env.AGENTONIC_EVALUATION_WORKER_SHA256]
+          [workerHash]
         )
         let job = result.rows[0].result as
           (Lease & { caseCount: number }) | null
@@ -88,14 +107,15 @@ async function run() {
         ) {
           const next = await pool.query(
             "SELECT agentonic.review_preparation_claim($1) result",
-            [env.AGENTONIC_EVALUATION_WORKER_SHA256]
+            [workerHash]
           )
           job = next.rows[0].result
           preparing = !!job
         }
+        life.recovered()
         if (!job) {
           if (process.argv.includes("--once")) break
-          await new Promise((r) => setTimeout(r, 2000))
+          await pause(2000)
           continue
         }
         active = new AbortController()
@@ -174,12 +194,15 @@ async function run() {
           clearInterval(heartbeat)
           active = undefined
         }
-      } catch {
-        console.error(
-          JSON.stringify({ event: "evaluation_worker_unavailable" })
+      } catch (error) {
+        // A refused registration (expired, retired or revoked) waits for renewal instead of exiting.
+        const refused = categorize(error) === "refused"
+        const wait = life.waiting(
+          refused ? "registration_refused" : reasonOf(error),
+          refused ? FAST : undefined
         )
         if (process.argv.includes("--once")) break
-        await new Promise((r) => setTimeout(r, 5000))
+        await pause(wait)
       }
       if (process.argv.includes("--once")) break
     }

@@ -49,10 +49,13 @@ try {
   await db.query("BEGIN")
   const role = "agentonic_eval_azure"
   const existing = await db.query(
-    "SELECT * FROM agentonic.evaluation_workers WHERE database_role=$1 AND revoked_at IS NULL FOR UPDATE",
+    "SELECT * FROM agentonic.evaluation_workers WHERE database_role=$1 AND revoked_at IS NULL AND retired_at IS NULL FOR UPDATE",
     [role]
   )
-  if (existing.rowCount && process.argv.includes("--replace")) {
+  // --replace retires the active registrations: normal succession, so approval evidence
+  // they produced stays valid. --revoke withdraws trust from everything they produced.
+  const revoke = process.argv.includes("--revoke")
+  if (existing.rowCount && (process.argv.includes("--replace") || revoke)) {
     assert.equal(
       (
         await db.query(
@@ -62,7 +65,9 @@ try {
       0
     )
     await db.query(
-      "UPDATE agentonic.evaluation_workers SET revoked_at=clock_timestamp() WHERE revoked_at IS NULL"
+      revoke
+        ? "UPDATE agentonic.evaluation_workers SET revoked_at=clock_timestamp() WHERE revoked_at IS NULL"
+        : "UPDATE agentonic.evaluation_workers SET retired_at=clock_timestamp() WHERE revoked_at IS NULL AND retired_at IS NULL"
     )
     existing.rowCount = 0
   }
@@ -93,7 +98,7 @@ try {
     )
   // Local execution remains useful for development but can never supply Azure evidence.
   const local = await db.query(
-    "SELECT id,worker_sha256 FROM agentonic.evaluation_workers WHERE database_role='agentonic_eval_local' AND revoked_at IS NULL"
+    "SELECT id,worker_sha256 FROM agentonic.evaluation_workers WHERE database_role='agentonic_eval_local' AND revoked_at IS NULL AND retired_at IS NULL"
   )
   if (!local.rowCount)
     await serve(

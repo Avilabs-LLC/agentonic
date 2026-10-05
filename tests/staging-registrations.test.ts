@@ -8,7 +8,10 @@ import {
   azureHostChecks,
   failedChecks,
   gatherScript,
+  healthFindings,
+  healthProbes,
   issueBody,
+  machineNotes,
   parseFacts,
   planRenewal,
   problems,
@@ -105,6 +108,15 @@ describe("renewal plan", () => {
         anyTime: true,
       })
     ).toEqual({ renew: false, reason: "revoked" })
+    // A retired evaluator registration was succeeded by a new one; it is never renewed.
+    expect(
+      planRenewal({
+        target: "azure-evaluator",
+        registration: registration(6 * DAY, { retiredAt: now.toISOString() }),
+        now,
+        anyTime: true,
+      })
+    ).toEqual({ renew: false, reason: "retired" })
     expect(
       planRenewal({ target: "azure-host", registration: null, now })
     ).toEqual({ renew: false, reason: "missing" })
@@ -141,6 +153,11 @@ function healthy(checks: Check[], overrides: Facts = {}): Facts {
       facts[check.key] =
         `${NODE} /opt/agentonic/evaluation/releases/${hash("a")}/worker.mjs`
     else if (check.key === "instances") facts[check.key] = "listed"
+    else if (
+      check.key.startsWith("sha:") &&
+      check.key.endsWith("staging@.service")
+    )
+      facts[check.key] = ""
   }
   facts[`stat:${NODE}`] = "root:root:755"
   return { ...facts, ...overrides }
@@ -149,11 +166,14 @@ function healthy(checks: Check[], overrides: Facts = {}): Facts {
 describe("installation checks", () => {
   const host = azureHostChecks({
     brokerSha256: hash("a"),
+    brokers: [
+      { sha256: hash("a"), templateSha256: hash("e") },
+      { sha256: hash("6"), templateSha256: hash("5") },
+    ],
     runtimes: [
       { sha256: hash("b"), files },
       { sha256: hash("7"), files },
     ],
-    runtimeUnitSha256: hash("e"),
     controllerUnitSha256: hash("f"),
   })
   const evaluator = azureEvaluatorChecks({
@@ -169,8 +189,26 @@ describe("installation checks", () => {
   it("names each deviation from the reviewed installation", () => {
     const broker = `sha:/opt/agentonic/staging/releases/${hash("a")}/broker.mjs`
     expect(failedChecks(host, healthy(host, { [broker]: hash("9") }))).toEqual([
-      "broker program hash",
+      "broker aaaaaaaaaaaa program hash",
     ])
+    // An earlier broker release still running copies is checked on its own.
+    expect(
+      failedChecks(
+        host,
+        healthy(host, {
+          [`sha:/etc/systemd/system/agentonic-staging-${hash("6")}@.service`]:
+            hash("9"),
+        })
+      )
+    ).toEqual(["broker 666666666666 agent service template"])
+    expect(
+      failedChecks(
+        host,
+        healthy(host, {
+          "sha:/etc/systemd/system/agentonic-staging@.service": hash("9"),
+        })
+      )
+    ).toEqual(["no shared agent service template"])
     expect(
       failedChecks(
         host,
@@ -188,14 +226,28 @@ describe("installation checks", () => {
         })
       )
     ).toEqual(["agentonic-deployer-staging.service unit loaded as installed"])
+    const copy = (broker: string) =>
+      `instance:agentonic-staging-${broker}@10000000-0000-4000-8000-000000000001.service`
+    const program = (broker: string) =>
+      `${NODE} /opt/agentonic/staging/releases/${broker}/broker.mjs`
+    // Copies of every live broker run side by side, each its own release's program.
     expect(
       failedChecks(
         host,
         healthy(host, {
-          "instance:agentonic-staging@x.service": `${NODE} /tmp/broker.mjs`,
+          [copy(hash("a"))]: program(hash("a")),
+          [copy(hash("6"))]: program(hash("6")),
         })
       )
-    ).toEqual(["agent services run verified program"])
+    ).toEqual([])
+    for (const deviation of [
+      { [copy(hash("6"))]: program(hash("a")) },
+      { [copy(hash("8"))]: program(hash("8")) },
+      { "instance:agentonic-staging@x.service": `${NODE} /tmp/broker.mjs` },
+    ])
+      expect(failedChecks(host, healthy(host, deviation))).toEqual([
+        "agent services run registered brokers",
+      ])
     expect(
       failedChecks(host, healthy(host, { [`stat:${NODE}`]: "root:root:777" }))
     ).toEqual(["Node binary protected"])
@@ -241,8 +293,8 @@ describe("installation checks", () => {
     expect(() =>
       azureHostChecks({
         brokerSha256: "a'; reboot #",
+        brokers: [{ sha256: "a'; reboot #", templateSha256: hash("e") }],
         runtimes: [{ sha256: hash("b"), files }],
-        runtimeUnitSha256: hash("e"),
         controllerUnitSha256: hash("f"),
       })
     ).toThrow()
@@ -252,7 +304,7 @@ describe("installation checks", () => {
         runtimes: [
           { sha256: hash("b"), files: { "../../etc/shadow": hash("c") } },
         ],
-        runtimeUnitSha256: hash("e"),
+        brokers: [{ sha256: hash("a"), templateSha256: hash("e") }],
         controllerUnitSha256: hash("f"),
       })
     ).toThrow()
@@ -260,7 +312,7 @@ describe("installation checks", () => {
       azureHostChecks({
         brokerSha256: hash("a"),
         runtimes: [{ sha256: hash("b"), files: { "x'$(id)": hash("c") } }],
-        runtimeUnitSha256: hash("e"),
+        brokers: [{ sha256: hash("a"), templateSha256: hash("e") }],
         controllerUnitSha256: hash("f"),
       })
     ).toThrow()
@@ -269,6 +321,71 @@ describe("installation checks", () => {
     expect(
       parseFacts("hostname\tvm-agents-01\nlisteners\t0 \n\nnoise")
     ).toEqual({ hostname: "vm-agents-01", listeners: "0" })
+  })
+})
+
+describe("service health", () => {
+  const unit = "agentonic-deployer-staging.service"
+  it("gathers health facts with fixed, safe commands", () => {
+    const script = gatherScript([
+      ...healthProbes("azure-host"),
+      ...healthProbes("azure-evaluator"),
+    ])
+    expect(script).toContain(`journalctl -u ${unit} -o cat`)
+    expect(script.match(/^f 'boot'/gm)).toHaveLength(1)
+  })
+  it("reports a stopped, waiting or failing service without content", () => {
+    expect(
+      healthFindings("azure-host", {
+        [`state:${unit}`]: "ActiveState=active|Result=success|NRestarts=0|",
+        [`event:${unit}`]:
+          '{"event":"service_recovered","reason":"database_unreachable"}',
+        failedagents: "0",
+      })
+    ).toEqual([])
+    expect(
+      healthFindings("azure-host", {
+        [`state:${unit}`]: "ActiveState=active|Result=success|NRestarts=0|",
+        [`event:${unit}`]: JSON.stringify({
+          event: "service_waiting",
+          service: "deployment-controller",
+          reason: "registration_refused",
+          since: "2026-10-05T07:32:30.000Z",
+        }),
+        failedagents: "2",
+      })
+    ).toEqual([
+      "the deployment controller is waiting since 2026-10-05 07:32 UTC: the database refuses its registration (expired, replaced or revoked)",
+      "2 agent services have failed",
+    ])
+    expect(
+      healthFindings("azure-evaluator", {
+        "state:agentonic-evaluator-staging.service":
+          "ActiveState=failed|Result=start-limit-hit|NRestarts=5|",
+        "event:agentonic-evaluator-staging.service":
+          '{"event":"service_waiting","reason":"<script>"}',
+      })
+    ).toEqual([
+      "the evaluator is not running (failed, start-limit-hit, 5 restarts)",
+    ])
+    expect(healthFindings("azure-host", {})).toEqual([
+      "could not read the state of the deployment controller",
+    ])
+  })
+  it("notes restarts and pending updates without alerting", () => {
+    const boot = String(Math.floor((now.getTime() - 3 * HOUR) / 1000))
+    expect(machineNotes({ boot, reboot: "none" }, now)).toEqual([
+      "vm-agents-01 has been up since 2026-10-10 09:00 UTC (restarted within the last day).",
+    ])
+    expect(
+      machineNotes(
+        {
+          boot: String(Math.floor((now.getTime() - 9 * DAY) / 1000)),
+          reboot: String(Math.floor((now.getTime() - 2 * DAY) / 1000)),
+        },
+        now
+      )[1]
+    ).toContain("waiting for a restart since 2026-10-08 12:00 UTC")
   })
 })
 
@@ -354,6 +471,34 @@ describe("alerts", () => {
       )[0]
     ).toContain("renewed, but")
   })
+  it("alerts on unhealthy Azure services even while registrations are valid", () => {
+    const found = problems(
+      report([
+        {
+          name: "azure-host",
+          validUntil: later(5 * DAY),
+          outcome: "valid",
+          health: ["2 agent services have failed"],
+        },
+        {
+          name: "local-host",
+          validUntil: later(5 * DAY),
+          outcome: "valid",
+          health: ["ignored for local registrations"],
+        },
+      ]),
+      now
+    )
+    expect(found).toEqual(["azure-host: 2 agent services have failed."])
+    expect(
+      problems(
+        report([
+          { name: "azure-evaluator", validUntil: null, outcome: "retired" },
+        ]),
+        now
+      )[0]
+    ).toContain("no active registration (retired)")
+  })
   it("treats a deferred renewal with time left as quiet", () => {
     expect(
       problems(
@@ -394,6 +539,13 @@ describe("alerts", () => {
     )
     expect(body.startsWith(ISSUE_MARKER)).toBe(true)
     expect(body).toContain("| azure-host | 2026-10-10 13:00 UTC | valid |")
+    expect(
+      issueBody(
+        { ...report([]), machine: ["vm-agents-01 has been up since X."] },
+        [],
+        now
+      )
+    ).toContain("**vm-agents-01**\n- vm-agents-01 has been up since X.")
     expect(body).not.toMatch(/[a-f0-9]{64}/)
   })
 })
