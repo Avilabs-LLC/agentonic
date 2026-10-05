@@ -31,6 +31,16 @@ import {
 } from "./preview-models"
 import { GoogleError, type GoogleConfig } from "@agentonic/connectors/google"
 import type { Execute, Lease } from "./pipeline"
+import {
+  BROKER_PROTOCOL,
+  turnSpec,
+} from "@agentonic/contracts/runtime-protocol"
+import {
+  BUDGET_STOP_ANSWER,
+  PROPOSAL_ANSWER,
+  TurnBroker,
+  runBrokeredTurn,
+} from "./broker"
 const MODEL = "gpt-4.1-mini-2025-04-14"
 const hash = z.string().regex(/^[a-f0-9]{64}$/)
 const runtimeSchema = z
@@ -43,6 +53,7 @@ const runtimeSchema = z
         gmailContract: z.literal("1").optional(),
         webContract: z.literal("1").optional(),
         webResearch: z.literal("1").optional(),
+        brokerProtocol: z.literal(BROKER_PROTOCOL).optional(),
         model: z.literal(MODEL),
         gitCommit: z.string(),
         files: z
@@ -117,6 +128,7 @@ export function verifyRuntime(value: unknown, root: string) {
     installed.gmailContract !== runtime.manifest.gmailContract ||
     installed.webContract !== runtime.manifest.webContract ||
     installed.webResearch !== runtime.manifest.webResearch ||
+    installed.brokerProtocol !== runtime.manifest.brokerProtocol ||
     Object.entries(runtime.manifest.files).some(
       ([path, sha]) =>
         installed.files[path as keyof typeof installed.files] !== sha ||
@@ -273,7 +285,7 @@ export async function generatePreview(
       if (!webKey) throw new Error("budget_exhausted")
       await execute("web-check", job)
       return {
-        text: "La búsqueda alcanzó el presupuesto disponible antes de completar la respuesta. No pude terminar la verificación de todos tus criterios. La búsqueda se ha detenido; no continuará en segundo plano.",
+        text: BUDGET_STOP_ANSWER,
         citations: [],
         insufficientEvidence: true,
       }
@@ -403,7 +415,7 @@ export async function generatePreview(
       )
       if (!gmailReads.some((op) => op === operation))
         return {
-          text: "He preparado una acción de Gmail. Revisa la cuenta, los destinatarios y el contenido en la tarjeta de confirmación. Todavía no se ha realizado ningún cambio.",
+          text: PROPOSAL_ANSWER,
           citations: [],
           insufficientEvidence: true,
         }
@@ -507,6 +519,50 @@ export async function runPreview(
     }
   }
   await execute("heartbeat", job)
+  if (manifest.brokerProtocol === BROKER_PROTOCOL) {
+    // Protocol 2: the frozen runtime runs the loop; this broker decides.
+    if (!key) throw new Error("configuration_required")
+    const reasoning =
+      reasoningLevel === undefined
+        ? modelCatalog.find((m) => m.id === model)!.defaultLevel
+        : (reasoningLevel as string | null)
+    const configuration = modelConfiguration.parse({ model, reasoning })
+    const toolCalls = webKey ? (manifest.webResearch === "1" ? 8 : 3) : 3
+    const turn = turnSpec.parse({
+      model,
+      reasoning: configuration.reasoning,
+      tools: {
+        gmail: gmailOptions?.grant.operations ?? [],
+        web: Boolean(webKey),
+      },
+      limits: { modelCalls: toolCalls + 1, toolCalls, gmailCalls: 3 },
+    })
+    const broker = new TurnBroker({
+      job,
+      execute,
+      key,
+      signal,
+      turn,
+      gmail: gmailOptions,
+      webKey,
+      passageIds: z
+        .array(z.object({ id: z.uuid() }))
+        .max(8)
+        .parse(context.passages)
+        .map((p) => p.id),
+    })
+    await runBrokeredTurn(
+      entry,
+      { envelope: context, turn },
+      broker,
+      signal,
+      gmailOptions || webKey ? 110000 : 60000
+    )
+    return
+  }
+  // Protocol 1 (runtime 0.3.0 and earlier): the child composes one request and
+  // the broker runs the tool loop in generatePreview. Kept until no granted
+  // code release declares protocol 1.
   await new Promise<void>((resolvePromise, reject) => {
     const child = fork(entry, [], {
       execArgv: ["--max-old-space-size=192"],

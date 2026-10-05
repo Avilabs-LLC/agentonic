@@ -2415,6 +2415,7 @@ async function modelReview() {
     "202609190035_model_evaluations",
     "202609190036_chat_model_levels",
     "202609190037_model_review_receipt_history",
+    "202610050038_side_by_side_runtimes",
   ])
     await db.exec(
       readFileSync(
@@ -2428,7 +2429,7 @@ async function modelReview() {
     "UPDATE agentonic.evaluation_workers SET revoked_at=clock_timestamp() WHERE database_role='agentonic_eval_azure' AND revoked_at IS NULL"
   )
   await sql(
-    "INSERT INTO agentonic.evaluation_workers(database_role,environment,worker_sha256,runtime_sha256,verified_at,verification) VALUES('agentonic_eval_azure','azure_staging',repeat('d',64),repeat('b',64),now(),'{\"reviewProtocol\":3,\"isolation\":true,\"recovery\":true,\"artifactIntegrity\":true}')"
+    "WITH w AS (INSERT INTO agentonic.evaluation_workers(database_role,environment,worker_sha256,verified_at,verification) VALUES('agentonic_eval_azure','azure_staging',repeat('d',64),now(),'{\"reviewProtocol\":3,\"isolation\":true,\"recovery\":true,\"artifactIntegrity\":true}') RETURNING id) INSERT INTO agentonic.evaluation_worker_runtimes(worker_id,runtime_sha256) SELECT id,repeat('b',64) FROM w"
   )
   await actor()
   await flow("save", {
@@ -2657,7 +2658,7 @@ it("model review approvals expose only the approved models and levels in live ch
   expect(report.modelBatch?.models).toHaveLength(2)
   expect(report.criteria).toHaveLength(1)
   await sql(
-    "INSERT INTO agentonic.runtime_hosts(environment,database_role,broker_sha256,runtime_sha256,verified_at,heartbeat_at) VALUES('local','agentonic_deployer_local',repeat('f',64),repeat('b',64),clock_timestamp(),clock_timestamp())"
+    "WITH h AS (INSERT INTO agentonic.runtime_hosts(environment,database_role,broker_sha256,verified_at,heartbeat_at) VALUES('local','agentonic_deployer_local',repeat('f',64),clock_timestamp(),clock_timestamp()) RETURNING id) INSERT INTO agentonic.runtime_host_artifacts(host_id,runtime_sha256) SELECT id,repeat('b',64) FROM h"
   )
   await actor()
   const d = await lifecycleCall("deployment_command", "authorize", {
@@ -2712,4 +2713,84 @@ it("model review approvals expose only the approved models and levels in live ch
     previewModel: "gpt-6-astra",
     reasoningLevel: "low",
   })
+})
+it("serves several frozen runtimes side by side and never retires one a deployment uses", async () => {
+  const p = await modelReview()
+  // The registration made before the migration kept its runtime.
+  expect(
+    (
+      await sql(
+        "SELECT count(*)::int n FROM agentonic.evaluation_worker_runtimes r JOIN agentonic.evaluation_workers ew ON ew.id=r.worker_id WHERE ew.revoked_at IS NOT NULL AND r.runtime_sha256=repeat('b',64)"
+      )
+    ).rows[0]
+  ).toEqual({ n: 1 })
+  const models = [{ model: "gpt-5.4-mini", reasoning: "medium" }]
+  await actor()
+  await flow("run", {
+    preparationId: p.preparationId,
+    revision: 1,
+    models,
+    budgetUsd: 3,
+    consent: true,
+    requestId: id(990),
+  })
+  for (const configuration of models)
+    await finishFlow((await evalClaim())!, "passed", true, configuration.model)
+  // A host that only has a newer runtime cannot run this candidate.
+  const host = (
+    await sql(
+      "INSERT INTO agentonic.runtime_hosts(environment,database_role,broker_sha256,verified_at,heartbeat_at) VALUES('local','agentonic_deployer_local',repeat('f',64),clock_timestamp(),clock_timestamp()) RETURNING id"
+    )
+  ).rows[0] as { id: string }
+  await sql(
+    "INSERT INTO agentonic.runtime_host_artifacts(host_id,runtime_sha256) VALUES($1,repeat('c',64))",
+    [host.id]
+  )
+  const authorize = async (n: number) => {
+    await actor()
+    return lifecycleCall("deployment_command", "authorize", {
+      submissionId: p.submissionId,
+      environment: "local",
+      budgetUsd: 0.25,
+      consent: true,
+      requestId: id(n),
+    })
+  }
+  await expect(authorize(991)).rejects.toMatchObject({ code: "42501" })
+  // Installing the pinned runtime next to the newer one makes it available.
+  await sql(
+    "INSERT INTO agentonic.runtime_host_artifacts(host_id,runtime_sha256) VALUES($1,repeat('b',64))",
+    [host.id]
+  )
+  const d = await authorize(992)
+  expect(d.ok).toBe(true)
+  await readyStaging({ ...p, deploymentId: String(d.id) })
+  await db.exec("SAVEPOINT retire")
+  await expect(
+    sql(
+      "UPDATE agentonic.runtime_host_artifacts SET retired_at=clock_timestamp() WHERE runtime_sha256=repeat('b',64)"
+    )
+  ).rejects.toThrow("Runtime in use")
+  await db.exec("ROLLBACK TO SAVEPOINT retire")
+  await sql(
+    "UPDATE agentonic.runtime_host_artifacts SET retired_at=clock_timestamp() WHERE runtime_sha256=repeat('c',64)"
+  )
+  for (const statement of [
+    "UPDATE agentonic.runtime_host_artifacts SET retired_at=NULL WHERE runtime_sha256=repeat('c',64)",
+    "UPDATE agentonic.runtime_host_artifacts SET runtime_sha256=repeat('d',64) WHERE runtime_sha256=repeat('b',64)",
+    "DELETE FROM agentonic.runtime_host_artifacts",
+    "UPDATE agentonic.evaluation_worker_runtimes SET runtime_sha256=repeat('d',64)",
+    "DELETE FROM agentonic.evaluation_worker_runtimes",
+  ]) {
+    await db.exec("SAVEPOINT immutable")
+    await expect(sql(statement)).rejects.toThrow()
+    await db.exec("ROLLBACK TO SAVEPOINT immutable")
+  }
+  // Application roles never read the registration lists directly.
+  await actor()
+  await db.exec("SAVEPOINT direct")
+  await expect(
+    db.query("SELECT * FROM agentonic.runtime_host_artifacts")
+  ).rejects.toThrow()
+  await db.exec("ROLLBACK TO SAVEPOINT direct")
 })

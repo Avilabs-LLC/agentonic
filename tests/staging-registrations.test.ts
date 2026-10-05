@@ -27,7 +27,7 @@ const registration = (
   id: "10000000-0000-4000-8000-000000000001",
   verifiedAt: new Date(now.getTime() - ageMs).toISOString(),
   revokedAt: null,
-  runtimeSha256: hash("b"),
+  runtimes: [hash("b")],
   codeSha256: hash("a"),
   ...extra,
 })
@@ -149,15 +149,16 @@ function healthy(checks: Check[], overrides: Facts = {}): Facts {
 describe("installation checks", () => {
   const host = azureHostChecks({
     brokerSha256: hash("a"),
-    runtimeSha256: hash("b"),
-    runtimeFiles: files,
+    runtimes: [
+      { sha256: hash("b"), files },
+      { sha256: hash("7"), files },
+    ],
     runtimeUnitSha256: hash("e"),
     controllerUnitSha256: hash("f"),
   })
   const evaluator = azureEvaluatorChecks({
     workerSha256: hash("a"),
-    runtimeSha256: hash("b"),
-    runtimeFiles: files,
+    runtimes: [{ sha256: hash("b"), files }],
     unitSha256: hash("e"),
   })
 
@@ -198,6 +199,16 @@ describe("installation checks", () => {
     expect(
       failedChecks(host, healthy(host, { [`stat:${NODE}`]: "root:root:777" }))
     ).toEqual(["Node binary protected"])
+    // Every runtime installed side by side is checked and named on its own.
+    expect(
+      failedChecks(
+        host,
+        healthy(host, {
+          [`sha:/opt/agentonic/runtime/artifacts/${hash("7")}/src/surfaces/preview.mjs`]:
+            hash("9"),
+        })
+      )
+    ).toEqual(["runtime 777777777777 file src/surfaces/preview.mjs"])
     expect(
       failedChecks(
         evaluator,
@@ -230,8 +241,7 @@ describe("installation checks", () => {
     expect(() =>
       azureHostChecks({
         brokerSha256: "a'; reboot #",
-        runtimeSha256: hash("b"),
-        runtimeFiles: files,
+        runtimes: [{ sha256: hash("b"), files }],
         runtimeUnitSha256: hash("e"),
         controllerUnitSha256: hash("f"),
       })
@@ -239,8 +249,9 @@ describe("installation checks", () => {
     expect(() =>
       azureHostChecks({
         brokerSha256: hash("a"),
-        runtimeSha256: hash("b"),
-        runtimeFiles: { "../../etc/shadow": hash("c") },
+        runtimes: [
+          { sha256: hash("b"), files: { "../../etc/shadow": hash("c") } },
+        ],
         runtimeUnitSha256: hash("e"),
         controllerUnitSha256: hash("f"),
       })
@@ -248,8 +259,7 @@ describe("installation checks", () => {
     expect(() =>
       azureHostChecks({
         brokerSha256: hash("a"),
-        runtimeSha256: hash("b"),
-        runtimeFiles: { "x'$(id)": hash("c") },
+        runtimes: [{ sha256: hash("b"), files: { "x'$(id)": hash("c") } }],
         runtimeUnitSha256: hash("e"),
         controllerUnitSha256: hash("f"),
       })

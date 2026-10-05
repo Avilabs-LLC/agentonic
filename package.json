@@ -33,6 +33,8 @@
     "setup:rag": "node scripts/setup-rag.mjs",
     "rag:check-live": "node scripts/check-rag-live.mjs --live",
     "setup:preview": "node scripts/setup-preview.mjs",
+    "package:runtime": "node scripts/package-runtime.mjs",
+    "runtime:install": "node scripts/install-runtime.mjs",
     "preview:check-live": "node scripts/check-preview-live.mjs --live",
     "setup:evaluation": "node scripts/setup-evaluation.mjs",
     "package:evaluation": "node scripts/package-evaluation.mjs",

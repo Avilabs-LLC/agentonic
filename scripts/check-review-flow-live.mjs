@@ -469,7 +469,7 @@ try {
     )
     const release = (
       await db.query(
-        "SELECT c.id,c.template_version_id FROM agentonic.code_releases c JOIN agentonic.evaluation_workers ew ON ew.runtime_sha256=c.artifact_sha256 WHERE ew.environment='azure_staging' AND ew.revoked_at IS NULL AND c.revoked_at IS NULL AND c.retired_at IS NULL ORDER BY c.created_at DESC LIMIT 1"
+        "SELECT c.id,c.template_version_id FROM agentonic.code_releases c JOIN agentonic.evaluation_worker_runtimes ewr ON ewr.runtime_sha256=c.artifact_sha256 JOIN agentonic.evaluation_workers ew ON ew.id=ewr.worker_id WHERE ew.environment='azure_staging' AND ew.revoked_at IS NULL AND c.revoked_at IS NULL AND c.retired_at IS NULL ORDER BY c.created_at DESC LIMIT 1"
       )
     ).rows[0]
     assert.ok(release)

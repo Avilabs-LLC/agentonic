@@ -170,13 +170,24 @@ function standing(registration, now) {
 async function load() {
   const hosts = (
     await db.query(
-      "SELECT id,environment,broker_sha256,runtime_sha256,verified_at,revoked_at FROM agentonic.runtime_hosts"
+      "SELECT id,environment,broker_sha256,verified_at,revoked_at FROM agentonic.runtime_hosts"
+    )
+  ).rows
+  // Runtime artifacts served side by side; retired ones are no longer checked.
+  const artifacts = (
+    await db.query(
+      "SELECT host_id,runtime_sha256 FROM agentonic.runtime_host_artifacts WHERE retired_at IS NULL ORDER BY runtime_sha256"
     )
   ).rows
   // Latest registration per evaluator role: the active one if any, otherwise the last revoked.
   const workers = (
     await db.query(
-      "SELECT DISTINCT ON (database_role) id,database_role,worker_sha256,runtime_sha256,verified_at,revoked_at,verification FROM agentonic.evaluation_workers ORDER BY database_role,(revoked_at IS NULL) DESC,created_at DESC"
+      "SELECT DISTINCT ON (database_role) id,database_role,worker_sha256,verified_at,revoked_at,verification FROM agentonic.evaluation_workers ORDER BY database_role,(revoked_at IS NULL) DESC,created_at DESC"
+    )
+  ).rows
+  const workerRuntimes = (
+    await db.query(
+      "SELECT worker_id,runtime_sha256 FROM agentonic.evaluation_worker_runtimes ORDER BY runtime_sha256"
     )
   ).rows
   const host = (environment) => {
@@ -187,7 +198,9 @@ async function load() {
         verifiedAt: row.verified_at.toISOString(),
         revokedAt: row.revoked_at?.toISOString() ?? null,
         codeSha256: row.broker_sha256,
-        runtimeSha256: row.runtime_sha256,
+        runtimes: artifacts
+          .filter((a) => a.host_id === row.id)
+          .map((a) => a.runtime_sha256),
       }
     )
   }
@@ -199,7 +212,9 @@ async function load() {
         verifiedAt: row.verified_at.toISOString(),
         revokedAt: row.revoked_at?.toISOString() ?? null,
         codeSha256: row.worker_sha256,
-        runtimeSha256: row.runtime_sha256,
+        runtimes: workerRuntimes
+          .filter((r) => r.worker_id === row.id)
+          .map((r) => r.runtime_sha256),
         verification: row.verification,
       }
     )
@@ -222,10 +237,11 @@ function runtimeFiles(runtimeSha256) {
 }
 
 function checksFor(target, registration) {
-  const files = runtimeFiles(registration.runtimeSha256)
   const common = {
-    runtimeSha256: registration.runtimeSha256,
-    runtimeFiles: files,
+    runtimes: registration.runtimes.map((sha256) => ({
+      sha256,
+      files: runtimeFiles(sha256),
+    })),
   }
   if (target === "azure-host") {
     const units = stagingUnits({
@@ -358,8 +374,8 @@ async function reverify(target, registration, current) {
 
 async function renewHost(target, registration, entry) {
   const updated = await db.query(
-    "UPDATE agentonic.runtime_hosts SET verified_at=clock_timestamp() WHERE id=$1 AND revoked_at IS NULL AND broker_sha256=$2 AND runtime_sha256=$3 RETURNING verified_at",
-    [registration.id, registration.codeSha256, registration.runtimeSha256]
+    "UPDATE agentonic.runtime_hosts h SET verified_at=clock_timestamp() WHERE id=$1 AND revoked_at IS NULL AND broker_sha256=$2 AND coalesce((SELECT array_agg(runtime_sha256 ORDER BY runtime_sha256) FROM agentonic.runtime_host_artifacts WHERE host_id=h.id AND retired_at IS NULL),'{}')=$3::text[] RETURNING verified_at",
+    [registration.id, registration.codeSha256, registration.runtimes]
   )
   if (updated.rowCount !== 1)
     throw new Error("registration_changed_during_check")
@@ -440,10 +456,16 @@ async function renewEvaluator(target, registration, names, entry) {
       [registration.id]
     )
     const row = locked.rows[0]
+    const runtimes = (
+      await db.query(
+        "SELECT runtime_sha256 FROM agentonic.evaluation_worker_runtimes WHERE worker_id=$1 ORDER BY runtime_sha256",
+        [registration.id]
+      )
+    ).rows.map((r) => r.runtime_sha256)
     if (
       !row ||
       row.worker_sha256 !== registration.codeSha256 ||
-      row.runtime_sha256 !== registration.runtimeSha256
+      runtimes.join() !== registration.runtimes.join()
     )
       throw new Error("registration_changed_during_check")
     const leased = await db.query(
@@ -467,14 +489,18 @@ async function renewEvaluator(target, registration, names, entry) {
       },
     }
     const inserted = await db.query(
-      "INSERT INTO agentonic.evaluation_workers(database_role,environment,worker_sha256,runtime_sha256,verified_at,verification) VALUES($1,$2,$3,$4,clock_timestamp(),$5) RETURNING verified_at",
+      "INSERT INTO agentonic.evaluation_workers(database_role,environment,worker_sha256,verified_at,verification) VALUES($1,$2,$3,clock_timestamp(),$4) RETURNING id,verified_at",
       [
         row.database_role,
         row.environment,
         row.worker_sha256,
-        row.runtime_sha256,
         JSON.stringify(verification),
       ]
+    )
+    // The renewed registration serves exactly the runtimes just re-verified.
+    await db.query(
+      "INSERT INTO agentonic.evaluation_worker_runtimes(worker_id,runtime_sha256,verified_at) SELECT $1,unnest($2::text[]),clock_timestamp()",
+      [inserted.rows[0].id, runtimes]
     )
     await db.query("COMMIT")
     return entry(

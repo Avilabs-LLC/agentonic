@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 import { createHash } from "node:crypto"
 import { execFileSync } from "node:child_process"
-import { resolve, join } from "node:path"
+import { join } from "node:path"
 import {
   bootstrapConfig,
   loadLocal,
@@ -10,10 +10,17 @@ import {
   fail,
   root,
 } from "./local-config.mjs"
+// Registers the runtime package (packages/runtime) as an executable code
+// release for the two configured nonproduction workspaces. Releases built here
+// name this repository and subdirectory as their source; repository identity
+// is immutable, so they use their own template. Agents created earlier keep
+// their template and runtime. Existing candidates and provider usage are kept.
+const REPOSITORY_URL = "https://github.com/Avilabs-LLC/agentonic"
+const SUBDIRECTORY = "packages/runtime"
+const TEMPLATE_SLUG = "agentonic-assistant"
 const sha = (value) => createHash("sha256").update(value).digest("hex")
-const checkout = resolve(process.argv[2] ?? join(root, "../agentonic-runtime"))
 const git = (...args) =>
-  execFileSync("git", ["-C", checkout, ...args], {
+  execFileSync("git", ["-C", root, ...args], {
     stdio: ["ignore", "pipe", "pipe"],
   })
     .toString()
@@ -23,23 +30,24 @@ try {
   assert.equal(git("status", "--porcelain"), "")
   assert.equal(
     git("remote", "get-url", "origin"),
-    "git@github.com:Avilabs-LLC/agentonic-runtime.git"
+    "git@github.com:Avilabs-LLC/agentonic.git"
   )
   const packaged = JSON.parse(
     execFileSync(
       process.execPath,
-      [
-        join(checkout, "scripts/package-preview.mjs"),
-        join(root, ".local/runtime"),
-      ],
-      { stdio: ["ignore", "pipe", "pipe"] }
+      [join(root, "scripts/package-runtime.mjs")],
+      {
+        stdio: ["ignore", "pipe", "pipe"],
+      }
     ).toString()
   )
   const raw = readFileSync(join(packaged.directory, "manifest.json"))
   const manifest = JSON.parse(raw)
+  const commit = git("rev-parse", "HEAD")
   assert.equal(sha(raw), packaged.artifactSha256)
-  assert.equal(manifest.gitCommit, git("rev-parse", "HEAD"))
+  assert.equal(manifest.gitCommit, commit)
   assert.equal(manifest.previewContract, "1")
+  assert.equal(manifest.brokerProtocol, "2")
   assert.equal(manifest.model, "gpt-4.1-mini-2025-04-14")
   assert.deepEqual(Object.keys(manifest.files).sort(), [
     "prompts/platform.md",
@@ -47,6 +55,18 @@ try {
   ])
   for (const [path, hash] of Object.entries(manifest.files))
     assert.equal(sha(readFileSync(join(packaged.directory, path))), hash)
+  const source = join(root, SUBDIRECTORY)
+  const rawTemplate = readFileSync(join(source, "template.manifest.json"))
+  const template = JSON.parse(rawTemplate)
+  assert.equal(
+    template.platformPolicyText,
+    readFileSync(join(packaged.directory, "prompts/platform.md"), "utf8")
+  )
+  const runtimeVersion = JSON.parse(
+    readFileSync(join(source, "package.json"), "utf8")
+  ).version
+  assert.match(runtimeVersion, /^\d+\.\d+\.\d+$/)
+
   const { e } = bootstrapConfig()
   bootstrap = await connect(
     e.AGENTONIC_BOOTSTRAP_DATABASE_URL,
@@ -70,25 +90,60 @@ try {
     env.AGENTONIC_DATABASE_CA_FILE
   )
   await db.query("BEGIN")
-  const template = (
+  let repository = (
     await db.query(
-      "SELECT v.id,v.structure_manifest,t.code_repository_id FROM agentonic.template_versions v JOIN agentonic.agent_templates t ON t.id=v.template_id WHERE t.slug='agentonic-base' AND v.runtime_contract_version='0.1' ORDER BY v.created_at LIMIT 1"
+      "SELECT * FROM agentonic.code_repositories WHERE repository_url=$1",
+      [REPOSITORY_URL]
     )
   ).rows[0]
-  assert.ok(template)
+  if (!repository)
+    repository = (
+      await db.query(
+        "INSERT INTO agentonic.code_repositories(name,repository_url,repository_subdirectory,visibility,provisioning_status,created_by_staff_id) VALUES('Agentonic runtime',$1,$2,'platform','ready',$3) RETURNING *",
+        [REPOSITORY_URL, SUBDIRECTORY, staff.rows[0].id]
+      )
+    ).rows[0]
+  assert.equal(repository.repository_subdirectory, SUBDIRECTORY)
+  assert.equal(repository.visibility, "platform")
+  assert.equal(repository.provisioning_status, "ready")
+  let agentTemplate = (
+    await db.query("SELECT * FROM agentonic.agent_templates WHERE slug=$1", [
+      TEMPLATE_SLUG,
+    ])
+  ).rows[0]
+  if (!agentTemplate)
+    agentTemplate = (
+      await db.query(
+        "INSERT INTO agentonic.agent_templates(slug,name,code_repository_id) VALUES($1,'Asistente personalizable',$2) RETURNING *",
+        [TEMPLATE_SLUG, repository.id]
+      )
+    ).rows[0]
+  assert.equal(agentTemplate.code_repository_id, repository.id)
+  // Agents stay on their template version and choose among its releases, so
+  // every runtime release for configuration contract 0.1 publishes under the
+  // same template version. That is what lets an agent move to a newer runtime.
+  let version = (
+    await db.query(
+      "SELECT * FROM agentonic.template_versions WHERE template_id=$1 AND runtime_contract_version='0.1' ORDER BY created_at LIMIT 1",
+      [agentTemplate.id]
+    )
+  ).rows[0]
+  if (!version)
+    version = (
+      await db.query(
+        "INSERT INTO agentonic.template_versions(template_id,version,git_commit_sha,manifest_sha256,structure_manifest,runtime_contract_version) VALUES($1,'0.1.0',$2,$3,$4::jsonb,'0.1') RETURNING *",
+        [agentTemplate.id, commit, sha(rawTemplate), rawTemplate.toString()]
+      )
+    ).rows[0]
   assert.equal(
-    template.structure_manifest.platformPolicyText,
-    readFileSync(join(packaged.directory, "prompts/platform.md"), "utf8")
+    version.structure_manifest.platformPolicyText,
+    template.platformPolicyText
   )
-  const runtimeVersion = JSON.parse(
-    readFileSync(join(checkout, "package.json"), "utf8")
-  ).version
-  assert.match(runtimeVersion, /^\d+\.\d+\.\d+$/)
-  const version = `${runtimeVersion}-preview-${manifest.gitCommit.slice(0, 8)}`
+  const releaseVersion = `${runtimeVersion}-preview-${commit.slice(0, 8)}`
   let release = (
     await db.query(
       "SELECT id,artifact_sha256 FROM agentonic.code_releases WHERE code_repository_id=$1 AND version=$2",
-      [template.code_repository_id, version]
+      [repository.id, releaseVersion]
     )
   ).rows[0]
   if (!release)
@@ -96,12 +151,12 @@ try {
       await db.query(
         "INSERT INTO agentonic.code_releases(version,template_version_id,git_commit_sha,artifact_sha256,registry_sha256,runtime_contract_version,code_repository_id,artifact_bucket,artifact_key,artifact_size_bytes,published_by_staff_id,execution_manifest) VALUES($1,$2,$3,$4,$5,'0.1',$6,'local-preview',$4,$7,$8,$9::jsonb) RETURNING id,artifact_sha256",
         [
-          version,
-          template.id,
-          manifest.gitCommit,
+          releaseVersion,
+          version.id,
+          commit,
           packaged.artifactSha256,
-          sha(readFileSync(join(checkout, "src/tools/registry.ts"))),
-          template.code_repository_id,
+          sha(readFileSync(join(source, "src/tools/registry.ts"))),
+          repository.id,
           raw.length +
             Object.keys(manifest.files).reduce(
               (n, p) => n + readFileSync(join(packaged.directory, p)).length,
@@ -126,7 +181,11 @@ try {
   }
   await db.query("COMMIT")
   console.log(
-    `Registered local preview runtime ${version} for the two configured nonproduction workspaces. Existing candidates and provider allowances were preserved.`
+    JSON.stringify({
+      registered: releaseVersion,
+      artifactSha256: packaged.artifactSha256,
+      next: "pnpm runtime:install --local|--azure --runtime-sha256=<artifactSha256>",
+    })
   )
 } catch (error) {
   await db?.query("ROLLBACK")
