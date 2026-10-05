@@ -38,7 +38,8 @@ The Admin app has **Revisiones** (submissions, receipts, renewal and activation)
   - the last VM backup failed or is stale, or the Mac's Azure sign-in has lapsed;
   - the Mac hasn't reported for 36 hours.
 - **Services.** The controller, agent services and evaluator wait and report instead of exiting. Each change of state is one categorized JSON line in the journal. Restarts are capped.
-- **Connections.** An agent with nothing to do rests: its service stops and uses no connection, and the controller wakes it when a message arrives. Awake agents reach the database through the host's single gateway, so with one instance of each app the platform needs 18 connections however many agents are activated (architecture §43).
+- **Connections.** An agent with nothing to do rests: its service stops and uses no connection, and the controller wakes it when a message arrives. Awake agents reach the database through the host's single gateway, so with one instance of each app the platform needs 19 connections however many agents are activated (architecture §43).
+- **Knowledge worker.** Each kind of work has its own lane: cleanup, documents, searches and preview turns. Each lane is shared fairly between workspaces, so a slow document no longer holds up previews (architecture §45).
 - **Upgrades.** New runtimes (`pnpm runtime:install`) and new worker releases (`install-staging`) install next to the running ones. Running agents move over one at a time without stopping.
 - **Restarts.** The VM restarts on Sundays at 04:00 Canary time, only when installed updates require it (`pnpm staging:restart-window`).
 - **Secrets.** Each secret lives only in the processes that make the calls it is for (table in architecture §44).
@@ -68,5 +69,6 @@ The ordered plan is architecture §37; the owner's audit brief tracks progress. 
 | Admin expiry view and customer availability wording                    | §42                  |
 | Resting agents, the database gateway and the connection budget         | §43                  |
 | Where secrets live; key rotation; agent services without secrets       | §44                  |
+| Knowledge worker lanes and fairness between workspaces                 | §45                  |
 
-Presentation rules are in the [UI contract](ui/ui-contract.md). The [target schema](schema.dbml) describes 79 tables; 53 exist in the 42 checked-in migrations.
+Presentation rules are in the [UI contract](ui/ui-contract.md). The [target schema](schema.dbml) describes 79 tables; 53 exist in the 43 checked-in migrations.

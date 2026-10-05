@@ -1,8 +1,10 @@
 import { existsSync, readFileSync } from "node:fs"
 import { parse } from "dotenv"
 import pg from "pg"
+import { z } from "zod"
 import { workerFailure } from "./failure"
-import { processJob, type Lease, type Execute } from "./pipeline"
+import { LANES, serveLanes, type LaneJob } from "./lanes"
+import { processJob, type Execute } from "./pipeline"
 import { directProviders, providerKeys } from "./providers"
 import { storageSession } from "./storage-session"
 const env = {
@@ -36,7 +38,8 @@ const pool = new pg.Pool({
     rejectUnauthorized: true,
     ca: readFileSync(env.AGENTONIC_DATABASE_CA_FILE, "utf8"),
   },
-  max: 3,
+  // Two lanes' document publishes can hold a connection for seconds each.
+  max: 4,
   connectionTimeoutMillis: 10000,
   statement_timeout: 30000,
   application_name: "agentonic_knowledge_worker",
@@ -64,77 +67,80 @@ const execute: Execute = async (operation, job, payload = {}) => {
   )
   return result.rows[0].result
 }
-let stopping = false,
-  active: AbortController | undefined
-process.once("SIGTERM", () => {
-  stopping = true
-  active?.abort()
-})
-process.once("SIGINT", () => {
-  stopping = true
-  active?.abort()
-})
-async function run() {
+const stop = new AbortController()
+process.once("SIGTERM", () => stop.abort())
+process.once("SIGINT", () => stop.abort())
+const claimed = z
+  .object({
+    id: z.uuid(),
+    token: z.uuid(),
+    kind: z.enum(["ingest", "purge", "retrieve"]),
+    lane: z.enum(LANES),
+  })
+  .nullable()
+async function run(job: LaneJob, stopping: AbortSignal) {
+  const lost = new AbortController()
+  const signal = AbortSignal.any([stopping, lost.signal])
+  const heartbeat = setInterval(() => {
+    void execute("heartbeat", job).catch(() => lost.abort())
+  }, 20000)
+  try {
+    await processJob(job, execute, config, signal)
+    console.log(
+      JSON.stringify({
+        event: "knowledge_job_completed",
+        job: job.id,
+        kind: job.kind,
+        lane: job.lane,
+      })
+    )
+  } catch (error) {
+    const { code, diagnostic } = workerFailure(error)
+    await execute("fail", job, { code }).catch(() => {})
+    console.log(
+      JSON.stringify({
+        event: "knowledge_job_stopped",
+        job: job.id,
+        kind: job.kind,
+        lane: job.lane,
+        code,
+        diagnostic,
+      })
+    )
+  } finally {
+    clearInterval(heartbeat)
+  }
+}
+async function main() {
+  // Without an embeddings provider only cleanup can run.
+  const lanes = config.providers.embeddings ? LANES : (["purge"] as const)
   console.log(
     JSON.stringify({
       event: "knowledge_worker_started",
       providerConfigured: config.providers.embeddings,
       storageConfigured: !!config.storage,
+      lanes,
     })
   )
   try {
-    while (!stopping) {
-      try {
-        const claimed = await pool.query(
-          "SELECT agentonic.rag_claim($1) result",
-          [!config.providers.embeddings]
-        )
-        const job = claimed.rows[0].result as Lease | null
-        if (!job) {
-          if (process.argv.includes("--once")) break
-          await new Promise((r) => setTimeout(r, 1500))
-          continue
-        }
-        active = new AbortController()
-        const controller = active
-        const signal = controller.signal
-        const heartbeat = setInterval(() => {
-          void execute("heartbeat", job).catch(() => controller.abort())
-        }, 20000)
-        try {
-          await processJob(job, execute, config, signal)
-          console.log(
-            JSON.stringify({
-              event: "knowledge_job_completed",
-              job: job.id,
-              kind: job.kind,
-            })
-          )
-        } catch (error) {
-          const { code, diagnostic } = workerFailure(error)
-          await execute("fail", job, { code }).catch(() => {})
-          console.log(
-            JSON.stringify({
-              event: "knowledge_job_stopped",
-              job: job.id,
-              kind: job.kind,
-              code,
-              diagnostic,
-            })
-          )
-        } finally {
-          clearInterval(heartbeat)
-          active = undefined
-        }
-      } catch {
-        console.error(JSON.stringify({ event: "knowledge_worker_unavailable" }))
-        if (!process.argv.includes("--once"))
-          await new Promise((r) => setTimeout(r, 5000))
-      }
-      if (process.argv.includes("--once")) break
-    }
+    await serveLanes({
+      lanes,
+      claim: async (free) =>
+        claimed.parse(
+          (
+            await pool.query("SELECT agentonic.knowledge_claim($1) result", [
+              free,
+            ])
+          ).rows[0].result
+        ),
+      run,
+      unavailable: () =>
+        console.error(JSON.stringify({ event: "knowledge_worker_unavailable" })),
+      stop: stop.signal,
+      once: process.argv.includes("--once"),
+    })
   } finally {
     await pool.end()
   }
 }
-void run()
+void main()
