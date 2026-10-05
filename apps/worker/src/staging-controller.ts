@@ -4,7 +4,9 @@
 // One controller per host runs the host's current broker. Every running
 // deployment has a serving copy (a process of the broker release it was started
 // on) and, during an upgrade, at most one other copy: a successor starting on
-// the current broker, or the replaced copy draining the turn it leased.
+// the current broker, or the replaced copy draining the turn it leased. An idle
+// serving copy rests (exits on purpose); the controller starts it again when a
+// turn waits, so idle agents hold no process, connection or query.
 import { join } from "node:path"
 import { z } from "zod"
 import { reasonOf, type Backoff } from "./service-state"
@@ -23,6 +25,10 @@ export const metadata = z.object({
   successorBroker: hash.nullable().default(null),
   drainingBroker: hash.nullable().default(null),
   drainingSince: z.string().nullable().default(null),
+  /** The serving copy stopped on purpose and is started again for a waiting turn. */
+  resting: z.boolean().default(false),
+  /** A turn waits for the serving copy. */
+  pending: z.boolean().default(false),
 })
 export type Deployment = z.infer<typeof metadata>
 export const pollResult = z.object({
@@ -38,6 +44,17 @@ export const MOVE_COOLDOWN_MS = 10 * 60_000
 export const DRAIN_MS = 150_000
 /** A copy that stops this soon after starting failed; its restarts back off. */
 export const QUICK_EXIT_MS = 30_000
+/** The controller's full pass; lighter watches run every two seconds in between. */
+export const FULL_POLL_MS = 30_000
+/** How often a running copy reports; claims for work run every two seconds. */
+export const HEARTBEAT_MS = 10_000
+/** A copy that has served a turn rests after this long without work. */
+export const REST_AFTER_MS = 10 * 60_000
+/** A copy started without work (a move, an activation) rests sooner. */
+export const REST_UNUSED_MS = 60_000
+/** Whether a copy that has had no work for `idleMs` rests now. */
+export const restDue = (idleMs: number, served: boolean) =>
+  idleMs >= (served ? REST_AFTER_MS : REST_UNUSED_MS)
 
 export class StepFailure extends Error {
   constructor(
@@ -96,6 +113,8 @@ export class Controller {
   private readonly successors = new Map<string, number>()
   private readonly cooldowns = new Map<string, number>()
   private readonly started = new Map<string, number>()
+  /** Deployments whose current-release pointer this controller already set. */
+  private readonly switched = new Set<string>()
   constructor(private readonly system: ControllerSystem) {}
 
   /** One pass over a poll: every deployment's copies, brought toward what the database says. */
@@ -181,6 +200,7 @@ export class Controller {
       system.removeAssets(d)
       this.successors.delete(d.id)
       this.cooldowns.delete(d.id)
+      this.switched.delete(d.id)
       return
     }
     const serving = d.broker ?? system.brokerHash
@@ -211,8 +231,17 @@ export class Controller {
       this.successors.delete(d.id)
       return this.createCopy(d, "restore")
     }
-    await this.ensure(serving, d.id)
-    await step("switch", () => system.switchCurrent(d))
+    // A resting copy is started again only for a waiting turn. Waking vouches
+    // for it briefly; a copy that then fails to report goes offline as usual.
+    if (!d.resting) await this.ensure(serving, d.id)
+    else if (d.pending) {
+      await step("wake", () => system.host("wake", d.id))
+      await this.ensure(serving, d.id)
+    } else this.started.delete(`${serving}:${d.id}`)
+    if (!this.switched.has(d.id)) {
+      await step("switch", () => system.switchCurrent(d))
+      this.switched.add(d.id)
+    }
     if (d.successorBroker) {
       const successor = d.successorBroker
       const began = this.successors.get(d.id) ?? system.now()

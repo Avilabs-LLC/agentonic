@@ -2426,6 +2426,7 @@ async function modelReview() {
     "202610050038_side_by_side_runtimes",
     "202610050039_side_by_side_brokers",
     "202610050040_admin_expiry_view",
+    "202610050041_resting_agents",
   ])
     await db.exec(
       readFileSync(
@@ -2966,6 +2967,9 @@ it("moves a running deployment to a new broker while the old copy finishes its l
   await expect(work(dep, next, "claim")).rejects.toMatchObject({
     code: "42501",
   })
+  await expect(copy("rest", dep, next)).rejects.toMatchObject({
+    code: "42501",
+  })
   expect(await copy("heartbeat", dep, next)).toEqual({ ok: true })
   await expect(
     copy("ready", dep, next, {
@@ -2984,6 +2988,9 @@ it("moves a running deployment to a new broker while the old copy finishes its l
   expect(await copy("heartbeat", dep, serviceSecret)).toEqual({
     ok: true,
     draining: true,
+  })
+  await expect(copy("rest", dep, serviceSecret)).rejects.toMatchObject({
+    code: "42501",
   })
   await actor()
   const second = await chat("start", {
@@ -3041,6 +3048,119 @@ it("moves a running deployment to a new broker while the old copy finishes its l
   await expect(
     controller(brokers.e, "move", dep, "c".repeat(64))
   ).rejects.toMatchObject({ code: "42501" })
+})
+it("rests an idle copy, keeps it available through its controller and wakes it for a waiting turn", async () => {
+  const { deploymentId: dep, leased, ask } = await servingOnBroker()
+  const watched = async () =>
+    (await controller(brokers.f, "watch", null))!.deployments
+  const chatState = async (conversationId: string) => {
+    await actor()
+    return chat("state", { conversationId })
+  }
+  const conversationId = (
+    (
+      await sql(
+        "SELECT conversation_id FROM agentonic.staging_turns WHERE id=$1",
+        [leased.id]
+      )
+    ).rows[0] as { conversation_id: string }
+  ).conversation_id
+  expect(
+    await work(dep, serviceSecret, "fail", leased, { code: "lease_lost" })
+  ).toEqual({ ok: true })
+  // Only the serving copy may rest.
+  await expect(copy("rest", dep, "9".repeat(64))).rejects.toMatchObject({
+    code: "42501",
+  })
+  expect(await copy("rest", dep, serviceSecret)).toEqual({ ok: true })
+  // Long after its copy last reported, a resting deployment stays available
+  // while its controller reports: chats can still send turns.
+  await sql(
+    "UPDATE agentonic.deployments SET heartbeat_at=clock_timestamp()-interval '10 minutes' WHERE id=$1",
+    [dep]
+  )
+  expect(await watched()).toEqual([
+    expect.objectContaining({ id: dep, resting: true, pending: false }),
+  ])
+  expect(await chatState(conversationId)).toMatchObject({ online: true })
+  await ask(983)
+  expect(await watched()).toEqual([
+    expect.objectContaining({ id: dep, resting: true, pending: true }),
+  ])
+  // A copy cannot rest while a turn waits for it.
+  expect(await copy("rest", dep, serviceSecret)).toEqual({
+    ok: false,
+    code: "pending",
+  })
+  // Waking vouches for the starting copy for one heartbeat interval only.
+  expect(await controller(brokers.f, "wake", dep)).toEqual({ ok: true })
+  expect(await watched()).toEqual([
+    expect.objectContaining({ id: dep, resting: false, pending: true }),
+  ])
+  expect(await copy("heartbeat", dep, serviceSecret)).toEqual({ ok: true })
+  const job = (await work(dep, serviceSecret, "claim")) as Job
+  expect(job).toMatchObject({ kind: "retrieve" })
+  expect(await watched()).toEqual([
+    expect.objectContaining({ resting: false, pending: false }),
+  ])
+  expect(
+    await work(dep, serviceSecret, "fail", job, { code: "lease_lost" })
+  ).toEqual({ ok: true })
+  // Without a reporting controller nobody would start the copy: offline.
+  expect(await copy("rest", dep, serviceSecret)).toEqual({ ok: true })
+  await sql(
+    "UPDATE agentonic.deployments SET heartbeat_at=clock_timestamp()-interval '10 minutes' WHERE id=$1",
+    [dep]
+  )
+  await sql(
+    "UPDATE agentonic.runtime_hosts SET heartbeat_at=clock_timestamp()-interval '2 minutes'"
+  )
+  expect(await chatState(conversationId)).toMatchObject({ online: false })
+  await actor()
+  expect(
+    await chat("turn", {
+      conversationId,
+      query: "Synthetic question",
+      requestId: id(985),
+      model: "gpt-5.4-mini",
+      reasoning: "medium",
+    })
+  ).toEqual({ ok: false, code: "offline" })
+  await controller(brokers.f, "watch", null)
+  expect(await chatState(conversationId)).toMatchObject({ online: true })
+  // A copy that reports is awake, however it was started.
+  expect(await copy("heartbeat", dep, serviceSecret)).toEqual({ ok: true })
+  expect(await watched()).toEqual([
+    expect.objectContaining({ id: dep, resting: false }),
+  ])
+  // A waiting turn whose authority lapsed between full polls wakes nothing.
+  expect(await copy("rest", dep, serviceSecret)).toEqual({ ok: true })
+  await ask(986)
+  expect(await watched()).toEqual([
+    expect.objectContaining({ id: dep, resting: true, pending: true }),
+  ])
+  await sql("ALTER TABLE agentonic.deployments DISABLE TRIGGER USER")
+  await sql(
+    "UPDATE agentonic.deployments SET authorized_until=created_at+interval '1 millisecond' WHERE id=$1",
+    [dep]
+  )
+  await sql("ALTER TABLE agentonic.deployments ENABLE TRIGGER USER")
+  expect(await watched()).toEqual([
+    expect.objectContaining({ id: dep, status: "running", pending: false }),
+  ])
+  // Between full polls the controller lists only active deployments; a
+  // deployment that ended appears in the next full poll, which cleans it up.
+  await actor()
+  expect(
+    await lifecycleCall("deployment_command", "stop", { deploymentId: dep })
+  ).toMatchObject({ ok: true })
+  expect(await watched()).toEqual([])
+  expect((await controller(brokers.f, "poll", null))!.deployments).toEqual([
+    expect.objectContaining({ id: dep, status: "stopped", resting: false }),
+  ])
+  await expect(controller(brokers.f, "wake", dep)).rejects.toMatchObject({
+    code: "42501",
+  })
 })
 it("refuses a revoked broker's copies at once, restores them and ends every copy on stop", async () => {
   const { deploymentId: dep, hostId, leased } = await servingOnBroker()
@@ -3220,8 +3340,8 @@ function machine(
   const failures: string[] = []
   const controller = new Controller(system)
   /** One controller pass, exactly as the deployment controller runs it. */
-  const pass = async () => {
-    const state_ = pollResult.parse(await controllerPoll(brokerHash))
+  const pass = async (operation: "poll" | "watch" = "poll") => {
+    const state_ = pollResult.parse(await controllerPoll(brokerHash, operation))
     const onDisk = new Map<string, Set<string>>()
     for (const name of state.configs.keys()) {
       const [broker, id] = name.split(":") as [string, string]
@@ -3242,7 +3362,8 @@ function machine(
   }
   return { ...state, pass, failures }
 }
-const controllerPoll = (broker: string) => controller(broker, "poll", null)
+const controllerPoll = (broker: string, operation = "poll") =>
+  controller(broker, operation, null)
 const copySecret = (
   m: { configs: Map<string, Record<string, string>> },
   broker: string,
@@ -3483,4 +3604,71 @@ it("shows staff each expiry as its own fact and keeps registrations from custome
       )
     ).rows[0]
   ).toEqual({ retired: "retired", revoked: "revoked" })
+})
+
+it("starts a resting copy only when a turn waits for it", async () => {
+  const { deploymentId: dep, leased, ask } = await servingOnBroker()
+  const clock = { now: Date.now() }
+  const m = machine(brokers.f, clock)
+  const serving = `${brokers.f}:${dep}`
+  m.configs.set(serving, { AGENTONIC_DEPLOYMENT_SECRET: serviceSecret })
+  m.processes.add(serving)
+  await m.pass()
+  expect(m.log).toEqual([])
+  // The idle copy rests and exits. Neither pass restarts it or counts a failure.
+  expect(
+    await work(dep, serviceSecret, "fail", leased, { code: "lease_lost" })
+  ).toEqual({ ok: true })
+  expect(await copy("rest", dep, serviceSecret)).toEqual({ ok: true })
+  m.processes.delete(serving)
+  await m.pass("watch")
+  clock.now += 60_000
+  await m.pass()
+  expect(m.log).toEqual([])
+  expect(m.failures).toEqual([])
+  // A turn arrives: the next watch wakes the deployment and starts its copy.
+  await ask(983)
+  await m.pass("watch")
+  expect(m.log).toEqual(["start f"])
+  expect((await controller(brokers.f, "watch", null))!.deployments).toEqual([
+    expect.objectContaining({ id: dep, resting: false, pending: true }),
+  ])
+  // A woken copy that never reports is handled like any copy that stopped.
+  m.processes.delete(serving)
+  await m.pass("watch")
+  expect(m.failures).toEqual(["start:copy_exited"])
+  expect(m.log).toEqual(["start f"])
+})
+
+it("moves a resting deployment to a new broker without starting its old copy", async () => {
+  const { deploymentId: dep, hostId, leased } = await servingOnBroker()
+  expect(
+    await work(dep, serviceSecret, "fail", leased, { code: "lease_lost" })
+  ).toEqual({ ok: true })
+  expect(await copy("rest", dep, serviceSecret)).toEqual({ ok: true })
+  await installBroker(hostId, brokers.e)
+  const m = machine(brokers.e, { now: Date.now() })
+  m.configs.set(`${brokers.f}:${dep}`, {
+    AGENTONIC_DEPLOYMENT_SECRET: serviceSecret,
+  })
+  await m.pass()
+  expect(m.log).toEqual(["start e"])
+  const successor = copySecret(m, brokers.e, dep)
+  expect(
+    await copy("ready", dep, successor.AGENTONIC_DEPLOYMENT_SECRET!, {
+      manifestHash: successor.AGENTONIC_MANIFEST_HASH,
+      brokerHash: brokers.e,
+    })
+  ).toEqual({ ok: true })
+  // The new copy serves awake; the old one, never started again, is removed.
+  expect((await controllerPoll(brokers.e, "watch"))!.deployments).toEqual([
+    expect.objectContaining({
+      broker: brokers.e,
+      drainingBroker: brokers.f,
+      resting: false,
+    }),
+  ])
+  await m.pass()
+  expect(m.log).toEqual(["start e", "remove f"])
+  expect(m.failures).toEqual([])
 })

@@ -151,6 +151,9 @@ function healthy(checks: Check[], overrides: Facts = {}): Facts {
     else if (check.key === "cmdline:agentonic-deployer-staging.service")
       facts[check.key] =
         `${NODE} /opt/agentonic/staging/releases/${hash("a")}/broker.mjs --manager`
+    else if (check.key === "cmdline:agentonic-gateway-staging.service")
+      facts[check.key] =
+        `${NODE} /opt/agentonic/staging/releases/${hash("a")}/broker.mjs --gateway`
     else if (check.key === "cmdline:agentonic-evaluator-staging.service")
       facts[check.key] =
         `${NODE} /opt/agentonic/evaluation/releases/${hash("a")}/worker.mjs`
@@ -177,6 +180,8 @@ describe("installation checks", () => {
       { sha256: hash("7"), files },
     ],
     controllerUnitSha256: hash("f"),
+    gatewayUnitSha256: hash("1"),
+    gatewaySocketSha256: hash("2"),
   })
   const evaluator = azureEvaluatorChecks({
     workerSha256: hash("a"),
@@ -298,6 +303,8 @@ describe("installation checks", () => {
         brokers: [{ sha256: "a'; reboot #", templateSha256: hash("e") }],
         runtimes: [{ sha256: hash("b"), files }],
         controllerUnitSha256: hash("f"),
+        gatewayUnitSha256: hash("1"),
+        gatewaySocketSha256: hash("2"),
       })
     ).toThrow()
     expect(() =>
@@ -308,6 +315,8 @@ describe("installation checks", () => {
         ],
         brokers: [{ sha256: hash("a"), templateSha256: hash("e") }],
         controllerUnitSha256: hash("f"),
+        gatewayUnitSha256: hash("1"),
+        gatewaySocketSha256: hash("2"),
       })
     ).toThrow()
     expect(() =>
@@ -316,6 +325,8 @@ describe("installation checks", () => {
         runtimes: [{ sha256: hash("b"), files: { "x'$(id)": hash("c") } }],
         brokers: [{ sha256: hash("a"), templateSha256: hash("e") }],
         controllerUnitSha256: hash("f"),
+        gatewayUnitSha256: hash("1"),
+        gatewaySocketSha256: hash("2"),
       })
     ).toThrow()
   })
@@ -328,6 +339,8 @@ describe("installation checks", () => {
 
 describe("service health", () => {
   const unit = "agentonic-deployer-staging.service"
+  const gateway = "agentonic-gateway-staging.service"
+  const running = "ActiveState=active|Result=success|NRestarts=0|"
   it("gathers health facts with fixed, safe commands", () => {
     const script = gatherScript([
       ...healthProbes("azure-host"),
@@ -339,9 +352,10 @@ describe("service health", () => {
   it("reports a stopped, waiting or failing service without content", () => {
     expect(
       healthFindings("azure-host", {
-        [`state:${unit}`]: "ActiveState=active|Result=success|NRestarts=0|",
+        [`state:${unit}`]: running,
         [`event:${unit}`]:
           '{"event":"service_recovered","reason":"database_unreachable"}',
+        [`state:${gateway}`]: running,
         failedagents: "0",
       })
     ).toEqual([])
@@ -354,11 +368,29 @@ describe("service health", () => {
           reason: "registration_refused",
           since: "2026-10-05T07:32:30.000Z",
         }),
+        [`state:${gateway}`]: running,
+        [`event:${gateway}`]: JSON.stringify({
+          event: "service_waiting",
+          service: "database-gateway",
+          reason: "database_unreachable",
+          since: "2026-10-05T07:33:00.000Z",
+        }),
         failedagents: "2",
       })
     ).toEqual([
       "the deployment controller is waiting since 2026-10-05 07:32 UTC: the database refuses its registration (expired, replaced or revoked)",
+      "the database gateway is waiting since 2026-10-05 07:33 UTC: the database is unreachable",
       "2 agent services have failed",
+    ])
+    expect(
+      healthFindings("azure-host", {
+        [`state:${unit}`]: running,
+        [`state:${gateway}`]:
+          "ActiveState=failed|Result=exit-code|NRestarts=5|",
+        failedagents: "0",
+      })
+    ).toEqual([
+      "the database gateway is not running (failed, exit-code, 5 restarts)",
     ])
     expect(
       healthFindings("azure-evaluator", {
@@ -372,13 +404,15 @@ describe("service health", () => {
     ])
     expect(healthFindings("azure-host", {})).toEqual([
       "could not read the state of the deployment controller",
+      "could not read the state of the database gateway",
     ])
   })
   it("checks the planned restart window against the reviewed units", () => {
     const window = { timerSha256: hash("1"), serviceSha256: hash("2") }
     const timer = "agentonic-restart-window.timer"
     const facts = {
-      [`state:${unit}`]: "ActiveState=active|Result=success|NRestarts=0|",
+      [`state:${unit}`]: running,
+      [`state:${gateway}`]: running,
       failedagents: "0",
       [`sha:/etc/systemd/system/${timer}`]: hash("1"),
       "sha:/etc/systemd/system/agentonic-restart-window.service": hash("2"),

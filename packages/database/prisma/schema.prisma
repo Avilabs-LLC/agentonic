@@ -1118,6 +1118,7 @@ model Deployment {
  drainingBrokerSha256 String? @map("draining_broker_sha256")
  drainingTokenSha256 String? @map("draining_token_sha256")
  drainingSince DateTime? @map("draining_since") @db.Timestamptz
+ restingSince DateTime? @map("resting_since") @db.Timestamptz
  @@unique([workspaceId,id])
  @@unique([workspaceId,agentId,id])
  @@unique([workspaceId,authorizedByMemberId,requestId])
@@ -1144,6 +1145,7 @@ model StagingConversation {
  expiresAt DateTime @map("expires_at") @db.Timestamptz
  closedAt DateTime? @map("closed_at") @db.Timestamptz
  @@unique([workspaceId,id])
+ @@index([deploymentId],map:"staging_conversations_deployment_id_idx")
  @@map("staging_conversations")
  @@schema("agentonic")
 }

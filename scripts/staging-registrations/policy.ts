@@ -217,13 +217,17 @@ const brokerRelease = (sha256: string) =>
 const AGENT_INSTANCE =
   /^instance:agentonic-staging-([a-f0-9]{64})@[0-9a-f-]{36}\.service$/
 
+const GATEWAY = "agentonic-gateway-staging"
+const GATEWAY_SOCKET = "/run/agentonic-gateway/gateway.sock"
 export function azureHostChecks(input: {
-  /** The current broker: it runs the controller and starts every new copy. */
+  /** The current broker: it runs the controller, the gateway and every new copy. */
   brokerSha256: string
   /** Every live broker release, current included; older ones still run copies. */
   brokers: Broker[]
   runtimes: Runtime[]
   controllerUnitSha256: string
+  gatewayUnitSha256: string
+  gatewaySocketSha256: string
 }): Check[] {
   const current = assertHash(input.brokerSha256)
   if (!input.brokers.some((broker) => broker.sha256 === current))
@@ -270,6 +274,44 @@ export function azureHostChecks(input: {
       "/etc/systemd/system/agentonic-deployer-staging.service",
       assertHash(input.controllerUnitSha256)
     ),
+    ...unitChecks(
+      `${GATEWAY}.service`,
+      `/etc/systemd/system/${GATEWAY}.service`,
+      assertHash(input.gatewayUnitSha256)
+    ),
+    ...unitChecks(
+      `${GATEWAY}.socket`,
+      `/etc/systemd/system/${GATEWAY}.socket`,
+      assertHash(input.gatewaySocketSha256)
+    ),
+    {
+      name: "gateway socket open only to agent copies",
+      key: `stat:${GATEWAY_SOCKET}`,
+      expect: "root:agentonic-gateway:660",
+    },
+    {
+      name: "gateway runs the current broker",
+      key: `cmdline:${GATEWAY}.service`,
+      expect: runsCommand(
+        `${NODE} ${brokerRelease(current)}/broker.mjs --gateway`
+      ),
+    },
+    {
+      name: "gateway.env private",
+      key: `stat:${config}/gateway.env`,
+      expect: rootOwned("600"),
+    },
+    {
+      name: "gateway.env pins the current broker",
+      key: `env:${config}/gateway.env#AGENTONIC_BROKER_SHA256`,
+      expect: (value) => unquote(value) === current,
+    },
+    // Agent copies start from broker.env; the database password stays with the gateway.
+    {
+      name: "agent copies get no database password",
+      key: `env:${config}/broker.env#DATABASE_URL`,
+      expect: "",
+    },
     {
       name: "no shared agent service template",
       key: "sha:/etc/systemd/system/agentonic-staging@.service",
@@ -417,14 +459,20 @@ export function localHostChecks(input: {
       expect: broker,
     })),
     ...localArtifactChecks(input),
-    ...(["broker.env", "manager.env"] as const).flatMap((file): Check[] => [
-      { name: `${file} private`, key: `mode:${config}/${file}`, expect: "600" },
-      {
-        name: `${file} pins the current broker`,
-        key: `env:${config}/${file}#AGENTONIC_BROKER_SHA256`,
-        expect: (value) => unquote(value) === current,
-      },
-    ]),
+    ...(["broker.env", "manager.env", "gateway.env"] as const).flatMap(
+      (file): Check[] => [
+        {
+          name: `${file} private`,
+          key: `mode:${config}/${file}`,
+          expect: "600",
+        },
+        {
+          name: `${file} pins the current broker`,
+          key: `env:${config}/${file}#AGENTONIC_BROKER_SHA256`,
+          expect: (value) => unquote(value) === current,
+        },
+      ]
+    ),
   ]
 }
 export function localEvaluatorChecks(input: {
@@ -481,21 +529,22 @@ function localArtifactChecks(input: {
 // Gathered on every run, independent of renewal: a service that is waiting,
 // failed or restarting is reported even while its registration is valid.
 
-const SERVICE: Record<"azure-host" | "azure-evaluator", [string, string]> = {
+const SERVICES: Record<"azure-host" | "azure-evaluator", [string, string][]> = {
   "azure-host": [
-    "agentonic-deployer-staging.service",
-    "the deployment controller",
+    ["agentonic-deployer-staging.service", "the deployment controller"],
+    [`${GATEWAY}.service`, "the database gateway"],
   ],
-  "azure-evaluator": ["agentonic-evaluator-staging.service", "the evaluator"],
+  "azure-evaluator": [["agentonic-evaluator-staging.service", "the evaluator"]],
 }
 const RESTART_TIMER = "agentonic-restart-window.timer"
 const RESTART_SERVICE = "agentonic-restart-window.service"
 /** Facts to gather for one Azure target's health and the machine it runs on. */
 export function healthProbes(target: "azure-host" | "azure-evaluator") {
-  const [unit] = SERVICE[target]
   return [
-    { key: `state:${unit}` },
-    { key: `event:${unit}` },
+    ...SERVICES[target].flatMap(([unit]) => [
+      { key: `state:${unit}` },
+      { key: `event:${unit}` },
+    ]),
     ...(target === "azure-host"
       ? [
           { key: "failedagents" },
@@ -525,33 +574,38 @@ export function healthFindings(
   facts: Facts,
   restartWindow?: RestartWindow
 ): string[] {
-  const [unit, label] = SERVICE[target]
-  const raw = facts[`state:${unit}`]
-  if (raw === undefined) return [`could not read the state of ${label}`]
   const out: string[] = []
-  const state = parseUnit(raw)
-  if (state.ActiveState !== "active")
-    out.push(
-      `${label} is not running (${state.ActiveState || "unknown"}, ${state.Result || "unknown"}, ${Number(state.NRestarts) || 0} restarts)`
-    )
-  let event: { event?: unknown; reason?: unknown; since?: unknown } = {}
-  try {
-    event = JSON.parse(facts[`event:${unit}`] || "{}")
-  } catch {
-    /* An unreadable line says nothing about the state. */
-  }
-  if (
-    event.event === "service_waiting" &&
-    typeof event.reason === "string" &&
-    /^[a-z_]{3,40}$/.test(event.reason)
-  ) {
-    const since =
-      typeof event.since === "string" && !Number.isNaN(Date.parse(event.since))
-        ? ` since ${utc(event.since)}`
-        : ""
-    out.push(
-      `${label} is waiting${since}: ${WAITING[event.reason] ?? event.reason.replaceAll("_", " ")}`
-    )
+  for (const [unit, label] of SERVICES[target]) {
+    const raw = facts[`state:${unit}`]
+    if (raw === undefined) {
+      out.push(`could not read the state of ${label}`)
+      continue
+    }
+    const state = parseUnit(raw)
+    if (state.ActiveState !== "active")
+      out.push(
+        `${label} is not running (${state.ActiveState || "unknown"}, ${state.Result || "unknown"}, ${Number(state.NRestarts) || 0} restarts)`
+      )
+    let event: { event?: unknown; reason?: unknown; since?: unknown } = {}
+    try {
+      event = JSON.parse(facts[`event:${unit}`] || "{}")
+    } catch {
+      /* An unreadable line says nothing about the state. */
+    }
+    if (
+      event.event === "service_waiting" &&
+      typeof event.reason === "string" &&
+      /^[a-z_]{3,40}$/.test(event.reason)
+    ) {
+      const since =
+        typeof event.since === "string" &&
+        !Number.isNaN(Date.parse(event.since))
+          ? ` since ${utc(event.since)}`
+          : ""
+      out.push(
+        `${label} is waiting${since}: ${WAITING[event.reason] ?? event.reason.replaceAll("_", " ")}`
+      )
+    }
   }
   const failed = Number(facts.failedagents)
   if (target === "azure-host" && failed > 0)
@@ -680,7 +734,8 @@ export function gatherScript(checks: readonly { key: string }[]) {
       if (!/^[A-Z0-9_]+$/.test(name ?? "")) throw new Error("Unsafe key")
       out(`sed -n 's/^${name}=//p' ${quote(file!)} 2>/dev/null | head -1`)
     } else if (kind === "unit") {
-      if (!/^[a-z@.-]+\.service$/.test(arg)) throw new Error("Unsafe unit")
+      if (!/^[a-z@.-]+\.(service|socket)$/.test(arg))
+        throw new Error("Unsafe unit")
       out(
         `systemctl show -p ActiveState,UnitFileState,NeedDaemonReload,DropInPaths ${arg} 2>/dev/null | tr '\\n' '|'`
       )
