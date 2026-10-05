@@ -488,17 +488,30 @@ const SERVICE: Record<"azure-host" | "azure-evaluator", [string, string]> = {
   ],
   "azure-evaluator": ["agentonic-evaluator-staging.service", "the evaluator"],
 }
+const RESTART_TIMER = "agentonic-restart-window.timer"
+const RESTART_SERVICE = "agentonic-restart-window.service"
 /** Facts to gather for one Azure target's health and the machine it runs on. */
 export function healthProbes(target: "azure-host" | "azure-evaluator") {
   const [unit] = SERVICE[target]
   return [
     { key: `state:${unit}` },
     { key: `event:${unit}` },
-    ...(target === "azure-host" ? [{ key: "failedagents" }] : []),
+    ...(target === "azure-host"
+      ? [
+          { key: "failedagents" },
+          // The machine's planned restart window is reported with the host.
+          { key: `sha:/etc/systemd/system/${RESTART_TIMER}` },
+          { key: `sha:/etc/systemd/system/${RESTART_SERVICE}` },
+          { key: `state:${RESTART_TIMER}` },
+          { key: `next:${RESTART_TIMER}` },
+        ]
+      : []),
     { key: "boot" },
     { key: "reboot" },
   ]
 }
+/** Hashes of the reviewed restart window units (from scripts/staging-units.mjs). */
+export type RestartWindow = { timerSha256: string; serviceSha256: string }
 const WAITING: Record<string, string> = {
   registration_refused:
     "the database refuses its registration (expired, replaced or revoked)",
@@ -509,7 +522,8 @@ const WAITING: Record<string, string> = {
 /** Content-free health problems for one Azure target. */
 export function healthFindings(
   target: "azure-host" | "azure-evaluator",
-  facts: Facts
+  facts: Facts,
+  restartWindow?: RestartWindow
 ): string[] {
   const [unit, label] = SERVICE[target]
   const raw = facts[`state:${unit}`]
@@ -544,6 +558,21 @@ export function healthFindings(
     out.push(
       `${failed} agent service${failed === 1 ? " has" : "s have"} failed`
     )
+  if (target === "azure-host" && restartWindow) {
+    if (
+      facts[`sha:/etc/systemd/system/${RESTART_TIMER}`] !==
+        restartWindow.timerSha256 ||
+      facts[`sha:/etc/systemd/system/${RESTART_SERVICE}`] !==
+        restartWindow.serviceSha256
+    )
+      out.push(
+        "the planned restart window is not installed as reviewed (`pnpm staging:restart-window`)"
+      )
+    else if (
+      parseUnit(facts[`state:${RESTART_TIMER}`]).ActiveState !== "active"
+    )
+      out.push("the planned restart window is not active")
+  }
   return out
 }
 /** Notes about the machine for the issue body; they never raise an alert by themselves. */
@@ -555,9 +584,14 @@ export function machineNotes(facts: Facts, now: Date): string[] {
       `vm-agents-01 has been up since ${utc(new Date(boot).toISOString())}${now.getTime() - boot < DAY ? " (restarted within the last day)" : ""}.`
     )
   const pending = Number(facts.reboot) * 1000
+  const next = facts[`next:${RESTART_TIMER}`]
+  const window =
+    next && !Number.isNaN(Date.parse(next))
+      ? ` The planned restart window applies them on ${utc(next)}.`
+      : " No restart window is planned."
   if (pending > 0)
     notes.push(
-      `Installed updates have been waiting for a restart since ${utc(new Date(pending).toISOString())}; schedule one.`
+      `Installed updates have been waiting for a restart since ${utc(new Date(pending).toISOString())}.${window}`
     )
   return notes
 }
@@ -619,9 +653,16 @@ export function gatherScript(checks: readonly { key: string }[]) {
       )
       out("echo listed")
     } else if (kind === "state") {
-      if (!/^[a-z@.-]+\.service$/.test(arg)) throw new Error("Unsafe unit")
+      if (!/^[a-z@.-]+\.(service|timer)$/.test(arg))
+        throw new Error("Unsafe unit")
       out(
         `systemctl show -p ActiveState,Result,NRestarts ${arg} 2>/dev/null | tr '\\n' '|'`
+      )
+    } else if (kind === "next") {
+      if (!/^[a-z@.-]+\.timer$/.test(arg)) throw new Error("Unsafe unit")
+      // The timer's next elapse as an ISO time the Mac can parse.
+      out(
+        `t=$(systemctl show -p NextElapseUSecRealtime --value ${arg} 2>/dev/null); date -u -d "$t" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo none`
       )
     } else if (kind === "event") {
       if (!/^[a-z@.-]+\.service$/.test(arg)) throw new Error("Unsafe unit")

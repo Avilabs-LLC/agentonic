@@ -34,7 +34,7 @@ import {
   loadLocal,
   root,
 } from "../local-config.mjs"
-import { stagingUnits } from "../staging-units.mjs"
+import { restartWindowUnits, stagingUnits } from "../staging-units.mjs"
 import {
   NODE,
   TARGETS,
@@ -545,8 +545,12 @@ function health(registrations, entries, now) {
     /* Reported per target below. */
   }
   for (const target of targets) {
+    const window = restartWindowUnits()
     const found = facts
-      ? healthFindings(target, facts)
+      ? healthFindings(target, facts, {
+          timerSha256: sha(window.timer),
+          serviceSha256: sha(window.service),
+        })
       : ["could not reach vm-agents-01 with sudo"]
     const missing = missingLocally(target, registrations[target])
     if (missing.length)

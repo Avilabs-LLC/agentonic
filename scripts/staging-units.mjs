@@ -21,3 +21,17 @@ export function stagingUnits({ broker, serviceRoot, caPath, configRoot }) {
     controller: `[Unit]\nDescription=Agentonic staging deployment controller\nAfter=network-online.target\nStartLimitIntervalSec=600\nStartLimitBurst=5\n[Service]\nType=simple\nUser=root\nEnvironment=AGENTONIC_STAGING_CONFIG=${configRoot}/manager.env\nExecStart=${node} ${release}/broker.mjs --manager\nRestart=on-failure\nRestartSec=10\nNoNewPrivileges=yes\nProtectSystem=strict\nProtectHome=yes\nPrivateTmp=yes\nReadWritePaths=/opt/agentonic/instances ${serviceRoot} /etc/systemd/system\nMemoryMax=256M\nCPUQuota=50%\nUMask=0077\n[Install]\nWantedBy=multi-user.target\n`,
   }
 }
+
+/**
+ * The planned restart window. Updates install themselves daily, but kernel and
+ * library updates only take effect after a restart; without a window they wait
+ * until Azure restarts the VM unannounced. The service restarts only when updates
+ * are waiting, and a window missed while the VM was off is skipped, never run late.
+ */
+export const restartWindowCalendar = "Sun *-*-* 04:00:00 Atlantic/Canary"
+export function restartWindowUnits() {
+  return {
+    timer: `[Unit]\nDescription=Agentonic planned restart window (Sundays 04:00 Canary time)\n[Timer]\nOnCalendar=${restartWindowCalendar}\nPersistent=false\n[Install]\nWantedBy=timers.target\n`,
+    service: `[Unit]\nDescription=Restart vm-agents-01 when installed updates are waiting for it\nConditionPathExists=/var/run/reboot-required\n[Service]\nType=oneshot\nExecStart=/usr/bin/systemctl reboot\n`,
+  }
+}
