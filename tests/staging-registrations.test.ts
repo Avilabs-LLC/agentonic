@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest"
+import { createHash } from "node:crypto"
 import { execFileSync } from "node:child_process"
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 // @ts-expect-error -- plain ESM script without type declarations
 import * as units from "../scripts/staging-units.mjs"
+import { DROP_IN_BROKERS } from "../apps/worker/src/staging-controller"
 import {
   DAY,
   HOUR,
@@ -190,6 +192,7 @@ describe("installation checks", () => {
     controllerUnitSha256: hash("f"),
     gatewayUnitSha256: hash("1"),
     gatewaySocketSha256: hash("2"),
+    controllerRulesSha256: null,
   })
   const evaluator = azureEvaluatorChecks({
     workerSha256: hash("a"),
@@ -381,6 +384,7 @@ describe("installation checks", () => {
         controllerUnitSha256: hash("f"),
         gatewayUnitSha256: hash("1"),
         gatewaySocketSha256: hash("2"),
+        controllerRulesSha256: null,
       })
     ).toThrow()
     expect(() =>
@@ -393,6 +397,7 @@ describe("installation checks", () => {
         controllerUnitSha256: hash("f"),
         gatewayUnitSha256: hash("1"),
         gatewaySocketSha256: hash("2"),
+        controllerRulesSha256: null,
       })
     ).toThrow()
     expect(() =>
@@ -403,6 +408,7 @@ describe("installation checks", () => {
         controllerUnitSha256: hash("f"),
         gatewayUnitSha256: hash("1"),
         gatewaySocketSha256: hash("2"),
+        controllerRulesSha256: null,
       })
     ).toThrow()
   })
@@ -843,5 +849,140 @@ describe("what each environment runs", () => {
       "azure-host runs worker 58d9a1f3, 2af81262; runtimes 0.3.0-preview-f272ddaa, 0.5.0 (1234567).",
       `azure-evaluator runs worker c0fdd72d; runtimes ${unknown.slice(0, 12)}.`,
     ])
+  })
+})
+
+describe("the deployment controller's privilege", () => {
+  const options = {
+    serviceRoot: "/etc/agentonic/staging/agents",
+    caPath: "/etc/agentonic/staging/database-ca.crt",
+    configRoot: "/etc/agentonic/staging",
+  }
+  const live =
+    "58d9a1f3366ef70450cc7acc1b696728d3f12dc13270e529cce387598107ffe4"
+  const digest = (text: string) =>
+    createHash("sha256").update(text).digest("hex")
+  it("keeps the installed units of drop-in brokers byte for byte", () => {
+    const installed = units.stagingUnits({ broker: live, ...options })
+    expect(digest(installed.runtime)).toBe(
+      "fa839cce06ffd3478816793d31c883eb6d87f387f47ec47a2a9fe3c7315f92d7"
+    )
+    expect(digest(installed.controller)).toBe(
+      "1278353e7e3cf63f270d83d02b0936c54655a5ae9f3a2cac696966e03a95e282"
+    )
+  })
+  it("runs a later broker's controller as its own user, writing no units", () => {
+    const later = units.stagingUnits({ broker: hash("d"), ...options })
+    expect(later.controller).toContain("User=agentonic-controller\n")
+    expect(later.controller).not.toContain("User=root")
+    expect(later.controller).not.toContain("/etc/systemd/system")
+    expect(later.controller).toContain("CapabilityBoundingSet=\n")
+    expect(later.controller).toContain(
+      "LoadCredential=config:/etc/agentonic/staging/manager.env\n"
+    )
+    expect(later.runtime).toContain(
+      `LoadCredential=release:/etc/agentonic/staging/agents/${hash("d")}/%i\n`
+    )
+  })
+  it("agrees with the worker on which brokers need drop-ins", () => {
+    expect([...DROP_IN_BROKERS].sort()).toEqual([...units.dropInBrokers].sort())
+    for (const broker of units.directProviderBrokers)
+      expect(units.dropInBrokers.has(broker)).toBe(true)
+  })
+  it("lets the controller start, stop and reset agent copies, and nothing else", () => {
+    const rules: ((
+      action: { id: string; lookup(key: string): string | undefined },
+      subject: { user: string }
+    ) => unknown)[] = []
+    new Function("polkit", units.controllerRules)({
+      addRule: (rule: (typeof rules)[number]) => rules.push(rule),
+      Result: { YES: "yes" },
+    })
+    expect(rules).toHaveLength(1)
+    const manage = "org.freedesktop.systemd1.manage-units"
+    const decide = (
+      unit: string | undefined,
+      verb: string | undefined,
+      user = "agentonic-controller",
+      id = manage
+    ) =>
+      rules[0]!(
+        { id, lookup: (key) => (key === "unit" ? unit : verb) },
+        { user }
+      )
+    const copy = `agentonic-staging-${hash("a")}@10000000-0000-4000-8000-000000000001.service`
+    for (const verb of ["start", "stop", "reset-failed"])
+      expect(decide(copy, verb)).toBe("yes")
+    for (const [unit, verb, user, id] of [
+      [copy, "restart"],
+      [copy, "reload"],
+      ["agentonic-gateway-staging.service", "stop"],
+      ["agentonic-deployer-staging.service", "start"],
+      ["ssh.service", "start"],
+      [`agentonic-staging-${hash("a")}@.service`, "start"],
+      [`agentonic-staging-${hash("a")}@x.service`, "start"],
+      [`${copy}.d`, "start"],
+      [`x${copy}`, "start"],
+      [copy, "start", "root"],
+      [copy, "start", "agentonic-eval"],
+      [copy, "start", undefined, "org.freedesktop.systemd1.manage-unit-files"],
+      [
+        undefined,
+        undefined,
+        undefined,
+        "org.freedesktop.systemd1.reload-daemon",
+      ],
+    ] as const)
+      expect(decide(unit, verb, user, id)).toBeUndefined()
+  })
+  it("checks the unprivileged controller once its broker is current", () => {
+    const checks = azureHostChecks({
+      brokerSha256: hash("a"),
+      brokers: [{ sha256: hash("a"), templateSha256: hash("e") }],
+      runtimes: [{ sha256: hash("b"), files }],
+      controllerUnitSha256: hash("f"),
+      gatewayUnitSha256: hash("1"),
+      gatewaySocketSha256: hash("2"),
+      controllerRulesSha256: hash("3"),
+    })
+    const facts = healthy(checks, {
+      "stat:/etc/agentonic/staging/agents":
+        "agentonic-controller:agentonic-controller:700",
+    })
+    expect(failedChecks(checks, facts)).toEqual([])
+    for (const [key, value, name] of [
+      [
+        "user:agentonic-deployer-staging.service",
+        "root",
+        "controller runs as its own user",
+      ],
+      [
+        `sha:/etc/polkit-1/rules.d/50-agentonic-controller.rules`,
+        hash("9"),
+        "controller may manage agent copies only",
+      ],
+      [
+        "stat:/etc/polkit-1/rules.d/50-agentonic-controller.rules",
+        "agentonic-controller:root:644",
+        "controller's polkit rule protected",
+      ],
+      [
+        "stat:/etc/agentonic/staging",
+        "root:agentonic-controller:750",
+        "staging configuration private",
+      ],
+      [
+        "stat:/opt/agentonic/instances",
+        "root:root:700",
+        "deployment files private to the controller",
+      ],
+      ["dropins", "1", "no agent unit drop-ins"],
+    ] as const)
+      expect(failedChecks(checks, { ...facts, [key]: value })).toEqual([name])
+  })
+  it("counts only configuration files when looking for keys", () => {
+    expect(
+      gatherScript([{ key: "secrets:/etc/agentonic/staging/agents/x" }])
+    ).toContain("--include='*.env'")
   })
 })

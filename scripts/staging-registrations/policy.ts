@@ -19,6 +19,10 @@ export const EVIDENCE_WINDOW_MS = DAY
 export const NODE = "/opt/agentonic/node/v22.23.2/bin/node"
 export const RUNTIME_ROOT = "/opt/agentonic/runtime/artifacts"
 export const EVAL_USER = "agentonic-eval"
+/** The deployment controller's user and its polkit rule (scripts/staging-units.mjs). */
+export const CONTROLLER_USER = "agentonic-controller"
+export const CONTROLLER_RULES =
+  "/etc/polkit-1/rules.d/50-agentonic-controller.rules"
 
 export type Target =
   "azure-host" | "azure-evaluator" | "local-host" | "local-evaluator"
@@ -228,8 +232,14 @@ export function azureHostChecks(input: {
   controllerUnitSha256: string
   gatewayUnitSha256: string
   gatewaySocketSha256: string
+  /**
+   * The polkit rule's hash when the current broker's controller runs as its own
+   * user; null while it runs as root (a broker whose copies need unit drop-ins).
+   */
+  controllerRulesSha256: string | null
 }): Check[] {
   const current = assertHash(input.brokerSha256)
+  const unprivileged = input.controllerRulesSha256 !== null
   if (!input.brokers.some((broker) => broker.sha256 === current))
     throw new Error("Current broker not listed")
   const live = new Set(input.brokers.map((broker) => assertHash(broker.sha256)))
@@ -328,16 +338,49 @@ export function azureHostChecks(input: {
       key: "sha:/etc/systemd/system/agentonic-staging@.service",
       expect: "",
     },
+    // An unprivileged controller passes through the configuration directory to its
+    // own agent directory; it cannot list it or read the files kept there.
     {
       name: "staging configuration private",
       key: `stat:${config}`,
-      expect: rootOwned("700"),
+      expect: unprivileged ? `root:${CONTROLLER_USER}:710` : rootOwned("700"),
     },
     {
       name: "agent configuration private",
       key: `stat:${config}/agents`,
-      expect: rootOwned("700"),
+      expect: unprivileged
+        ? `${CONTROLLER_USER}:${CONTROLLER_USER}:700`
+        : rootOwned("700"),
     },
+    ...(unprivileged
+      ? [
+          {
+            name: "controller runs as its own user",
+            key: "user:agentonic-deployer-staging.service",
+            expect: CONTROLLER_USER,
+          },
+          {
+            name: "controller may manage agent copies only",
+            key: `sha:${CONTROLLER_RULES}`,
+            expect: assertHash(input.controllerRulesSha256!),
+          },
+          {
+            name: "controller's polkit rule protected",
+            key: `stat:${CONTROLLER_RULES}`,
+            expect: rootOwned("644"),
+          },
+          {
+            name: "deployment files private to the controller",
+            key: "stat:/opt/agentonic/instances",
+            expect: `${CONTROLLER_USER}:${CONTROLLER_USER}:700`,
+          },
+          {
+            name: "no agent unit drop-ins",
+            key: "dropins",
+            expect: "0",
+          },
+        ]
+      : []),
     ...(["broker.env", "manager.env"] as const).flatMap((file): Check[] => [
       {
         name: `${file} private`,
@@ -806,9 +849,20 @@ export function gatherScript(checks: readonly { key: string }[]) {
         `grep -qsE '^${name}="?[^"]' -- ${quote(file!)} && echo yes || echo no`
       )
     } else if (kind === "secrets") {
-      // How many files under a path set any password or key.
+      // How many configuration files under a path set any password or key. Copies'
+      // release credentials (customer text) sit beside them and are not read.
       out(
-        `grep -rlsE '^(${SECRET_NAMES.join("|")})="?[^"]' -- ${quote(arg)} | wc -l`
+        `grep -rlsE --include='*.env' '^(${SECRET_NAMES.join("|")})="?[^"]' -- ${quote(arg)} | wc -l`
+      )
+    } else if (kind === "user") {
+      if (!/^[a-z@.-]+\.service$/.test(arg)) throw new Error("Unsafe unit")
+      out(
+        `pid=$(systemctl show -p MainPID --value ${arg}); if [ "\${pid:-0}" -gt 0 ]; then stat -c %U /proc/$pid; else echo none; fi`
+      )
+    } else if (kind === "dropins") {
+      // Unit drop-ins for agent copies; only root could write them.
+      out(
+        `find /etc/systemd/system -maxdepth 1 -name 'agentonic-staging-*@*.service.d' | wc -l`
       )
     } else if (kind === "unit") {
       if (!/^[a-z@.-]+\.(service|socket)$/.test(arg))

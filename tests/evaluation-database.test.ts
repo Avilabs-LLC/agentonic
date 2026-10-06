@@ -3301,7 +3301,9 @@ function machine(
     configs: new Map<string, Record<string, string>>(),
     processes: new Set<string>(),
     log: [] as string[],
-  }
+  },
+  /** Brokers whose copies need a root-written drop-in this controller cannot write. */
+  dropIn = new Set<string>()
 ) {
   let secrets = 0
   const key = (broker: string, id: string) => `${broker}:${id}`
@@ -3325,7 +3327,9 @@ function machine(
       state.configs.set(key(broker, id), settings)
     },
     running: (broker, id) => state.processes.has(key(broker, id)),
+    startable: (broker) => !dropIn.has(broker),
     start: (broker, id) => {
+      if (dropIn.has(broker)) throw new Error("broker_unavailable")
       state.processes.add(key(broker, id))
       state.log.push(`start ${broker[0]}`)
     },
@@ -3458,6 +3462,47 @@ it("upgrades running copies through the controller: move, drain, retire, restore
   await o.pass()
   expect(since(mark).sort()).toEqual(["remove 7", "remove d"])
   expect([...o.configs.keys(), ...o.processes]).toEqual([])
+})
+
+it("restarts a stopped copy of a drop-in broker on the current broker", async () => {
+  const { deploymentId: dep, hostId } = await servingOnBroker()
+  const clock = { now: Date.now() }
+  // Broker f's copies need a root-written drop-in; e's controller runs as its own user.
+  await installBroker(hostId, brokers.e)
+  const m = machine(brokers.e, clock, undefined, new Set([brokers.f]))
+  m.configs.set(`${brokers.f}:${dep}`, {
+    AGENTONIC_DEPLOYMENT_SECRET: serviceSecret,
+  })
+  await m.pass()
+  expect(m.log).toEqual(["remove f", "start e"])
+  expect(m.failures).toEqual([])
+  const restored = copySecret(m, brokers.e, dep)
+  expect(
+    await copy("ready", dep, restored.AGENTONIC_DEPLOYMENT_SECRET!, {
+      manifestHash: restored.AGENTONIC_MANIFEST_HASH,
+      brokerHash: brokers.e,
+    })
+  ).toEqual({ ok: true })
+  // The replaced copy's secret is refused.
+  await expect(copy("heartbeat", dep, serviceSecret)).rejects.toThrow(
+    "insufficient_privilege"
+  )
+})
+
+it("leaves a running copy of a drop-in broker serving until it moves", async () => {
+  const { deploymentId: dep, hostId } = await servingOnBroker()
+  const clock = { now: Date.now() }
+  await installBroker(hostId, brokers.e)
+  const m = machine(brokers.e, clock, undefined, new Set([brokers.f]))
+  m.configs.set(`${brokers.f}:${dep}`, {
+    AGENTONIC_DEPLOYMENT_SECRET: serviceSecret,
+  })
+  m.processes.add(`${brokers.f}:${dep}`)
+  await m.pass()
+  // The usual move: a successor on e, while f keeps serving.
+  expect(m.log).toEqual(["start e"])
+  expect(m.processes.has(`${brokers.f}:${dep}`)).toBe(true)
+  expect(m.failures).toEqual([])
 })
 
 it("shows staff each expiry as its own fact and keeps registrations from customers", async () => {

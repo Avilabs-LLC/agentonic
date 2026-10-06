@@ -34,6 +34,7 @@ import {
 import {
   COPY,
   Controller,
+  DROP_IN_BROKERS,
   FULL_POLL_MS,
   HEARTBEAT_MS,
   metadata,
@@ -179,6 +180,11 @@ const unitName = (broker: string, id: string) =>
   `agentonic-staging-${hash.parse(broker)}@${z.uuid().parse(id)}.service`
 const copyConfig = (broker: string, id: string) =>
   join(serviceRoot, hash.parse(broker), `${z.uuid().parse(id)}.env`)
+// A copy's frozen release (manifest and generated assets), which systemd loads
+// into its credentials (LoadCredential=release:, scripts/staging-units.mjs).
+const releaseCredentials = (broker: string, id: string) =>
+  join(serviceRoot, hash.parse(broker), z.uuid().parse(id))
+const startable = (broker: string) => local || !DROP_IN_BROKERS.has(broker)
 const releaseDirectory = (d: Deployment) =>
   join(root, d.workspaceId, d.agentId, d.environment, "releases", d.id)
 async function host(
@@ -223,8 +229,12 @@ function running(broker: string, id: string) {
   }
   return activeUnits.has(unitName(broker, id))
 }
+// The controller runs as its own user: polkit lets it start, stop and reset agent copies only.
 const systemctl = (...args: string[]) =>
-  execFileSync("systemctl", args, { stdio: "ignore", timeout: 20000 })
+  execFileSync("systemctl", ["--no-ask-password", ...args], {
+    stdio: "ignore",
+    timeout: 20000,
+  })
 function start(broker: string, id: string) {
   const settings = parse(readFileSync(copyConfig(broker, id)))
   if (local) {
@@ -261,27 +271,20 @@ function start(broker: string, id: string) {
       )
   )
     throw new Error("installation_invalid")
+  if (!startable(broker)) throw new Error("broker_unavailable")
   const unit = unitName(broker, id)
-  const override = join("/etc/systemd/system", `${unit}.d`)
-  mkdirSync(override, { recursive: true, mode: 0o755 })
-  writeFileSync(
-    join(override, "release.conf"),
-    "[Service]\nLoadCredential=manifest:" +
-      path +
-      "\n" +
-      manifest.assets
-        .map(
-          (asset) =>
-            "LoadCredential=" +
-            digest(asset.path) +
-            ":" +
-            resolve(path, "..", asset.path)
-        )
-        .join("\n") +
-      "\n",
-    { mode: 0o644 }
-  )
-  systemctl("daemon-reload")
+  // Written fresh for every start from the installed release; nothing here is a link.
+  const credentials = releaseCredentials(broker, id)
+  rmSync(credentials, { recursive: true, force: true })
+  mkdirSync(credentials, { mode: 0o700 })
+  const write = (name: string, from: string) =>
+    writeFileSync(join(credentials, name), readFileSync(from), {
+      mode: 0o400,
+      flag: "wx",
+    })
+  write("manifest", path)
+  for (const asset of manifest.assets)
+    write(digest(asset.path), resolve(path, "..", asset.path))
   // The controller paces retries itself; clear systemd's start limit from earlier attempts.
   try {
     systemctl("reset-failed", unit)
@@ -299,10 +302,8 @@ function remove(broker: string, id: string) {
     const unit = unitName(broker, id)
     if (running(broker, id)) systemctl("stop", unit)
     activeUnits.delete(unit)
-    rmSync(join("/etc/systemd/system", `${unit}.d`), {
-      recursive: true,
-      force: true,
-    })
+    // A drop-in broker's unit drop-in is root's; the installer removes stale ones.
+    rmSync(releaseCredentials(broker, id), { recursive: true, force: true })
     try {
       systemctl("reset-failed", unit)
     } catch {
@@ -360,6 +361,7 @@ const system: ControllerSystem = {
     )
   },
   running,
+  startable,
   start,
   remove,
   secret: () => randomBytes(32).toString("hex"),
@@ -441,8 +443,11 @@ async function serviceLoop() {
     deploymentId: id,
     broker: brokerHash.slice(0, 12),
   })
+  // systemd loads the release the controller wrote as credentials named release_*.
+  const credential = (name: string) =>
+    join(env.CREDENTIALS_DIRECTORY ?? "", `release_${name}`)
   const manifestPath = env.CREDENTIALS_DIRECTORY
-    ? join(env.CREDENTIALS_DIRECTORY, "manifest")
+    ? credential("manifest")
     : (env.AGENTONIC_MANIFEST_PATH ?? "")
   const raw = readFileSync(manifestPath, "utf8")
   const manifest = manifestSchema.parse(JSON.parse(raw))
@@ -455,7 +460,7 @@ async function serviceLoop() {
   // systemd supplies each generated asset as a private credential; local uses the immutable directory.
   for (const asset of manifest.assets) {
     const path = env.CREDENTIALS_DIRECTORY
-      ? join(env.CREDENTIALS_DIRECTORY, digest(asset.path))
+      ? credential(digest(asset.path))
       : resolve(manifestPath, "..", asset.path)
     if (digest(readFileSync(path)) !== asset.sha256)
       throw new Error("asset_mismatch")

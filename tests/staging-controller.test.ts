@@ -42,6 +42,7 @@ function host(count: number) {
       work.running++
       return processes.has(id)
     },
+    startable: () => true,
     start: (_broker, id) => {
       work.start++
       processes.add(id)
