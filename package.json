@@ -27,6 +27,7 @@
     "db:check-access": "node scripts/check-access.mjs",
     "setup:storage": "node scripts/setup-storage.mjs",
     "setup:storage-identity": "node scripts/setup-storage-identity.mjs",
+    "setup:auth-hook": "node scripts/setup-auth-hook.mjs",
     "setup:template": "node scripts/publish-authoring-template.mjs",
     "db:check-authoring": "node scripts/check-authoring.mjs",
     "db:check-page-reads": "node scripts/check-page-reads.mjs",
