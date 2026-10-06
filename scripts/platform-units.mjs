@@ -81,6 +81,7 @@ EnvironmentFile=${platformConfig}/${name}.env
 LoadCredential=ca:${platformConfig}/ca.pem
 Environment=AGENTONIC_DATABASE_CA_FILE=%d/ca
 Environment=NODE_ENV=production
+Environment=AGENTONIC_ENVIRONMENT=staging
 Environment=NEXT_TELEMETRY_DISABLED=1
 Environment=HOSTNAME=127.0.0.1
 Environment=PORT=${ports[name]}

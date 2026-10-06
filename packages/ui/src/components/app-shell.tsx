@@ -80,12 +80,14 @@ export function AppShell({
   app,
   navigation,
   email,
+  environment,
   signOut,
   children,
 }: {
   app: AppKind
   navigation: NavigationItem[]
   email: string
+  environment: string
   signOut: () => Promise<ActionResult>
   children: React.ReactNode
 }) {
@@ -263,7 +265,7 @@ export function AppShell({
           </Breadcrumb>
           <span className="ml-auto inline-flex items-center gap-1.5 text-xs text-muted-foreground">
             <MonitorIcon aria-hidden="true" className="size-3.5" />
-            Desarrollo
+            {environment}
           </span>
         </header>
         <main

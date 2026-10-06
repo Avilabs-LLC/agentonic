@@ -230,3 +230,10 @@ it("keeps each app's session cookie on its own name, secure in production", asyn
     "agentonic-customer-auth"
   )
 })
+
+it("names the hosted environment in the header, and development elsewhere", async () => {
+  const { environmentLabel } = await import("../packages/server/src/env")
+  expect(environmentLabel()).toBe("Desarrollo")
+  vi.stubEnv("AGENTONIC_ENVIRONMENT", "staging")
+  expect(environmentLabel()).toBe("Pruebas")
+})
