@@ -18,8 +18,10 @@ import {
 import { notify } from "@workspace/ui/lib/toast"
 export function LoginForm({
   action,
+  next = "/",
 }: {
   action: (input: SignInInput) => Promise<ActionResult>
+  next?: string
 }) {
   const router = useRouter()
   const {
@@ -39,7 +41,7 @@ export function LoginForm({
         return
       }
       notify.success("Sesión iniciada.")
-      router.replace("/")
+      router.replace(next)
       router.refresh()
     } catch {
       notify.destructive("No se pudo iniciar sesión. Inténtalo de nuevo.")

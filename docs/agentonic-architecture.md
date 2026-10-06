@@ -1607,3 +1607,64 @@ The database CA reaches the apps and worker as a systemd credential. The three n
   - an upgrade back to `de2c4a52` passed again.
 
   Both releases stayed on disk, and each switch was checked from the processes' working directories. The hosted check passed afterwards, and the browser sessions survived all three switches. The live release is `de2c4a52`.
+
+## 54. Invitations, password reset and staff two-factor sign-in — 6 October 2026
+
+Until now accounts existed only because the owner created them from the Mac with the Supabase secret key, and nobody could reset a password (C13). The owner chose, on 6 October: **invite-only accounts by email link**, and **an optional authenticator app for staff**. Email goes through Supabase Auth's SMTP, which the owner pointed at Resend with the verified domain `agentonic.avilabs.tech` (C5). The apps hold no new secret: every flow uses the publishable key.
+
+**Invite-only accounts (migration 49).** `agentonic.auth_before_user_created(event)` is Supabase Auth's "before user created" hook.
+
+- **What it allows:** a new account only when its email has a live workspace invitation: not accepted, not revoked, not expired, in an active workspace. Case and spacing are ignored. Everyone else is refused before an account or an email exists, with a Spanish message.
+- **Who can call it:** only `supabase_auth_admin`; the apps, the anonymous role and the public cannot. Existing accounts are unaffected.
+- **Staff accounts:** the Mac's bootstrap script may also be refused by the hook, unless an invitation exists for that email; turn the hook off while creating one.
+
+**Invitations (customer app).** A new **Miembros** page lists a workspace's members and invitations for its owners and admins; others see who to ask.
+
+- **Invitar miembro** records the invitation through the existing `invite.issue` command (§23): a 256-bit token, stored as its hash, valid for 7 days. Only an owner may invite an admin.
+- Then Supabase emails a sign-in link (`signInWithOtp`, creating the account if needed, which the hook allows). Its destination is `/invitation` with the one-time token. If the email can't be sent, the invitation is withdrawn at once, so none is left unreachable.
+- The link passes through `/auth/confirm`, which verifies Supabase's token hash with `verifyOtp` and signs the invitee in. `/invitation` then accepts through `invite.accept`, which still requires the verified email to be the invited one. After accepting, a first-time invitee is offered a password.
+- Withdrawing an invitation is a row action with confirmation; reissuing means withdrawing first.
+
+**Email links.** Supabase's templates build links from `{{ .RedirectTo }}` and `{{ .TokenHash }}`, not its own confirmation URL, so a link works in any browser. PKCE would tie it to the browser that asked. `/auth/confirm` exists in both apps:
+
+- it accepts only the `email` and `recovery` types;
+- it follows only paths on its own app (`safeNext`);
+- it builds every link from `AGENTONIC_PUBLIC_URL` (set by the hosted units; loopback locally), never from the request's Host header.
+
+A link that no longer works leads to the login page, which keeps the destination, so an invitee whose link expired still reaches the invitation after signing in.
+
+**Passwords.**
+
+- **Reset:** "¿Olvidaste tu contraseña?" on both login pages asks Supabase for a recovery email. The page answers the same way whether or not the address has an account; only a rate limit is reported.
+- **Change:** the recovery link and **Mi cuenta → Cambiar contraseña** lead to `/password`, which sets a new password of 10 to 72 characters. Supabase's refusals are explained in Spanish.
+
+**Staff two-factor sign-in (optional).** **Mi cuenta** in Admin can turn on an authenticator app (TOTP):
+
+1. A QR code and its key are shown.
+2. A first code confirms the setup; any abandoned setup is removed before a new one starts.
+3. From then on, every Admin request from a session that hasn't passed the second factor goes to `/mfa` for the code. Turning it off needs a session that already passed it.
+
+Customers stay on password only, and the policy can become mandatory later without new building blocks.
+
+**What the owner sets in Supabase** (Authentication):
+
+- **Hooks:** Before User Created → Postgres → `agentonic.auth_before_user_created`.
+- **Email templates:** paste [invitation.html](email-templates/invitation.html) into **Confirm signup** and **Magic Link** (subject "Tu invitación a Agentonic"), and [reset-password.html](email-templates/reset-password.html) into **Reset Password** (subject "Restablece tu contraseña de Agentonic").
+- **Sign-up and links:** keep "Allow new users to sign up" and "Confirm email" on; the hook does the restricting. Set the email link (OTP) expiry to 86,400 seconds, so a link lasts 24 hours.
+- **Already set (C5):** SMTP to Resend, the Site URL and the redirect allowlist for both hostnames and loopback.
+
+**Tests.**
+
+- **The hook,** against the replayed migrations: a live invitation in any case or spacing passes; expired, accepted, revoked and suspended-workspace invitations are refused; the apps and the public can't call it.
+- **The account service,** with Supabase replaced:
+  - email links follow only safe paths, and a failed link keeps its destination;
+  - links come from configuration;
+  - reset requests answer the same for unknown addresses;
+  - an invitation email carries the token, and a failed send withdraws the invitation;
+  - an invitation without authority sends nothing;
+  - password refusals are explained;
+  - codes are checked against the enrolled factor;
+  - abandoned enrolments are removed.
+- **Sign-in:** enrolled staff are sent to `/mfa`, the `/mfa` page itself only needs the password session, and customers are never asked.
+
+**Not covered yet:** making the second factor mandatory, recovery codes for a lost authenticator (the owner can remove a factor in the Supabase dashboard), changing email addresses, and invitations to staff. The invitation email doesn't name the workspace: an invitee isn't a member until they accept, so the link page doesn't either.

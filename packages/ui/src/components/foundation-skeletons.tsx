@@ -144,7 +144,11 @@ export function ExpirySkeleton() {
     </div>
   )
 }
-export function AccountSkeleton() {
+export function AccountSkeleton({
+  authenticator = false,
+}: {
+  authenticator?: boolean
+}) {
   return (
     <div aria-label="Cargando cuenta" role="status" className="space-y-6">
       <div className="space-y-3">
@@ -153,13 +157,27 @@ export function AccountSkeleton() {
       </div>
       <Card>
         <CardContent className="space-y-6 pt-6">
-          {[1, 2, 3].map((i) => (
+          {[1, 2, 3, 4].map((i) => (
             <Skeleton key={i} className="h-8 w-full" />
           ))}
         </CardContent>
       </Card>
+      {authenticator && (
+        <Card>
+          <CardHeader className="space-y-2">
+            <Skeleton className="h-6 w-56" />
+            <Skeleton className="h-4 w-full" />
+          </CardHeader>
+          <CardContent>
+            <Skeleton className="h-8 w-full" />
+          </CardContent>
+        </Card>
+      )}
     </div>
   )
+}
+export function AdminAccountSkeleton() {
+  return <AccountSkeleton authenticator />
 }
 export function LoginSkeleton() {
   return (
@@ -188,5 +206,89 @@ export function LoginSkeleton() {
         </CardFooter>
       </Card>
     </main>
+  )
+}
+/** A centered card with fields, for the signed-out account pages (architecture §54). */
+export function AuthCardSkeleton({
+  fields = 1,
+  footer = false,
+}: {
+  fields?: number
+  footer?: boolean
+}) {
+  return (
+    <main
+      role="status"
+      aria-label="Cargando"
+      className="flex min-h-svh items-center justify-center bg-muted/40 p-6"
+    >
+      <Card className="w-full max-w-md">
+        <CardHeader className="space-y-3">
+          <Skeleton className="size-10" />
+          <Skeleton className="h-8 w-56" />
+          <Skeleton className="h-4 w-full" />
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {Array.from({ length: fields }, (_, i) => (
+            <div key={i} className="space-y-2">
+              <Skeleton className="h-4 w-24" />
+              <Skeleton className="h-8 w-full" />
+            </div>
+          ))}
+          <Skeleton className="h-10 w-full" />
+        </CardContent>
+        {footer && (
+          <CardFooter>
+            <Skeleton className="h-4 w-40" />
+          </CardFooter>
+        )}
+      </Card>
+    </main>
+  )
+}
+/** Reset request and invitation: one field or message, and a footer link. */
+export function AuthCardWithFooterSkeleton() {
+  return <AuthCardSkeleton footer />
+}
+export function PasswordSkeleton() {
+  return (
+    <div aria-label="Cargando contraseña" role="status" className="space-y-6">
+      <div className="space-y-3">
+        <BackRowSkeleton />
+        <RecordHeaderSkeleton />
+      </div>
+      <Card className="max-w-md">
+        <CardContent className="space-y-6 pt-6">
+          {[1, 2].map((i) => (
+            <div key={i} className="space-y-2">
+              <Skeleton className="h-4 w-32" />
+              <Skeleton className="h-8 w-full" />
+            </div>
+          ))}
+          <Skeleton className="h-8 w-40" />
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
+export function MembersSkeleton() {
+  return (
+    <div aria-label="Cargando miembros" role="status" className="space-y-6">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <PageHeaderSkeleton />
+        <Skeleton className="h-8 w-36" />
+      </div>
+      <Skeleton className="h-7 w-48" />
+      {[3, 5].map((columns) => (
+        <Card key={columns}>
+          <CardHeader>
+            <Skeleton className="h-6 w-40" />
+          </CardHeader>
+          <CardContent>
+            <TableSkeleton columns={columns} />
+          </CardContent>
+        </Card>
+      ))}
+    </div>
   )
 }

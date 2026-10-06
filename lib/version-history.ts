@@ -1,5 +1,10 @@
 export const VERSION_HISTORY = [
   {
+    "version": "0.16.0",
+    "date": "2026-10-06",
+    "summary": "Invitaciones por correo para unirse a un espacio, restablecimiento y cambio de contraseña, y verificación en dos pasos opcional para el equipo."
+  },
+  {
     "version": "0.15.0",
     "date": "2026-10-06",
     "summary": "Primera versión publicada para el servidor: aplicaciones y procesamiento de conocimiento alojados con HTTPS y encabezados de seguridad, pantallas de operación, evaluaciones de herramientas y modelo general de conversaciones."
