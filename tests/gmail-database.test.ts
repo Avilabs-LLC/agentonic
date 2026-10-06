@@ -363,3 +363,185 @@ it("does not grant normal retrieval jobs Gmail authority", async () => {
   )
   await expect(p.tool("gmail-tools")).rejects.toThrow()
 })
+
+it("keeps the general conversation model in step with a private preview", async () => {
+  const p = await privatePreview()
+  const general = async () => ({
+    conversation: (
+      await f.sql(
+        "SELECT c.environment,c.deleted_at IS NOT NULL closed,e.surface FROM agentonic.conversations c JOIN agentonic.channel_endpoints e ON e.id=c.endpoint_id WHERE c.id=$1",
+        [p.p.id]
+      )
+    ).rows[0],
+    runs: (
+      await f.sql(
+        "SELECT id,status,deployment_id,preview_id FROM agentonic.agent_runs WHERE conversation_id=$1",
+        [p.p.id]
+      )
+    ).rows,
+    messages: (
+      await f.sql(
+        "SELECT role,content,redacted_at IS NOT NULL redacted FROM agentonic.messages WHERE conversation_id=$1 ORDER BY sequence_number",
+        [p.p.id]
+      )
+    ).rows,
+  })
+  // The preview is a conversation on the agent's preview surface; its turn is a
+  // run with no deployment, sharing the job's ID.
+  expect(await general()).toEqual({
+    conversation: { environment: "staging", closed: false, surface: "preview" },
+    runs: [
+      {
+        id: p.job.id,
+        status: "running",
+        deployment_id: null,
+        preview_id: p.p.id,
+      },
+    ],
+    messages: [
+      {
+        role: "user",
+        content: { version: "1", text: "Read synthetic messages" },
+        redacted: false,
+      },
+    ],
+  })
+  // Cancelling the preview closes the conversation and erases the turn's text.
+  await p.preview("cancel", { previewId: p.p.id })
+  const cancelled = await general()
+  expect(cancelled.conversation).toMatchObject({ closed: true })
+  expect(cancelled.messages).toEqual([
+    { role: "user", content: { version: "1", redacted: true }, redacted: true },
+  ])
+  // Expired and cancelled previews' turns are deleted with their messages; the
+  // run stays as the record of work.
+  await f.claim().catch(() => null)
+  expect((await general()).runs).toEqual([
+    expect.objectContaining({ id: p.job.id, status: "cancelled" }),
+  ])
+  expect((await general()).messages).toEqual([])
+})
+
+it("keeps the general connection and grant in step with a Gmail connection", async () => {
+  await connect()
+  const general = async () => ({
+    connection: (
+      await f.sql(
+        "SELECT provider,kind,status,external_account_id,secret_reference,environment,revoked_at IS NOT NULL revoked FROM agentonic.connections WHERE id=$1",
+        [id(501)]
+      )
+    ).rows[0],
+    grant: (
+      await f.sql(
+        "SELECT agent_id,allowed_operations,revoked_at IS NOT NULL revoked FROM agentonic.agent_connection_grants WHERE connection_id=$1",
+        [id(501)]
+      )
+    ).rows[0],
+  })
+  expect(await general()).toEqual({
+    connection: {
+      provider: "google_gmail",
+      kind: "oauth",
+      status: "active",
+      external_account_id: "synthetic@example.invalid",
+      secret_reference: `gmail_connections:${id(501)}`,
+      environment: "staging",
+      revoked: false,
+    },
+    grant: { agent_id: id(20), allowed_operations: [], revoked: false },
+  })
+  await f.actor()
+  await command("permissions", {
+    agentId: id(20),
+    connectionId: id(501),
+    operations: ["gmail.read"],
+  })
+  expect((await general()).grant).toMatchObject({
+    allowed_operations: ["gmail.read"],
+  })
+  await f.actor()
+  await command("disconnect", { connectionId: id(501) })
+  expect(await general()).toMatchObject({
+    connection: { status: "revoked", revoked: true },
+    grant: { allowed_operations: [], revoked: true },
+  })
+  // The sealed credential never crosses into the general model.
+  const columns = (
+    await f.sql(
+      "SELECT column_name FROM information_schema.columns WHERE table_schema='agentonic' AND table_name IN ('connections','agent_connection_grants','tool_invocations','tool_approvals') AND column_name LIKE '%cipher%'"
+    )
+  ).rows
+  expect(columns).toEqual([])
+})
+
+it("records each Gmail write as a tool invocation with a one-time approval", async () => {
+  const p = await privatePreview()
+  await p.propose()
+  const general = async () => ({
+    invocation: (
+      await f.sql(
+        "SELECT i.run_id,i.status,i.authorization_kind,i.connection_id,i.redacted_arguments,i.redacted_result,i.error_code,k.name tool FROM agentonic.tool_invocations i JOIN agentonic.code_tools k ON k.id=i.code_tool_id WHERE i.id=$1",
+        [id(503)]
+      )
+    ).rows[0],
+    approval: (
+      await f.sql(
+        "SELECT decision,decided_at IS NOT NULL decided,consumed_at IS NOT NULL consumed FROM agentonic.tool_approvals WHERE tool_invocation_id=$1",
+        [id(503)]
+      )
+    ).rows[0],
+  })
+  expect(await general()).toEqual({
+    invocation: {
+      run_id: p.job.id,
+      status: "awaiting_approval",
+      authorization_kind: "one_off",
+      connection_id: id(501),
+      redacted_arguments: null,
+      redacted_result: null,
+      error_code: null,
+      tool: "gmail.send",
+    },
+    approval: { decision: "pending", decided: false, consumed: false },
+  })
+  await f.actor()
+  await command("confirm", { id: id(503), hash: "a".repeat(64) })
+  expect(await general()).toMatchObject({
+    invocation: { status: "running" },
+    approval: { decision: "approved", decided: true, consumed: true },
+  })
+  await f.actor()
+  await command("complete", {
+    id: id(503),
+    status: "uncertain",
+    result: { code: "uncertain" },
+  })
+  expect((await general()).invocation).toMatchObject({
+    status: "unknown",
+    redacted_result: { code: "uncertain" },
+  })
+  // A consumed approval cannot be reset, nor its invocation's arguments changed.
+  for (const statement of [
+    "UPDATE agentonic.tool_approvals SET consumed_at=NULL,decision='pending' WHERE tool_invocation_id=$1",
+    "UPDATE agentonic.tool_invocations SET arguments_sha256=repeat('b',64) WHERE id=$1",
+  ]) {
+    await f.db.exec("SAVEPOINT reset_attempt")
+    await expect(f.sql(statement, [id(503)])).rejects.toThrow()
+    await f.db.exec("ROLLBACK TO SAVEPOINT reset_attempt")
+  }
+})
+
+it("denies a cancelled Gmail write in the general model", async () => {
+  const p = await privatePreview()
+  await p.propose()
+  await f.actor()
+  await p.preview("cancel", { previewId: p.p.id })
+  expect(
+    (
+      await f.sql(
+        "SELECT i.status,i.error_code,a.decision FROM agentonic.tool_invocations i JOIN agentonic.tool_approvals a ON a.tool_invocation_id=i.id WHERE i.id=$1",
+        [id(503)]
+      )
+    ).rows
+  ).toEqual([{ status: "denied", error_code: "cancelled", decision: "cancelled" }])
+})

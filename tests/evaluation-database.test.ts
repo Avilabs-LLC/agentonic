@@ -2427,6 +2427,11 @@ async function modelReview() {
     "202610050039_side_by_side_brokers",
     "202610050040_admin_expiry_view",
     "202610050041_resting_agents",
+    "202610050042_worker_storage",
+    "202610050043_worker_lanes",
+    "202610060044_general_conversations",
+    "202610060045_general_connections",
+    "202610060046_usage_events",
   ])
     await db.exec(
       readFileSync(
@@ -3462,6 +3467,128 @@ it("upgrades running copies through the controller: move, drain, retire, restore
   await o.pass()
   expect(since(mark).sort()).toEqual(["remove 7", "remove d"])
   expect([...o.configs.keys(), ...o.processes]).toEqual([])
+})
+
+it("keeps the general conversation model in step with a staging chat", async () => {
+  const { deploymentId: dep, leased } = await servingOnBroker()
+  const c = (
+    await sql(
+      "SELECT id,agent_id FROM agentonic.staging_conversations WHERE deployment_id=$1",
+      [dep]
+    )
+  ).rows[0] as { id: string; agent_id: string }
+  const general = async () => {
+    await db.exec("RESET ROLE")
+    const conversation = (
+      await db.query(
+        "SELECT c.environment,c.title,c.deleted_at IS NOT NULL closed,e.surface,e.external_endpoint_key,k.linked_user_id FROM agentonic.conversations c JOIN agentonic.channel_endpoints e ON e.id=c.endpoint_id JOIN agentonic.contacts k ON k.id=c.owner_contact_id WHERE c.id=$1",
+        [c.id]
+      )
+    ).rows[0]
+    const runs = (
+      await db.query(
+        "SELECT id,status,deployment_id,preview_id,trigger_kind FROM agentonic.agent_runs WHERE conversation_id=$1 ORDER BY created_at",
+        [c.id]
+      )
+    ).rows
+    const messages = (
+      await db.query<{ content: unknown; redacted: boolean }>(
+        "SELECT role,sequence_number::int seq,content,redacted_at IS NOT NULL redacted FROM agentonic.messages WHERE conversation_id=$1 ORDER BY sequence_number",
+        [c.id]
+      )
+    ).rows
+    return { conversation, runs, messages }
+  }
+  let state = await general()
+  expect(state.conversation).toEqual({
+    environment: "staging",
+    title: "Synthetic broker move",
+    closed: false,
+    surface: "web",
+    external_endpoint_key: `panel:${c.agent_id}`,
+    linked_user_id: owner,
+  })
+  // The turn and its run share one ID; the leased turn is running.
+  expect(state.runs).toEqual([
+    {
+      id: leased.id,
+      status: "running",
+      deployment_id: dep,
+      preview_id: null,
+      trigger_kind: "message",
+    },
+  ])
+  expect(state.messages).toEqual([
+    {
+      role: "user",
+      seq: 1,
+      content: { version: "1", text: "Synthetic question" },
+      redacted: false,
+    },
+  ])
+  await work(dep, serviceSecret, "search", leased, { embedding })
+  const context = (await work(dep, serviceSecret, "context", leased))!
+  const citations = (context.passages as { id: string }[]).map((x) => x.id)
+  await work(dep, serviceSecret, "answer", leased, {
+    text: "three years",
+    citations,
+    insufficientEvidence: false,
+    model: "gpt-5.4-mini",
+  })
+  state = await general()
+  expect(state.runs[0]).toMatchObject({ status: "succeeded" })
+  expect(state.messages[1]).toEqual({
+    role: "assistant",
+    seq: 2,
+    content: {
+      version: "1",
+      text: "three years",
+      citations,
+      insufficientEvidence: false,
+    },
+    redacted: false,
+  })
+  // Closing the chat erases its text from both models.
+  await actor()
+  expect(await chat("close", { conversationId: c.id })).toMatchObject({
+    ok: true,
+  })
+  state = await general()
+  expect(state.conversation).toMatchObject({ closed: true })
+  expect(state.messages.map((m) => [m.content, m.redacted])).toEqual([
+    [{ version: "1", redacted: true }, true],
+    [{ version: "1", redacted: true }, true],
+  ])
+  // The general row is the turn's identity: it cannot be removed underneath it.
+  await rejectsSql("DELETE FROM agentonic.agent_runs WHERE id=$1", [leased.id])
+})
+
+it("attributes a staging turn's spend to its run", async () => {
+  const { deploymentId: dep, leased } = await servingOnBroker()
+  await sql(
+    "UPDATE agentonic.retrieval_provider_budgets SET cap_microusd=10000000 WHERE provider='voyage'"
+  )
+  await work(dep, serviceSecret, "reserve", leased, {
+    id: id(960),
+    provider: "voyage",
+    model: "voyage-4",
+    microusd: 500,
+  })
+  await work(dep, serviceSecret, "settle", leased, {
+    id: id(960),
+    tokens: 10,
+    microusd: 200,
+  })
+  expect(
+    (
+      await sql(
+        "SELECT source,run_id,agent_id,provider_cost_usd::text cost FROM agentonic.usage_events WHERE id=$1",
+        [id(960)]
+      )
+    ).rows
+  ).toEqual([
+    { source: "run", run_id: leased.id, agent_id: a, cost: "0.00020000" },
+  ])
 })
 
 it("restarts a stopped copy of a drop-in broker on the current broker", async () => {

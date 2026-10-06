@@ -1283,7 +1283,7 @@ Table agentonic.agent_runs {
   agent_id uuid [not null]
   code_release_id uuid [not null]
   environment text [not null, check: `environment IN ('development', 'staging', 'production')`]
-  deployment_id uuid [not null]
+  deployment_id uuid [note: 'IMPLEMENTED 6 Oct 2026 (migration 44): null exactly when preview_id is set; private previews run without a deployment.']
   conversation_id uuid
   session_id uuid
   acting_contact_id uuid [not null]
@@ -1300,9 +1300,9 @@ Table agentonic.agent_runs {
   error_code text
   error_summary text
   configuration_release_id uuid [not null]
-  max_turns integer [not null, check: `max_turns > 0`]
-  max_tool_calls integer [not null, check: `max_tool_calls >= 0`]
-  max_duration_seconds integer [not null, check: `max_duration_seconds > 0`]
+  max_turns integer [check: `max_turns > 0`, note: 'IMPLEMENTED 6 Oct 2026: nullable; the broker sets limits when the turn runs, after the run row exists.']
+  max_tool_calls integer [check: `max_tool_calls >= 0`]
+  max_duration_seconds integer [check: `max_duration_seconds > 0`]
   schedule_fire_id uuid
   preview_id uuid
   created_at timestamptz [not null, default: `now()`]
@@ -1323,6 +1323,7 @@ Table agentonic.agent_runs {
     `session_id IS NULL OR conversation_id IS NOT NULL`
     `finished_at IS NULL OR started_at IS NULL OR finished_at >= started_at`
     `preview_id IS NULL OR environment = 'staging'`
+    `(deployment_id IS NULL) = (preview_id IS NOT NULL)`
   }
 
   Note: '''SCOPE: LAUNCH. Logical task pinned to actual deployed code/config pair, verified original acting contact and immutable effective nonsecret settings. Linked panel membership and grants rechecked on each action/resume; schedules resolve their current responsible member to a verified linked contact. Retried events retain identity. Limits include aggregate delegated work. Record observable outputs and redacted audit, not hidden reasoning. Usage ledger is provider-cost truth, no customer billing engine. Customer preview turns must reference the active unexpired preview and its exact deployment; server classifies them so omitting preview_id cannot bypass preview policy. Compare actor/deployment and enforce preview budget in addition to run/workspace limits.'''
@@ -1546,7 +1547,9 @@ Table agentonic.usage_events {
   occurred_at timestamptz [not null]
   quantity numeric(24,8) [check: `quantity >= 0`]
   provider_cost_usd numeric(20,8) [check: `provider_cost_usd >= 0`]
-  connection_id uuid [not null]
+  connection_id uuid [note: 'IMPLEMENTED 6 Oct 2026 (migration 46): null for the platform\'s own provider accounts.']
+  source text [not null, note: 'IMPLEMENTED 6 Oct 2026: run, ingestion, search, evaluation, preparation or unattributed (old rows whose job is gone).']
+  source_id uuid
   measurement_status text [not null, check: `measurement_status IN ('unknown', 'estimated', 'measured')`]
   cost_basis text [not null, check: `cost_basis IN ('unknown', 'estimated', 'provider_billed')`]
   provider_operation_key text [not null]
@@ -1559,11 +1562,12 @@ Table agentonic.usage_events {
     (workspace_id, id) [unique]
     (workspace_id, occurred_at)
     (workspace_id, agent_id, occurred_at)
-    (workspace_id, connection_id, provider_operation_key, meter) [unique]
+    (provider, provider_operation_key, meter) [unique]
   }
 
   checks {
-    `num_nonnulls(run_id, ingestion_job_id) = 1`
+    `(source = 'run') = (run_id IS NOT NULL)`
+    `(source = 'ingestion') = (ingestion_job_id IS NOT NULL)`
     `run_id IS NULL OR agent_id IS NOT NULL`
     `(measurement_status = 'unknown') = (quantity IS NULL)`
     `(cost_basis = 'unknown') = (provider_cost_usd IS NULL)`
@@ -1660,7 +1664,7 @@ Table agentonic.daily_cost_summaries {
     (workspace_id, id) [unique]
   }
 
-  Note: '''SCOPE: LAUNCH. Rebuildable cache from ledger plus latest reconciliation using explicit timezone. Null agent is whole-workspace total including shared ingestion once; agent rows are direct costs and must not be added to workspace total. SQL NULLS NOT DISTINCT uniqueness for scope/date/zone.'''
+  Note: '''IMPLEMENTED 6 Oct 2026 (migration 46) as a view over usage_events and unsettled ledger reservations, always current; no id or created_at. SCOPE: LAUNCH. Rebuildable cache from ledger plus latest reconciliation using explicit timezone. Null agent is whole-workspace total including shared ingestion once; agent rows are direct costs and must not be added to workspace total. SQL NULLS NOT DISTINCT uniqueness for scope/date/zone.'''
 }
 
 // QUALITY

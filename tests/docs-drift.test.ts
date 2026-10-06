@@ -15,13 +15,26 @@ const latest = Math.max(
   )
 )
 let built = 0
+let tables: string[] = []
 beforeAll(async () => {
   const f = await createRagFixture()
-  const r = await f.sql<{ n: number }>(
-    "SELECT count(*)::int n FROM information_schema.tables WHERE table_type='BASE TABLE' AND table_schema='agentonic'"
+  const r = await f.sql<{ name: string }>(
+    "SELECT table_name name FROM information_schema.tables WHERE table_type='BASE TABLE' AND table_schema='agentonic' ORDER BY 1"
   )
-  built = r.rows[0]!.n
+  tables = r.rows.map((row) => row.name)
+  built = tables.length
   await f.db.close()
+})
+
+it("the Prisma schema models exactly the tables the migrations build", () => {
+  const modelled = [
+    ...read("packages/database/prisma/schema.prisma").matchAll(
+      /@@map\("([a-z_]+)"\)/g
+    ),
+  ]
+    .map((m) => m[1]!)
+    .sort()
+  expect(modelled).toEqual(tables)
 })
 
 it("current-state gives the table and migration counts", () => {
