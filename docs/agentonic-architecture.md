@@ -1352,6 +1352,7 @@ The staging deployment controller ran as root, because it wrote a unit drop-in i
   - Through the real database functions, a stopped copy of a drop-in broker is restored on the current broker, and the old secret is refused. A running one stays until it moves.
   - The live broker's units are pinned by hash.
   - Removing the regex anchor, allowing `restart`, or dropping the restore path each fails a test.
+- **Installed 6 Oct 2026, 11:03 UTC:** worker `f7deae1f` on Azure; `58d9a1f3` retired by itself (no copies). The controller runs as `agentonic-controller`. As that user, on the VM: starting a synthetic agent unit was authorized and stopped at credential setup (`243/CREDENTIALS`, no code ran), then stopped and cleared by the controller itself. Restarting an agent unit, resetting the gateway and stopping the evaluator were refused. `staging:reverify --verify` passed every check, the new ones included.
 - **Not covered:** a compromised controller could still point a copy's credential at another root-readable file, because systemd reads credentials as root. That file reaches only the copy, which runs reviewed code with no network, and never reaches the controller.
 
 ## 48. The general model, part 1: conversations and runs — 6 October 2026
@@ -1463,6 +1464,7 @@ Evaluations ran every case without tools. A version with Gmail or web tools was 
   - the version 4 rules;
   - against the real database functions: tool cases and grader version 4 appear only after an evaluator that advertises the capability is registered, and the `fixtures` step refuses a wrong lease.
   - Each of these deliberate breaks fails a test: removing the gate, a write reaching the database, tools for every case, and consulting live Gmail authority.
+- **Installed 6 Oct 2026, 11:05 UTC:** evaluator `4b2aaee4` on Azure, registered with `toolFixtures: 1` and both runtimes; the previous registrations were retired, so their evidence stays valid. It started before its registration existed, waited and recovered after 5 seconds. Every installation check passed. No paid evaluation has run the tool cases yet.
 - **Not covered:** the cases test the riskiest tool behavior, not each customer's own tool tasks. Customer criteria remain read-only questions. Domain-representative tool evaluation for the first pilot agent stays D17.
 
 ## 52. Admin operations screens — 6 October 2026
