@@ -48,6 +48,7 @@ import {
   DialogDescription,
 } from "@workspace/ui/components/dialog"
 import { ConsentCheckbox } from "@workspace/ui/components/consent-checkbox"
+import { IconTile } from "@workspace/ui/components/icon-tile"
 import { notify } from "@workspace/ui/lib/toast"
 
 type Base = Omit<
@@ -190,9 +191,9 @@ function VersionCards({
           <div className="overflow-hidden rounded-lg border bg-muted/20">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b p-4">
               <div className="flex items-center gap-3">
-                <div className="flex shrink-0 items-center text-muted-foreground">
-                  <PackageIcon className="size-5" aria-hidden="true" />
-                </div>
+                <IconTile tone="yellow">
+                  <PackageIcon aria-hidden="true" />
+                </IconTile>
                 <div className="space-y-0.5">
                   <p className="text-sm font-medium">Borrador</p>
                   <p className="font-mono text-xs text-muted-foreground">
@@ -249,9 +250,9 @@ function VersionCards({
               <div className="overflow-hidden rounded-lg border bg-muted/20">
                 <div className="flex flex-wrap items-center justify-between gap-3 border-b p-4">
                   <div className="flex items-center gap-3">
-                    <div className="flex shrink-0 items-center text-muted-foreground">
-                      <PackageIcon className="size-5" aria-hidden="true" />
-                    </div>
+                    <IconTile tone="sky">
+                      <PackageIcon aria-hidden="true" />
+                    </IconTile>
                     <div className="space-y-0.5">
                       <p className="text-sm font-medium">{label}</p>
                       <p className="font-mono text-xs text-muted-foreground">

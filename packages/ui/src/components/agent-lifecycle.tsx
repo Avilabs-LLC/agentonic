@@ -22,6 +22,7 @@ import {
 import type { FormResult } from "@agentonic/contracts/authoring"
 import { AgentSettingsCard } from "@workspace/ui/components/agent-settings-card"
 import { CardEmptyState } from "@workspace/ui/components/card-empty-state"
+import { IconTile } from "@workspace/ui/components/icon-tile"
 import {
   approvalBadgeVariants,
   deploymentBadgeVariants,
@@ -144,9 +145,9 @@ export function AgentLifecycle({
               >
                 <div className="flex flex-wrap items-center justify-between gap-3 border-b p-4">
                   <div className="flex items-center gap-3">
-                    <div className="flex size-10 shrink-0 items-center justify-center rounded-md border border-emerald-200 bg-emerald-100 text-emerald-800 shadow-xs dark:border-emerald-400/25 dark:bg-emerald-400/15 dark:text-emerald-300">
-                      <PackageIcon className="size-5" aria-hidden="true" />
-                    </div>
+                    <IconTile tone="emerald">
+                      <PackageIcon aria-hidden="true" />
+                    </IconTile>
                     <div className="space-y-0.5">
                       <p className="text-sm font-medium">
                         Versión {s.versionNumber}
