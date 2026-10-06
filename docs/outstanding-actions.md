@@ -90,7 +90,6 @@ Gate: the §14 acceptance suite with at least two workspaces and several users.
 | D12 | Database, Storage, artifact and configuration backups, restored independently, with a replacement-host drill. The VM is backed up; the database isn't. A second VM and a timed rebuild drill were deferred on 5 Oct.                      | Owner + Build | Deferred in part (5 Oct)      | A restore onto a fresh host is timed and recorded.                  |
 | D13 | Legal: privacy policy, terms, the list of outside services that handle customer data, a data processing agreement, retention periods per data type.                                                                                       | Owner         | Open                          | The documents are published; retention values are recorded.         |
 | D14 | Operations and pilot: alert recipient and incident owner; the first pilot customer and agent; data consent; the colleague's test account and extra users for the two-workspace tests.                                                     | Owner         | Open                          | Names and consents are recorded.                                    |
-| D15 | Admin operations screens: agents, activity, workspaces, users and staff, deployments and hosts, costs, audit, runtime publishing.                                                                                                         | Build         | Open                          | Each task currently done by script on the Mac has a screen.         |
 | D17 | Domain-representative evaluation of the first pilot agent before broad enablement. Platform tool cases now test injected instructions and unconfirmed writes against fixtures (§51); the pilot agent's own tool tasks are still untested. | Owner + Build | Blocked: D14                  | The pilot agent passes an evaluation built from its own domain.     |
 
 ## E · Launch features not yet built
@@ -124,21 +123,22 @@ Gate: the §14 acceptance suite with at least two workspaces and several users.
 
 ## Recently closed
 
-| Item                                                                                                                          | Closed | Where         |
-| ----------------------------------------------------------------------------------------------------------------------------- | ------ | ------------- |
-| Renewal command and twice-daily renewal with GitHub alerts                                                                    | 5 Oct  | PR #18        |
-| Agent loop moved into the runtime; runtimes side by side; runtime in the platform repo                                        | 5 Oct  | PR #19        |
-| Worker releases side by side; services wait and report; capped restarts                                                       | 5 Oct  | PR #21, #22   |
-| Planned restart window                                                                                                        | 5 Oct  | PR #23        |
-| VM backups (Azure Backup, daily, 14 days) and their twice-daily check                                                         | 5 Oct  | Azure; PR #24 |
-| Host, consent and approval expiry in Admin                                                                                    | 5 Oct  | PR #25        |
-| Database connections independent of agent count (resting agents, one gateway per host)                                        | 5 Oct  | PR #26, #27   |
-| Customer-facing availability wording; README refresh and current-state summary                                                | 5 Oct  | PR #28        |
-| Gmail key names and rotation (`v2.<key name>`, `pnpm connections:rotate-key`)                                                 | 5 Oct  | PR #30        |
-| Agent services hold no password or key and run without network; the gateway makes their provider calls                        | 5 Oct  | PR #31        |
-| The worker reaches Storage with its own lease-bound account; the Supabase secret key is bootstrap-only (closes C14)           | 5 Oct  | PR #32        |
-| Knowledge worker lanes: each kind of work has its own slots, shared fairly between workspaces (closes C15)                    | 5 Oct  | PR #34        |
-| Each environment's worker and runtime releases named in the re-verification report; documentation drift test                  | 6 Oct  | PR #35        |
-| The deployment controller runs without root; polkit limits it to agent copies (closes D16)                                    | 6 Oct  | PR #36        |
-| Chats, Gmail and costs on the general model: conversations, runs, messages, connections, tool calls, usage events (closes D8) | 6 Oct  | PR #37        |
-| Evaluations test Gmail and web tools: platform tool cases against synthetic fixtures, grader version 4                        | 6 Oct  | PR #38        |
+| Item                                                                                                                            | Closed | Where         |
+| ------------------------------------------------------------------------------------------------------------------------------- | ------ | ------------- |
+| Renewal command and twice-daily renewal with GitHub alerts                                                                      | 5 Oct  | PR #18        |
+| Agent loop moved into the runtime; runtimes side by side; runtime in the platform repo                                          | 5 Oct  | PR #19        |
+| Worker releases side by side; services wait and report; capped restarts                                                         | 5 Oct  | PR #21, #22   |
+| Planned restart window                                                                                                          | 5 Oct  | PR #23        |
+| VM backups (Azure Backup, daily, 14 days) and their twice-daily check                                                           | 5 Oct  | Azure; PR #24 |
+| Host, consent and approval expiry in Admin                                                                                      | 5 Oct  | PR #25        |
+| Database connections independent of agent count (resting agents, one gateway per host)                                          | 5 Oct  | PR #26, #27   |
+| Customer-facing availability wording; README refresh and current-state summary                                                  | 5 Oct  | PR #28        |
+| Gmail key names and rotation (`v2.<key name>`, `pnpm connections:rotate-key`)                                                   | 5 Oct  | PR #30        |
+| Agent services hold no password or key and run without network; the gateway makes their provider calls                          | 5 Oct  | PR #31        |
+| The worker reaches Storage with its own lease-bound account; the Supabase secret key is bootstrap-only (closes C14)             | 5 Oct  | PR #32        |
+| Knowledge worker lanes: each kind of work has its own slots, shared fairly between workspaces (closes C15)                      | 5 Oct  | PR #34        |
+| Each environment's worker and runtime releases named in the re-verification report; documentation drift test                    | 6 Oct  | PR #35        |
+| The deployment controller runs without root; polkit limits it to agent copies (closes D16)                                      | 6 Oct  | PR #36        |
+| Chats, Gmail and costs on the general model: conversations, runs, messages, connections, tool calls, usage events (closes D8)   | 6 Oct  | PR #37        |
+| Evaluations test Gmail and web tools: platform tool cases against synthetic fixtures, grader version 4                          | 6 Oct  | PR #38        |
+| Admin operations screens: agents, deployments and servers, activity, costs, workspaces and staff, runtime releases (closes D15) | 6 Oct  | PR #39        |

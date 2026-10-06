@@ -33,11 +33,11 @@ export default async function Page() {
                 <CardTitle>Operación</CardTitle>
               </CardHeader>
               <CardContent className="space-y-2">
-                <p className="font-semibold">Revisión de propuestas</p>
+                <p className="font-semibold">Pruebas privadas</p>
                 <p className="text-sm text-muted-foreground">
-                  Revisa configuraciones enviadas por clientes y devuelve
-                  comentarios. Las evaluaciones y los despliegues aún no están
-                  habilitados.
+                  Revisa y aprueba versiones, activa despliegues de pruebas y
+                  supervisa agentes, servidores y costos. Instalar servidores y
+                  publicar runtimes se hace desde el Mac.
                 </p>
               </CardContent>
             </Card>

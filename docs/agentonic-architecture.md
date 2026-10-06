@@ -1465,3 +1465,34 @@ Evaluations ran every case without tools. A version with Gmail or web tools was 
   - Each of these deliberate breaks fails a test: removing the gate, a write reaching the database, tools for every case, and consulting live Gmail authority.
 - **Not covered:** the cases test the riskiest tool behavior, not each customer's own tool tasks. Customer criteria remain read-only questions. Domain-representative tool evaluation for the first pilot agent stays D17.
 
+## 52. Admin operations screens — 6 October 2026
+
+The Admin app only handled reviews: "Agentes" and "Actividad" were disabled, and staff checked agents, deployments, servers, spend and runtime releases with scripts on the Mac (D15). Six screens now show the same facts (migration 48).
+
+| Screen | Shows | Replaces |
+| --- | --- | --- |
+| **Agentes** | Every agent: workspace, owner, the latest version's capabilities (knowledge, Gmail, web), deployment state and environment, last turn and turns in seven days | Database queries |
+| **Despliegues** | What each host and evaluator runs: worker release, runtimes by version and commit, last report, whether the evaluator tests tools. Every deployment with its authorization, spend against budget and state | The release lines of `pnpm staging:reverify` (§46) |
+| **Actividad** | Turns completed, failed and in progress, writes awaiting confirmation, and the last 200 changes in the audit log, in Spanish, with who acted and the outcome. Reads are counted, not listed | Audit queries |
+| **Costos** | Each provider's cap, committed and settled spend, and unknown outcomes; known spend per day and workspace in its time zone (§50); the agents with the most spend | Ledger queries |
+| **Espacios de trabajo** | Workspaces with active members, agents and pending invitations; Agentonic's staff and their roles | `setup:accounts` checks |
+| **Runtime** | The runtime catalog: version, source commit, artifact, where each release is installed, how many workspaces may use it | Catalog queries |
+
+- **Metadata only:** each screen reads a function (`operations_agents` and the others) that only active staff in the Admin app may call; customers, services and disabled staff are refused. The functions return names, states, counts, times and amounts, never prompts, documents, conversation text, email addresses or secrets. A test plants prompt and document text and checks that no screen returns it. Staff access to a customer's content stays scoped to a review, as before.
+- **What stays a script:**
+  - Installing servers and evaluators, publishing runtimes and renewing verification need SSH, the VM's keys and the migration role. The screens show their state and say they are done from the Mac.
+  - Moving these steps into the web app would need a privileged job runner with its own review, and is not part of D15.
+- **Presentation:** the screens follow the UI contract:
+  - shared `DataTable` with sortable headers, search, pagination and empty states;
+  - one badge per row for the record's primary state (agent, workspace, staff member, release, deployment, verification);
+  - nested states inline (an agent's deployment, an event's outcome, unknown spend);
+  - counts and amounts as plain text;
+  - Spanish labels from shared maps, with unknown values shown as "Estado desconocido" or their code;
+  - each route has a matching loading state.
+
+  The Admin home and the shared roadmap card no longer call evaluation, deployment and supervision unbuilt.
+- **Tests:**
+  - against the real database functions: every read for staff, refusals for customers, services and disabled staff, and no content leak;
+  - every component rendered with synthetic data: Spanish labels, unknown states and unknown spend, and every skeleton.
+- **Not covered:** detail pages per agent or deployment, filters beyond search, and server-side pagination. The collections are small today; the read functions return everything except the activity log, which keeps the last 200 changes.
+

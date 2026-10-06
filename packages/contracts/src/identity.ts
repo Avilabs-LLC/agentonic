@@ -22,6 +22,10 @@ export type NavigationItem = {
     | "activity"
     | "chat"
     | "expiry"
+    | "workspaces"
+    | "deployments"
+    | "costs"
+    | "releases"
 }
 export const retentionPolicy = z
   .object({

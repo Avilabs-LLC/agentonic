@@ -12,6 +12,10 @@ import {
   PlugIcon,
   ActivityIcon,
   CalendarClockIcon,
+  Building2Icon,
+  ServerIcon,
+  CoinsIcon,
+  PackageIcon,
   ChevronsUpDownIcon,
   UserIcon,
   LogOutIcon,
@@ -67,6 +71,10 @@ const icons = {
   connections: PlugIcon,
   activity: ActivityIcon,
   expiry: CalendarClockIcon,
+  workspaces: Building2Icon,
+  deployments: ServerIcon,
+  costs: CoinsIcon,
+  releases: PackageIcon,
 }
 export function AppShell({
   app,

@@ -1,0 +1,114 @@
+import { Skeleton } from "@workspace/ui/components/skeleton"
+import { Card, CardContent, CardHeader } from "@workspace/ui/components/card"
+import {
+  PageHeaderSkeleton,
+  TableSkeleton,
+} from "@workspace/ui/components/foundation-skeletons"
+
+// Loading states for the Admin operations screens (architecture §52), matching
+// each page: header, then its cards and tables in order.
+function ListCardSkeleton({ items }: { items: number }) {
+  return (
+    <Card>
+      <CardHeader className="space-y-2">
+        <Skeleton className="h-5 w-48" />
+        <Skeleton className="h-4 w-full max-w-2xl" />
+      </CardHeader>
+      <CardContent className="divide-y">
+        {Array.from({ length: items }, (_, i) => (
+          <div
+            key={i}
+            className="flex items-center justify-between gap-4 py-5 first:pt-2.5 last:pb-2.5"
+          >
+            <div className="space-y-1.5">
+              <Skeleton className="h-4 w-56" />
+              <Skeleton className="h-4 w-80 max-w-full" />
+            </div>
+            <Skeleton className="h-5 w-20 rounded-full" />
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  )
+}
+function StatsSkeleton({ count }: { count: number }) {
+  return (
+    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+      {Array.from({ length: count }, (_, i) => (
+        <Card key={i}>
+          <CardHeader className="space-y-2">
+            <Skeleton className="h-3 w-32" />
+            <Skeleton className="h-7 w-12" />
+          </CardHeader>
+        </Card>
+      ))}
+    </div>
+  )
+}
+function Loading({
+  label,
+  children,
+}: {
+  label: string
+  children: React.ReactNode
+}) {
+  return (
+    <div aria-label={label} role="status" className="space-y-6">
+      <PageHeaderSkeleton />
+      {children}
+    </div>
+  )
+}
+/** Agentes: the six-column agents table. */
+export function OperationsAgentsSkeleton() {
+  return (
+    <Loading label="Cargando agentes">
+      <TableSkeleton columns={6} />
+    </Loading>
+  )
+}
+/** Actividad: five stat tiles and the five-column changes table. */
+export function OperationsActivitySkeleton() {
+  return (
+    <Loading label="Cargando actividad">
+      <StatsSkeleton count={5} />
+      <TableSkeleton columns={5} />
+    </Loading>
+  )
+}
+/** Espacios de trabajo: the six-column workspaces table and the staff card. */
+export function OperationsWorkspacesSkeleton() {
+  return (
+    <Loading label="Cargando espacios de trabajo">
+      <TableSkeleton columns={6} />
+      <ListCardSkeleton items={2} />
+    </Loading>
+  )
+}
+/** Despliegues: the installations card (four registrations) and the five-column table. */
+export function OperationsDeploymentsSkeleton() {
+  return (
+    <Loading label="Cargando despliegues">
+      <ListCardSkeleton items={4} />
+      <TableSkeleton columns={5} />
+    </Loading>
+  )
+}
+/** Costos: the provider card, the four-column daily table and the agents card. */
+export function OperationsCostsSkeleton() {
+  return (
+    <Loading label="Cargando costos">
+      <ListCardSkeleton items={3} />
+      <TableSkeleton columns={4} />
+      <ListCardSkeleton items={3} />
+    </Loading>
+  )
+}
+/** Runtime: the five-column releases table. */
+export function OperationsReleasesSkeleton() {
+  return (
+    <Loading label="Cargando versiones del runtime">
+      <TableSkeleton columns={5} />
+    </Loading>
+  )
+}
