@@ -1648,13 +1648,14 @@ Customers stay on password only, and the policy can become mandatory later witho
 
 **What the owner sets in Supabase** (Authentication):
 
-- **Hooks:** Before User Created → Postgres → `agentonic.auth_before_user_created`.
+- **Hooks:** Before User Created → Postgres → `public.agentonic_before_user_created`. The dashboard lists only functions in `public`, which the migration role cannot write to, so `pnpm setup:auth-hook` installs this wrapper once with the bootstrap role ([auth-hook.sql](../scripts/sql/auth-hook.sql)). It only calls the migration-49 function; only Supabase Auth may run it, and the script checks both. Installed 6 October.
 - **Email templates:** paste [invitation.html](email-templates/invitation.html) into **Confirm signup** and **Magic Link** (subject "Tu invitación a Agentonic"), and [reset-password.html](email-templates/reset-password.html) into **Reset Password** (subject "Restablece tu contraseña de Agentonic").
-- **Sign-up and links:** keep "Allow new users to sign up" and "Confirm email" on; the hook does the restricting. Set the email link (OTP) expiry to 86,400 seconds, so a link lasts 24 hours.
+- **Sign-up and links:** keep "Allow new users to sign up" and "Confirm email" on; the hook does the restricting. Under Sign In / Providers → Email, set **Email OTP Expiration** to 86,400 seconds, so a link lasts 24 hours; the same setting governs reset links. Supabase's production checklist suggests an hour or less. That is the owner's trade-off: with an hour, an invitee who opens the email later needs a new invitation.
 - **Already set (C5):** SMTP to Resend, the Site URL and the redirect allowlist for both hostnames and loopback.
 
 **Tests.**
 
+- **The public wrapper,** replayed from its SQL file: only Supabase Auth may run it, and it applies the same rule.
 - **The hook,** against the replayed migrations: a live invitation in any case or spacing passes; expired, accepted, revoked and suspended-workspace invitations are refused; the apps and the public can't call it.
 - **The account service,** with Supabase replaced:
   - email links follow only safe paths, and a failed link keeps its destination;

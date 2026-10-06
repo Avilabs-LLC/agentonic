@@ -103,3 +103,34 @@ it("is callable only by Supabase Auth, never by the apps or the public", async (
   }
   await f.db.exec("RESET ROLE")
 })
+
+it("installs a public wrapper only Supabase Auth may run, which applies the same rule", async () => {
+  const { readFileSync } = await import("node:fs")
+  // Migration 49 grants these where Supabase's role exists; mirror that here.
+  await f.db.exec(`RESET ROLE; CREATE ROLE supabase_auth_admin;
+    GRANT USAGE ON SCHEMA agentonic TO supabase_auth_admin;
+    GRANT EXECUTE ON FUNCTION agentonic.auth_before_user_created(jsonb) TO supabase_auth_admin;`)
+  await f.db.exec(readFileSync("scripts/sql/auth-hook.sql", "utf8"))
+  await invite("invitada@example.test")
+  const call = async (role: string, email: string) => {
+    await f.db.exec(`SAVEPOINT wrapper; RESET ROLE; SET LOCAL ROLE ${role}`)
+    try {
+      const r = await f.db.query<{ result: unknown }>(
+        "SELECT public.agentonic_before_user_created($1::jsonb) result",
+        [JSON.stringify({ user: { email } })]
+      )
+      return r.rows[0]!.result
+    } finally {
+      await f.db.exec("ROLLBACK TO SAVEPOINT wrapper")
+    }
+  }
+  expect(await call("supabase_auth_admin", "invitada@example.test")).toEqual({})
+  expect(await call("supabase_auth_admin", "otra@example.test")).toEqual(
+    refused
+  )
+  for (const role of ["anon", "authenticated", "agentonic_customer"])
+    await expect(call(role, "invitada@example.test")).rejects.toThrow(
+      /permission denied/
+    )
+  await f.db.exec("RESET ROLE")
+})
