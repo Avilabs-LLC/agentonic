@@ -1,5 +1,5 @@
-// Runs in GitHub Actions. Turns the Mac's published registration report into one
-// assigned issue: opened as the workflow bot so the assignee is notified, reminded
+// Runs in GitHub Actions. Turns the Mac's published registration report, and a
+// check of the hosted apps over HTTPS, into one assigned issue: opened as the workflow bot so the assignee is notified, reminded
 // daily while unresolved, closed once everything is valid. A missing or stale report
 // is itself a problem, so this also fires when the Mac job stops running.
 import {
@@ -10,6 +10,8 @@ import {
   problems,
   utc,
 } from "./policy.ts"
+import { hostedProblems } from "../hosted-check.mjs"
+import { hostnames } from "../platform-units.mjs"
 
 const token = process.env.GITHUB_TOKEN
 const repo = process.env.GITHUB_REPOSITORY
@@ -53,7 +55,13 @@ async function api(method, path, body) {
 }
 
 const now = new Date()
-const found = problems(report, now)
+// The hosted apps are checked from here, so they are watched even while the Mac is off.
+const found = [
+  ...problems(report, now),
+  ...(await hostedProblems(hostnames)).map(
+    (problem) => `Hosted apps: ${problem}.`
+  ),
+]
 const fingerprint = found.join("\n")
 const issues = await api("GET", "/issues?state=open&per_page=100")
 const open = issues.find(
@@ -105,7 +113,7 @@ if (found.length && !open) {
     .map((entry) => entry.validUntil)
     .sort()[0]
   await api("POST", `/issues/${open.number}/comments`, {
-    body: `Resolved: all Azure staging registrations are valid${next ? `; the next expiry is ${utc(next)}` : ""}.`,
+    body: `Resolved: all Azure staging registrations are valid${next ? `; the next expiry is ${utc(next)}` : ""}, and the hosted apps answer.`,
   })
   await api("PATCH", `/issues/${open.number}`, {
     state: "closed",

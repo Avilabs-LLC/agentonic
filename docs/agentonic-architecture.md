@@ -1498,3 +1498,92 @@ The Admin app only handled reviews: "Agentes" and "Actividad" were disabled, and
   - every component rendered with synthetic data: Spanish labels, unknown states and unknown spend, and every skeleton.
 - **Not covered:** detail pages per agent or deployment, filters beyond search, and server-side pagination. The collections are small today; the read functions return everything except the activity log, which keeps the last 200 changes.
 
+
+## 53. Hosted beta: release, hosting and the round trip with the Mac off — 6 October 2026
+
+Until now both web apps and the knowledge worker ran only on the owner's Mac (C8–C11, C16). The platform now has a release built in CI from a known commit, installed on `vm-agents-01` behind TLS on `app.agentonic.avilabs.tech` (customer) and `admin.agentonic.avilabs.tech` (Admin).
+
+**Every hosted process (C7).** All run on `vm-agents-01` under systemd, from fixed release directories.
+
+| Process | Unit | Runs as | Listens on | Database role | Secrets it holds (configuration) | Memory | Ready when |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Customer app | `agentonic-customer-staging` | dynamic user | `127.0.0.1:3101` | `agentonic_customer` | its database password, Google client secret, connection keys (`/etc/agentonic/platform/customer.env`) | 1 GB | `/api/health` and the login page answer |
+| Admin app | `agentonic-admin-staging` | dynamic user | `127.0.0.1:3100` | `agentonic_admin` | its database password (`admin.env`) | 1 GB | as above |
+| Knowledge worker | `agentonic-knowledge-staging` | dynamic user | nothing | `agentonic_worker` | its database password, Storage account, OpenAI, Voyage and Browserbase keys, Google client secret, connection keys (`worker.env`) | 2 GB | it logs `knowledge_worker_started` with providers and Storage, and claims work without a database failure |
+| TLS proxy | `caddy` (Ubuntu package) | `caddy` | `:80` (redirect and certificate challenges), `:443` | none | its certificates' private keys (`/var/lib/caddy`) | — | both names answer over HTTPS |
+| Evaluator | `agentonic-evaluator-staging` | `agentonic-eval` | nothing | `agentonic_eval_azure` | OpenAI and Voyage keys | 768 MB | registration valid (§39.7) |
+| Deployment controller | `agentonic-deployer-staging` | `agentonic-controller` | nothing | the Azure deployer role | its database password | 256 MB | host registration valid (§47) |
+| Gateway | `agentonic-gateway-staging` (+ socket) | dynamic user | `/run/agentonic-gateway/gateway.sock` | the Azure runtime role | provider keys, Google client secret, connection keys (§44) | 512 MB | it reports `service_started` |
+| Agent services | `agentonic-staging-<broker>@<deployment>` | dynamic user, no network | nothing | none (through the gateway) | their deployment secret | 512 MB each | the controller's lease |
+
+The database CA reaches the apps and worker as a systemd credential. The three new services read `/etc/agentonic/platform/*.env` (root, `0700`/`0600`) through systemd; none can read another's file, and none holds the Supabase secret key. The apps and worker use the same database roles and keys as the Mac's development copies, since it is the same nonproduction project; production gets its own (D2). Schema compatibility is checked at install (below); the apps and worker of one release always come from one commit.
+
+**The release (C8).** The **Release** workflow (`.github/workflows/release.yml`) builds on a clean Ubuntu 24.04 runner with Node.js 22.23.2, the VM's version.
+
+- **What it builds:**
+  - Both apps with `output: "standalone"`, traced from the repository root.
+  - The knowledge worker as one esbuild bundle. Beside it sit its PDF parser (a forked child, so a separate file), the PDF engine's worker file and the native canvas package that engine needs on Linux.
+- **What it records:** `scripts/package-platform.mjs` writes `manifest.json` with:
+  - the platform version, commit, lockfile hash, target (`linux-x64`) and the migrations the release expects;
+  - the SHA-256 of every file and the target of every link.
+
+  A release is named by the hash of its manifest.
+- **The smoke test:** `scripts/smoke-platform.mjs` unpacks the archive into a fresh directory and starts both servers there with placeholder settings. It checks that:
+  - the login pages answer with the security headers, and every script carries the page's nonce;
+  - headless Chrome reports no blocked script and renders the form;
+  - signed-out visitors are sent to the login page;
+  - an upload from another origin is refused;
+  - the bundled PDF parser reads a synthetic PDF.
+- **When it runs:** pull requests that touch what ships run the build, pack and smoke test without publishing. A manual run on `main` first runs every repository check, then publishes `platform.tar.gz`, `manifest.json` and `release.json` as a private GitHub release, `platform-<version>-<commit>`.
+
+**First production builds and security headers (C9).** These were the first Next.js production builds, made only in CI; the Mac never builds.
+
+- **Headers on every page:** the session proxy (`packages/server/src/proxy.ts`) sets `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy: same-origin`, `Cross-Origin-Opener-Policy: same-origin` and a Permissions-Policy denying camera, microphone, location, payment and USB. In production it also sets HSTS for two years.
+- **Content Security Policy:** in production, each page gets a fresh nonce in a policy that allows:
+  - scripts: `'self'`, the nonce and `'strict-dynamic'`, with no inline or eval;
+  - styles: the app's own, plus inline style attributes;
+  - images and fonts: the app's own;
+  - forms: the app itself and Google's consent screen (where the Gmail connection form redirects);
+  - frames, objects and `<base>`: none.
+
+  Next.js reads the nonce from the forwarded request header and puts it on its own scripts, and the root layouts pass it to the theme script. API routes keep their own policies; document downloads stay sandboxed.
+- **Development:** `next dev` gets the plain headers but no CSP or HSTS.
+
+**Hosting (C10, C11).**
+
+- **Units:** `scripts/platform-units.mjs` is the single source for the three units and the Caddyfile; installation writes those bytes, and the twice-daily check compares them. Each unit:
+  - names one release directory;
+  - runs as a dynamic user with no privileges, a read-only system, no other users' files and no instance-metadata address;
+  - allows five failed starts in ten minutes, so a broken release ends visibly failed instead of looping.
+- **Caddy:** it gets certificates from Let's Encrypt, redirects plain HTTP, removes its `Server` header and passes each name only to its own app (uploads up to 12 MB on the customer name, 2 MB on Admin). Its admin endpoint is off, so only root can change it.
+- **What stays the same:**
+  - The apps listen only on loopback, and Caddy keeps the original `Host`. The existing origin checks compare `Origin` with `Host` and work unchanged behind the proxy.
+  - Session cookies have no `Domain` attribute and different names per app, so each stays on its own host. They are `Secure` in production.
+- **Sign-in and Google:** sign-in is by password on the server, so no Supabase redirect URL is involved yet; invitations and resets need C13. The customer app's Google callback is `https://app.agentonic.avilabs.tech/api/connections/google/callback`, which the OAuth client must list (C12).
+
+**Install, upgrade and rollback (C16).** `pnpm platform:install --azure --release=<tag>` runs these steps:
+
+1. **Checks the published files** on the Mac: published by the workflow bot, manifest hash equal to the release name, archive hash as recorded, target `linux-x64`, and a commit on `main`.
+2. **Checks the database** has applied every migration the manifest lists, using the migration role read-only. Migrations stay a separate step (`pnpm db:migrate`), and a rollback never reverses one.
+3. **Unpacks on the VM** beside the releases. The VM checks every file and link against the manifest with this repository's checker (`scripts/platform-tree.mjs`), sent alongside the release, never the release's own copy. Only then does the directory become root-owned, read-only and named after the release.
+4. **Writes configuration:** each service gets only the names it needs from the owner's local files, and the Google callback uses the hosted name.
+5. **Moves one service at a time,** worker first, each through a health gate. For the apps: the process runs the new release with no restarts, `/api/health` answers, and the login page renders for its hostname. For the worker: it started with its providers and Storage, and kept claiming work for 15 seconds without a database failure. A failed gate restores every moved service's previous unit and stops; services moved for the first time are removed.
+6. **Installs Caddy** once both names resolve to the VM.
+7. **Records the release** in `/opt/agentonic/platform/installed.json` and keeps the last three releases on disk.
+
+`--rollback` reinstalls the previous recorded release the same way. The fresh-host drill belongs with the replacement-host drill the owner deferred on 5 October (D12).
+
+**Watching it.**
+
+- **On the VM:** the twice-daily re-verification reports the three services and Caddy with the host. A service that is not running raises the GitHub issue.
+- **From outside:** the GitHub alert workflow checks both names over HTTPS every six hours, with no credentials. A stopped app, proxy or expired certificate raises the same issue even while the Mac is off.
+- **On demand:** `pnpm hosted:check` runs the full outside check:
+  - plain HTTP redirects to HTTPS;
+  - every header is present, and no software names itself;
+  - signed-out visitors get no cookie and no home page;
+  - a signed-out chat request is refused;
+  - cross-origin uploads and Google connection starts are refused, even from the Admin name.
+
+**Firewall.** The VM's network security group opens 80 and 443 to everyone and SSH only to the owner's address. The rule that opened SSH to the internet was removed on 6 October with the owner's agreement (part of C4).
+
+**Tests.** The release tree checker covers changed, missing and unexpected files, changed links, and links that leave the release. The proxy tests cover the nonce policy on production pages, refreshed cookies forwarded to the page, the API exemption and development without CSP. Other tests cover the units' invariants, the Caddyfile, host-only secure cookies, and the hosted services in the health report. CI builds, packs and smoke-tests every change that ships.

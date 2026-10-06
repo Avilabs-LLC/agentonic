@@ -591,10 +591,19 @@ function localArtifactChecks(input: {
 // Gathered on every run, independent of renewal: a service that is waiting,
 // failed or restarting is reported even while its registration is valid.
 
+export const PLATFORM_SERVICES: [string, string][] = [
+  ["agentonic-admin-staging.service", "the Admin app"],
+  ["agentonic-customer-staging.service", "the customer app"],
+  ["agentonic-knowledge-staging.service", "the knowledge worker"],
+  ["caddy.service", "the TLS proxy"],
+]
 const SERVICES: Record<"azure-host" | "azure-evaluator", [string, string][]> = {
   "azure-host": [
     ["agentonic-deployer-staging.service", "the deployment controller"],
     [`${GATEWAY}.service`, "the database gateway"],
+    // The hosted platform shares the host's report (architecture §53); the
+    // names match scripts/platform-units.mjs, which a test compares.
+    ...PLATFORM_SERVICES,
   ],
   "azure-evaluator": [["agentonic-evaluator-staging.service", "the evaluator"]],
 }

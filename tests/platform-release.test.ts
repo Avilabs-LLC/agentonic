@@ -177,3 +177,56 @@ it("gives production pages a nonce policy, keeps refreshed sessions, and leaves 
   expect(development.headers.get("content-security-policy")).toBeNull()
   expect(development.headers.get("strict-transport-security")).toBeNull()
 })
+
+it("pins each hosted service to one release, without privileges, behind a TLS proxy", async () => {
+  // @ts-expect-error -- plain ESM script without type declarations
+  const hosted = await import("../scripts/platform-units.mjs")
+  const release = "a".repeat(64)
+  const units = hosted.platformUnits(release) as Record<string, string>
+  expect(Object.keys(units)).toEqual(["admin", "customer", "worker"])
+  for (const [name, unit] of Object.entries(units)) {
+    expect(unit).toContain(`${hosted.platformReleases}/${release}/${name}/`)
+    expect(unit).toContain("DynamicUser=yes")
+    expect(unit).toContain("NoNewPrivileges=yes")
+    expect(unit).toContain("ProtectSystem=strict")
+    expect(unit).toContain("CapabilityBoundingSet=\n")
+    expect(unit).toContain("IPAddressDeny=169.254.169.254")
+    expect(unit).toContain(
+      `EnvironmentFile=${hosted.platformConfig}/${name}.env`
+    )
+    expect(unit).toContain("Environment=AGENTONIC_DATABASE_CA_FILE=%d/ca")
+    expect(unit).toContain("StartLimitBurst=5")
+    expect(unit).not.toMatch(/ReadWritePaths|User=root|SUPABASE_SECRET_KEY/)
+  }
+  expect(units.admin).toContain("Environment=HOSTNAME=127.0.0.1")
+  expect(units.admin).toContain("Environment=PORT=3100")
+  expect(units.customer).toContain("Environment=PORT=3101")
+  expect(units.worker).toContain(
+    "Environment=AGENTONIC_RUNTIME_ROOT=/opt/agentonic/runtime/artifacts"
+  )
+  expect(() => hosted.platformUnits("../etc")).toThrow("Invalid release id")
+  const proxy = hosted.caddyfile() as string
+  expect(proxy).toContain("admin off")
+  expect(proxy).toContain(
+    "app.agentonic.avilabs.tech {\n\tencode zstd gzip\n\trequest_body {\n\t\tmax_size 12MB\n\t}\n\theader -Server\n\treverse_proxy 127.0.0.1:3101\n}"
+  )
+  expect(proxy).toContain(
+    "admin.agentonic.avilabs.tech {\n\tencode zstd gzip\n\trequest_body {\n\t\tmax_size 2MB\n\t}\n\theader -Server\n\treverse_proxy 127.0.0.1:3100\n}"
+  )
+})
+
+it("keeps each app's session cookie on its own name, secure in production", async () => {
+  vi.stubEnv("NODE_ENV", "production")
+  const { authConfiguration } = await import("../packages/server/src/env")
+  // No Domain attribute: the cookie stays on the exact host that set it.
+  expect(authConfiguration("admin").cookieOptions).toEqual({
+    name: "agentonic-admin-auth",
+    httpOnly: true,
+    sameSite: "lax",
+    secure: true,
+    path: "/",
+  })
+  expect(authConfiguration("customer").cookieOptions.name).toBe(
+    "agentonic-customer-auth"
+  )
+})
