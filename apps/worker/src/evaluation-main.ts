@@ -2,6 +2,7 @@ import { readFileSync, existsSync } from "node:fs"
 import { parse } from "dotenv"
 import { setTimeout as delay } from "node:timers/promises"
 import pg from "pg"
+import { runReviewCase } from "./evaluation-case"
 import { prepareCriteria, gradeAnswer } from "./review-ai"
 import { processJob, type Execute, type Lease } from "./pipeline"
 import { directProviders } from "./providers"
@@ -145,27 +146,16 @@ async function run() {
               if (i > 0)
                 await delay(31000, undefined, { signal: controller.signal })
               const specification = await execute("read", job)
-              if (specification.reviewProtocol === 2) {
-                let answer: Record<string, unknown> | undefined
-                const capture: Execute = async (operation, lease, payload) => {
-                  if (operation === "answer") {
-                    answer = payload
-                    return { ok: true }
-                  }
-                  return execute(operation, lease, payload)
-                }
-                await processJob(job, capture, config, controller.signal)
-                if (!answer) throw new Error("provider_unavailable")
-                const context = await execute("grade-context", job)
-                const assessment = await gradeAnswer(
-                  { context, answer },
+              if (specification.reviewProtocol === 2)
+                await runReviewCase(
                   job,
                   execute,
-                  openaiKey,
+                  config,
+                  (input, lease, call, signal) =>
+                    gradeAnswer(input, lease, call, openaiKey, signal),
                   controller.signal
                 )
-                await execute("answer", job, { ...answer, assessment })
-              } else await processJob(job, execute, config, controller.signal)
+              else await processJob(job, execute, config, controller.signal)
             }
           console.log(
             JSON.stringify({
