@@ -1,3 +1,4 @@
+import { WorkspaceName } from "@workspace/ui/components/workspace-name"
 import { DomainStatus } from "@workspace/ui/components/status-badge"
 import { ApprovedModelResults } from "@workspace/ui/components/model-evaluation-dialog"
 import { approvalLabels } from "@agentonic/contracts/lifecycle"
@@ -57,17 +58,22 @@ export function SubmissionReceipt({
         description="Contenido y resultados de la versión enviada. Este comprobante no representa un despliegue."
       >
         <dl className="grid gap-5 text-sm sm:grid-cols-2">
-          {[
-            ["Espacio de trabajo", r.workspaceName],
-            ["Enviada", date(r.submittedAt)],
-            ["Criterios confirmados", date(r.evaluation.confirmedAt)],
-            ["Evaluación terminada", date(r.evaluation.finishedAt)],
-            ["Límite autorizado", usd(r.evaluation.budgetUsd)],
+          {(
             [
-              "Uso del presupuesto",
-              usd(r.evaluation.committedMicrousd / 1000000),
-            ],
-          ].map(([label, value]) => (
+              [
+                "Espacio de trabajo",
+                <WorkspaceName key="workspace" name={r.workspaceName} />,
+              ],
+              ["Enviada", date(r.submittedAt)],
+              ["Criterios confirmados", date(r.evaluation.confirmedAt)],
+              ["Evaluación terminada", date(r.evaluation.finishedAt)],
+              ["Límite autorizado", usd(r.evaluation.budgetUsd)],
+              [
+                "Uso del presupuesto",
+                usd(r.evaluation.committedMicrousd / 1000000),
+              ],
+            ] as [string, React.ReactNode][]
+          ).map(([label, value]) => (
             <div key={label} className="space-y-1">
               <dt className="text-muted-foreground">{label}</dt>
               <dd className="font-medium">{value}</dd>

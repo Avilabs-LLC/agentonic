@@ -35,6 +35,21 @@ import {
 import { Badge } from "@workspace/ui/components/badge"
 import { StatusIndicator } from "@workspace/ui/components/status-badge"
 import { IdLink } from "@workspace/ui/components/id-link"
+import { WorkspaceName } from "@workspace/ui/components/workspace-name"
+import { restingColumn } from "@workspace/ui/components/resting-column"
+import { Button } from "@workspace/ui/components/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@workspace/ui/components/dialog"
+import {
+  PlaceGroups,
+  type PlaceItem,
+} from "@workspace/ui/components/place-groups"
 import {
   AgentLink,
   agentVersionColumns,
@@ -84,20 +99,47 @@ const at = (value: string | null) =>
 function Named({
   name,
   detail,
-  href,
+  icon = false,
 }: {
   name: string
   detail: string
-  href?: string
+  // Shows `name` (a workspace) with the workspace icon.
+  icon?: boolean
 }) {
   return (
-    <div className="max-w-64 min-w-40 whitespace-normal">
+    <div className="max-w-64 min-w-40 space-y-1 whitespace-normal">
       <p className="font-medium">
-        {href ? <AgentLink href={href} name={name} /> : name}
+        {icon ? <WorkspaceName name={name} /> : name}
       </p>
       <p className="text-muted-foreground">{detail}</p>
     </div>
   )
+}
+/** The agent's name over its workspace, with the workspace icon. */
+function AgentAndWorkspace({
+  agentId,
+  name,
+  workspaceName,
+}: {
+  agentId: string
+  name: string
+  workspaceName: string
+}) {
+  return (
+    <div className="max-w-64 min-w-40 space-y-1 whitespace-normal">
+      <p className="font-medium">
+        <AgentLink href={`/agents/${agentId}`} name={name} />
+      </p>
+      <WorkspaceName name={workspaceName} className="text-muted-foreground" />
+    </div>
+  )
+}
+function workspaceColumn<T extends { workspaceName: string }>(): ColumnDef<T> {
+  return {
+    accessorKey: "workspaceName",
+    header: header("Espacio de trabajo"),
+    cell: ({ row }) => <WorkspaceName name={row.original.workspaceName} />,
+  }
 }
 function Stat({ label, value }: { label: string; value: number }) {
   return (
@@ -144,10 +186,10 @@ export function OperationsAgentsTable({
       accessorKey: "name",
       header: header("Agente"),
       cell: ({ row }) => (
-        <Named
+        <AgentAndWorkspace
+          agentId={row.original.id}
           name={row.original.name}
-          detail={row.original.workspaceName}
-          href={`/agents/${row.original.id}`}
+          workspaceName={row.original.workspaceName}
         />
       ),
     },
@@ -234,7 +276,7 @@ export function OperationsActivityTable({
       header: header("Fecha"),
       cell: ({ row }) => <When value={row.original.at} />,
     },
-    { accessorKey: "workspaceName", header: header("Espacio de trabajo") },
+    workspaceColumn<ActivityRow>(),
     {
       accessorKey: "actionLabel",
       header: header("Acción"),
@@ -297,6 +339,7 @@ export function OperationsWorkspacesTable({
         <Named
           name={row.original.name}
           detail={`${workspaceKindLabels[row.original.kind] ?? row.original.kind} · ${row.original.timezone}`}
+          icon
         />
       ),
     },
@@ -438,18 +481,28 @@ export function OperationsInstallationsCard({
     runtimes: Runtime[]
   }[]
 }) {
-  const items = [
+  const items: PlaceItem[] = [
     ...hosts.map((h) => ({
-      key: `host-${h.environment}`,
-      name: registrationNames.host[h.environment],
-      state: h.state,
+      environment: h.environment,
+      name: "Agentes",
       description: `Trabajador ${h.current}${h.workers.length > 1 ? ` (en servicio: ${h.workers.join(", ")})` : ""} · Runtimes ${runtimesText(h.runtimes)} · ${h.heartbeatAt ? `Último reporte el ${utc(h.heartbeatAt)}` : "Sin reportes"}`,
+      action: (
+        <StatusIndicator
+          appearance="badge"
+          state={statusDescriptor("registration", h.state)}
+        />
+      ),
     })),
     ...evaluators.map((e) => ({
-      key: `evaluator-${e.environment}`,
-      name: registrationNames.evaluator[e.environment],
-      state: e.state,
+      environment: e.environment,
+      name: "Evaluaciones",
       description: `Evaluador ${e.current} · Runtimes ${runtimesText(e.runtimes)} · ${e.toolFixtures ? "Prueba herramientas con datos sintéticos" : "Sin pruebas de herramientas"}`,
+      action: (
+        <StatusIndicator
+          appearance="badge"
+          state={statusDescriptor("registration", e.state)}
+        />
+      ),
     })),
   ]
   return (
@@ -469,27 +522,7 @@ export function OperationsInstallationsCard({
             versiones.
           </CardEmptyState>
         ) : (
-          <ItemGroup>
-            {items.map((item, index) => (
-              <div key={item.key}>
-                {index > 0 && <ItemSeparator className="my-0" />}
-                <Item size="sm" className="px-0">
-                  <ItemContent>
-                    <ItemTitle>{item.name}</ItemTitle>
-                    <ItemDescription className="whitespace-normal">
-                      {item.description}
-                    </ItemDescription>
-                  </ItemContent>
-                  <ItemActions>
-                    <StatusIndicator
-                      appearance="badge"
-                      state={statusDescriptor("registration", item.state)}
-                    />
-                  </ItemActions>
-                </Item>
-              </div>
-            ))}
-          </ItemGroup>
+          <PlaceGroups items={items} />
         )}
       </CardContent>
     </Card>
@@ -505,10 +538,10 @@ export function OperationsDeploymentsTable({
       accessorKey: "agentName",
       header: header("Agente"),
       cell: ({ row }) => (
-        <Named
+        <AgentAndWorkspace
+          agentId={row.original.agentId}
           name={row.original.agentName}
-          detail={row.original.workspaceName}
-          href={`/agents/${row.original.agentId}`}
+          workspaceName={row.original.workspaceName}
         />
       ),
     },
@@ -545,18 +578,14 @@ export function OperationsDeploymentsTable({
       accessorKey: "status",
       header: header("Estado"),
       cell: ({ row }) => (
-        <div className="space-y-1">
-          <Badge
-            variant={deploymentBadgeVariants[row.original.status] ?? "slate"}
-          >
-            {deploymentLabels[row.original.status] ?? "Estado desconocido"}
-          </Badge>
-          {row.original.resting && row.original.status === "running" && (
-            <p className="text-xs text-muted-foreground">En reposo</p>
-          )}
-        </div>
+        <Badge
+          variant={deploymentBadgeVariants[row.original.status] ?? "slate"}
+        >
+          {deploymentLabels[row.original.status] ?? "Estado desconocido"}
+        </Badge>
       ),
     },
+    restingColumn<OperationsDeployment>(),
   ]
   return (
     <DataTable
@@ -640,7 +669,7 @@ export function OperationsCostsTable({ days }: { days: OperationsCostDay[] }) {
         </div>
       ),
     },
-    { accessorKey: "workspaceName", header: header("Espacio de trabajo") },
+    workspaceColumn<OperationsCostDay>(),
     {
       accessorKey: "knownUsd",
       header: header("Gasto conocido"),
@@ -722,9 +751,9 @@ export function OperationsTopAgentsCard({
                         agent.agentName
                       )}
                     </ItemTitle>
-                    <ItemDescription>
-                      {agent.workspaceName} · {formatCount(agent.operations)}{" "}
-                      operaciones
+                    <ItemDescription className="flex flex-wrap items-center gap-x-1.5">
+                      <WorkspaceName name={agent.workspaceName} />
+                      <span>· {formatCount(agent.operations)} operaciones</span>
                     </ItemDescription>
                   </ItemContent>
                   <ItemActions className="tabular-nums">
@@ -741,7 +770,50 @@ export function OperationsTopAgentsCard({
 }
 
 // Runtime -------------------------------------------------------------------------
-type ReleaseRow = OperationsRelease & { installed: string }
+type ReleaseRow = OperationsRelease & { installed: string; places: number }
+// Where a runtime is installed: a count that opens the full list, grouped by
+// place, instead of every location inline.
+function Installed({ release }: { release: ReleaseRow }) {
+  if (release.places === 0)
+    return <span className="text-muted-foreground">Sin instalar</span>
+  const where = (["azure_staging", "local"] as const)
+    .map((environment) => ({
+      environment,
+      kinds: [
+        ...(release.hosts.includes(environment) ? ["Agentes"] : []),
+        ...(release.evaluators.includes(environment) ? ["Evaluaciones"] : []),
+      ],
+    }))
+    .filter((place) => place.kinds.length > 0)
+  return (
+    <Dialog>
+      <DialogTrigger
+        render={<Button variant="link" className="h-auto p-0 tabular-nums" />}
+      >
+        {formatCount(release.places)}{" "}
+        {release.places === 1 ? "instalación" : "instalaciones"}
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Dónde está instalado {release.version}</DialogTitle>
+          <DialogDescription>
+            Lugares que tienen este runtime, según la última verificación.
+          </DialogDescription>
+        </DialogHeader>
+        <dl className="space-y-4">
+          {where.map((place) => (
+            <div key={place.environment} className="space-y-1">
+              <dt className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                {environmentLabels[place.environment]}
+              </dt>
+              <dd>{place.kinds.join(" · ")}</dd>
+            </div>
+          ))}
+        </dl>
+      </DialogContent>
+    </Dialog>
+  )
+}
 export function OperationsReleasesTable({
   releases,
 }: {
@@ -749,6 +821,7 @@ export function OperationsReleasesTable({
 }) {
   const rows: ReleaseRow[] = releases.map((r) => ({
     ...r,
+    places: r.hosts.length + r.evaluators.length,
     installed:
       [
         ...r.hosts.map((h) => registrationNames.host[h]),
@@ -769,13 +842,10 @@ export function OperationsReleasesTable({
       ),
     },
     {
-      accessorKey: "installed",
+      id: "installed",
+      accessorFn: (row) => row.places,
       header: header("Instalada en"),
-      cell: ({ row }) => (
-        <p className="max-w-72 min-w-48 whitespace-normal">
-          {row.original.installed}
-        </p>
-      ),
+      cell: ({ row }) => <Installed release={row.original} />,
     },
     {
       accessorKey: "workspaces",
@@ -807,7 +877,7 @@ export function OperationsReleasesTable({
     <DataTable
       data={rows}
       columns={columns}
-      searchKeys={["version", "commit", "artifact"]}
+      searchKeys={["version", "commit", "artifact", "installed"]}
       searchLabel="Buscar versiones o commits"
       emptyDescription="No hay versiones del runtime publicadas."
       getRowId={(row) => row.id}

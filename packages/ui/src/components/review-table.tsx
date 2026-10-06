@@ -1,4 +1,5 @@
 "use client"
+import { WorkspaceName } from "@workspace/ui/components/workspace-name"
 import { AgentLink } from "@workspace/ui/components/agent-versions"
 import { approvalBadgeVariants } from "@workspace/ui/lib/badge-status"
 import { Badge } from "@workspace/ui/components/badge"
@@ -212,6 +213,7 @@ export function ReviewTable({
       header: ({ column }) => (
         <DataTableColumnHeader column={column} title="Espacio de trabajo" />
       ),
+      cell: ({ row }) => <WorkspaceName name={row.original.workspaceName} />,
     },
     {
       accessorKey: "userEmail",

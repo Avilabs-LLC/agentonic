@@ -169,3 +169,13 @@ Empty or unavailable card content uses the shared `CardEmptyState`: a muted, das
 The compact Propuestas table, five derived proposal states, version/revision descriptors, frozen configuration receipt and criteria/results dialogs in architecture §39.6 supersede earlier proposal presentation examples. Preserve distinct approval, submission and deployment colors from the shared maps.
 
 **Agent state columns — owner direction, 2026-10-06.** Both agent lists replace their state columns with **Versión en uso** and **Próxima versión** (architecture §55). In the customer list they replace En revisión, Actual and Estado, and are the last two columns; the loading state now mirrors six columns. In Admin they replace Despliegue and Estado, and Agentes gains the ID column. Each row has one badge: on the version in use when one runs, otherwise on the next version or "Borrador"; the other facet is inline icon and text. Labels and colours come from the deployment, proposal and approval maps. Every agent name in Admin is a blue underlined link to the agent page; in Revisiones the review number opens the review. Vencimientos groups servers and evaluators by place in labelled groups, not tabs, so no lapsed registration is hidden.
+
+**Admin layout — owner direction, 2026-10-06 (evening).**
+
+- **Place names:** staff screens name where something runs by its host, `vm-agents-01`, or "Local (desarrollo)", while each environment has one host. Customers keep "Servidor de pruebas".
+- **Servers by place:** Despliegues groups its servers and evaluators by place in labelled groups, like Vencimientos (shared `PlaceGroups`).
+- **Workspace names:** a workspace's name always carries the sidebar's workspace icon (shared `WorkspaceName`), in tables, cards and headers. Cells that stack an agent over its workspace leave a small gap between the lines.
+- **One fact per cell:** a state badge never shares its cell with a secondary state. Deployment tables give **En reposo** its own column ("Sí", "No", or "No aplica" when not running).
+- **Long lists open a dialog:** a cell that would list many places (Runtime → Instalada en) shows a count that opens a dialog with the full list.
+- **Metric tiles** (the Admin agent page) show their value as prominent text in its state's colour, never a badge. Every tile keeps the same three rows (label, value, detail), with a placeholder when a detail is missing, so their text lines up.
+

@@ -5,6 +5,7 @@ import { formatUtcParts } from "@agentonic/contracts/format"
 import { uuid } from "@agentonic/contracts/identity"
 import { BackRow, RecordHeader } from "@workspace/ui/components/record-header"
 import { OperationsAgentOverview } from "@workspace/ui/components/operations-agent"
+import { WorkspaceName } from "@workspace/ui/components/workspace-name"
 export default async function Page({
   params,
 }: {
@@ -24,7 +25,15 @@ export default async function Page({
         <BackRow href="/agents" />
         <RecordHeader
           title={agent.name}
-          description={`${agent.workspaceName} · Responsable: ${agent.ownerName} · Creado el ${formatUtcParts(agent.createdAt).date}`}
+          description={
+            <span className="flex flex-wrap items-center gap-x-1.5">
+              <WorkspaceName name={agent.workspaceName} />
+              <span>
+                · Responsable: {agent.ownerName} · Creado el{" "}
+                {formatUtcParts(agent.createdAt).date}
+              </span>
+            </span>
+          }
         />
       </div>
       <OperationsAgentOverview agent={agent} />
