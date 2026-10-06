@@ -37,7 +37,7 @@ The Admin app has **Revisiones** (submissions, receipts, renewal and activation)
   - the Mac no longer holds what's needed to rebuild the VM;
   - the last VM backup failed or is stale, or the Mac's Azure sign-in has lapsed;
   - the Mac hasn't reported for 36 hours.
-- **Services.** The controller, agent services and evaluator wait and report instead of exiting. Each change of state is one categorized JSON line in the journal. Restarts are capped.
+- **Services.** The controller, agent services and evaluator wait and report instead of exiting. The controller runs as its own user, without root, and polkit lets it start, stop and reset agent services only (architecture §47). Each change of state is one categorized JSON line in the journal. Restarts are capped.
 - **Connections.** An agent with nothing to do rests: its service stops and uses no connection, and the controller wakes it when a message arrives. Awake agents reach the database through the host's single gateway, so with one instance of each app the platform needs 19 connections however many agents are activated (architecture §43).
 - **Knowledge worker.** Each kind of work has its own lane: cleanup, documents, searches and preview turns. Each lane is shared fairly between workspaces, so a slow document no longer holds up previews (architecture §45).
 - **Upgrades.** New runtimes (`pnpm runtime:install`) and new worker releases (`install-staging`) install next to the running ones. Running agents move over one at a time without stopping.
@@ -71,5 +71,6 @@ The ordered plan is architecture §37; the owner's audit brief tracks progress. 
 | Where secrets live; key rotation; agent services without secrets       | §44                  |
 | Knowledge worker lanes and fairness between workspaces                 | §45                  |
 | Release identity per environment; documentation drift test             | §46                  |
+| The deployment controller without root                                 | §47                  |
 
 Presentation rules are in the [UI contract](ui/ui-contract.md). The [target schema](schema.dbml) describes 79 tables; 53 exist in the 43 checked-in migrations.

@@ -35,6 +35,18 @@ export const pollResult = z.object({
   deployments: z.array(z.unknown()),
   brokers: z.array(z.object({ sha256: hash, live: z.boolean() })),
 })
+/**
+ * Brokers whose copies receive their frozen release through a unit drop-in only
+ * root can write (scripts/staging-units.mjs dropInBrokers; a test compares the
+ * two). A controller that does not run as root cannot start their copies: it
+ * can stop them, and starts their deployments again on the current broker.
+ */
+export const DROP_IN_BROKERS = new Set([
+  "042e079548b6f283e3fb8640ace3f50b4a4b906e4e4bbaf6f595d138d66e98cc",
+  "c87a65555612ed4b467ea37d9c5b8d4fbcfd763dcff51f3375f22f4e7e75c7d3",
+  "2af812627203fafcb32a302563aa62c26d7a3330a52af55a4d2923ec735fbb99",
+  "58d9a1f3366ef70450cc7acc1b696728d3f12dc13270e529cce387598107ffe4",
+])
 /** Retry pacing per deployment: a copy that should run is retried until it does. */
 export const COPY: Backoff = { first: 10_000, max: 300_000 }
 /** A successor not ready by then is abandoned; the serving copy keeps serving. */
@@ -90,8 +102,10 @@ export type ControllerSystem = {
   /** Writes one copy's private configuration; fails if it already exists. */
   configure(broker: string, id: string, settings: Record<string, string>): void
   running(broker: string, id: string): boolean
+  /** Whether this controller can start copies of `broker` (see DROP_IN_BROKERS). */
+  startable(broker: string): boolean
   start(broker: string, id: string): void
-  /** Stops one copy and removes its secret, credentials and unit drop-in. */
+  /** Stops one copy and removes its secret and its release credentials. */
   remove(broker: string, id: string): void
   secret(): string
   now(): number
@@ -224,9 +238,13 @@ export class Controller {
       }
       return
     }
-    // The serving copy can no longer run (broker revoked, installation gone):
-    // replace it on the current broker at once.
-    if (!poll.live.has(serving) || !onDisk.has(serving)) {
+    // The serving copy can no longer run (broker revoked, installation gone, or a
+    // stopped copy this controller cannot start): replace it on the current broker.
+    if (
+      !poll.live.has(serving) ||
+      !onDisk.has(serving) ||
+      (!system.startable(serving) && !system.running(serving, d.id))
+    ) {
       for (const broker of onDisk) await remove(broker)
       this.successors.delete(d.id)
       return this.createCopy(d, "restore")

@@ -1331,3 +1331,26 @@ Two of the audit's housekeeping findings, closed.
 - **Release identity:** `pnpm staging:reverify` (read-only, and in every twice-daily run's log) now prints what each registration runs: its worker releases, and each runtime release it serves by catalog version and the commit it was built from. A runtime missing from the catalog shows by its hash. Since §40 the runtime placeholders are gone, and releases from `packages/runtime` record the platform commit they were built from, so the report and the catalog give one identity per build. The old `agentonic-runtime` repository still awaits a notice and archiving (N3, owner OK).
 - **Documentation drift:** the record now opens with a reading guide. Sections 1–21 are the design and later sections are dated checkpoints. A table names the earlier passages most often misread and the sections that replace them. A test (`tests/docs-drift.test.ts`) fails when `current-state.md` or the README misstate the number of target and built tables, the number of migrations, the latest architecture section or the platform version. The table count comes from replaying every migration. The 25 September verification deadline in `web-access.md` is marked as history.
 
+## 47. The deployment controller without root — 6 October 2026
+
+The staging deployment controller ran as root, because it wrote a unit drop-in in `/etc/systemd/system` for every agent copy it started. Its code limited what it did, but a compromise meant root on the host: it could write any unit. From this broker release on, it runs as its own system user, `agentonic-controller`.
+
+- **No unit files:** a copy's frozen release (its manifest and generated prompts and skills) reaches it as a credential directory, `LoadCredential=release:<agents>/<broker>/%i`. The controller writes that directory, next to the copy's configuration, before each start. systemd loads every file in it and ignores symlinks, and the copy reads `release_manifest` and `release_<asset digest>`. The template is the only unit text, and only the installer writes it.
+- **What the controller may do:** a polkit rule (`/etc/polkit-1/rules.d/50-agentonic-controller.rules`) lets that user `start`, `stop` and `reset-failed` units named `agentonic-staging-<64 hex>@<UUID>.service`, and nothing else. It cannot restart or reload them, touch the gateway, the evaluator or any other unit, reload systemd or change unit files. Listing units needs no permission.
+- **What it can write:** the deployment files (`/opt/agentonic/instances`) and the agent configurations (`/etc/agentonic/staging/agents`). Both are its own, mode 700. It passes through `/etc/agentonic/staging` (`root:agentonic-controller`, mode 710) without listing it, and receives `manager.env`, `broker.env` and the database CA as credentials, so it cannot read `gateway.env` or the CA's source. The unit keeps the rest of the sandbox and drops every capability.
+- **Older brokers:** the four earlier releases' copies need root-written drop-ins (`dropInBrokers` in `staging-units.mjs`, `DROP_IN_BROKERS` in the worker; a test compares them). Their units keep their installed bytes, so the twice-daily check is unchanged until this release is current. The new controller can stop their copies but not start them. A running one keeps serving until it moves to the current broker as usual. A stopped or resting one is restored on the current broker at once.
+- **Installation:** the installer creates the user, installs the rule, hands over the two directories (again after stopping the previous controller, so nothing it wrote stays root's) and removes leftover agent drop-ins.
+- **Re-verification:** once this broker is current, the twice-daily check also confirms that:
+  - the controller's process runs as `agentonic-controller`;
+  - the polkit rule matches its reviewed bytes and is root-owned;
+  - the directories have the owners and modes above;
+  - no agent unit drop-in exists.
+
+  The probe that counts keys in agent configurations now reads only `.env` files, because copies' release files (customer text) sit next to them.
+- **Tests:**
+  - The rule is run against a fake `polkit`: it allows the three operations on agent copies only, and refuses restart, reload, other units, other users, other actions, unanchored names and template names.
+  - Through the real database functions, a stopped copy of a drop-in broker is restored on the current broker, and the old secret is refused. A running one stays until it moves.
+  - The live broker's units are pinned by hash.
+  - Removing the regex anchor, allowing `restart`, or dropping the restore path each fails a test.
+- **Not covered:** a compromised controller could still point a copy's credential at another root-readable file, because systemd reads credentials as root. That file reaches only the copy, which runs reviewed code with no network, and never reaches the controller.
+

@@ -34,7 +34,12 @@ import {
   loadLocal,
   root,
 } from "../local-config.mjs"
-import { restartWindowUnits, stagingUnits } from "../staging-units.mjs"
+import {
+  controllerRules,
+  dropInBrokers,
+  restartWindowUnits,
+  stagingUnits,
+} from "../staging-units.mjs"
 import {
   NODE,
   TARGETS,
@@ -201,6 +206,9 @@ function checksFor(target, registration) {
       controllerUnitSha256: sha(units(registration.codeSha256).controller),
       gatewayUnitSha256: sha(units(registration.codeSha256).gateway),
       gatewaySocketSha256: sha(units(registration.codeSha256).gatewaySocket),
+      controllerRulesSha256: dropInBrokers.has(registration.codeSha256)
+        ? null
+        : sha(controllerRules),
     })
   }
   if (target === "azure-evaluator") {

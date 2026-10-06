@@ -20,6 +20,10 @@ import {
 } from "./local-config.mjs"
 import {
   agentTemplate,
+  controllerRules,
+  controllerRulesPath,
+  controllerUser,
+  dropInBrokers,
   gatewayGroup,
   gatewaySocket,
   gatewayUnit,
@@ -28,7 +32,8 @@ import {
   stagingUnits,
 } from "./staging-units.mjs"
 // Installs the private staging deployment controller, the host's gateway and an agent
-// service template for the packaged broker. Brokers install side by side: running
+// service template for the packaged broker. The controller runs as its own user, not
+// root (architecture §47). Brokers install side by side: running
 // deployments keep their copies, and the new controller moves them to this broker one
 // at a time without interrupting a turn. Agent copies started from this broker reach
 // the database and every provider only through the gateway: they hold no database
@@ -245,6 +250,9 @@ try {
     writeFileSync(join(staging, "controller.service"), current.controller)
     writeFileSync(join(staging, "gateway.service"), current.gateway)
     writeFileSync(join(staging, "gateway.socket"), current.gatewaySocket)
+    writeFileSync(join(staging, "controller.rules"), controllerRules)
+    // This broker's controller runs as its own user (see staging-units.mjs).
+    const unprivileged = !dropInBrokers.has(packaged.brokerHash)
     const templates = [packaged.brokerHash, ...earlier]
     for (const hash of templates)
       writeFileSync(
@@ -264,6 +272,7 @@ try {
         join(staging, "controller.service"),
         join(staging, "gateway.service"),
         join(staging, "gateway.socket"),
+        join(staging, "controller.rules"),
         `vm-agents-01:${upload}/`,
       ],
       { stdio: "ignore" }
@@ -294,6 +303,21 @@ try {
         `install -m 644 ${upload}/controller.service /etc/systemd/system/agentonic-deployer-staging.service`,
         `install -m 644 ${upload}/gateway.service /etc/systemd/system/${gatewayUnit}.service`,
         `install -m 644 ${upload}/gateway.socket /etc/systemd/system/${gatewayUnit}.socket`,
+        // The controller's own user: it writes only the deployment files and agent
+        // configurations, passes through the configuration directory without reading
+        // it, and polkit lets it start, stop and reset agent copies only. Agent unit
+        // drop-ins are no longer used; running copies keep what they loaded at start.
+        ...(unprivileged
+          ? [
+              `id -u ${controllerUser} >/dev/null 2>&1 || useradd --system --no-create-home --home-dir /nonexistent --shell /usr/sbin/nologin ${controllerUser}`,
+              `install -m 644 ${upload}/controller.rules ${controllerRulesPath}`,
+              `chown root:${controllerUser} ${configRoot}`,
+              `chmod 710 ${configRoot}`,
+              `chown -R ${controllerUser}:${controllerUser} ${instanceRoot} ${serviceRoot}`,
+              `chmod 700 ${instanceRoot} ${serviceRoot}`,
+              "find /etc/systemd/system -maxdepth 1 -name 'agentonic-staging-*@*.service.d' -exec rm -rf {} +",
+            ]
+          : []),
         // Retired brokers run no copies; their templates and empty configuration directories go.
         ...retired.map(
           (hash) =>
@@ -364,6 +388,13 @@ try {
         `systemctl enable ${gatewayUnit}.service`,
         `systemctl restart ${gatewayUnit}.service`,
         `systemctl is-active ${gatewayUnit}.service`,
+        // Files the previous controller wrote as root until now become the new one's.
+        ...(dropInBrokers.has(packaged.brokerHash)
+          ? []
+          : [
+              "systemctl stop agentonic-deployer-staging.service",
+              `chown -R ${controllerUser}:${controllerUser} ${instanceRoot} ${serviceRoot}`,
+            ]),
         "systemctl enable --now agentonic-deployer-staging.service",
         "systemctl restart agentonic-deployer-staging.service",
         "systemctl is-active agentonic-deployer-staging.service",
