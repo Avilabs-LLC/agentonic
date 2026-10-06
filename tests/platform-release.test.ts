@@ -199,6 +199,14 @@ it("pins each hosted service to one release, without privileges, behind a TLS pr
     expect(unit).not.toMatch(/ReadWritePaths|User=root|SUPABASE_SECRET_KEY/)
   }
   expect(units.admin).toContain("Environment=HOSTNAME=127.0.0.1")
+  expect(units.customer).toContain("SuccessExitStatus=143")
+  expect(units.admin).toContain("Environment=AGENTONIC_ENVIRONMENT=staging")
+  expect(units.admin).toContain(
+    "Environment=AGENTONIC_PUBLIC_URL=https://admin.agentonic.avilabs.tech"
+  )
+  expect(units.customer).toContain(
+    "Environment=AGENTONIC_PUBLIC_URL=https://app.agentonic.avilabs.tech"
+  )
   expect(units.admin).toContain("Environment=PORT=3100")
   expect(units.customer).toContain("Environment=PORT=3101")
   expect(units.worker).toContain(

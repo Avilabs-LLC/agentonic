@@ -149,3 +149,50 @@ export const accessResult = z.discriminatedUnion("ok", [
   z.object({ ok: z.literal(true), id: uuid.nullable(), data: z.unknown() }),
   z.object({ ok: z.literal(false) }),
 ])
+// Members and invitations, as the Miembros page shows them (architecture §54).
+export const memberRoleLabels: Record<string, string> = {
+  owner: "Propietario",
+  admin: "Administrador",
+  member: "Miembro",
+  viewer: "Lector",
+}
+export const memberInvitationInput = z
+  .object({
+    workspaceId: uuid,
+    email: z.email("Introduce un correo válido.").max(320),
+    role: z.enum(["admin", "member", "viewer"]),
+  })
+  .strict()
+export type MemberInvitationInput = z.infer<typeof memberInvitationInput>
+export const workspaceMember = z.object({
+  id: uuid,
+  displayName: z.string(),
+  role: z.string(),
+  status: z.string(),
+})
+export type WorkspaceMember = z.infer<typeof workspaceMember>
+export const workspaceInvitation = z.object({
+  id: uuid,
+  email: z.string(),
+  role: z.string(),
+  expiresAt: z.string(),
+  acceptedAt: z.string().nullable(),
+  revokedAt: z.string().nullable(),
+})
+export type WorkspaceInvitation = z.infer<typeof workspaceInvitation>
+/** An invitation's state, derived from its dates. */
+export function invitationState(
+  invitation: WorkspaceInvitation,
+  now = new Date()
+): "pending" | "accepted" | "revoked" | "expired" {
+  if (invitation.acceptedAt) return "accepted"
+  if (invitation.revokedAt) return "revoked"
+  return Date.parse(invitation.expiresAt) <= now.getTime()
+    ? "expired"
+    : "pending"
+}
+export const workspaceMembers = z.array(workspaceMember)
+export const workspaceInvitations = z.array(workspaceInvitation)
+export const invitationRevocation = z
+  .object({ workspaceId: uuid, invitationId: uuid })
+  .strict()

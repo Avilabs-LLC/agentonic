@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
   overview: vi.fn(),
   signIn: vi.fn(),
   signOut: vi.fn(),
+  aal: vi.fn(),
 }))
 vi.mock("server-only", () => ({}))
 vi.mock("@supabase/ssr", () => ({
@@ -12,6 +13,7 @@ vi.mock("@supabase/ssr", () => ({
       getUser: mocks.getUser,
       signInWithPassword: mocks.signIn,
       signOut: mocks.signOut,
+      mfa: { getAuthenticatorAssuranceLevel: mocks.aal },
     },
   }),
 }))
@@ -32,6 +34,10 @@ beforeEach(() => {
   vi.clearAllMocks()
   vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://example.supabase.co")
   vi.stubEnv("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY", "test-public-key")
+  mocks.aal.mockResolvedValue({
+    data: { currentLevel: "aal1", nextLevel: "aal1" },
+    error: null,
+  })
 })
 it("rejects unverifiable sessions before database access", async () => {
   mocks.getUser.mockResolvedValue({
@@ -111,4 +117,38 @@ it("does not expose provider errors or credentials in login feedback", async () 
   })
   expect(response.ok).toBe(false)
   expect(JSON.stringify(response)).not.toContain("sensitive")
+})
+
+it("sends enrolled staff to their second factor, and leaves customers and unenrolled staff alone", async () => {
+  mocks.getUser.mockResolvedValue({
+    data: {
+      user: {
+        id: "11111111-1111-4111-8111-111111111111",
+        email: "staff@example.test",
+        email_confirmed_at: "2026-01-01T00:00:00Z",
+      },
+    },
+    error: null,
+  })
+  mocks.overview.mockResolvedValue({ user: null, staff: null, workspaces: [] })
+  mocks.aal.mockResolvedValue({
+    data: { currentLevel: "aal1", nextLevel: "aal2" },
+    error: null,
+  })
+  const { requireVerifiedUser, requirePasswordSession } =
+    await import("../packages/server/src/auth")
+  await expect(requireVerifiedUser("admin")).rejects.toThrow("REDIRECT /mfa")
+  // The /mfa page itself only needs the password session.
+  await expect(requirePasswordSession("admin")).resolves.toMatchObject({
+    email: "staff@example.test",
+  })
+  // Customers are never asked for a second factor.
+  await expect(requireVerifiedUser("customer")).resolves.toMatchObject({
+    email: "staff@example.test",
+  })
+  mocks.aal.mockResolvedValue({
+    data: { currentLevel: "aal2", nextLevel: "aal2" },
+    error: null,
+  })
+  await expect(requirePasswordSession("customer")).resolves.toBeTruthy()
 })

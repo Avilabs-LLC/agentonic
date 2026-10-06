@@ -106,6 +106,19 @@ export const statusMaps = {
     active: state("Activo", "success", "check"),
     disabled: state("Desactivado", "slate", "minus"),
   },
+  // Workspace members and invitations (architecture §54).
+  member: {
+    active: state("Activo", "success", "check"),
+    suspended: state("Suspendido", "warning", "pause"),
+    removed: state("Retirado", "slate", "archive"),
+  },
+  invitation: {
+    pending: state("Pendiente", "warning", "clock"),
+    accepted: state("Aceptada", "success", "check"),
+    // Withdrawn by the workspace: a cancellation, not a failure.
+    revoked: state("Retirada", "slate", "archive"),
+    expired: state("Vencida", "warning", "alert"),
+  },
   release: {
     available: state("Disponible", "success", "check"),
     retired: state("Retirada", "slate", "archive"),

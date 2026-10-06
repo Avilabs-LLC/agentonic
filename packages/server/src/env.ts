@@ -23,3 +23,22 @@ export function environmentLabel() {
     ? "Pruebas"
     : "Desarrollo"
 }
+/**
+ * The address email links point to. It comes from configuration, never from a
+ * request's Host header: hosted units set it, local development uses loopback.
+ */
+export function publicUrl(app: AppKind) {
+  const configured = process.env.AGENTONIC_PUBLIC_URL
+  const url = new URL(
+    configured ??
+      (app === "admin" ? "http://localhost:3100" : "http://localhost:3101")
+  )
+  if (
+    (url.protocol !== "https:" && url.hostname !== "localhost") ||
+    url.pathname !== "/" ||
+    url.search ||
+    url.username
+  )
+    throw new Error("AGENTONIC_PUBLIC_URL must be one HTTPS origin.")
+  return url.origin
+}
