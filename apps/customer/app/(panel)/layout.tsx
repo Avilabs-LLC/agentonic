@@ -1,3 +1,4 @@
+import { environmentLabel } from "@agentonic/server/env"
 import { requireVerifiedUser } from "@agentonic/server/auth"
 import { AppShell } from "@workspace/ui/components/app-shell"
 import { navigation } from "@/lib/navigation"
@@ -13,6 +14,7 @@ export default async function Layout({
       app="customer"
       navigation={navigation}
       email={identity.email}
+      environment={environmentLabel()}
       signOut={logout}
     >
       {children}

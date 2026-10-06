@@ -79,13 +79,26 @@ export async function hostedProblems(hostnames, { full = false } = {}) {
   }
   if (full && hostnames.customer && hostnames.admin) {
     const customer = `https://${hostnames.customer}`
-    // Signed out, a same-origin request reaches no customer data.
-    const chats = await get(`${customer}/api/chats`, {
-      method: "POST",
-      headers: { Origin: customer, "Content-Type": "application/json" },
-      body: "{}",
-    })
-    if (chats.failed || (chats.status >= 200 && chats.status < 300))
+    // Signed out, a well-formed same-origin request (it passes validation and
+    // reaches the session check) is refused and carries no data.
+    const chats = await get(
+      `${customer}/api/chats?workspace=00000000-0000-4000-8000-000000000000`,
+      {
+        method: "POST",
+        headers: { Origin: customer, "Content-Type": "application/json" },
+        body: JSON.stringify({ operation: "list", payload: {} }),
+      }
+    )
+    const refused = chats.failed
+      ? null
+      : await chats
+          .json()
+          .then(
+            (body) =>
+              body?.error === "unavailable" && Object.keys(body).length === 1
+          )
+          .catch(() => false)
+    if (chats.failed || chats.status < 400 || !refused)
       problems.push(
         `a signed-out chat request answered ${chats.status ?? chats.failed}`
       )

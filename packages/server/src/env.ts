@@ -17,3 +17,9 @@ export function authConfiguration(app: AppKind) {
     },
   }
 }
+/** The environment named in each page's header: hosted nonproduction says "Pruebas". */
+export function environmentLabel() {
+  return process.env.AGENTONIC_ENVIRONMENT === "staging"
+    ? "Pruebas"
+    : "Desarrollo"
+}

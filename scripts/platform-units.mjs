@@ -81,11 +81,14 @@ EnvironmentFile=${platformConfig}/${name}.env
 LoadCredential=ca:${platformConfig}/ca.pem
 Environment=AGENTONIC_DATABASE_CA_FILE=%d/ca
 Environment=NODE_ENV=production
+Environment=AGENTONIC_ENVIRONMENT=staging
 Environment=NEXT_TELEMETRY_DISABLED=1
 Environment=HOSTNAME=127.0.0.1
 Environment=PORT=${ports[name]}
 WorkingDirectory=${root}/${name}/apps/${name}
 ExecStart=${stagingNode} ${root}/${name}/apps/${name}/server.js
+# Next.js exits 143 when systemd stops it with SIGTERM: a clean stop.
+SuccessExitStatus=143
 Restart=on-failure
 RestartSec=5
 TimeoutStopSec=20

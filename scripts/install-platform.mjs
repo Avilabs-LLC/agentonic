@@ -419,7 +419,7 @@ function health(name) {
 pid=$(systemctl show -p MainPID --value ${unit})
 printf 'active\\t%s\\n' "$(systemctl is-active ${unit} || true)"
 printf 'restarts\\t%s\\n' "$(systemctl show -p NRestarts --value ${unit})"
-if [ "\${pid:-0}" -gt 0 ]; then printf 'command\\t%s\\n' "$(tr '\\0' ' ' < /proc/$pid/cmdline)"; fi
+if [ "\${pid:-0}" -gt 0 ]; then printf 'directory\\t%s\\n' "$(sudo readlink /proc/$pid/cwd)"; fi
 printf 'started\\t%s\\n' "$(sudo journalctl -u ${unit} --since @$((since-20)) -o cat | grep -c '"knowledge_worker_started".*"providerConfigured":true,"storageConfigured":true' || true)"
 printf 'unavailable\\t%s\\n' "$(sudo journalctl -u ${unit} --since @$((since-20)) -o cat | grep -c knowledge_worker_unavailable || true)"
 `
@@ -427,7 +427,7 @@ printf 'unavailable\\t%s\\n' "$(sudo journalctl -u ${unit} --since @$((since-20)
 pid=$(systemctl show -p MainPID --value ${unit})
 printf 'active\\t%s\\n' "$(systemctl is-active ${unit} || true)"
 printf 'restarts\\t%s\\n' "$(systemctl show -p NRestarts --value ${unit})"
-if [ "\${pid:-0}" -gt 0 ]; then printf 'command\\t%s\\n' "$(tr '\\0' ' ' < /proc/$pid/cmdline)"; fi
+if [ "\${pid:-0}" -gt 0 ]; then printf 'directory\\t%s\\n' "$(sudo readlink /proc/$pid/cwd)"; fi
 printf 'health\\t%s\\n' "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:${ports[name]}/api/health)"
 printf 'login\\t%s\\n' "$(curl -s -o /dev/null -w '%{http_code}' -H 'Host: ${hostnames[name]}' -H 'X-Forwarded-Proto: https' http://127.0.0.1:${ports[name]}/login)"
 `
@@ -436,7 +436,9 @@ printf 'login\\t%s\\n' "$(curl -s -o /dev/null -w '%{http_code}' -H 'Host: ${hos
       .split("\n")
       .map((line) => line.split("\t"))
   )
-  const runsRelease = (facts.command ?? "").includes(release)
+  // Next.js renames its process, so the release is read from the working
+  // directory, which each unit sets inside its release.
+  const runsRelease = (facts.directory ?? "").startsWith(`${release}/`)
   const healthy =
     facts.active === "active" &&
     facts.restarts === "0" &&
