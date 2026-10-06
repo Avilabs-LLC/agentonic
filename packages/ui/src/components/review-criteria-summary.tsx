@@ -92,7 +92,7 @@ export function ReviewCriteriaSummary({
                     {edited === null ? "—" : edited ? "Sí" : "No"}
                   </TableCell>
                   <TableCell>{c.notes.trim() ? "Sí" : "No"}</TableCell>
-                  <TableCell>
+                  <TableCell className="whitespace-normal">
                     <CriterionStatus criterion={c} confirmed={confirmed} />
                   </TableCell>
                 </TableRow>
