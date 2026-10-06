@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { agentVersionSummary } from "./agent-versions"
 
 // Read models for the Admin operations screens (architecture §52). Metadata
 // only: the SQL functions return names, states, counts, times and amounts.
@@ -31,11 +32,62 @@ export const operationsAgents = z.array(
         authorizedUntil: time,
       })
       .nullable(),
+    summary: agentVersionSummary,
     lastRunAt: time.nullable(),
     runs7d: count,
   })
 )
 export type OperationsAgent = z.infer<typeof operationsAgents>[number]
+
+// One agent for the Admin agent page (architecture §55).
+export const operationsAgent = z.object({
+  id: z.uuid(),
+  name: z.string(),
+  workspaceId: z.uuid(),
+  workspaceName: z.string(),
+  ownerName: z.string(),
+  createdAt: time,
+  latestVersion: count,
+  tools: z.object({
+    gmail: z.boolean(),
+    web: z.boolean(),
+    collections: count,
+  }),
+  summary: agentVersionSummary,
+  proposals: z.array(
+    z.object({
+      id: z.uuid(),
+      number: count,
+      versionNumber: count,
+      status: z.string(),
+      submittedAt: time,
+      approvalReason: z.string().nullable(),
+      approvalExpiresAt: time.nullable(),
+    })
+  ),
+  deployments: z.array(
+    z.object({
+      id: z.uuid(),
+      submissionId: z.uuid(),
+      environment,
+      status: z.string(),
+      resting: z.boolean(),
+      versionNumber: count,
+      authorizedUntil: time,
+      budgetUsd: usd,
+      spentUsd: usd,
+      createdAt: time,
+      activatedAt: time.nullable(),
+    })
+  ),
+  activity: z.object({
+    lastRunAt: time.nullable(),
+    runs7d: count,
+    failed7d: count,
+    knownUsd30d: usd,
+  }),
+})
+export type OperationsAgentDetail = z.infer<typeof operationsAgent>
 
 export const operationsActivity = z.object({
   runs: z.object({ succeeded: count, failed: count, active: count }),
@@ -51,6 +103,8 @@ export const operationsActivity = z.object({
       resourceId: z.string(),
       outcome: z.string(),
       actor: z.enum(["member", "staff", "system"]),
+      agentId: z.uuid().nullable(),
+      agentName: z.string().nullable(),
     })
   ),
 })
@@ -89,6 +143,7 @@ export const operationsDeployments = z.object({
   deployments: z.array(
     z.object({
       id: z.uuid(),
+      agentId: z.uuid(),
       agentName: z.string(),
       workspaceName: z.string(),
       environment,
@@ -148,6 +203,7 @@ export const operationsCosts = z.object({
   ),
   agents: z.array(
     z.object({
+      agentId: z.uuid().nullable(),
       agentName: z.string(),
       workspaceName: z.string(),
       knownUsd: usd,
