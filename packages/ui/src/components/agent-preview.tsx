@@ -28,6 +28,8 @@ import {
   previewModelName,
   type PreviewModel,
 } from "@agentonic/contracts/preview-models"
+const astraNote = "Astra puede necesitar el límite de US$3,00"
+const astraNoteRestart = "Puedes elegirlo al iniciar otra prueba"
 export function AgentPreview({
   workspaceId,
   agentId,
@@ -206,7 +208,7 @@ export function AgentPreview({
               prueba
             </p>
           ) : (
-            <Field className="w-full sm:w-48">
+            <Field className="w-full sm:w-56">
               <FieldLabel htmlFor="preview-budget">
                 Máximo por prueba
               </FieldLabel>
@@ -261,25 +263,40 @@ export function AgentPreview({
       )}
       <div className="overflow-hidden rounded-lg border bg-card">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b px-6 py-4">
-          <div className="space-y-1">
-            <h2 className="text-xs text-muted-foreground">
-              Conversación de prueba
-            </h2>
-            <ModelConfigurationSelect
-              value={{ model, reasoning }}
-              disabled={busy || waiting}
-              onChange={(choice) => {
-                setModel(choice.model)
-                setReasoning(choice.reasoning)
-              }}
-            />
-            {model === "gpt-6-astra" && (state?.budgetUsd ?? budgetUsd) < 3 && (
-              <p className="max-w-sm text-xs text-muted-foreground">
-                Astra puede necesitar el límite de US$3,00
-                {previewId ? ". Puedes elegirlo al iniciar otra prueba" : ""}.
-              </p>
-            )}
-          </div>
+          <Field className="flex-1">
+            <FieldLabel htmlFor="preview-model">
+              Selecciona un modelo
+            </FieldLabel>
+            <div>
+              <ModelConfigurationSelect
+                id="preview-model"
+                className="min-w-56"
+                value={{ model, reasoning }}
+                disabled={busy || waiting}
+                onChange={(choice) => {
+                  setModel(choice.model)
+                  setReasoning(choice.reasoning)
+                }}
+              />
+            </div>
+            {/* The longest note always reserves its space, so choosing Astra
+                does not move the conversation below. */}
+            <p className="grid text-xs text-muted-foreground">
+              <span
+                aria-hidden="true"
+                className="invisible col-start-1 row-start-1"
+              >
+                {astraNote}. {astraNoteRestart}.
+              </span>
+              <span className="col-start-1 row-start-1">
+                {model === "gpt-6-astra" &&
+                  (state?.budgetUsd ?? budgetUsd) < 3 &&
+                  (previewId
+                    ? `${astraNote}. ${astraNoteRestart}.`
+                    : `${astraNote}.`)}
+              </span>
+            </p>
+          </Field>
           <span className="text-sm text-muted-foreground">
             {previewId
               ? `${state?.turns.length ?? 0} de 10 mensajes`
