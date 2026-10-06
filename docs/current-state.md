@@ -52,7 +52,7 @@ The Admin app has **Revisiones** (submissions, receipts, renewal and activation)
 
 - Hosted beta: hosted web apps, TLS and domains, hosted sign-in URLs, SMTP and invitations, a paid Supabase plan (and transaction pooling once apps run several instances), release packaging, and a deploy workflow. No production build has been verified.
 - Production: a separate project and keys, ongoing operating authorization instead of the 7-day staging limit, budgets per period, backups with a restore drill.
-- Product: Admin Agents and Activity screens, the general connections and tools model (Gmail is feature-specific), external channels, automation, agent memory and Google verification.
+- Product: Admin Agents and Activity screens, external channels, automation, agent memory and Google verification. Chats, Gmail and costs now sit on the general model (architecture §§48–50).
 - Scale: multiple hosts, the 250-agent synthetic load test, and a tested path to 500 agents.
 
 The ordered plan is architecture §37; the owner's audit brief tracks progress. [Outstanding actions](outstanding-actions.md) lists every open item, who acts next and when it counts as done.
@@ -72,6 +72,8 @@ The ordered plan is architecture §37; the owner's audit brief tracks progress. 
 | Knowledge worker lanes and fairness between workspaces                 | §45                  |
 | Release identity per environment; documentation drift test             | §46                  |
 | The deployment controller without root                                 | §47                  |
-| The general model: conversations and runs                              | §48                  |
+| The general model: conversations, runs and messages                    | §48                  |
+| The general model: connections and tool calls                          | §49                  |
+| The general model: usage events and the daily cost summary             | §50                  |
 
-Presentation rules are in the [UI contract](ui/ui-contract.md). The [target schema](schema.dbml) describes 79 tables; 57 exist in the 44 checked-in migrations.
+Presentation rules are in the [UI contract](ui/ui-contract.md). The [target schema](schema.dbml) describes 79 tables; 62 exist in the 46 checked-in migrations.

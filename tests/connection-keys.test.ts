@@ -9,12 +9,7 @@ import {
 } from "../packages/connectors/src/secrets"
 // @ts-expect-error -- plain ESM script without type declarations
 import * as rotation from "../scripts/connection-keys.mjs"
-import {
-  createRagFixture,
-  id,
-  member,
-  w,
-} from "../scripts/rag-benchmark/fixture"
+import { createRagFixture, id, w } from "../scripts/rag-benchmark/fixture"
 
 const oldKey = "a".repeat(64),
   newKey = "b".repeat(64)
@@ -110,6 +105,86 @@ async function gmail(operation: string, payload: Record<string, unknown>) {
 }
 const query = (text: string, values?: unknown[]) => f.sql(text, values)
 
+/** Proposes a Gmail draft from a private preview turn, as the preview worker does. */
+async function proposeDraft(
+  connection: string,
+  invocation: string,
+  ciphertext: string
+) {
+  await f.sql(
+    `INSERT INTO agentonic.code_releases(id,version,template_version_id,git_commit_sha,artifact_sha256,registry_sha256,runtime_contract_version,code_repository_id,artifact_bucket,artifact_key,artifact_size_bytes,published_by_staff_id,execution_manifest)
+    SELECT $1,'gmail-preview',template_version_id,repeat('d',40),repeat('e',64),registry_sha256,runtime_contract_version,code_repository_id,artifact_bucket,'gmail-preview',artifact_size_bytes,published_by_staff_id,'{"previewContract":"1","gmailContract":"1","model":"gpt-4.1-mini-2025-04-14"}' FROM agentonic.code_releases WHERE id=$2`,
+    [id(41), id(40)]
+  )
+  await f.sql(
+    "INSERT INTO agentonic.workspace_code_release_grants(workspace_id,code_release_id,granted_by_staff_id) VALUES($1,$2,$3)",
+    [w, id(41), id(3)]
+  )
+  const operations = ["gmail.drafts.create"]
+  await gmail("permissions", {
+    agentId: id(20),
+    connectionId: connection,
+    operations,
+  })
+  await f.actor()
+  await f.command("draft.save", {
+    agentId: id(20),
+    revision: 0,
+    content: {
+      version: 1,
+      systemPrompt: "Synthetic mailbox assistant for key rotation tests.",
+      skills: [],
+    },
+    requestedAccess: {
+      version: 1,
+      collectionIds: [],
+      tools: [{ connectionId: connection, operations }],
+    },
+  })
+  const candidate = await f.command("candidate.freeze", {
+    agentId: id(20),
+    revision: 1,
+    codeReleaseId: id(41),
+  })
+  const preview = async (
+    operation: string,
+    payload: Record<string, unknown>
+  ) => {
+    await f.actor()
+    return (
+      await f.db.query<{ r: Record<string, unknown> }>(
+        "SELECT agentonic.preview_command($1,$2::jsonb) r",
+        [operation, JSON.stringify({ agentId: id(20), ...payload })]
+      )
+    ).rows[0]!.r
+  }
+  const started = await preview("start", {
+    candidateId: candidate.id,
+    enableTools: true,
+  })
+  await preview("turn", {
+    previewId: started.id,
+    query: "Draft a synthetic note",
+    requestKey: id(703),
+  })
+  const job = (await f.claim()) as { id: string; token: string }
+  await f.db.exec("RESET ROLE; SET LOCAL ROLE agentonic_worker")
+  await f.db.query(
+    "SELECT agentonic.gmail_preview_worker('gmail-propose',$1,$2,$3::jsonb)",
+    [
+      job.id,
+      job.token,
+      JSON.stringify({
+        connectionId: connection,
+        operation: "gmail.drafts.create",
+        id: invocation,
+        argumentsCiphertext: ciphertext,
+        hash: "e".repeat(64),
+      }),
+    ]
+  )
+}
+
 it("re-seals every stored Gmail secret with the active key and leaves nothing for the old one", async () => {
   // A connection and an OAuth start sealed before keys had names, and a
   // proposal sealed with the old key's name.
@@ -139,19 +214,11 @@ it("re-seals every stored Gmail secret with the active key and leaves nothing fo
     state: pending,
     verifier: sealV1("verifier-2", `oauth:${pending}`, oldKey),
   })
-  await f.sql(
-    `INSERT INTO agentonic.gmail_invocations(id,workspace_id,agent_id,connection_id,owner_member_id,turn_id,conversation_id,operation,arguments_ciphertext,arguments_sha256)
- VALUES($1,$2,$3,$4,$5,$6,$7,'gmail.drafts.create',$8,repeat('e',64))`,
-    [
-      invocation,
-      w,
-      id(20),
-      connection,
-      member,
-      id(701),
-      id(702),
-      seal({ to: ["x@example.invalid"] }, `invocation:${invocation}`, oldKey),
-    ]
+  // A draft proposal from a private preview turn, sealed with the old key's name.
+  await proposeDraft(
+    connection,
+    invocation,
+    seal({ to: ["x@example.invalid"] }, `invocation:${invocation}`, oldKey)
   )
   expect(await rotation.keyUsage(query)).toEqual([
     { kind: "connection", key: "v1", count: 1 },

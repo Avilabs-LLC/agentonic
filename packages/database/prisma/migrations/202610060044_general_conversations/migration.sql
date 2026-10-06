@@ -9,8 +9,9 @@ BEGIN;
 --   agent_previews.id        = conversations.id
 --   a preview turn's background_jobs.id = agent_runs.id
 -- Triggers keep both in step in the same transaction, including erasure: when a
--- chat's text is scrubbed, its messages are redacted; when a preview turn is
--- deleted, its run and messages go with it. Existing command functions are
+-- chat's text is scrubbed, its messages are redacted; when a turn is deleted, its
+-- messages go with it. Runs stay: they are the record of work that tool calls
+-- and costs refer to, and they hold no text. Existing command functions are
 -- unchanged. Deviations from schema.dbml: agent_runs.deployment_id is null for
 -- preview turns (previews run without a deployment), and the max_* limits are
 -- null because the broker sets them per turn when the turn runs.
@@ -110,6 +111,12 @@ END $$;
 CREATE FUNCTION agentonic.run_status(status text) RETURNS text LANGUAGE sql IMMUTABLE SET search_path='' AS $$
  SELECT CASE status WHEN 'queued' THEN 'queued' WHEN 'running' THEN 'running' WHEN 'succeeded' THEN 'succeeded' WHEN 'failed' THEN 'failed' ELSE 'cancelled' END
 $$;
+-- A deleted turn: its messages go, its run stays as the record of work.
+CREATE FUNCTION agentonic.run_ended(run uuid) RETURNS void LANGUAGE sql SECURITY DEFINER SET search_path='' AS $$
+ DELETE FROM agentonic.messages WHERE run_id=run;
+ UPDATE agentonic.agent_runs SET status=CASE WHEN status IN ('queued','running','awaiting_approval') THEN 'cancelled' ELSE status END,
+  finished_at=coalesce(finished_at,clock_timestamp()) WHERE id=run;
+$$;
 CREATE FUNCTION agentonic.redacted_content() RETURNS jsonb LANGUAGE sql IMMUTABLE SET search_path='' AS $$ SELECT '{"version":"1","redacted":true}'::jsonb $$;
 
 -- Staging chats -----------------------------------------------------------------
@@ -133,7 +140,7 @@ CREATE TRIGGER general_conversation_sync AFTER UPDATE OF title,expires_at,closed
 CREATE FUNCTION agentonic.staging_turn_spine() RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path='' AS $$
 DECLARE c agentonic.conversations; d agentonic.deployments; prompt text;
 BEGIN
- IF TG_OP='DELETE' THEN DELETE FROM agentonic.agent_runs WHERE id=OLD.id; RETURN OLD; END IF;
+ IF TG_OP='DELETE' THEN PERFORM agentonic.run_ended(OLD.id); RETURN OLD; END IF;
  IF TG_OP='INSERT' THEN
   SELECT * INTO c FROM agentonic.conversations WHERE id=NEW.conversation_id;
   SELECT dep.* INTO d FROM agentonic.staging_conversations sc JOIN agentonic.deployments dep ON dep.id=sc.deployment_id WHERE sc.id=NEW.conversation_id;
@@ -186,7 +193,7 @@ CREATE TRIGGER general_conversation_sync AFTER UPDATE OF status,expires_at OR DE
 CREATE FUNCTION agentonic.preview_turn_spine() RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path='' AS $$
 DECLARE p agentonic.agent_previews; c agentonic.conversations; prompt text;
 BEGIN
- IF TG_OP='DELETE' THEN DELETE FROM agentonic.agent_runs WHERE id=OLD.id; RETURN OLD; END IF;
+ IF TG_OP='DELETE' THEN PERFORM agentonic.run_ended(OLD.id); RETURN OLD; END IF;
  IF TG_OP='INSERT' THEN
   SELECT * INTO p FROM agentonic.agent_previews WHERE id=NEW.preview_id;
   SELECT * INTO c FROM agentonic.conversations WHERE id=p.id;
@@ -260,7 +267,7 @@ ALTER TABLE agentonic.staging_conversations ADD CONSTRAINT staging_conversations
 ALTER TABLE agentonic.staging_turns ADD CONSTRAINT staging_turns_general FOREIGN KEY(workspace_id,id) REFERENCES agentonic.agent_runs(workspace_id,id);
 ALTER TABLE agentonic.agent_previews ADD CONSTRAINT agent_previews_general FOREIGN KEY(workspace_id,id) REFERENCES agentonic.conversations(workspace_id,id);
 
-REVOKE ALL ON FUNCTION agentonic.member_contact(uuid,uuid),agentonic.panel_endpoint(uuid,uuid,text),agentonic.run_status(text),agentonic.redacted_content(),
+REVOKE ALL ON FUNCTION agentonic.member_contact(uuid,uuid),agentonic.panel_endpoint(uuid,uuid,text),agentonic.run_status(text),agentonic.run_ended(uuid),agentonic.redacted_content(),
  agentonic.staging_conversation_spine(),agentonic.staging_turn_spine(),agentonic.preview_spine(),agentonic.preview_turn_spine()
  FROM PUBLIC,anon,authenticated,service_role,agentonic_admin,agentonic_customer,agentonic_worker;
 COMMIT;

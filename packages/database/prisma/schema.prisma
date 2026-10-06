@@ -1337,3 +1337,125 @@ model Message {
  @@map("messages")
  @@schema("agentonic")
 }
+// The general model: connections and tool calls (migration 45, architecture §49).
+model Connection {
+ id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+ workspaceId String @map("workspace_id") @db.Uuid
+ name String
+ provider String
+ kind String
+ externalAccountId String? @map("external_account_id")
+ ownerMemberId String @map("owner_member_id") @db.Uuid
+ configuration Json @default("{}")
+ status String @default("active")
+ credentialExpiresAt DateTime? @map("credential_expires_at") @db.Timestamptz
+ lastVerifiedAt DateTime? @map("last_verified_at") @db.Timestamptz
+ revokedAt DateTime? @map("revoked_at") @db.Timestamptz
+ secretReference String? @map("secret_reference")
+ environment String
+ createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+ @@unique([workspaceId,id])
+ @@unique([workspaceId,environment,id])
+ @@map("connections")
+ @@schema("agentonic")
+}
+model AgentConnectionGrant {
+ id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+ workspaceId String @map("workspace_id") @db.Uuid
+ agentId String @map("agent_id") @db.Uuid
+ connectionId String @map("connection_id") @db.Uuid
+ environment String
+ allowedOperations Json @map("allowed_operations")
+ grantedByMemberId String @map("granted_by_member_id") @db.Uuid
+ expiresAt DateTime? @map("expires_at") @db.Timestamptz
+ revokedAt DateTime? @map("revoked_at") @db.Timestamptz
+ approvedReviewDecisionId String? @map("approved_review_decision_id") @db.Uuid
+ activatedByStaffId String? @map("activated_by_staff_id") @db.Uuid
+ approvedDecisionKind String @default("approved") @map("approved_decision_kind")
+ createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+ @@unique([workspaceId,id])
+ @@unique([workspaceId,agentId,connectionId,environment])
+ @@map("agent_connection_grants")
+ @@schema("agentonic")
+}
+model ToolInvocation {
+ id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+ workspaceId String @map("workspace_id") @db.Uuid
+ runId String @map("run_id") @db.Uuid
+ codeReleaseId String @map("code_release_id") @db.Uuid
+ configurationToolId String @map("configuration_tool_id") @db.Uuid
+ invocationKey String @map("invocation_key")
+ status String @default("requested")
+ argumentsSha256 String @map("arguments_sha256")
+ redactedArguments Json? @map("redacted_arguments")
+ redactedResult Json? @map("redacted_result")
+ policySnapshot Json @map("policy_snapshot")
+ externalIdempotencyKey String? @map("external_idempotency_key")
+ startedAt DateTime? @map("started_at") @db.Timestamptz
+ finishedAt DateTime? @map("finished_at") @db.Timestamptz
+ errorCode String? @map("error_code")
+ agentId String @map("agent_id") @db.Uuid
+ configurationReleaseId String @map("configuration_release_id") @db.Uuid
+ standingAuthorizationId String? @map("standing_authorization_id") @db.Uuid
+ connectionId String? @map("connection_id") @db.Uuid
+ environment String
+ authorizationKind String @default("none") @map("authorization_kind")
+ codeToolId String @map("code_tool_id") @db.Uuid
+ argumentsObjectId String? @map("arguments_object_id") @db.Uuid
+ createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+ @@unique([workspaceId,id])
+ @@unique([workspaceId,runId,invocationKey])
+ @@unique([workspaceId,id,argumentsSha256])
+ @@index([workspaceId,runId],map:"tool_invocations_run")
+ @@map("tool_invocations")
+ @@schema("agentonic")
+}
+model ToolApproval {
+ id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+ workspaceId String @map("workspace_id") @db.Uuid
+ toolInvocationId String @map("tool_invocation_id") @db.Uuid
+ requestedContactId String @map("requested_contact_id") @db.Uuid
+ argumentsSha256 String @map("arguments_sha256")
+ decision String @default("pending")
+ decidedByContactId String? @map("decided_by_contact_id") @db.Uuid
+ decidedAt DateTime? @map("decided_at") @db.Timestamptz
+ expiresAt DateTime @map("expires_at") @db.Timestamptz
+ consumedAt DateTime? @map("consumed_at") @db.Timestamptz
+ createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+ @@unique([workspaceId,id])
+ @@unique([workspaceId,toolInvocationId])
+ @@map("tool_approvals")
+ @@schema("agentonic")
+}
+// The general model: usage events fed by the provider ledger (migration 46, architecture §50).
+model UsageEvent {
+ id String @id @db.Uuid
+ workspaceId String @map("workspace_id") @db.Uuid
+ agentId String? @map("agent_id") @db.Uuid
+ runId String? @map("run_id") @db.Uuid
+ ingestionJobId String? @map("ingestion_job_id") @db.Uuid
+ source String
+ sourceId String? @map("source_id") @db.Uuid
+ provider String
+ modelIdentifier String? @map("model_identifier")
+ providerEventKey String @map("provider_event_key")
+ providerRequestId String? @map("provider_request_id")
+ pricingSnapshot Json @map("pricing_snapshot")
+ occurredAt DateTime @map("occurred_at") @db.Timestamptz
+ quantity Decimal? @db.Decimal(24,8)
+ providerCostUsd Decimal? @map("provider_cost_usd") @db.Decimal(20,8)
+ connectionId String? @map("connection_id") @db.Uuid
+ measurementStatus String @map("measurement_status")
+ costBasis String @map("cost_basis")
+ providerOperationKey String @map("provider_operation_key")
+ pricingEvidence Json? @map("pricing_evidence")
+ providerAggregateEvidence Json? @map("provider_aggregate_evidence")
+ meter String
+ createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+ @@unique([workspaceId,id])
+ @@unique([provider,providerOperationKey,meter])
+ @@index([workspaceId,occurredAt],map:"usage_events_workspace_time")
+ @@index([workspaceId,agentId,occurredAt],map:"usage_events_agent_time")
+ @@map("usage_events")
+ @@schema("agentonic")
+}

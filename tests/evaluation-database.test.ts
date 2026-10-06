@@ -2430,6 +2430,8 @@ async function modelReview() {
     "202610050042_worker_storage",
     "202610050043_worker_lanes",
     "202610060044_general_conversations",
+    "202610060045_general_connections",
+    "202610060046_usage_events",
   ])
     await db.exec(
       readFileSync(
@@ -3490,7 +3492,7 @@ it("keeps the general conversation model in step with a staging chat", async () 
       )
     ).rows
     const messages = (
-      await db.query(
+      await db.query<{ content: unknown; redacted: boolean }>(
         "SELECT role,sequence_number::int seq,content,redacted_at IS NOT NULL redacted FROM agentonic.messages WHERE conversation_id=$1 ORDER BY sequence_number",
         [c.id]
       )
@@ -3559,6 +3561,34 @@ it("keeps the general conversation model in step with a staging chat", async () 
   ])
   // The general row is the turn's identity: it cannot be removed underneath it.
   await rejectsSql("DELETE FROM agentonic.agent_runs WHERE id=$1", [leased.id])
+})
+
+it("attributes a staging turn's spend to its run", async () => {
+  const { deploymentId: dep, leased } = await servingOnBroker()
+  await sql(
+    "UPDATE agentonic.retrieval_provider_budgets SET cap_microusd=10000000 WHERE provider='voyage'"
+  )
+  await work(dep, serviceSecret, "reserve", leased, {
+    id: id(960),
+    provider: "voyage",
+    model: "voyage-4",
+    microusd: 500,
+  })
+  await work(dep, serviceSecret, "settle", leased, {
+    id: id(960),
+    tokens: 10,
+    microusd: 200,
+  })
+  expect(
+    (
+      await sql(
+        "SELECT source,run_id,agent_id,provider_cost_usd::text cost FROM agentonic.usage_events WHERE id=$1",
+        [id(960)]
+      )
+    ).rows
+  ).toEqual([
+    { source: "run", run_id: leased.id, agent_id: a, cost: "0.00020000" },
+  ])
 })
 
 it("restarts a stopped copy of a drop-in broker on the current broker", async () => {
