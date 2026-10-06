@@ -1,6 +1,6 @@
 # Agentonic: current state
 
-**As of 5 October 2026 · platform v0.14.0 · nonproduction only.** A short summary of what runs where, what works and what doesn't exist yet. [The architecture record](agentonic-architecture.md) keeps the full, dated history. If the two disagree about the present, fix this page. Update it whenever a change alters what runs where.
+**As of 6 October 2026 · platform v0.14.0 · nonproduction only.** A short summary of what runs where, what works and what doesn't exist yet. [The architecture record](agentonic-architecture.md) keeps the full, dated history. If the two disagree about the present, fix this page. Update it whenever a change alters what runs where.
 
 ## What runs where
 
@@ -28,7 +28,7 @@ The Admin app has **Revisiones** (submissions, receipts, renewal and activation)
 
 ## Operations
 
-- **Verification.** Hosts and evaluators stay trusted for 7 days. A launchd job on the Mac runs `pnpm staging:reverify --renew --publish` at 09:00 and 21:00. It checks the installed files and services over SSH, renews only what passes, and renews anything within 2 days of expiry. Run `pnpm staging:reverify` (read-only) for live expiry dates and installed releases. The local deployment host has been expired since 26 September on purpose; run `install-staging --local` before using local staging chats.
+- **Verification.** Hosts and evaluators stay trusted for 7 days. A launchd job on the Mac runs `pnpm staging:reverify --renew --publish` at 09:00 and 21:00. It checks the installed files and services over SSH, renews only what passes, and renews anything within 2 days of expiry. Run `pnpm staging:reverify` (read-only) for live expiry dates and what each environment runs: its worker release and each runtime's version and source commit. The local deployment host has been expired since 26 September on purpose; run `install-staging --local` before using local staging chats.
 - **Alerts.** A GitHub workflow opens one issue assigned to the owner when:
   - a check fails;
   - a registration expires within 24 hours;
@@ -70,5 +70,6 @@ The ordered plan is architecture §37; the owner's audit brief tracks progress. 
 | Resting agents, the database gateway and the connection budget         | §43                  |
 | Where secrets live; key rotation; agent services without secrets       | §44                  |
 | Knowledge worker lanes and fairness between workspaces                 | §45                  |
+| Release identity per environment; documentation drift test             | §46                  |
 
 Presentation rules are in the [UI contract](ui/ui-contract.md). The [target schema](schema.dbml) describes 79 tables; 53 exist in the 43 checked-in migrations.

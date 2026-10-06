@@ -669,6 +669,40 @@ export function machineNotes(facts: Facts, now: Date): string[] {
   return notes
 }
 
+/** A runtime release as the catalog records it: version and the commit it was built from. */
+export type RuntimeRelease = { sha256: string; version: string; commit: string }
+/**
+ * What each registration runs: its worker releases and the runtime releases it
+ * serves, by version and source commit, so the report shows which build each
+ * environment runs. A runtime missing from the catalog is shown by its hash.
+ */
+export function releaseNotes(
+  registrations: Record<
+    string,
+    { codeSha256: string; brokers?: string[]; runtimes: string[] } | null
+  >,
+  releases: RuntimeRelease[]
+): string[] {
+  const named = (sha256: string) => {
+    const release = releases.find((r) => r.sha256 === sha256)
+    if (!release) return sha256.slice(0, 12)
+    const commit = release.commit.slice(0, 7)
+    return release.version.includes(commit)
+      ? release.version
+      : `${release.version} (${commit})`
+  }
+  return Object.entries(registrations).flatMap(([target, registration]) => {
+    if (!registration) return []
+    const workers = registration.brokers?.length
+      ? registration.brokers
+      : [registration.codeSha256]
+    const runtimes = registration.runtimes.map(named).sort()
+    return [
+      `${target} runs worker ${workers.map((w) => w.slice(0, 8)).join(", ")}; runtimes ${runtimes.length ? runtimes.join(", ") : "none"}.`,
+    ]
+  })
+}
+
 // ---------------------------------------------------------------------------
 // VM backups (Azure Backup, read through the Azure CLI on the Mac)
 

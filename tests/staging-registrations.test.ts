@@ -21,6 +21,7 @@ import {
   healthProbes,
   issueBody,
   machineNotes,
+  releaseNotes,
   parseFacts,
   planRenewal,
   problems,
@@ -806,5 +807,41 @@ describe("agent service templates", () => {
       expect(runtime).toContain("LoadCredential=ca:")
       expect(runtime).not.toContain("PrivateNetwork")
     }
+  })
+})
+
+describe("what each environment runs", () => {
+  const a = "a".repeat(64),
+    b = "b".repeat(64),
+    unknown = "c".repeat(64)
+  const releases = [
+    {
+      sha256: a,
+      version: "0.3.0-preview-f272ddaa",
+      commit: "f272ddaa" + "0".repeat(32),
+    },
+    { sha256: b, version: "0.5.0", commit: "1234567" + "0".repeat(33) },
+  ]
+  it("names worker releases and runtimes by version and source commit", () => {
+    expect(
+      releaseNotes(
+        {
+          "azure-host": {
+            codeSha256: "e".repeat(64),
+            brokers: ["58d9a1f3" + "0".repeat(56), "2af81262" + "0".repeat(56)],
+            runtimes: [b, a],
+          },
+          "azure-evaluator": {
+            codeSha256: "c0fdd72d" + "0".repeat(56),
+            runtimes: [unknown],
+          },
+          "local-host": null,
+        },
+        releases
+      )
+    ).toEqual([
+      "azure-host runs worker 58d9a1f3, 2af81262; runtimes 0.3.0-preview-f272ddaa, 0.5.0 (1234567).",
+      `azure-evaluator runs worker c0fdd72d; runtimes ${unknown.slice(0, 12)}.`,
+    ])
   })
 })
