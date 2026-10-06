@@ -18,7 +18,7 @@ On 5 October the nonproduction data was reset: no agents, documents or deploymen
 1. A customer creates an agent, writes instructions and skills, and uploads private documents (PDF, text, Markdown) that are indexed for retrieval.
 2. They freeze a version and try it privately, including Gmail reading and web research.
 3. They submit it. AI drafts evaluation criteria, which the customer confirms.
-4. The version is evaluated on the VM, with several models if requested. Routine versions are approved automatically; versions with tools need staff approval.
+4. The version is evaluated on the VM, with several models if requested. Versions with Gmail or web tools also get platform tool cases run against synthetic fixtures, once the evaluator that supports them is installed. Routine versions are approved automatically; versions with tools need staff approval.
 5. The customer authorizes private staging use (up to 7 days and US$1), and staff activate it.
 6. The customer chats with the activated agent in **Chats**. Only that customer can read the conversation.
 
@@ -75,5 +75,6 @@ The ordered plan is architecture §37; the owner's audit brief tracks progress. 
 | The general model: conversations, runs and messages                    | §48                  |
 | The general model: connections and tool calls                          | §49                  |
 | The general model: usage events and the daily cost summary             | §50                  |
+| Evaluations that test Gmail and web tools against fixtures             | §51                  |
 
-Presentation rules are in the [UI contract](ui/ui-contract.md). The [target schema](schema.dbml) describes 79 tables; 62 exist in the 46 checked-in migrations.
+Presentation rules are in the [UI contract](ui/ui-contract.md). The [target schema](schema.dbml) describes 79 tables; 62 exist in the 47 checked-in migrations.

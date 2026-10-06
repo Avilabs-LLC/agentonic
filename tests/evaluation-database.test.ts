@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs"
 import { PGlite } from "@electric-sql/pglite"
-import { beforeEach, afterEach, expect, it, vi } from "vitest"
+import { beforeEach, afterEach, describe, expect, it, vi } from "vitest"
 const submissionMocks = vi.hoisted(() => ({
   identity: vi.fn(),
   auth: vi.fn(),
@@ -2432,6 +2432,7 @@ async function modelReview() {
     "202610060044_general_conversations",
     "202610060045_general_connections",
     "202610060046_usage_events",
+    "202610060047_evaluation_tool_cases",
   ])
     await db.exec(
       readFileSync(
@@ -2462,6 +2463,73 @@ async function modelReview() {
   ).toMatchObject({ ok: true })
   return p
 }
+describe("platform tool cases", () => {
+  it("adds them, with grader version 4, only while the evaluator can answer tools from fixtures", async () => {
+    requested.tools = [
+      { capability: "web", operations: ["web.search", "web.read"] },
+    ]
+    const p = await modelReview()
+    const run = async (requestId: string, revision: number) => {
+      await actor()
+      expect(
+        await flow("run", {
+          preparationId: p.preparationId,
+          revision,
+          models: [{ model: "gpt-5.4-mini", reasoning: "medium" }],
+          budgetUsd: 3,
+          consent: true,
+          requestId,
+        })
+      ).toMatchObject({ ok: true })
+      return (
+        await sql(
+          "SELECT (SELECT jsonb_agg(c->>'key') FROM jsonb_array_elements(dataset_snapshot) c) keys,grader_snapshot->>'version' grader FROM agentonic.evaluation_runs WHERE preparation_id=$1 ORDER BY created_at DESC LIMIT 1",
+          [p.preparationId]
+        )
+      ).rows[0] as { keys: string[]; grader: string }
+    }
+    // The registered evaluator cannot answer tools from fixtures yet: as before.
+    const before = await run(id(994), 1)
+    expect(before.grader).toBe("grounded-review-v3")
+    expect(before.keys).not.toContain("platform-web-injection")
+    // Once it can, a new run also tests the web tool.
+    await evalCommand("cancel", {
+      evaluationId: (
+        (
+          await sql(
+            "SELECT id FROM agentonic.evaluation_runs WHERE preparation_id=$1",
+            [p.preparationId]
+          )
+        ).rows[0] as { id: string }
+      ).id,
+    }).catch(() => null)
+    // A new evaluator release that answers tools from fixtures replaces the old one.
+    await sql(
+      "UPDATE agentonic.evaluation_workers SET retired_at=clock_timestamp() WHERE database_role='agentonic_eval_azure' AND retired_at IS NULL"
+    )
+    await sql(
+      "WITH w AS (INSERT INTO agentonic.evaluation_workers(database_role,environment,worker_sha256,verified_at,verification) VALUES('agentonic_eval_azure','azure_staging',repeat('d',64),now(),'{\"reviewProtocol\":3,\"toolFixtures\":1,\"isolation\":true,\"recovery\":true,\"artifactIntegrity\":true}') RETURNING id) INSERT INTO agentonic.evaluation_worker_runtimes(worker_id,runtime_sha256) SELECT id,repeat('b',64) FROM w"
+    )
+    await sql(
+      "UPDATE agentonic.evaluation_runs SET status='error',lease_token=NULL,lease_until=NULL WHERE preparation_id=$1 AND status IN ('queued','running')",
+      [p.preparationId]
+    )
+    await sql(
+      "UPDATE agentonic.evaluation_preparations SET status='criteria_ready' WHERE id=$1",
+      [p.preparationId]
+    )
+    const after = await run(id(995), 1)
+    expect(after.grader).toBe("grounded-review-v4")
+    expect(after.keys.slice(-1)).toEqual(["platform-web-injection"])
+    // The evaluator reads a case's fixtures under its lease: none for a business case.
+    const job = (await evalClaim())!
+    expect(await execute(job, "fixtures")).toEqual({ fixtures: null })
+    await expect(
+      execute({ ...job, token: id(996) }, "fixtures")
+    ).rejects.toThrow()
+  })
+})
+
 it("model batches separate confirmation from paid runs, enforce scope and preserve repeated history", async () => {
   const p = await modelReview()
   expect(

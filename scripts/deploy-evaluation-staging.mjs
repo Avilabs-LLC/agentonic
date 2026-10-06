@@ -235,6 +235,8 @@ systemctl is-active agentonic-evaluator-staging.service
     verifiedAt: new Date().toISOString(),
     verification: {
       reviewProtocol: 3,
+      // Answers platform tool cases' Gmail and web calls from fixtures (architecture §51).
+      toolFixtures: 1,
       isolation: true,
       recovery: true,
       artifactIntegrity: true,
