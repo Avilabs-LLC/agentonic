@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url"
 import type { NextConfig } from "next"
 import { customerDevOrigins } from "./dev-origin"
 
@@ -6,6 +7,10 @@ const config: NextConfig = {
     process.env.NODE_ENV,
     process.env.AGENTONIC_CUSTOMER_DEV_ORIGIN
   ),
+  // Releases carry a self-contained server traced from the repository root
+  // (architecture §53); `next dev` ignores both settings.
+  output: "standalone",
+  outputFileTracingRoot: fileURLToPath(new URL("../..", import.meta.url)),
   transpilePackages: [
     "@workspace/ui",
     "@agentonic/contracts",

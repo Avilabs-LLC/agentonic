@@ -1,0 +1,86 @@
+name: Release
+# Builds the platform release on a clean runner (architecture §53): both apps'
+# standalone servers and the knowledge worker, with a manifest naming every
+# file. The installer checks that manifest on the VM before installing.
+# Pull requests that touch what ships build, pack and smoke-test it without
+# publishing. A manual run on main also runs the repository checks first and
+# publishes the files as a private GitHub release named after the commit.
+on:
+  pull_request:
+    paths:
+      - "apps/**"
+      - "packages/**"
+      - "pnpm-lock.yaml"
+      - "package.json"
+      - "scripts/package-platform.mjs"
+      - "scripts/platform-tree.mjs"
+      - "scripts/smoke-platform.mjs"
+      - ".github/workflows/release.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    permissions:
+      contents: write
+    steps:
+      - name: Publish only from main
+        if: github.event_name == 'workflow_dispatch'
+        run: test "$GITHUB_REF" = refs/heads/main
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.21.0
+      # The VM runs this Node.js release (scripts/deploy-evaluation-staging.mjs).
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.23.2
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm db:generate
+      - name: Repository checks
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          pnpm db:validate
+          pnpm version:check
+          pnpm typecheck
+          pnpm lint
+          pnpm test
+          pnpm skeletons:check
+      - name: Build both apps
+        env:
+          NEXT_TELEMETRY_DISABLED: "1"
+        run: |
+          pnpm --filter @agentonic/admin build
+          pnpm --filter @agentonic/customer build
+      - run: node scripts/package-platform.mjs
+      - run: node scripts/smoke-platform.mjs dist/platform/platform.tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: platform-${{ github.sha }}
+          path: |
+            dist/platform/platform.tar.gz
+            dist/platform/manifest.json
+            dist/platform/release.json
+          retention-days: ${{ github.event_name == 'pull_request' && 7 || 30 }}
+      - name: Publish the release
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          id=$(node -p 'require("./dist/platform/release.json").releaseId')
+          version=$(node -p 'require("./package.json").version')
+          tag="platform-${version}-${GITHUB_SHA::12}"
+          gh release create "$tag" \
+            dist/platform/platform.tar.gz \
+            dist/platform/manifest.json \
+            dist/platform/release.json \
+            --target "$GITHUB_SHA" \
+            --title "Platform ${version} (${GITHUB_SHA::12})" \
+            --notes "Release ${id} built from ${GITHUB_SHA} by run ${GITHUB_RUN_ID}. Install with \`pnpm platform:install --azure --release ${tag}\`." \
+            --prerelease

@@ -1,4 +1,6 @@
 import type { Metadata } from "next"
+import { headers } from "next/headers"
+import { nonceOf } from "@agentonic/server/security"
 import { Figtree } from "next/font/google"
 import "@workspace/ui/globals.css"
 import { Providers } from "@workspace/ui/components/providers"
@@ -8,12 +10,18 @@ export const metadata: Metadata = {
   description: "Administración de agentes y operaciones.",
   robots: { index: false, follow: false },
 }
-export default function Layout({ children }: { children: React.ReactNode }) {
+export default async function Layout({
+  children,
+}: {
+  children: React.ReactNode
+}) {
+  // The theme script runs before hydration, so it carries the page nonce.
+  const nonce = nonceOf((await headers()).get("content-security-policy"))
   return (
     <html lang="es-VE" suppressHydrationWarning className={figtree.variable}>
       {/* Browser extensions can inject body attributes before hydration. */}
       <body suppressHydrationWarning className="font-sans antialiased">
-        <Providers>{children}</Providers>
+        <Providers nonce={nonce}>{children}</Providers>
       </body>
     </html>
   )
