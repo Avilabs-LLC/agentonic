@@ -1,6 +1,6 @@
 # Agentonic — architecture and implementation decisions
 
-**Status:** accepted direction. Implemented in nonproduction: authoring, knowledge retrieval, automatic review, and private staging deployment and chat (§§30–36); Gmail and public-web tools (§§38–39); and, from §40 onward, the runtime engine, side-by-side upgrades and the operational hardening that followed. Hosted platform and production operation are pending. **What runs today:** [current-state.md](current-state.md). **Open work:** [outstanding-actions.md](outstanding-actions.md). · **Decision date:** 2026-09-13 · **Owner:** Agentonic founder
+**Status:** accepted direction. Implemented in nonproduction: authoring, knowledge retrieval, automatic review, and private staging deployment and chat (§§30–36); Gmail and public-web tools (§§38–39); and, from §40 onward, the runtime engine, side-by-side upgrades and the operational hardening that followed. Since 6 October both apps and the knowledge worker are hosted on `vm-agents-01` for nonproduction (§53); production operation is pending. **What runs today:** [current-state.md](current-state.md). **Open work:** [outstanding-actions.md](outstanding-actions.md). · **Decision date:** 2026-09-13 · **Owner:** Agentonic founder
 
 This is the authoritative architecture decision record for the initial Agentonic platform. It records the owner's accepted choices and the implementation judgment delegated to Codex for scope, operational details and corrections. Its authoritative schema companion is [schema.dbml](schema.dbml).
 
@@ -16,6 +16,7 @@ This record and its reconciled DBML supersede the earlier Claude and Codex propo
 | §§36–39: agent services holding the database password and provider keys | §43 (one gateway per host holds the database connections) and §44 (it also holds every provider key; agent services hold none) |
 | §§30–36: one knowledge worker loop for every job | §45: one lane per kind of work, shared fairly between workspaces |
 | §43: the connection budget of 18 | §45: 19, after the worker's pool grew to 4 |
+| §§31, 37.1: the web apps and the knowledge worker run only on the owner's Mac | §53: both apps and the worker run on `vm-agents-01` behind TLS on their own names; the Mac runs nothing for the platform |
 
 ## 1. Product and launch boundary
 
@@ -1587,3 +1588,22 @@ The database CA reaches the apps and worker as a systemd credential. The three n
 **Firewall.** The VM's network security group opens 80 and 443 to everyone and SSH only to the owner's address. The rule that opened SSH to the internet was removed on 6 October with the owner's agreement (part of C4).
 
 **Tests.** The release tree checker covers changed, missing and unexpected files, changed links, and links that leave the release. The proxy tests cover the nonce policy on production pages, refreshed cookies forwarded to the page, the API exemption and development without CSP. Other tests cover the units' invariants, the Caddyfile, host-only secure cookies, and the hosted services in the health report. CI builds, packs and smoke-tests every change that ships.
+
+**Installed and certified (C8, C10, C11, C18), 6 October.**
+
+- **Release:** `platform-0.15.0-4a66fdcabc34`, release `e89ca805`, built by the Release workflow from `main` `4a66fdc`.
+- **Install:** on the first attempt, the worker passed its gate and the customer app answered `/api/health` and `/login`. The gate still failed, because Next.js renames its process and the release check read the command line. The installer restored both moved services as designed. The check now reads the working directory (PR #42), and the second attempt passed every gate. Caddy got Let's Encrypt certificates for both names on first use, and `pnpm hosted:check` passes.
+- **The round trip,** with no Agentonic process on the Mac: the dev servers were stopped, the Mac's knowledge worker was stopped, and the Mac held no database connection (checked with `lsof` throughout). It was driven through the hosted names in a browser:
+  1. A synthetic agent and two synthetic Markdown documents. The first was ingested by the Mac's worker, which was found still running and then stopped. The second, ingest job `f08ac5e6`, was ingested by the VM worker in 2.6 s, with its own Storage account and Voyage.
+  2. A frozen version, previewed on the VM worker's preview lane (run `6ae22aeb`). The answer came from the VM-ingested document.
+  3. Submission. The VM evaluator drafted five criteria (`8713ad61`), which the customer confirmed. The evaluation (`9c883b75`, GPT-5.4 mini) passed 7/7.
+  4. Automatic approval, the customer's staging authorization, and staff activation in the hosted Admin. The VM controller started agent service `1871a8f9` on worker `f7deae1f`, which rested after one idle minute.
+  5. A chat message woke it at 13:11:44 and was answered from the VM-ingested document. It rested at 13:21:49, ten minutes after the reply. A second message woke it at 13:23:04 and was answered too (N1). Every provider call went through the gateway; the agent service holds no key and has no network.
+- **Spend:** US$0.0245 in all: US$0.0049 for the preview and the two chat turns, US$0.0016 for the criteria, US$0.0180 for the evaluation, and under US$0.0001 for ingestion. Every usage event is measured; none is unknown.
+- **Visual checks:** the hosted login, customer pages and Admin **Revisiones** and **Despliegues** rendered with the nonce policy, and the browser console reported nothing blocked. One defect was found: the header said "Desarrollo" on the hosted names (fixed in PR #42).
+- **Upgrade and rollback (C16):** with the agent deployed and both apps in use:
+  - an upgrade to `platform-0.15.0-654b81f23bea` (release `de2c4a52`, with the PR #42 fixes) passed every gate in 48 s;
+  - `--rollback` returned all three services to `e89ca805`, each gate passing;
+  - an upgrade back to `de2c4a52` passed again.
+
+  Both releases stayed on disk, and each switch was checked from the processes' working directories. The hosted check passed afterwards, and the browser sessions survived all three switches. The live release is `de2c4a52`.
