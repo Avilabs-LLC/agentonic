@@ -72,5 +72,6 @@ The ordered plan is architecture §37; the owner's audit brief tracks progress. 
 | Knowledge worker lanes and fairness between workspaces                 | §45                  |
 | Release identity per environment; documentation drift test             | §46                  |
 | The deployment controller without root                                 | §47                  |
+| The general model: conversations and runs                              | §48                  |
 
-Presentation rules are in the [UI contract](ui/ui-contract.md). The [target schema](schema.dbml) describes 79 tables; 53 exist in the 43 checked-in migrations.
+Presentation rules are in the [UI contract](ui/ui-contract.md). The [target schema](schema.dbml) describes 79 tables; 57 exist in the 44 checked-in migrations.

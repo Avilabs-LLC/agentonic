@@ -1236,3 +1236,104 @@ model GmailInvocation {
   @@map("gmail_invocations")
   @@schema("agentonic")
 }
+// The general conversation model (migration 44, architecture §48).
+model ChannelEndpoint {
+ id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+ workspaceId String @map("workspace_id") @db.Uuid
+ agentId String @map("agent_id") @db.Uuid
+ environment String
+ surface String
+ connectionId String? @map("connection_id") @db.Uuid
+ externalEndpointKey String @map("external_endpoint_key")
+ configuration Json @default("{}")
+ enabled Boolean @default(false)
+ accessMode String @default("restricted") @map("access_mode")
+ publicCapabilities Json @default("[]") @map("public_capabilities")
+ createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+ @@unique([workspaceId,id])
+ @@unique([workspaceId,surface,externalEndpointKey])
+ @@unique([workspaceId,agentId,environment,id])
+ @@map("channel_endpoints")
+ @@schema("agentonic")
+}
+model Conversation {
+ id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+ workspaceId String @map("workspace_id") @db.Uuid
+ agentId String @map("agent_id") @db.Uuid
+ environment String
+ endpointId String @map("endpoint_id") @db.Uuid
+ externalConversationKey String @map("external_conversation_key")
+ ownerContactId String @map("owner_contact_id") @db.Uuid
+ title String?
+ lastActiveAt DateTime @default(now()) @map("last_active_at") @db.Timestamptz
+ expiresAt DateTime? @map("expires_at") @db.Timestamptz
+ deletedAt DateTime? @map("deleted_at") @db.Timestamptz
+ audienceMode String @default("private") @map("audience_mode")
+ audienceVerifiedAt DateTime? @map("audience_verified_at") @db.Timestamptz
+ createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+ @@unique([workspaceId,id])
+ @@unique([workspaceId,endpointId,externalConversationKey])
+ @@unique([workspaceId,agentId,environment,id])
+ @@index([workspaceId,agentId,lastActiveAt],map:"conversations_agent_activity")
+ @@map("conversations")
+ @@schema("agentonic")
+}
+model AgentRun {
+ id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+ workspaceId String @map("workspace_id") @db.Uuid
+ agentId String @map("agent_id") @db.Uuid
+ codeReleaseId String @map("code_release_id") @db.Uuid
+ configurationReleaseId String @map("configuration_release_id") @db.Uuid
+ environment String
+ deploymentId String? @map("deployment_id") @db.Uuid
+ conversationId String? @map("conversation_id") @db.Uuid
+ sessionId String? @map("session_id") @db.Uuid
+ actingContactId String @map("acting_contact_id") @db.Uuid
+ triggerKind String @map("trigger_kind")
+ idempotencyKey String @map("idempotency_key")
+ traceId String @map("trace_id")
+ status String @default("queued")
+ effectivePromptSha256 String @map("effective_prompt_sha256")
+ effectiveConfig Json @map("effective_config")
+ requestObjectId String? @map("request_object_id") @db.Uuid
+ resultObjectId String? @map("result_object_id") @db.Uuid
+ startedAt DateTime? @map("started_at") @db.Timestamptz
+ finishedAt DateTime? @map("finished_at") @db.Timestamptz
+ errorCode String? @map("error_code")
+ errorSummary String? @map("error_summary")
+ maxTurns Int? @map("max_turns")
+ maxToolCalls Int? @map("max_tool_calls")
+ maxDurationSeconds Int? @map("max_duration_seconds")
+ scheduleFireId String? @map("schedule_fire_id") @db.Uuid
+ previewId String? @map("preview_id") @db.Uuid
+ createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+ @@unique([workspaceId,id])
+ @@unique([workspaceId,agentId,idempotencyKey])
+ @@unique([workspaceId,agentId,id])
+ @@unique([workspaceId,codeReleaseId,id])
+ @@unique([workspaceId,conversationId,id])
+ @@unique([workspaceId,agentId,environment,id])
+ @@unique([workspaceId,agentId,codeReleaseId,configurationReleaseId,id])
+ @@index([workspaceId,agentId,createdAt],map:"agent_runs_agent_created")
+ @@index([workspaceId,status,createdAt],map:"agent_runs_status_created")
+ @@map("agent_runs")
+ @@schema("agentonic")
+}
+model Message {
+ id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+ workspaceId String @map("workspace_id") @db.Uuid
+ conversationId String @map("conversation_id") @db.Uuid
+ runId String? @map("run_id") @db.Uuid
+ authorContactId String? @map("author_contact_id") @db.Uuid
+ role String
+ sequenceNumber BigInt @map("sequence_number")
+ externalMessageId String? @map("external_message_id")
+ content Json
+ redactedAt DateTime? @map("redacted_at") @db.Timestamptz
+ createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+ @@unique([workspaceId,id])
+ @@unique([workspaceId,conversationId,sequenceNumber])
+ @@unique([workspaceId,conversationId,externalMessageId])
+ @@map("messages")
+ @@schema("agentonic")
+}

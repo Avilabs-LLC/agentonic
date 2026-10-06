@@ -1354,3 +1354,33 @@ The staging deployment controller ran as root, because it wrote a unit drop-in i
   - Removing the regex anchor, allowing `restart`, or dropping the restore path each fails a test.
 - **Not covered:** a compromised controller could still point a copy's credential at another root-readable file, because systemd reads credentials as root. That file reaches only the copy, which runs reviewed code with no network, and never reaches the controller.
 
+## 48. The general model, part 1: conversations and runs — 6 October 2026
+
+The audit found chat, Gmail and costs built on feature-specific tables, so that every new channel or connector would either copy the pattern or force a migration later (D8). This part moves chat onto the target model in `schema.dbml`. Gmail (§49) and costs (§50) follow.
+
+- **Tables (migration 44):** `channel_endpoints`, `conversations`, `agent_runs` and `messages`, as designed in `schema.dbml`.
+- **The general row comes first:** a staging chat is a `conversations` row, and the `staging_conversations` row is its extension with the same ID. Each turn works the same way: the general row is an `agent_runs` row, and `staging_turns` is its extension. A private preview is a conversation too (`agent_previews.id`), and each preview turn's job is a run with `preview_id`. Foreign keys tie each extension to its general row, so neither can exist without the other.
+- **Kept in step by triggers in the same transaction, not by rewriting the chat functions:**
+  - creating a chat or preview creates its conversation;
+  - queuing a turn creates its run and the user's message;
+  - status changes update the run;
+  - an answer adds the assistant's message;
+  - closing or scrubbing a chat redacts its messages, and so does cancelling a preview;
+  - deleting a preview turn deletes its run and messages.
+
+  Existing command functions, leases and authorization are unchanged.
+- **Identities:**
+  - **Contacts:** a member becomes a channel contact linked to their verified user, the same way `contact.ensure` does it; a blocked contact is never unblocked.
+  - **Endpoints:** each agent gets panel endpoints on two surfaces, `web` for chats and `preview` for previews.
+  - **Runs:** each run records the frozen code and configuration, the deployment (none for previews), the model settings and the composed prompt's hash.
+- **Deviations from schema.dbml, recorded there:**
+  - `agent_runs.deployment_id` is null exactly for preview runs;
+  - the `max_*` limits are null, because the broker sets limits when the turn runs;
+  - endpoints are created as `enabled` panel routes.
+- **Not yet:** agent sessions (no resumable SDK sessions exist), conversation participants (staging chats are owner-only), and reads from the general tables. The apps still read through the existing functions; the Admin screens will read the general tables.
+- **Tests:**
+  - A staging chat through queue, claim, answer and close: the general rows, shared IDs, statuses, message text and order, and redaction on close, against the real functions.
+  - A preview through turn, cancel and cleanup: the run without a deployment, redaction, and deletion with its job.
+  - Removing a run under its turn is refused.
+  - A drift test now fails when the Prisma schema doesn't model exactly the tables the migrations build.
+

@@ -363,3 +363,58 @@ it("does not grant normal retrieval jobs Gmail authority", async () => {
   )
   await expect(p.tool("gmail-tools")).rejects.toThrow()
 })
+
+it("keeps the general conversation model in step with a private preview", async () => {
+  const p = await privatePreview()
+  const general = async () => ({
+    conversation: (
+      await f.sql(
+        "SELECT c.environment,c.deleted_at IS NOT NULL closed,e.surface FROM agentonic.conversations c JOIN agentonic.channel_endpoints e ON e.id=c.endpoint_id WHERE c.id=$1",
+        [p.p.id]
+      )
+    ).rows[0],
+    runs: (
+      await f.sql(
+        "SELECT id,status,deployment_id,preview_id FROM agentonic.agent_runs WHERE conversation_id=$1",
+        [p.p.id]
+      )
+    ).rows,
+    messages: (
+      await f.sql(
+        "SELECT role,content,redacted_at IS NOT NULL redacted FROM agentonic.messages WHERE conversation_id=$1 ORDER BY sequence_number",
+        [p.p.id]
+      )
+    ).rows,
+  })
+  // The preview is a conversation on the agent's preview surface; its turn is a
+  // run with no deployment, sharing the job's ID.
+  expect(await general()).toEqual({
+    conversation: { environment: "staging", closed: false, surface: "preview" },
+    runs: [
+      {
+        id: p.job.id,
+        status: "running",
+        deployment_id: null,
+        preview_id: p.p.id,
+      },
+    ],
+    messages: [
+      {
+        role: "user",
+        content: { version: "1", text: "Read synthetic messages" },
+        redacted: false,
+      },
+    ],
+  })
+  // Cancelling the preview closes the conversation and erases the turn's text.
+  await p.preview("cancel", { previewId: p.p.id })
+  const cancelled = await general()
+  expect(cancelled.conversation).toMatchObject({ closed: true })
+  expect(cancelled.messages).toEqual([
+    { role: "user", content: { version: "1", redacted: true }, redacted: true },
+  ])
+  // Expired and cancelled previews' turns are deleted, and their runs with them.
+  await f.claim().catch(() => null)
+  expect((await general()).runs).toEqual([])
+  expect((await general()).messages).toEqual([])
+})
