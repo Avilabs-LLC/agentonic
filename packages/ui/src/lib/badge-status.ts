@@ -95,6 +95,41 @@ export const statusMaps = {
     valid: state("Aprobación vigente", "success", "check"),
     invalid: state("Aprobación no vigente", "warning", "alert"),
   },
+  // Admin operations (architecture §52).
+  workspace: {
+    active: state("Activo", "success", "check"),
+    suspended: state("Suspendido", "warning", "pause"),
+    closing: state("En cierre", "orange", "clock"),
+    closed: state("Cerrado", "slate", "archive"),
+  },
+  staff: {
+    active: state("Activo", "success", "check"),
+    disabled: state("Desactivado", "slate", "minus"),
+  },
+  release: {
+    available: state("Disponible", "success", "check"),
+    retired: state("Retirada", "slate", "archive"),
+    revoked: state("Revocada", "error", "ban"),
+  },
+  // An audit event's outcome is a nested outcome, shown inline.
+  outcome: {
+    succeeded: state("Completada", "success", "check"),
+    allowed: state("Permitida", "success", "check"),
+    denied: state("Denegada", "error", "ban"),
+    failed: state("Fallida", "error", "x"),
+  },
+  // A deployment shown inline beneath its agent; its own badge uses deploymentBadgeVariants.
+  deployment: {
+    none: state("Sin despliegue", "slate", "minus"),
+    awaiting_activation: state("Pendiente de activación", "warning", "clock"),
+    queued: state("Activación en cola", "violet", "clock"),
+    preparing: state("Preparando despliegue", "sky", "activity"),
+    running: state("En funcionamiento", "success", "check"),
+    offline: state("Sin conexión", "orange", "alert"),
+    stopped: state("Detenido", "slate", "pause"),
+    failed: state("No se pudo activar", "error", "x"),
+    superseded: state("Reemplazado", "slate", "archive"),
+  },
   // Host and evaluator verification. "Vence pronto" means within a day, when
   // the twice-daily renewal should already have run.
   registration: {

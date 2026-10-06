@@ -11,9 +11,10 @@ export const navigation = [
   {
     href: "/agents",
     title: "Agentes",
-    description: "Configuración y operación de agentes.",
+    description:
+      "Todos los agentes, sus capacidades, su despliegue y su actividad.",
     group: "Operación",
-    enabled: false,
+    enabled: true,
     icon: "agents",
   },
   {
@@ -33,12 +34,44 @@ export const navigation = [
     icon: "expiry",
   },
   {
+    href: "/deployments",
+    title: "Despliegues",
+    description: "Despliegues de pruebas y qué ejecuta cada servidor.",
+    group: "Operación",
+    enabled: true,
+    icon: "deployments",
+  },
+  {
     href: "/activity",
     title: "Actividad",
-    description: "Salud y consumo de los agentes.",
+    description: "Cambios recientes y estado de los turnos de los agentes.",
     group: "Operación",
-    enabled: false,
+    enabled: true,
     icon: "activity",
+  },
+  {
+    href: "/costs",
+    title: "Costos",
+    description: "Gasto por proveedor, espacio de trabajo y agente.",
+    group: "Operación",
+    enabled: true,
+    icon: "costs",
+  },
+  {
+    href: "/workspaces",
+    title: "Espacios de trabajo",
+    description: "Clientes, sus miembros y el equipo de Agentonic.",
+    group: "Plataforma",
+    enabled: true,
+    icon: "workspaces",
+  },
+  {
+    href: "/runtimes",
+    title: "Runtime",
+    description: "Versiones publicadas del runtime y dónde están instaladas.",
+    group: "Plataforma",
+    enabled: true,
+    icon: "releases",
   },
   {
     href: "/account",
@@ -49,8 +82,15 @@ export const navigation = [
     icon: "home",
   },
 ] satisfies NavigationItem[]
+const at = (href: string) => navigation.find((item) => item.href === href)!
 export const home = navigation[0]!
-export const expirations = navigation.find(
-  (item) => item.href === "/expirations"
-)!
+export const expirations = at("/expirations")
+export const operations = {
+  agents: at("/agents"),
+  activity: at("/activity"),
+  deployments: at("/deployments"),
+  costs: at("/costs"),
+  workspaces: at("/workspaces"),
+  runtimes: at("/runtimes"),
+}
 export const account = navigation[navigation.length - 1]!

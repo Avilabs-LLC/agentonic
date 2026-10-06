@@ -24,7 +24,7 @@ On 5 October the nonproduction data was reset: no agents, documents or deploymen
 
 Gmail reading was confirmed live on 18 September. Creating drafts and sending have not been tested live. No paid turn has run yet on the new protocol-2 runtime engine (0.4.0).
 
-The Admin app has **Revisiones** (submissions, receipts, renewal and activation) and **Vencimientos** (what expires, when and who must act). Agents and Activity are not built yet. Everything else is done with scripts on the Mac.
+The Admin app has **Revisiones** (submissions, receipts, renewal and activation), **Vencimientos** (what expires, when and who must act), and the operations screens **Agentes**, **Despliegues**, **Actividad**, **Costos**, **Espacios de trabajo** and **Runtime** (architecture §52). Installing servers, publishing runtimes and renewing verification are still done with scripts on the Mac; the screens show their state.
 
 ## Operations
 
@@ -52,7 +52,7 @@ The Admin app has **Revisiones** (submissions, receipts, renewal and activation)
 
 - Hosted beta: hosted web apps, TLS and domains, hosted sign-in URLs, SMTP and invitations, a paid Supabase plan (and transaction pooling once apps run several instances), release packaging, and a deploy workflow. No production build has been verified.
 - Production: a separate project and keys, ongoing operating authorization instead of the 7-day staging limit, budgets per period, backups with a restore drill.
-- Product: Admin Agents and Activity screens, external channels, automation, agent memory and Google verification. Chats, Gmail and costs now sit on the general model (architecture §§48–50).
+- Product: external channels, automation, agent memory and Google verification. Chats, Gmail and costs now sit on the general model (architecture §§48–50).
 - Scale: multiple hosts, the 250-agent synthetic load test, and a tested path to 500 agents.
 
 The ordered plan is architecture §37; the owner's audit brief tracks progress. [Outstanding actions](outstanding-actions.md) lists every open item, who acts next and when it counts as done.
@@ -76,5 +76,6 @@ The ordered plan is architecture §37; the owner's audit brief tracks progress. 
 | The general model: connections and tool calls                          | §49                  |
 | The general model: usage events and the daily cost summary             | §50                  |
 | Evaluations that test Gmail and web tools against fixtures             | §51                  |
+| Admin operations screens                                               | §52                  |
 
-Presentation rules are in the [UI contract](ui/ui-contract.md). The [target schema](schema.dbml) describes 79 tables; 62 exist in the 47 checked-in migrations.
+Presentation rules are in the [UI contract](ui/ui-contract.md). The [target schema](schema.dbml) describes 79 tables; 62 exist in the 48 checked-in migrations.

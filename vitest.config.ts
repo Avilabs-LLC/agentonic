@@ -10,6 +10,7 @@ export default defineConfig({
         "packages/server/node_modules/@supabase/ssr/dist/module/index.js"
       ),
       "@agentonic/database/client": resolve("packages/database/src/client.ts"),
+      "@workspace/ui": resolve("packages/ui/src"),
     },
   },
   test: { include: ["tests/**/*.test.ts"], testTimeout: 10_000 },

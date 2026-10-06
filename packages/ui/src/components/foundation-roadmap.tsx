@@ -30,7 +30,8 @@ export function FoundationRoadmap({ customer }: { customer: boolean }) {
         ],
         [
           "Usa tu agente",
-          "Accede cuando su despliegue esté aprobado y completado.",
+          "Chatea en privado con la versión aprobada que actives.",
+          "/chats",
         ],
       ]
     : [
@@ -40,12 +41,14 @@ export function FoundationRoadmap({ customer }: { customer: boolean }) {
           "/submissions",
         ],
         [
-          "Evaluar y desplegar",
-          "Pruebas de la versión aprobada antes de activarla.",
+          "Evaluar y activar",
+          "Evaluaciones de la versión exacta y activación en pruebas privadas.",
+          "/expirations",
         ],
         [
           "Supervisar la operación",
-          "Salud, consumo y recuperación del agente.",
+          "Agentes, despliegues, actividad y costos.",
+          "/activity",
         ],
       ]
   return (
@@ -53,8 +56,9 @@ export function FoundationRoadmap({ customer }: { customer: boolean }) {
       <CardHeader>
         <CardTitle>Tu flujo de trabajo</CardTitle>
         <CardDescription>
-          La personalización y la revisión están disponibles. La ejecución del
-          agente se habilitará en la siguiente etapa.
+          {customer
+            ? "Personaliza, envía a revisión y usa tu agente en pruebas privadas. El uso con más personas llegará en la etapa piloto."
+            : "Revisión, evaluación, activación en pruebas privadas y supervisión. La operación con clientes reales llegará en la etapa piloto."}
         </CardDescription>
       </CardHeader>
       <CardContent>
