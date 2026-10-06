@@ -66,12 +66,11 @@ export function ModelConfigurationSelect({
           </SelectValue>
         </span>
       </SelectTrigger>
-      <SelectContent className="w-auto max-w-(--available-width) min-w-(--anchor-width)">
+      <SelectContent>
         {options.map((m) => (
           <SelectItem
             key={modelConfigurationKey(m)}
             value={modelConfigurationKey(m)}
-            className="pr-8"
           >
             {modelConfigurationLabel(m)}
           </SelectItem>

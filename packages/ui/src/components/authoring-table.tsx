@@ -277,7 +277,7 @@ export function AuthoringTable({
                     : `${selectedWorkspaceIds.length} espacios seleccionados`}
               </SelectValue>
             </SelectTrigger>
-            <SelectContent alignItemWithTrigger={false}>
+            <SelectContent>
               {workspaceOptions.map((workspace) => (
                 <SelectItem key={workspace.value} value={workspace.value}>
                   {workspace.label}
