@@ -51,6 +51,7 @@ import {
   localHostChecks,
   machineNotes,
   parseFacts,
+  releaseNotes,
   planRenewal,
   problems,
   utc,
@@ -80,6 +81,8 @@ const sha = (value) => createHash("sha256").update(value).digest("hex")
 const lockPath = join(root, ".local/staging/reverify.lock")
 let db,
   locked = false
+/** Runtime releases in the catalog, read once by load(). */
+let releases = []
 
 function standing(registration, now) {
   if (!registration) return "missing"
@@ -150,6 +153,12 @@ async function load() {
       }
     )
   }
+  // Version and source commit of every runtime a registration serves.
+  releases = (
+    await db.query(
+      "SELECT DISTINCT ON (artifact_sha256) artifact_sha256 sha256,version,git_commit_sha commit FROM agentonic.code_releases ORDER BY artifact_sha256,created_at DESC"
+    )
+  ).rows
   return {
     "azure-host": host("azure_staging") ?? null,
     "azure-evaluator": worker("agentonic_eval_azure") ?? null,
@@ -805,7 +814,7 @@ try {
     registrations: entries,
     ...(machine.length ? { machine } : {}),
   }
-  print(entries, now, machine)
+  print(entries, now, [...machine, ...releaseNotes(registrations, releases)])
   if (flag("publish")) publish(report)
   const found = problems(report, new Date())
   if (found.length || entries.some((entry) => entry.outcome === "failed"))

@@ -1,10 +1,21 @@
 # Agentonic — architecture and implementation decisions
 
-**Status:** accepted direction; authoring, knowledge retrieval, automatic review and private staging deployment/chat implemented (§§30–36); Gmail and public-web tools implemented for private previews and private staging (§§38–39); complete hosted platform and production operation pending. **Next implementation plan:** §37. · **Decision date:** 2026-09-13 · **Owner:** Agentonic founder
+**Status:** accepted direction. Implemented in nonproduction: authoring, knowledge retrieval, automatic review, and private staging deployment and chat (§§30–36); Gmail and public-web tools (§§38–39); and, from §40 onward, the runtime engine, side-by-side upgrades and the operational hardening that followed. Hosted platform and production operation are pending. **What runs today:** [current-state.md](current-state.md). **Open work:** [outstanding-actions.md](outstanding-actions.md). · **Decision date:** 2026-09-13 · **Owner:** Agentonic founder
 
 This is the authoritative architecture decision record for the initial Agentonic platform. It records the owner's accepted choices and the implementation judgment delegated to Codex for scope, operational details and corrections. Its authoritative schema companion is [schema.dbml](schema.dbml).
 
-This record and its reconciled DBML supersede the earlier Claude and Codex proposals, which have been removed from this directory at the owner's request. Read the two files together: this record defines authorization, operational behavior and SQL-only requirements; the DBML defines the relational model. Accepted decisions are requirements for implementation, not a claim that every target capability is enabled. Sections 22–36 are dated implementation checkpoints; earlier descriptions of missing features and operational state are historical. Section 37 is the current forward implementation checklist.
+This record and its reconciled DBML supersede the earlier Claude and Codex proposals, which have been removed from this directory at the owner's request. Read the two files together: this record defines authorization, operational behavior and SQL-only requirements; the DBML defines the relational model. Accepted decisions are requirements for implementation, not a claim that every target capability is enabled.
+
+**Reading this record.** Sections 1–21 are the accepted design. Sections 22 onward are dated checkpoints: each describes the platform on its date, and a later checkpoint supersedes an earlier one where they differ. Counts, installed hashes, verification dates and "not built yet" statements inside a checkpoint are history, not the present. [current-state.md](current-state.md) describes the present, and [outstanding-actions.md](outstanding-actions.md) lists every open item; it replaces §37's unchecked boxes as the list of open work. These earlier passages are the ones most often misread:
+
+| Earlier text | Replaced by |
+| --- | --- |
+| §18: runtime source in the separate `agentonic-runtime` repository | §40: the runtime is `packages/runtime` in this repository; the old repository is the frozen record of releases up to 0.3.0 |
+| §31.2: the planned VM layout, and preview runtimes packaged from a sibling runtime checkout | §§40–41: runtimes and worker releases install side by side in fixed directories; `pnpm setup:preview` and `pnpm runtime:install` package `packages/runtime` |
+| §§36, 38–39 and [web-access.md](web-access.md): verification dates, deadlines and installed hashes | §39.7: renewal is automatic. Live expiry is in the database, shown in Admin **Vencimientos** (§42) and by `pnpm staging:reverify` |
+| §§36–39: agent services holding the database password and provider keys | §43 (one gateway per host holds the database connections) and §44 (it also holds every provider key; agent services hold none) |
+| §§30–36: one knowledge worker loop for every job | §45: one lane per kind of work, shared fairly between workspaces |
+| §43: the connection budget of 18 | §45: 19, after the worker's pool grew to 4 |
 
 ## 1. Product and launch boundary
 
@@ -1312,3 +1323,11 @@ The knowledge worker on the Mac ran one job at a time for every workspace: docum
 - **Shutdown:** stopping the worker aborts every running job, records each as failed or requeued exactly as before, and closes the pool once they have ended.
 - **Limits:** provider rate limits are shared by all lanes. A provider refusal requeues document processing after 60 seconds, as before; a preview turn fails with `provider_unavailable`.
 - **Tests:** a slow document keeps processing while three preview turns run and finish. Each lane runs at most its slots, a freed slot starts the next job without waiting, a cleanup-only worker asks only for cleanup, a failed claim waits before retrying, and stopping returns at once. In the replayed database, a workspace with a job running yields to another workspace's newer job, and a workspace at its share waits. Lanes are kept apart, cleanup goes first, unauthorized jobs are skipped, other roles and unknown lanes are refused, and the previous claim keeps its order. Deliberately turning off fairness, the skip of unauthorized jobs, the slot limit, the immediate reclaim, the idle stop or the shared sign-in each fails a test.
+
+## 46. Housekeeping: release identity and documentation drift — 6 October 2026
+
+Two of the audit's housekeeping findings, closed.
+
+- **Release identity:** `pnpm staging:reverify` (read-only, and in every twice-daily run's log) now prints what each registration runs: its worker releases, and each runtime release it serves by catalog version and the commit it was built from. A runtime missing from the catalog shows by its hash. Since §40 the runtime placeholders are gone, and releases from `packages/runtime` record the platform commit they were built from, so the report and the catalog give one identity per build. The old `agentonic-runtime` repository still awaits a notice and archiving (N3, owner OK).
+- **Documentation drift:** the record now opens with a reading guide. Sections 1–21 are the design and later sections are dated checkpoints. A table names the earlier passages most often misread and the sections that replace them. A test (`tests/docs-drift.test.ts`) fails when `current-state.md` or the README misstate the number of target and built tables, the number of migrations, the latest architecture section or the platform version. The table count comes from replaying every migration. The 25 September verification deadline in `web-access.md` is marked as history.
+

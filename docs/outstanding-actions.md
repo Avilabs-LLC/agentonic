@@ -1,6 +1,6 @@
 # Agentonic: outstanding actions
 
-**Maintained by Claude · last updated 5 October 2026.** Every action still open, in the audit brief's order of work (stages A–F), with who acts and how we'll know it's done. [current-state.md](current-state.md) says what runs today. The [architecture record](agentonic-architecture.md) holds the design and the dated detail (§37 is the release checklist).
+**Maintained by Claude · last updated 6 October 2026.** Every action still open, in the audit brief's order of work (stages A–F), with who acts and how we'll know it's done. [current-state.md](current-state.md) says what runs today. The [architecture record](agentonic-architecture.md) holds the design and the dated detail (§37 is the release checklist).
 
 **How this page is kept**
 
@@ -138,3 +138,4 @@ Gate: the §14 acceptance suite with at least two workspaces and several users.
 | Agent services hold no password or key and run without network; the gateway makes their provider calls              | 5 Oct  | PR #31        |
 | The worker reaches Storage with its own lease-bound account; the Supabase secret key is bootstrap-only (closes C14) | 5 Oct  | PR #32        |
 | Knowledge worker lanes: each kind of work has its own slots, shared fairly between workspaces (closes C15)          | 5 Oct  | PR #34        |
+| Each environment's worker and runtime releases named in the re-verification report; documentation drift test        | 6 Oct  | PR #35        |
