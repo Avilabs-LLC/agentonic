@@ -141,7 +141,7 @@ export function AgentEditorSkeleton() {
                     <div className="overflow-hidden rounded-lg border bg-muted/20">
                       <div className="flex flex-wrap items-center justify-between gap-3 border-b p-4">
                         <div className="flex items-center gap-3">
-                          <Skeleton className="size-5 shrink-0" />
+                          <Skeleton className="size-10 shrink-0 rounded-md" />
                           <div className="space-y-1">
                             <Skeleton className="h-5 w-20" />
                             <Skeleton className="h-4 w-24" />

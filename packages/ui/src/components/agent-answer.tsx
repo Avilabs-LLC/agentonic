@@ -36,7 +36,7 @@ export function AgentAnswer({ text }: { text: string }) {
                   href={url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="break-all text-primary underline underline-offset-4"
+                  className="break-all text-link underline underline-offset-4"
                 >
                   {new URL(url).hostname}
                   {new URL(url).pathname === "/" ? "" : new URL(url).pathname}

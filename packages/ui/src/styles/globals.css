@@ -129,13 +129,18 @@
 }
 @theme inline {
   --color-highlight: var(--highlight);
+  --color-link: var(--link);
   --font-sans: var(--font-figtree);
 }
+/* Clickable text. Light mode keeps the primary blue; dark mode's primary is
+   too dark to read on cards, dialogs and tables, so links use a lighter blue. */
 :root {
   --highlight: oklch(0.541 0.281 293.009);
+  --link: oklch(0.5 0.134 242.749);
 }
 .dark {
   --highlight: oklch(0.702 0.183 293.541);
+  --link: oklch(0.746 0.16 232.661);
 }
 @layer base {
   body {

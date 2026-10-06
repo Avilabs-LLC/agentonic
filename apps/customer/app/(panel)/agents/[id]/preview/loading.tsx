@@ -15,14 +15,15 @@ export default function Loading() {
         <Skeleton className="h-5 w-32" />
       </div>
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-4 sm:p-6">
-        <Skeleton className="h-5 w-48" />
+        <Skeleton className="h-5 w-56" />
         <Skeleton className="h-9 w-36" />
       </div>
       <div className="overflow-hidden rounded-lg border">
-        <div className="flex items-center justify-between border-b px-6 py-4">
-          <div className="space-y-2">
-            <Skeleton className="h-3 w-40" />
-            <Skeleton className="h-8 w-36" />
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b px-6 py-4">
+          <div className="flex-1 space-y-2">
+            <Skeleton className="h-3 w-32" />
+            <Skeleton className="h-7 w-56 max-w-full" />
+            <div className="h-4" />
           </div>
           <Skeleton className="h-5 w-24" />
         </div>
