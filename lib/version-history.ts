@@ -1,5 +1,10 @@
 export const VERSION_HISTORY = [
   {
+    "version": "0.18.0",
+    "date": "2026-10-06",
+    "summary": "Interfaz con el preset Nova de shadcn (tipografía Inter y tema esmeralda), menús desplegables que se abren debajo y muestran el nombre completo, y versión legible en los agentes de Administración."
+  },
+  {
     "version": "0.17.0",
     "date": "2026-10-06",
     "summary": "Versión en uso y próxima versión de cada agente, página de agente en Administración con enlaces desde todas las pantallas, servidores agrupados por lugar, selector de modelo más ancho en la prueba y enlaces legibles en modo oscuro."
