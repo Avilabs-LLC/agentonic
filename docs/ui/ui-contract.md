@@ -8,30 +8,32 @@ This is the authoritative presentation contract for Agentonic. Read it before ch
 
 Adapted from `Dev/acachuchazo-admin/docs/ui/ui-contract.md` (read in full on 2026-09-15), carrying over its Base UI composition, semantic styling, Spanish interface, page/table conventions, forms, feedback and skeleton verification. The applicable baseline had already been accepted in architecture §21; it now lives here so new UI work has one local reference.
 
-Agentonic retains its **Mira / Mist / Sky / Figtree preset `b1GfVg2Oe` and medium radius**, separate apps, shared `packages/ui` components, per-app navigation and customer agent-list override. Acachuchazo's Lyra/green theme, financial widgets, KYC screens and preview overlay are not imported. The owner's badge hierarchy below supersedes the baseline's blanket status-badge and `Pronto`-badge conventions.
+Agentonic uses the **Nova / Neutral / Emerald / Inter preset `b1zBuS` with the default radius** (owner change on 2026-10-06; it replaced Mira / Mist / Sky / Figtree `b1GfVg2Oe`), separate apps, shared `packages/ui` components, per-app navigation and customer agent-list override. Acachuchazo's Lyra/green theme, financial widgets, KYC screens and preview overlay are not imported. The owner's badge hierarchy below supersedes the baseline's blanket status-badge and `Pronto`-badge conventions.
 
 ## 1. Preset, primitives and styling
 
 Owner-supplied initialization command:
 
 ```sh
-pnpm dlx shadcn@latest init --preset b1GfVg2Oe --template next
+pnpm dlx shadcn@latest init --preset b1zBuS --template next
 ```
 
-The official CLI's read-only `preset decode b1GfVg2Oe --json` resolved the base preset on 2026-09-13. The table below includes the subsequent owner override from large to default/medium radius:
+The official CLI's read-only `preset decode b1zBuS --json` resolved the preset on 2026-10-06:
 
 | Setting | Agentonic |
 |---|---|
-| Style | Mira |
-| Base color | Mist |
-| Theme | Sky |
-| Font | Figtree; headings inherit |
+| Style | Nova |
+| Base color | Neutral |
+| Theme | Emerald |
+| Font | Inter; headings inherit |
 | Icons | Lucide |
-| Radius | Default / medium (`--radius: 0.625rem`), owner override |
-| Chart color | Amber |
+| Radius | Default (`--radius: 0.625rem`) |
+| Chart color | Neutral |
 | Menu color / accent | Default / subtle |
 
-Preset reference: [Agentonic preset](https://ui.shadcn.com/create?preset=b1GfVg2Oe). The [official CLI documentation](https://ui.shadcn.com/docs/cli) describes initialization and preset inspection. Preserve the generated token values except the explicit owner radius override: use `--radius: 0.625rem`, matching the [default shadcn radius](https://ui.shadcn.com/docs/theming), and retain the generated derived radius scale. The preset ID still encodes the original large radius; reinitializing it must reapply this override. Initialize within the planned monorepo layout, with shared primitives and theme; do not accidentally create a third app at the repository root. Pin the resulting dependencies in the workspace lockfile.
+Preset reference: [Agentonic preset](https://ui.shadcn.com/create?preset=b1zBuS). The [official CLI documentation](https://ui.shadcn.com/docs/cli) describes initialization and preset inspection. Preserve the generated token values; the preset's default radius matches the earlier owner override, so none is needed. Do not run `init` in the monorepo: it would overwrite the customized primitives and could create a third app at the repository root. Generate a reference project with the command above (with `--base base`) and port its tokens and primitives into `packages/ui`.
+
+**Moving from Mira to Nova (2026-10-06).** Each primitive was three-way merged: the Mira original as the base, ours, and the Nova version, so local changes survive. Kept on top of Nova: the status badge palette and `link` variants; the `link` token for clickable text (blue like the ID links, not the emerald primary); the 8px title-to-description gap in dialogs; and the dialog layout every dialog relies on (24px padding for full-bleed footers, a `max-w-lg` default that a `max-w-2xl` class overrides, and scrolling within the viewport); the Spanish "Cerrar" label; and the taller default textarea.
 
 Retain the source contract's **Base UI** component architecture. The decoded preset does not identify a primitive library: explicitly select Base UI during initialization (the CLI supports `--base base`) and verify the generated configuration. Compose with `render`, using Base UI's actual open-state hooks (`data-popup-open` / `data-open` as applicable). A `Button` rendered as a Next.js `Link` sets `nativeButton={false}`. A `Select` with machine-readable values supplies a value-to-label `items` mapping so the trigger displays a human label.
 

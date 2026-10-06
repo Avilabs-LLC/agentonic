@@ -36,7 +36,7 @@ can be used; connecting a new Gmail account on mobile additionally requires the
 same tunnel callback URL in `GOOGLE_REDIRECT_URI` and Google's authorized redirect
 URIs. A localhost callback returns to the phone, not this Mac.
 
-Both apps use the same Base UI/shadcn Mira preset (`b1GfVg2Oe`), Figtree font and shared UI package. Authentication cookies are separate per app, host-only and HTTP-only. Customer membership never grants staff access.
+Both apps use the same Base UI/shadcn Nova preset (`b1zBuS`), Inter font and shared UI package. Authentication cookies are separate per app, host-only and HTTP-only. Customer membership never grants staff access.
 
 The configured nonproduction Supabase project has its dedicated roles and every checked-in migration applied. The three confirmed Auth users are linked: one staff administrator and two customer owners, each with a separate test workspace. Their actual access boundaries have been verified; interactive sign-in uses the private passwords chosen in Supabase. App `.env.local` files contain only their restricted database credentials and public Supabase configuration. No bootstrap or migration URL belongs in either app's environment.
 
