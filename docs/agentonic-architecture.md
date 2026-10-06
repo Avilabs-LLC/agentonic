@@ -1718,3 +1718,5 @@ Version numbers count an agent's prepared versions in order, as elsewhere (`agen
 - **The Admin screens and the agent page,** rendered with synthetic data.
 
 **Not covered.** Proposals for versions between the one running and the newest are not shown in the lists; the agent page lists them all. The customer agent page keeps its own Activación tab.
+
+**Follow-up (migration 51).** Admin → Agentes showed the latest version as its internal release label ("Versión r2-63c0a65a") next to "Versión 1" in the new columns. `operations_agents` now returns the counted number as `latestVersion`, still as text, so the installed v0.17.0 app shows "Versión 1" once the migration is applied, without a new release.

@@ -18,6 +18,7 @@ export const operationsAgents = z.array(
     workspaceName: z.string(),
     ownerName: z.string(),
     createdAt: time,
+    // The counted version number ("1"), as text (migration 51).
     latestVersion: z.string().nullable(),
     tools: z.object({
       gmail: z.boolean(),
