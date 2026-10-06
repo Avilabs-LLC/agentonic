@@ -1,7 +1,9 @@
 import { Skeleton } from "@workspace/ui/components/skeleton"
 import { Card, CardContent, CardHeader } from "@workspace/ui/components/card"
 import {
+  BackRowSkeleton,
   PageHeaderSkeleton,
+  RecordHeaderSkeleton,
   TableSkeleton,
 } from "@workspace/ui/components/foundation-skeletons"
 
@@ -59,12 +61,42 @@ function Loading({
     </div>
   )
 }
-/** Agentes: the six-column agents table. */
+/** Agentes: the seven-column agents table. */
 export function OperationsAgentsSkeleton() {
   return (
     <Loading label="Cargando agentes">
-      <TableSkeleton columns={6} />
+      <TableSkeleton columns={7} />
     </Loading>
+  )
+}
+/** One agent: back row, header, three tiles, tabs and the proposals table. */
+export function OperationsAgentSkeleton() {
+  return (
+    <div aria-label="Cargando agente" role="status" className="space-y-6">
+      <div className="space-y-3">
+        <BackRowSkeleton />
+        <RecordHeaderSkeleton />
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {[1, 2, 3].map((i) => (
+          <Card key={i}>
+            <CardHeader>
+              <Skeleton className="h-3 w-32" />
+            </CardHeader>
+            <CardContent className="space-y-2">
+              <Skeleton className="h-5 w-28 rounded-full" />
+              <Skeleton className="h-3 w-40" />
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+      <div className="flex gap-6 border-b pb-2">
+        {[1, 2, 3].map((i) => (
+          <Skeleton key={i} className="h-5 w-24" />
+        ))}
+      </div>
+      <TableSkeleton columns={5} />
+    </div>
   )
 }
 /** Actividad: five stat tiles and the five-column changes table. */

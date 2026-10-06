@@ -142,6 +142,7 @@ export const statusMaps = {
     stopped: state("Detenido", "slate", "pause"),
     failed: state("No se pudo activar", "error", "x"),
     superseded: state("Reemplazado", "slate", "archive"),
+    unauthorized: state("Autorización no vigente", "warning", "alert"),
   },
   // Host and evaluator verification. "Vence pronto" means within a day, when
   // the twice-daily renewal should already have run.
@@ -236,7 +237,7 @@ export const proposalBadgeVariants: Record<ProposalStatus, BadgeVariant> = {
   closed: "slate",
 }
 
-type BadgeVariant =
+export type BadgeVariant =
   | "success"
   | "warning"
   | "error"

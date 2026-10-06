@@ -6,7 +6,6 @@ import {
 } from "@agentonic/contracts/format"
 import {
   expiryActorLabels,
-  registrationNames,
   type ExpiryRow,
   type Registration,
   type RuntimeRegistrations,
@@ -22,6 +21,7 @@ import {
 import { Badge } from "@workspace/ui/components/badge"
 import { StatusIndicator } from "@workspace/ui/components/status-badge"
 import { IdLink } from "@workspace/ui/components/id-link"
+import { AgentLink } from "@workspace/ui/components/agent-versions"
 import { CardEmptyState } from "@workspace/ui/components/card-empty-state"
 import {
   DataTable,
@@ -71,6 +71,12 @@ function Deadline({ value, now }: { value: string | null; now: string }) {
   )
 }
 
+// Grouped by place, the VM first: every registration stays visible, since
+// a lapsed one stops agents or evaluations there.
+const places = [
+  { environment: "azure_staging", title: "VM de pruebas" },
+  { environment: "local", title: "Local (desarrollo)" },
+] as const
 export function RegistrationsCard({
   registrations,
   now,
@@ -78,13 +84,19 @@ export function RegistrationsCard({
   registrations: RuntimeRegistrations
   now: string
 }) {
-  const items = [
-    ...registrations.hosts.map((r) => ({ kind: "host" as const, ...r })),
-    ...registrations.evaluators.map((r) => ({
-      kind: "evaluator" as const,
-      ...r,
-    })),
-  ]
+  const groups = places
+    .map((place) => ({
+      ...place,
+      items: [
+        ...registrations.hosts
+          .filter((r) => r.environment === place.environment)
+          .map((r) => ({ name: "Agentes", ...r })),
+        ...registrations.evaluators
+          .filter((r) => r.environment === place.environment)
+          .map((r) => ({ name: "Evaluaciones", ...r })),
+      ],
+    }))
+    .filter((group) => group.items.length > 0)
   return (
     <Card>
       <CardHeader>
@@ -96,23 +108,39 @@ export function RegistrationsCard({
         </CardDescription>
       </CardHeader>
       <CardContent>
-        {items.length === 0 ? (
+        {groups.length === 0 ? (
           <CardEmptyState title="Sin servidores registrados">
             Instala y registra un servidor para activar agentes o evaluar
             versiones.
           </CardEmptyState>
         ) : (
-          <ItemGroup>
-            {items.map((item, index) => (
-              <RegistrationItem
-                key={`${item.kind}-${item.environment}`}
-                name={registrationNames[item.kind][item.environment]}
-                registration={item}
-                now={now}
-                separated={index > 0}
-              />
+          <div className="grid gap-6 md:grid-cols-2">
+            {groups.map((group) => (
+              <section
+                key={group.environment}
+                aria-labelledby={`registrations-${group.environment}`}
+                className="space-y-1"
+              >
+                <h3
+                  id={`registrations-${group.environment}`}
+                  className="text-xs font-medium tracking-wide text-muted-foreground uppercase"
+                >
+                  {group.title}
+                </h3>
+                <ItemGroup>
+                  {group.items.map((item, index) => (
+                    <RegistrationItem
+                      key={item.name}
+                      name={item.name}
+                      registration={item}
+                      now={now}
+                      separated={index > 0}
+                    />
+                  ))}
+                </ItemGroup>
+              </section>
             ))}
-          </ItemGroup>
+          </div>
         )}
       </CardContent>
     </Card>
@@ -178,7 +206,16 @@ export function ExpiryTable({ rows, now }: { rows: ExpiryRow[]; now: string }) {
       ),
       cell: ({ row }) => (
         <div className="max-w-64 min-w-40 whitespace-normal">
-          <p className="font-medium">{row.original.agentName}</p>
+          <p className="font-medium">
+            {row.original.agentId ? (
+              <AgentLink
+                href={`/agents/${row.original.agentId}`}
+                name={row.original.agentName}
+              />
+            ) : (
+              row.original.agentName
+            )}
+          </p>
           <p className="text-muted-foreground">
             {row.original.workspaceName} · Versión {row.original.versionNumber}
           </p>

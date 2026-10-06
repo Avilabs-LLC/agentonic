@@ -4,8 +4,6 @@ import { useId, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import {
   FileTextIcon,
-  RocketIcon,
-  Clock3Icon,
   EllipsisIcon,
   PencilIcon,
   ChartNoAxesCombinedIcon,
@@ -51,9 +49,9 @@ import {
   SelectItem,
 } from "@workspace/ui/components/select"
 import {
-  AgentStatusBadge,
-  DomainStatus,
-} from "@workspace/ui/components/status-badge"
+  AgentLink,
+  agentVersionColumns,
+} from "@workspace/ui/components/agent-versions"
 export function AuthoringTable({
   agents,
   workspaces,
@@ -176,12 +174,10 @@ export function AuthoringTable({
       cell: ({ row }) => (
         <div className="max-w-56 min-w-32 whitespace-normal">
           {row.original.canEdit ? (
-            <Link
+            <AgentLink
               href={`/agents/${row.original.id}?workspace=${row.original.workspaceId}`}
-              className="text-xs font-medium text-blue-600 underline underline-offset-4 outline-none hover:text-blue-800 focus-visible:ring-2 focus-visible:ring-ring dark:text-blue-400 dark:hover:text-blue-300"
-            >
-              {row.original.name}
-            </Link>
+              name={row.original.name}
+            />
           ) : (
             <p className="text-xs font-medium">{row.original.name}</p>
           )}
@@ -246,77 +242,10 @@ export function AuthoringTable({
         )
       },
     },
-    {
-      id: "reviewVersions",
-      accessorFn: (agent) =>
-        agent.configuration?.reviewVersions[0]?.revision ?? -1,
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="En revisión" />
-      ),
-      cell: ({ row }) => {
-        const configuration = row.original.configuration
-        if (!configuration) return unavailable
-        return (
-          <div className="space-y-2 text-xs">
-            {configuration.reviewVersions.length ? (
-              configuration.reviewVersions.map((version, index) => (
-                <div
-                  key={`${version.version}-${index}`}
-                  className="flex items-center gap-2"
-                  aria-label={`${version.status === "in_review" ? "En revisión" : "Enviada"}: ${version.version}`}
-                >
-                  <Clock3Icon
-                    className="size-4 shrink-0 text-muted-foreground"
-                    aria-hidden="true"
-                  />
-                  <span>{version.version}</span>
-                  <DomainStatus
-                    domain="submission"
-                    status={version.status}
-                    className="text-xs"
-                  />
-                </div>
-              ))
-            ) : (
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <Clock3Icon className="size-4 shrink-0" aria-hidden="true" />
-                <span>Sin envíos activos</span>
-              </div>
-            )}
-          </div>
-        )
-      },
-    },
-    {
-      id: "liveVersion",
-      accessorFn: (agent) => agent.configuration?.liveVersion ?? "",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Actual" />
-      ),
-      cell: ({ row }) => {
-        const configuration = row.original.configuration
-        if (!configuration) return unavailable
-        return (
-          <div
-            className="flex items-center gap-2"
-            aria-label={`Versión desplegada: ${configuration.liveVersion ?? "ninguna"}`}
-          >
-            <RocketIcon
-              className="size-4 shrink-0 text-muted-foreground"
-              aria-hidden="true"
-            />
-            <span>{configuration.liveVersion ?? "Sin desplegar"}</span>
-          </div>
-        )
-      },
-    },
-    {
-      accessorKey: "status",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Estado" />
-      ),
-      cell: ({ row }) => <AgentStatusBadge status={row.original.status} />,
-    },
+    ...agentVersionColumns<(typeof agents)[number]>(
+      (agent) => agent.configuration?.summary ?? null,
+      unavailable
+    ),
   ]
   return (
     <div className="space-y-4" aria-busy={pending}>
