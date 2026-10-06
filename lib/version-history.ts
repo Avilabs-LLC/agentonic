@@ -1,5 +1,10 @@
 export const VERSION_HISTORY = [
   {
+    "version": "0.17.0",
+    "date": "2026-10-06",
+    "summary": "Versión en uso y próxima versión de cada agente, página de agente en Administración con enlaces desde todas las pantallas, servidores agrupados por lugar, selector de modelo más ancho en la prueba y enlaces legibles en modo oscuro."
+  },
+  {
     "version": "0.16.0",
     "date": "2026-10-06",
     "summary": "Invitaciones por correo para unirse a un espacio, restablecimiento y cambio de contraseña, y verificación en dos pasos opcional para el equipo."

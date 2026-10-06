@@ -1669,3 +1669,52 @@ Customers stay on password only, and the policy can become mandatory later witho
 - **Sign-in:** enrolled staff are sent to `/mfa`, the `/mfa` page itself only needs the password session, and customers are never asked.
 
 **Not covered yet:** making the second factor mandatory, recovery codes for a lost authenticator (the owner can remove a factor in the Supabase dashboard), changing email addresses, and invitations to staff. The invitation email doesn't name the workspace: an invitee isn't a member until they accept, so the link page doesn't either.
+
+## 55. What is in use and what comes next; the Admin agent page — 6 October 2026
+
+Both agent lists showed an **Estado** badge read from `agents.status`, a column set to `draft` when an agent is created and never changed afterwards. A running, approved agent therefore read "Borrador" in Admin → Agentes and in the customer list, while Vencimientos said "En funcionamiento" and its receipt "Vigente". Those last two were right: they describe the deployment and the approval, which stay separate (§9.2 of the UI contract). The owner chose on 6 October to derive an agent's state from its records, and to show **what is in use** and **what is coming** side by side.
+
+**Two facets (migration 50).** `agentonic.agent_version_summary(agent)` returns metadata only:
+
+- **In use:** running deployments, the VM first, each with its version and whether it is offline, resting or no longer authorized. When nothing runs, the latest deployment if it stopped or failed.
+- **Next:** the newest proposal for a version newer than the one running (any version when nothing runs), skipping withdrawn ones. It carries its review state, its approval's validity and, when one is on the way, its pending deployment (awaiting activation, queued, preparing).
+
+Version numbers count an agent's prepared versions in order, as elsewhere (`agentonic.release_number`).
+
+**Presentation.** Both lists replace their state columns with **Versión en uso** and **Próxima versión**. The customer list replaced "En revisión", "Actual" and "Estado"; Admin replaced "Despliegue" and "Estado".
+
+- **One badge per row:** it goes on the version in use when one runs; otherwise on the next version, or on "Borrador" when nothing has been sent. The other facet is an inline icon and text. Labels and colours come from the existing deployment, proposal and approval maps, so a state reads the same on every screen.
+- Example: v1 running with v2 in review shows a green "En funcionamiento" badge with "Versión 1 · VM · pruebas", and "En revisión · Versión 2" inline.
+- Customers see the facets where they already saw the live and in-review versions: only for agents they can edit.
+- `agents.status` is no longer shown. It still guards archiving.
+
+**Admin agent page (`/agents/[id]`).** `agentonic.operations_agent(id)` is staff-only and returns metadata only, like the other operations reads (§52).
+
+- **The page:** under the header (workspace, owner, creation date), three tiles show the version in use, the next version and the latest version's capabilities.
+- **Tabs:**
+  - **Propuestas:** every proposal with its review state, approval validity and activation deadline. Approved proposals link to their receipt; open ones link to Revisiones, which records the access when a review is opened.
+  - **Despliegues:** environment, state, version, authorization, and spend against budget.
+  - **Actividad:** last turn, turns and failures in seven days, and known spend in thirty.
+- **Content:** a proposal's instructions and documents stay behind its review and receipt, as before.
+
+**Every agent name opens the agent page.** That covers Agentes (which now also has the ID column, UI contract §3), Despliegues, Costos, Actividad, Vencimientos and Revisiones.
+
+- **Read changes:** the deployment, cost, activity and review-queue reads now return the agent's ID. An activity event about an agent, a proposal or a deployment names its agent.
+- **Revisiones:** the agent name used to open the review. The **Revisión #** number does that now, so the name can lead to the agent.
+
+**Vencimientos.** The servers-and-evaluators card groups its four rows by place, side by side: **VM de pruebas** and **Local (desarrollo)**, each with Agentes and Evaluaciones. Tabs were considered and rejected, because they would hide a lapsed registration.
+
+**Compatibility.** The migration is additive: every read keeps its old keys, so the v0.16.0 apps kept working between applying it and installing platform v0.17.0, which carries this work and PR #47's preview and link-contrast fixes.
+
+**Tests.**
+
+- **The database,** against the replayed migrations: authorization, liveness and approval validity are replaced by column-driven stand-ins. That covers a version followed from review to approval, activation and use, plus:
+  - a newer proposal beside the running version;
+  - offline and unauthorized versions in use;
+  - a stopped deployment;
+  - withdrawn proposals and archived agents;
+  - the staff-only agent read and the editors-only summary, without prompt text.
+- **The badge placement and ordering** as a unit.
+- **The Admin screens and the agent page,** rendered with synthetic data.
+
+**Not covered.** Proposals for versions between the one running and the newest are not shown in the lists; the agent page lists them all. The customer agent page keeps its own Activación tab.
