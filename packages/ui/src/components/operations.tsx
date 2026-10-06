@@ -107,7 +107,7 @@ function Named({
   icon?: boolean
 }) {
   return (
-    <div className="max-w-64 min-w-40 space-y-1 whitespace-normal">
+    <div className="space-y-1">
       <p className="font-medium">
         {icon ? <WorkspaceName name={name} /> : name}
       </p>
@@ -126,7 +126,7 @@ function AgentAndWorkspace({
   workspaceName: string
 }) {
   return (
-    <div className="max-w-64 min-w-40 space-y-1 whitespace-normal">
+    <div className="space-y-1">
       <p className="font-medium">
         <AgentLink href={`/agents/${agentId}`} name={name} />
       </p>
@@ -202,7 +202,7 @@ export function OperationsAgentsTable({
       accessorFn: (row) => capabilities(row.tools),
       header: header("Capacidades de la última versión"),
       cell: ({ row }) => (
-        <div className="max-w-60 min-w-40 whitespace-normal">
+        <div>
           <p>{capabilities(row.original.tools)}</p>
           <p className="text-muted-foreground">
             {row.original.latestVersion
@@ -281,7 +281,7 @@ export function OperationsActivityTable({
       accessorKey: "actionLabel",
       header: header("Acción"),
       cell: ({ row }) => (
-        <div className="max-w-64 min-w-40 whitespace-normal">
+        <div>
           <p className="font-medium">{row.original.actionLabel}</p>
           <p className="text-muted-foreground">
             {auditResourceLabels[row.original.resourceType] ??
@@ -307,7 +307,6 @@ export function OperationsActivityTable({
       header: header("Resultado"),
       cell: ({ row }) => (
         <StatusIndicator
-          className="text-sm"
           state={statusDescriptor("outcome", row.original.outcome)}
         />
       ),
@@ -685,7 +684,6 @@ export function OperationsCostsTable({ days }: { days: OperationsCostDay[] }) {
       cell: ({ row }) =>
         row.original.unknownOperations > 0 ? (
           <StatusIndicator
-            className="text-sm"
             state={{
               label: `${formatCount(row.original.unknownOperations)} operaciones`,
               variant: "warning",
@@ -803,7 +801,7 @@ function Installed({ release }: { release: ReleaseRow }) {
         <dl className="space-y-4">
           {where.map((place) => (
             <div key={place.environment} className="space-y-1">
-              <dt className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+              <dt className="text-xs font-medium text-muted-foreground">
                 {environmentLabels[place.environment]}
               </dt>
               <dd>{place.kinds.join(" · ")}</dd>

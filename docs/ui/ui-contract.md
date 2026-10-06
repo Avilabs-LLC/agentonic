@@ -178,4 +178,4 @@ The compact Propuestas table, five derived proposal states, version/revision des
 - **One fact per cell:** a state badge never shares its cell with a secondary state. Deployment tables give **En reposo** its own column ("Sí", "No", or "No aplica" when not running).
 - **Long lists open a dialog:** a cell that would list many places (Runtime → Instalada en) shows a count that opens a dialog with the full list.
 - **Metric tiles** (the Admin agent page) show their value as prominent text in its state's colour, never a badge. Every tile keeps the same three rows (label, value, detail), with a placeholder when a detail is missing, so their text lines up.
-
+- **Table text** stays at 12px under the Nova preset, whose body text is 14px: the shared `Table` sets it once, and buttons in cells and headers follow. Inline status indicators take the surrounding text size. Data cells stay on one line, and a wide table scrolls within its own area. Only free text such as error messages, and tables inside dialogs, may wrap.

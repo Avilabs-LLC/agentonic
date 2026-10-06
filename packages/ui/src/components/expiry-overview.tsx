@@ -139,7 +139,7 @@ export function ExpiryTable({ rows, now }: { rows: ExpiryRow[]; now: string }) {
         <DataTableColumnHeader column={column} title="Agente" />
       ),
       cell: ({ row }) => (
-        <div className="max-w-64 min-w-40 space-y-1 whitespace-normal">
+        <div className="space-y-1">
           <p className="font-medium">
             {row.original.agentId ? (
               <AgentLink
@@ -150,7 +150,7 @@ export function ExpiryTable({ rows, now }: { rows: ExpiryRow[]; now: string }) {
               row.original.agentName
             )}
           </p>
-          <p className="flex flex-wrap items-center gap-x-1.5 text-muted-foreground">
+          <p className="flex items-center gap-x-1.5 text-muted-foreground">
             <WorkspaceName name={row.original.workspaceName} />
             <span>· Versión {row.original.versionNumber}</span>
           </p>
@@ -227,7 +227,7 @@ export function ExpiryTable({ rows, now }: { rows: ExpiryRow[]; now: string }) {
       cell: ({ row }) => {
         const { actor, action, by } = row.original.next
         return (
-          <div className="max-w-72 min-w-52 whitespace-normal">
+          <div>
             <p className="font-medium">
               {actor ? `${expiryActorLabels[actor]} · ${action}` : action}
             </p>

@@ -286,7 +286,7 @@ export function ReviewTable({
         id: "deployment",
         header: "Despliegue",
         cell: ({ row }: { row: { original: Review } }) => (
-          <span className="text-sm">
+          <span>
             {deploymentLabels[row.original.deploymentStatus ?? "none"] ??
               "No disponible"}
           </span>

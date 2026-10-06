@@ -27,7 +27,7 @@ export function AgentVersionFacet({
 }) {
   const f = view[facet]
   return (
-    <div className="max-w-56 min-w-36 space-y-1 whitespace-normal">
+    <div className="space-y-1">
       {f.state &&
         (view.primary === facet ? (
           <Badge variant={f.badge}>{f.state.label}</Badge>

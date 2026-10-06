@@ -82,7 +82,7 @@ export function StatusIndicator({
   return (
     <span
       className={cn(
-        "inline-flex min-w-0 items-center gap-1.5 text-sm text-muted-foreground",
+        "inline-flex min-w-0 items-center gap-1.5 text-muted-foreground",
         className
       )}
     >

@@ -173,7 +173,7 @@ export function AuthoringTable({
         <DataTableColumnHeader column={column} title="Agente" />
       ),
       cell: ({ row }) => (
-        <div className="max-w-56 min-w-32 whitespace-normal">
+        <div>
           {row.original.canEdit ? (
             <AgentLink
               href={`/agents/${row.original.id}?workspace=${row.original.workspaceId}`}

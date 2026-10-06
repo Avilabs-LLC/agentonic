@@ -37,7 +37,7 @@ export function PlaceGroups({ items }: { items: PlaceItem[] }) {
         >
           <h3
             id={`place-${group.environment}`}
-            className="text-xs font-medium tracking-wide text-muted-foreground uppercase"
+            className="text-xs font-medium text-muted-foreground"
           >
             {environmentLabels[group.environment]}
           </h3>
@@ -48,7 +48,7 @@ export function PlaceGroups({ items }: { items: PlaceItem[] }) {
                 <Item size="sm" className="px-0">
                   <ItemContent>
                     <ItemTitle>{item.name}</ItemTitle>
-                    <ItemDescription className="whitespace-normal">
+                    <ItemDescription className="line-clamp-none whitespace-normal">
                       {item.description}
                     </ItemDescription>
                   </ItemContent>

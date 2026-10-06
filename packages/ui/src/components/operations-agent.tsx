@@ -277,7 +277,7 @@ function ProposalsTable({
           return <span className="text-muted-foreground">Sin aprobación</span>
         const valid = p.approvalReason === "valid"
         return (
-          <div className="max-w-56 min-w-36 space-y-0.5 whitespace-normal">
+          <div className="space-y-0.5">
             <StatusIndicator
               state={statusDescriptor("approval", valid ? "valid" : "invalid")}
             />
