@@ -66,35 +66,54 @@ await build({
     js: 'import { createRequire as _createRequire } from "node:module"; const require = _createRequire(import.meta.url);',
   },
 })
-const fromWorker = createRequire(join(root, "apps/worker/package.json"))
-const pdfParse = createRequire(fromWorker.resolve("pdf-parse/package.json"))
-cpSync(
+// A package's directory, found from its entry point: some packages export no
+// package.json.
+const packageRoot = (from, name) => {
+  let directory = dirname(from.resolve(name))
+  while (
+    !existsSync(join(directory, "package.json")) ||
+    JSON.parse(readFileSync(join(directory, "package.json"))).name !== name
+  ) {
+    assert.notEqual(
+      dirname(directory),
+      directory,
+      `No package root for ${name}`
+    )
+    directory = dirname(directory)
+  }
+  return directory
+}
+const pdfParse = createRequire(
   join(
-    dirname(pdfParse.resolve("pdfjs-dist/package.json")),
-    "legacy/build/pdf.worker.mjs"
-  ),
+    packageRoot(
+      createRequire(join(root, "apps/worker/package.json")),
+      "pdf-parse"
+    ),
+    "package.json"
+  )
+)
+cpSync(
+  join(packageRoot(pdfParse, "pdfjs-dist"), "legacy/build/pdf.worker.mjs"),
   join(worker, "pdf.worker.mjs")
 )
-const canvasRoot = dirname(pdfParse.resolve("@napi-rs/canvas/package.json"))
+const canvasRoot = packageRoot(pdfParse, "@napi-rs/canvas")
 const canvas = JSON.parse(readFileSync(join(canvasRoot, "package.json")))
 const fromCanvas = createRequire(join(canvasRoot, "package.json"))
-const natives = Object.keys(canvas.optionalDependencies ?? {}).filter(
+const natives = Object.keys(canvas.optionalDependencies ?? {}).flatMap(
   (name) => {
     try {
-      fromCanvas.resolve(`${name}/package.json`)
-      return true
+      return [[name, packageRoot(fromCanvas, name)]]
     } catch {
-      return false
+      return []
     }
   }
 )
 assert.equal(natives.length, 1, "Expected exactly one installed canvas binary")
-for (const name of ["@napi-rs/canvas", ...natives])
-  cpSync(
-    dirname(fromCanvas.resolve(`${name}/package.json`)),
-    join(worker, "node_modules", name),
-    { recursive: true, dereference: true }
-  )
+for (const [name, directory] of [["@napi-rs/canvas", canvasRoot], ...natives])
+  cpSync(directory, join(worker, "node_modules", name), {
+    recursive: true,
+    dereference: true,
+  })
 
 const git = (...args) =>
   execFileSync("git", args, { cwd: root }).toString().trim()
