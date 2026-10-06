@@ -1560,7 +1560,7 @@ The database CA reaches the apps and worker as a systemd credential. The three n
 - **What stays the same:**
   - The apps listen only on loopback, and Caddy keeps the original `Host`. The existing origin checks compare `Origin` with `Host` and work unchanged behind the proxy.
   - Session cookies have no `Domain` attribute and different names per app, so each stays on its own host. They are `Secure` in production.
-- **Sign-in and Google:** sign-in is by password on the server, so no Supabase redirect URL is involved yet; invitations and resets need C13. The customer app's Google callback is `https://app.agentonic.avilabs.tech/api/connections/google/callback`, which the OAuth client must list (C12).
+- **Sign-in and Google:** sign-in is by password on the server, so no Supabase redirect URL is involved yet; invitations and resets need C13. The customer app's Google callback is `https://app.agentonic.avilabs.tech/api/connections/google/callback`, which the OAuth client lists since 6 October (C12): Google accepts it and rejects an unregistered path.
 
 **Install, upgrade and rollback (C16).** `pnpm platform:install --azure --release=<tag>` runs these steps:
 

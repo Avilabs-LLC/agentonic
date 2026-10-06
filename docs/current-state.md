@@ -51,7 +51,7 @@ The Admin app has **Revisiones** (submissions, receipts, renewal and activation)
 
 ## Not built yet
 
-- Hosted beta: SMTP and invitations (C13), renewal and VM checks that don't depend on the Mac (C19), the Google redirect on the hosted name (C12), and a paid Supabase plan (and transaction pooling once apps run several instances).
+- Hosted beta: SMTP and invitations (C13), renewal and VM checks that don't depend on the Mac (C19), and a paid Supabase plan (and transaction pooling once apps run several instances).
 - Production: a separate project and keys, ongoing operating authorization instead of the 7-day staging limit, budgets per period, backups with a restore drill.
 - Product: external channels, automation, agent memory and Google verification. Chats, Gmail and costs now sit on the general model (architecture §§48–50).
 - Scale: multiple hosts, the 250-agent synthetic load test, and a tested path to 500 agents.
