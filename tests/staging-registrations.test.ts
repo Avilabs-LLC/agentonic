@@ -6,6 +6,8 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 // @ts-expect-error -- plain ESM script without type declarations
 import * as units from "../scripts/staging-units.mjs"
+// @ts-expect-error -- plain ESM script without type declarations
+import * as platformUnits from "../scripts/platform-units.mjs"
 import { DROP_IN_BROKERS } from "../apps/worker/src/staging-controller"
 import {
   DAY,
@@ -21,6 +23,7 @@ import {
   gatherScript,
   healthFindings,
   healthProbes,
+  PLATFORM_SERVICES,
   issueBody,
   machineNotes,
   releaseNotes,
@@ -32,6 +35,9 @@ import {
   type Registration,
   type Report,
 } from "../scripts/staging-registrations/policy"
+const { platformServices } = platformUnits as {
+  platformServices: Record<string, string>
+}
 
 const now = new Date("2026-10-10T12:00:00Z")
 const hash = (c: string) => c.repeat(64)
@@ -454,6 +460,15 @@ describe("service health", () => {
   const unit = "agentonic-deployer-staging.service"
   const gateway = "agentonic-gateway-staging.service"
   const running = "ActiveState=active|Result=success|NRestarts=0|"
+  const platform = Object.fromEntries(
+    PLATFORM_SERVICES.map(([name]) => [`state:${name}`, running])
+  )
+  it("names the hosted services the platform units install", () => {
+    expect(PLATFORM_SERVICES.map(([name]) => name)).toEqual([
+      ...Object.values(platformServices).map((name) => `${name}.service`),
+      "caddy.service",
+    ])
+  })
   it("gathers health facts with fixed, safe commands", () => {
     const script = gatherScript([
       ...healthProbes("azure-host"),
@@ -469,6 +484,7 @@ describe("service health", () => {
         [`event:${unit}`]:
           '{"event":"service_recovered","reason":"database_unreachable"}',
         [`state:${gateway}`]: running,
+        ...platform,
         failedagents: "0",
       })
     ).toEqual([])
@@ -488,6 +504,7 @@ describe("service health", () => {
           reason: "database_unreachable",
           since: "2026-10-05T07:33:00.000Z",
         }),
+        ...platform,
         failedagents: "2",
       })
     ).toEqual([
@@ -500,10 +517,14 @@ describe("service health", () => {
         [`state:${unit}`]: running,
         [`state:${gateway}`]:
           "ActiveState=failed|Result=exit-code|NRestarts=5|",
+        ...platform,
+        "state:agentonic-knowledge-staging.service":
+          "ActiveState=inactive|Result=success|NRestarts=0|",
         failedagents: "0",
       })
     ).toEqual([
       "the database gateway is not running (failed, exit-code, 5 restarts)",
+      "the knowledge worker is not running (inactive, success, 0 restarts)",
     ])
     expect(
       healthFindings("azure-evaluator", {
@@ -518,6 +539,10 @@ describe("service health", () => {
     expect(healthFindings("azure-host", {})).toEqual([
       "could not read the state of the deployment controller",
       "could not read the state of the database gateway",
+      "could not read the state of the Admin app",
+      "could not read the state of the customer app",
+      "could not read the state of the knowledge worker",
+      "could not read the state of the TLS proxy",
     ])
   })
   it("checks the planned restart window against the reviewed units", () => {
@@ -526,6 +551,7 @@ describe("service health", () => {
     const facts = {
       [`state:${unit}`]: running,
       [`state:${gateway}`]: running,
+      ...platform,
       failedagents: "0",
       [`sha:/etc/systemd/system/${timer}`]: hash("1"),
       "sha:/etc/systemd/system/agentonic-restart-window.service": hash("2"),

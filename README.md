@@ -2,7 +2,7 @@
 
 Platform monorepo for the staff admin app, customer app, platform workers and the agent runtime (`packages/runtime`). The runtime is packaged as an immutable, content-addressed artifact that runs the agent loop in a credential-free child process; the worker broker holds credentials and executes provider and tool calls (architecture §40). Releases up to 0.3.0 came from the frozen `Avilabs-LLC/agentonic-runtime` repository.
 
-**Start with [docs/current-state.md](docs/current-state.md)**: a short summary of what runs where, what works end to end and what isn't built yet. Open work, who acts next and when each item counts as done are in [docs/outstanding-actions.md](docs/outstanding-actions.md). The authoritative design and dated implementation checkpoints are in [docs/agentonic-architecture.md](docs/agentonic-architecture.md) (§§22–52), and presentation rules are in [docs/ui/ui-contract.md](docs/ui/ui-contract.md). [docs/schema.dbml](docs/schema.dbml) describes the complete target model; 62 of its 79 tables exist so far. Everything runs against one nonproduction Supabase project: customers can author, preview, submit, get approval and chat with a privately activated agent, but nothing is hosted for outside users yet.
+**Start with [docs/current-state.md](docs/current-state.md)**: a short summary of what runs where, what works end to end and what isn't built yet. Open work, who acts next and when each item counts as done are in [docs/outstanding-actions.md](docs/outstanding-actions.md). The authoritative design and dated implementation checkpoints are in [docs/agentonic-architecture.md](docs/agentonic-architecture.md) (§§22–53), and presentation rules are in [docs/ui/ui-contract.md](docs/ui/ui-contract.md). [docs/schema.dbml](docs/schema.dbml) describes the complete target model; 62 of its 79 tables exist so far. Everything runs against one nonproduction Supabase project: customers can author, preview, submit, get approval and chat with a privately activated agent, but nothing is hosted for outside users yet.
 
 ## Local development
 
@@ -77,7 +77,7 @@ pnpm db:check-prisma
 
 Every page has a matching loading skeleton. After reviewing any affected visual sources and loading states, run `pnpm skeletons:update` to record the review baseline. CI checks the manifest and shared visual dependencies.
 
-**Do not run `pnpm build` or `next build` for verification.** They rewrite `.next` and can corrupt running development servers. A deliberate deployment build requires explicit owner authorization.
+**Do not run `pnpm build` or `next build` for verification.** They rewrite `.next` and can corrupt running development servers. Production builds happen only in the **Release** workflow on a clean runner (architecture §53).
 
 ## Layout
 
@@ -143,6 +143,16 @@ pnpm version:check
 This increments the minor version and resets the patch, recording the release in `lib/app-version.ts` and `lib/version-history.ts` and updating the shared UI label. Review that label and refresh the skeleton baseline with `pnpm skeletons:update` before committing. CI verifies that the package, application, history and UI versions agree. This command does not build or deploy either app.
 
 For an authorized release directly on `main`, use `node scripts/versioning.mjs bump direct --summary "Describe the completed changes"` instead. It increments only the patch version and updates the same metadata; run the same version and skeleton checks before committing and pushing.
+
+**Platform releases** (architecture §53). Run the **Release** workflow on `main` (Actions → Release → Run workflow). It runs every check, builds both apps and the knowledge worker on a clean runner, smoke-tests the packed release and publishes it as a private GitHub release named `platform-<version>-<commit>`, with a manifest naming every file. Pull requests that touch what ships run the same build and smoke test without publishing. Then, after `pnpm db:migrate` if the release brings migrations:
+
+```sh
+pnpm platform:install --azure --release=platform-<version>-<commit>   # check, install, health gates
+pnpm platform:install --azure --rollback                              # back to the previous release
+pnpm hosted:check                                                     # outside checks of both names
+```
+
+The VM checks every file against the manifest before installing, and services move one at a time through health gates; a failed gate restores what ran before.
 
 `pnpm db:check-page-reads` is an opt-in nonproduction concurrency check for both restricted app roles. It checks actor-scoped identity discovery, concurrent readers and conflicting writers; all temporary writes are rolled back. Page-load observations and limitations are recorded in architecture section 25.
 

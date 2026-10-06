@@ -1,6 +1,6 @@
 {
   "name": "agentonic",
-  "version": "0.14.0",
+  "version": "0.15.0",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@11.21.0",
@@ -46,6 +46,9 @@
     "dev:staging": "node scripts/start-staging.mjs",
     "staging:reverify": "node --import tsx scripts/staging-registrations/run.mjs",
     "staging:restart-window": "node scripts/install-restart-window.mjs",
+    "platform:install": "node scripts/install-platform.mjs",
+    "platform:smoke": "node scripts/smoke-platform.mjs",
+    "hosted:check": "node scripts/check-hosted.mjs",
     "connections:rotate-key": "node --import tsx scripts/rotate-connection-key.mjs",
     "rag:benchmark": "tsx scripts/rag-benchmark/run.ts",
     "web:benchmark": "node --import tsx scripts/web-benchmark/run.mjs --live",

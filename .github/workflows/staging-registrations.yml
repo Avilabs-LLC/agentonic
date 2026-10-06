@@ -1,6 +1,7 @@
 name: Staging registrations
 # Alerts when vm-agents-01 registrations are about to expire, failed re-verification,
-# or the renewal job on the owner's Mac stopped reporting. Reads only the content-free
+# the renewal job on the owner's Mac stopped reporting, or the hosted apps stop
+# answering over HTTPS (checked from here, without credentials). Reads only the content-free
 # STAGING_REGISTRATIONS repository variable; holds no database or VM credentials.
 on:
   schedule:
@@ -19,7 +20,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          sparse-checkout: scripts/staging-registrations
+          sparse-checkout: |
+            scripts/staging-registrations
+            scripts/hosted-check.mjs
+            scripts/platform-units.mjs
+            scripts/staging-units.mjs
+          sparse-checkout-cone-mode: false
       - uses: actions/setup-node@v4
         with:
           node-version: 22

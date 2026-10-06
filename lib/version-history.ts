@@ -1,5 +1,10 @@
 export const VERSION_HISTORY = [
   {
+    "version": "0.15.0",
+    "date": "2026-10-06",
+    "summary": "Primera versión publicada para el servidor: aplicaciones y procesamiento de conocimiento alojados con HTTPS y encabezados de seguridad, pantallas de operación, evaluaciones de herramientas y modelo general de conversaciones."
+  },
+  {
     "version": "0.14.0",
     "date": "2026-09-20",
     "summary": "Diálogos consistentes, criterios más claros y alineación uniforme de las tablas de propuestas y resultados."
