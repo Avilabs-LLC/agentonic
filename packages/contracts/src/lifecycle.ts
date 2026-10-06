@@ -30,6 +30,7 @@ export const deploymentLabels: Record<string, string> = {
   stopped: "Detenido",
   failed: "No se pudo activar",
   superseded: "Reemplazado",
+  unauthorized: "Autorización no vigente",
 }
 export const environmentLabels = {
   local: "Local · desarrollo",

@@ -1,6 +1,7 @@
 import { z } from "zod"
 import { toolGrants } from "./tools"
 import { uuid } from "./identity"
+import { agentVersionSummary } from "./agent-versions"
 export const skill = z
   .object({
     name: z
@@ -198,6 +199,7 @@ export const agentListing = z.array(
             status: z.enum(["submitted", "in_review"]),
           })
         ),
+        summary: agentVersionSummary.nullable(),
       })
       .nullable(),
   })
@@ -259,6 +261,7 @@ export type AgentView = z.infer<typeof agentView>
 export const reviewQueue = z.array(
   z.object({
     id: uuid,
+    agentId: uuid.nullable().optional(),
     agentName: z.string(),
     userId: uuid,
     userName: z.string(),

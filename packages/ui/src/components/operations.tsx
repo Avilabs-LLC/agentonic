@@ -34,6 +34,11 @@ import {
 } from "@workspace/ui/lib/badge-status"
 import { Badge } from "@workspace/ui/components/badge"
 import { StatusIndicator } from "@workspace/ui/components/status-badge"
+import { IdLink } from "@workspace/ui/components/id-link"
+import {
+  AgentLink,
+  agentVersionColumns,
+} from "@workspace/ui/components/agent-versions"
 import { CardEmptyState } from "@workspace/ui/components/card-empty-state"
 import {
   DataTable,
@@ -76,10 +81,20 @@ function When({ value }: { value: string | null }) {
 }
 const at = (value: string | null) =>
   value === null ? -Infinity : Date.parse(value)
-function Named({ name, detail }: { name: string; detail: string }) {
+function Named({
+  name,
+  detail,
+  href,
+}: {
+  name: string
+  detail: string
+  href?: string
+}) {
   return (
     <div className="max-w-64 min-w-40 whitespace-normal">
-      <p className="font-medium">{name}</p>
+      <p className="font-medium">
+        {href ? <AgentLink href={href} name={name} /> : name}
+      </p>
       <p className="text-muted-foreground">{detail}</p>
     </div>
   )
@@ -100,7 +115,7 @@ function Stat({ label, value }: { label: string; value: number }) {
 }
 
 // Agentes -------------------------------------------------------------------------
-function capabilities(tools: OperationsAgent["tools"]) {
+export function capabilities(tools: OperationsAgent["tools"]) {
   const parts = [
     ...(tools.collections
       ? [
@@ -119,10 +134,21 @@ export function OperationsAgentsTable({
 }) {
   const columns: ColumnDef<OperationsAgent>[] = [
     {
+      accessorKey: "id",
+      header: header("ID"),
+      cell: ({ row }) => (
+        <IdLink id={row.original.id} href={`/agents/${row.original.id}`} />
+      ),
+    },
+    {
       accessorKey: "name",
       header: header("Agente"),
       cell: ({ row }) => (
-        <Named name={row.original.name} detail={row.original.workspaceName} />
+        <Named
+          name={row.original.name}
+          detail={row.original.workspaceName}
+          href={`/agents/${row.original.id}`}
+        />
       ),
     },
     {
@@ -144,28 +170,7 @@ export function OperationsAgentsTable({
         </div>
       ),
     },
-    {
-      id: "deployment",
-      accessorFn: (row) => row.deployment?.status ?? "none",
-      header: header("Despliegue"),
-      cell: ({ row }) => {
-        const d = row.original.deployment
-        return (
-          <div className="space-y-1">
-            <StatusIndicator
-              className="text-sm"
-              state={statusDescriptor("deployment", d?.status ?? "none")}
-            />
-            {d && (
-              <p className="text-xs text-muted-foreground">
-                {environmentLabels[d.environment]}
-                {d.resting && d.status === "running" ? " · En reposo" : ""}
-              </p>
-            )}
-          </div>
-        )
-      },
-    },
+    ...agentVersionColumns<OperationsAgent>((row) => row.summary),
     {
       id: "activity",
       accessorFn: (row) => at(row.lastRunAt),
@@ -177,16 +182,6 @@ export function OperationsAgentsTable({
             {formatCount(row.original.runs7d)} en 7 días
           </p>
         </div>
-      ),
-    },
-    {
-      accessorKey: "status",
-      header: header("Estado"),
-      cell: ({ row }) => (
-        <StatusIndicator
-          appearance="badge"
-          state={statusDescriptor("agent", row.original.status)}
-        />
       ),
     },
   ]
@@ -251,6 +246,12 @@ export function OperationsActivityTable({
               row.original.resourceType}{" "}
             <span className="font-mono text-xs">{row.original.resourceId}</span>
           </p>
+          {row.original.agentId && row.original.agentName && (
+            <AgentLink
+              href={`/agents/${row.original.agentId}`}
+              name={row.original.agentName}
+            />
+          )}
         </div>
       ),
     },
@@ -274,7 +275,7 @@ export function OperationsActivityTable({
     <DataTable
       data={rows}
       columns={columns}
-      searchKeys={["actionLabel", "workspaceName", "resourceId"]}
+      searchKeys={["actionLabel", "workspaceName", "resourceId", "agentName"]}
       searchLabel="Buscar acciones o espacios"
       emptyDescription="No hay cambios registrados."
       getRowId={(row) => row.id}
@@ -456,8 +457,8 @@ export function OperationsInstallationsCard({
       <CardHeader>
         <CardTitle>Qué ejecuta cada servidor</CardTitle>
         <CardDescription>
-          Versiones del trabajador y del runtime instaladas, como las informa
-          la verificación dos veces al día. Instalar una versión nueva se hace
+          Versiones del trabajador y del runtime instaladas, como las informa la
+          verificación dos veces al día. Instalar una versión nueva se hace
           desde el Mac con los scripts de instalación.
         </CardDescription>
       </CardHeader>
@@ -507,6 +508,7 @@ export function OperationsDeploymentsTable({
         <Named
           name={row.original.agentName}
           detail={row.original.workspaceName}
+          href={`/agents/${row.original.agentId}`}
         />
       ),
     },
@@ -586,8 +588,8 @@ export function OperationsProvidersCard({
         <CardTitle>Límites de gasto por proveedor</CardTitle>
         <CardDescription>
           Lo comprometido incluye lo ya pagado y las reservas cuyo resultado no
-          se conoce; una reserva sin resultado nunca se cuenta como cero. El
-          uso acumulado no se reinicia.
+          se conoce; una reserva sin resultado nunca se cuenta como cero. El uso
+          acumulado no se reinicia.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -597,7 +599,9 @@ export function OperationsProvidersCard({
               {index > 0 && <ItemSeparator className="my-0" />}
               <Item size="sm" className="px-0">
                 <ItemContent>
-                  <ItemTitle>{providerLabels[p.provider] ?? p.provider}</ItemTitle>
+                  <ItemTitle>
+                    {providerLabels[p.provider] ?? p.provider}
+                  </ItemTitle>
                   <ItemDescription className="tabular-nums">
                     Comprometido {formatMoney(p.committedUsd)} de{" "}
                     {formatMoney(p.capUsd)} · Liquidado{" "}
@@ -679,6 +683,7 @@ export function OperationsTopAgentsCard({
   agents,
 }: {
   agents: {
+    agentId: string | null
     agentName: string
     workspaceName: string
     knownUsd: number
@@ -707,10 +712,19 @@ export function OperationsTopAgentsCard({
                 {index > 0 && <ItemSeparator className="my-0" />}
                 <Item size="sm" className="px-0">
                   <ItemContent>
-                    <ItemTitle>{agent.agentName}</ItemTitle>
+                    <ItemTitle>
+                      {agent.agentId ? (
+                        <AgentLink
+                          href={`/agents/${agent.agentId}`}
+                          name={agent.agentName}
+                        />
+                      ) : (
+                        agent.agentName
+                      )}
+                    </ItemTitle>
                     <ItemDescription>
-                      {agent.workspaceName} ·{" "}
-                      {formatCount(agent.operations)} operaciones
+                      {agent.workspaceName} · {formatCount(agent.operations)}{" "}
+                      operaciones
                     </ItemDescription>
                   </ItemContent>
                   <ItemActions className="tabular-nums">

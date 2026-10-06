@@ -1,4 +1,5 @@
 "use client"
+import { AgentLink } from "@workspace/ui/components/agent-versions"
 import { approvalBadgeVariants } from "@workspace/ui/lib/badge-status"
 import { Badge } from "@workspace/ui/components/badge"
 
@@ -195,31 +196,15 @@ export function ReviewTable({
       header: ({ column }) => (
         <DataTableColumnHeader column={column} title="Agente" />
       ),
+      // The name opens the agent page; the review number opens the review.
       cell: ({ row }) =>
-        row.original.canOpen || row.original.status === "approved" ? (
-          <Button
-            variant="link"
-            className="h-auto p-0 text-xs font-medium text-blue-600 underline underline-offset-4 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
-            disabled={pending}
-            aria-label={`Ver revisión ${row.original.number} de ${row.original.agentName}`}
-            onClick={() => open(row.original)}
-          >
-            {row.original.agentName}
-            {pending && openingId === row.original.id && (
-              <span className="sr-only"> · Abriendo…</span>
-            )}
-          </Button>
+        row.original.agentId ? (
+          <AgentLink
+            href={`/agents/${row.original.agentId}`}
+            name={row.original.agentName}
+          />
         ) : (
-          <div>
-            <span className="text-xs font-medium">
-              {row.original.agentName}
-            </span>
-            <p className="text-xs text-muted-foreground">
-              {["submitted", "in_review"].includes(row.original.status)
-                ? "Sin autorización vigente"
-                : "Revisión cerrada"}
-            </p>
-          </div>
+          <span className="text-xs font-medium">{row.original.agentName}</span>
         ),
     },
     {
@@ -242,9 +227,30 @@ export function ReviewTable({
       header: ({ column }) => (
         <DataTableColumnHeader column={column} title="Revisión #" />
       ),
-      cell: ({ row }) => (
-        <span className="tabular-nums">{row.original.number}</span>
-      ),
+      cell: ({ row }) =>
+        row.original.canOpen || row.original.status === "approved" ? (
+          <Button
+            variant="link"
+            className="h-auto p-0 text-xs font-medium text-blue-600 tabular-nums underline underline-offset-4 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
+            disabled={pending}
+            aria-label={`Ver revisión ${row.original.number} de ${row.original.agentName}`}
+            onClick={() => open(row.original)}
+          >
+            {row.original.number}
+            {pending && openingId === row.original.id && (
+              <span className="sr-only"> · Abriendo…</span>
+            )}
+          </Button>
+        ) : (
+          <div>
+            <span className="tabular-nums">{row.original.number}</span>
+            <p className="text-xs text-muted-foreground">
+              {["submitted", "in_review"].includes(row.original.status)
+                ? "Sin autorización vigente"
+                : "Revisión cerrada"}
+            </p>
+          </div>
+        ),
     },
     {
       accessorKey: "versionNumber",

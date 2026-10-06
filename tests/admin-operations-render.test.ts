@@ -15,6 +15,9 @@ const ui = (await load("../packages/ui/src/components/operations")) as Record<
 const skeletons = await load(
   "../packages/ui/src/components/operations-skeletons"
 )
+const agentPage = (await load(
+  "../packages/ui/src/components/operations-agent"
+)) as Record<string, (props: Record<string, unknown>) => unknown>
 const createElement = react.createElement as (
   component: unknown,
   props: Record<string, unknown>
@@ -33,37 +36,158 @@ const id = (n: number) =>
 const now = "2026-10-06T12:00:00.000Z"
 
 describe("Admin operations screens", () => {
-  it("lists agents with their state, capabilities and deployment", () => {
+  it("lists agents with the version in use, the next version and capabilities", () => {
+    const agent = {
+      id: id(1),
+      name: "Asistente sintético",
+      status: "draft",
+      workspaceId: id(2),
+      workspaceName: "Espacio A",
+      ownerName: "Ana",
+      createdAt: now,
+      latestVersion: "2",
+      tools: { gmail: true, web: false, collections: 2 },
+      deployment: null,
+      lastRunAt: null,
+      runs7d: 0,
+    }
     const out = html(ui.OperationsAgentsTable, {
       agents: [
         {
-          id: id(1),
-          name: "Asistente sintético",
-          status: "active",
-          workspaceId: id(2),
-          workspaceName: "Espacio A",
-          ownerName: "Ana",
-          createdAt: now,
-          latestVersion: "1",
-          tools: { gmail: true, web: false, collections: 2 },
-          deployment: {
-            status: "running",
-            environment: "azure_staging",
-            resting: true,
-            authorizedUntil: now,
+          ...agent,
+          summary: {
+            archived: false,
+            live: [
+              {
+                environment: "azure_staging",
+                status: "running",
+                resting: true,
+                versionNumber: 1,
+                submissionId: id(7),
+              },
+            ],
+            ended: null,
+            next: {
+              submissionId: id(8),
+              number: 6,
+              versionNumber: 2,
+              status: "in_review",
+              approvalReason: null,
+              approvalExpiresAt: null,
+              deployment: null,
+            },
           },
-          lastRunAt: null,
-          runs7d: 0,
+        },
+        {
+          ...agent,
+          id: id(9),
+          name: "Agente nuevo",
+          summary: { archived: false, live: [], ended: null, next: null },
         },
       ],
     })
     for (const text of [
+      `href="/agents/${id(1)}"`,
       "Asistente sintético",
       "Conocimiento (2 colecciones) · Gmail",
+      "Versión en uso",
+      "Próxima versión",
       "En funcionamiento",
-      "VM · pruebas · En reposo",
+      "Versión 1 · VM · pruebas · En reposo",
+      "En revisión",
+      "Versión 2",
+      "Ninguna",
+      "Borrador",
+      "Sin enviar a revisión",
       "Sin registro",
-      "Activo",
+    ])
+      expect(out).toContain(text)
+    // The stored agent status is no longer shown.
+    expect(out).not.toContain(">Estado<")
+  })
+  it("shows one agent's versions, proposals, deployments and activity", () => {
+    const out = html(agentPage.OperationsAgentOverview, {
+      agent: {
+        id: id(1),
+        name: "Asistente sintético",
+        workspaceId: id(2),
+        workspaceName: "Espacio A",
+        ownerName: "Ana",
+        createdAt: now,
+        latestVersion: 2,
+        tools: { gmail: false, web: true, collections: 0 },
+        summary: {
+          archived: false,
+          live: [],
+          ended: {
+            environment: "azure_staging",
+            status: "stopped",
+            versionNumber: 1,
+          },
+          next: {
+            submissionId: id(8),
+            number: 6,
+            versionNumber: 2,
+            status: "approved",
+            approvalReason: "valid",
+            approvalExpiresAt: now,
+            deployment: {
+              environment: "azure_staging",
+              status: "awaiting_activation",
+            },
+          },
+        },
+        proposals: [
+          {
+            id: id(8),
+            number: 6,
+            versionNumber: 2,
+            status: "approved",
+            submittedAt: now,
+            approvalReason: "valid",
+            approvalExpiresAt: now,
+          },
+          {
+            id: id(10),
+            number: 7,
+            versionNumber: 3,
+            status: "in_review",
+            submittedAt: now,
+            approvalReason: null,
+            approvalExpiresAt: null,
+          },
+        ],
+        deployments: [
+          {
+            id: id(11),
+            submissionId: id(7),
+            environment: "azure_staging",
+            status: "stopped",
+            resting: false,
+            versionNumber: 1,
+            authorizedUntil: now,
+            budgetUsd: 0.25,
+            spentUsd: 0.01,
+            createdAt: now,
+            activatedAt: null,
+          },
+        ],
+        activity: { lastRunAt: null, runs7d: 0, failed7d: 0, knownUsd30d: 0 },
+      },
+    })
+    for (const text of [
+      "Detenido",
+      "Pendiente de activación",
+      "Versión 2 · VM · pruebas",
+      "Web",
+      "Propuestas",
+      "Versión 2 · Revisión 6",
+      "Aprobada",
+      "Aprobación vigente",
+      "Plazo para activar",
+      `/submissions/${id(8)}/receipt?workspace=${id(2)}`,
+      `/submissions?workspace=${id(2)}`,
+      "Abrir en Revisiones",
     ])
       expect(out).toContain(text)
   })
@@ -79,6 +203,8 @@ describe("Admin operations screens", () => {
           resourceId: "abcdef12",
           outcome: "succeeded",
           actor: "staff",
+          agentId: id(1),
+          agentName: "Asistente sintético",
         },
         {
           id: id(4),
@@ -89,6 +215,8 @@ describe("Admin operations screens", () => {
           resourceId: "12345678",
           outcome: "denied",
           actor: "member",
+          agentId: null,
+          agentName: null,
         },
       ],
     })
@@ -99,6 +227,7 @@ describe("Admin operations screens", () => {
       "future.action",
       "Denegada",
       "Cliente",
+      `href="/agents/${id(1)}"`,
     ])
       expect(out).toContain(text)
     expect(
@@ -218,6 +347,7 @@ describe("Admin operations screens", () => {
         deployments: [
           {
             id: id(6),
+            agentId: id(1),
             agentName: "Asistente sintético",
             workspaceName: "Espacio A",
             environment: "local",
@@ -235,7 +365,7 @@ describe("Admin operations screens", () => {
     ).toContain("Estado desconocido")
   })
   it("gives each screen a loading state", () => {
-    expect(Object.keys(skeletons)).toHaveLength(6)
+    expect(Object.keys(skeletons)).toHaveLength(7)
     for (const skeleton of Object.values(skeletons))
       expect(html(skeleton)).toContain('role="status"')
   })

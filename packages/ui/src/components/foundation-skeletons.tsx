@@ -125,17 +125,24 @@ export function ExpirySkeleton() {
           <Skeleton className="h-5 w-48" />
           <Skeleton className="h-4 w-full max-w-2xl" />
         </CardHeader>
-        <CardContent className="divide-y">
-          {[1, 2, 3, 4].map((i) => (
-            <div
-              key={i}
-              className="flex items-center justify-between gap-4 py-5 first:pt-2.5 last:pb-2.5"
-            >
-              <div className="space-y-1.5">
-                <Skeleton className="h-4 w-56" />
-                <Skeleton className="h-4 w-80 max-w-full" />
+        <CardContent className="grid gap-6 md:grid-cols-2">
+          {[1, 2].map((group) => (
+            <div key={group} className="space-y-1">
+              <Skeleton className="h-3 w-32" />
+              <div className="divide-y">
+                {[1, 2].map((i) => (
+                  <div
+                    key={i}
+                    className="flex items-center justify-between gap-4 py-4"
+                  >
+                    <div className="space-y-1.5">
+                      <Skeleton className="h-4 w-28" />
+                      <Skeleton className="h-4 w-64 max-w-full" />
+                    </div>
+                    <Skeleton className="h-5 w-20 rounded-full" />
+                  </div>
+                ))}
               </div>
-              <Skeleton className="h-5 w-20 rounded-full" />
             </div>
           ))}
         </CardContent>

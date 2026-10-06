@@ -2,6 +2,7 @@ import "server-only"
 import { withIdentity } from "@agentonic/database/client"
 import {
   operationsActivity,
+  operationsAgent,
   operationsAgents,
   operationsCosts,
   operationsDeployments,
@@ -31,6 +32,13 @@ export const loadOperationsAgents = () =>
   operations(
     (tx) => tx.$queryRaw`SELECT agentonic.operations_agents() result`,
     (v) => operationsAgents.parse(v)
+  )
+// One agent for the Admin agent page (architecture §55): null when the read
+// fails, { agent: null } when no such agent exists.
+export const loadOperationsAgent = (id: string) =>
+  operations(
+    (tx) => tx.$queryRaw`SELECT agentonic.operations_agent(${id}::uuid) result`,
+    (v) => ({ agent: operationsAgent.nullable().parse(v) })
   )
 export const loadOperationsActivity = () =>
   operations(

@@ -49,6 +49,7 @@ export type ExpiryRow = {
   id: string
   workspaceId: string
   workspaceName: string
+  agentId: string | null
   agentName: string
   versionNumber: number
   status: string
@@ -170,6 +171,7 @@ export function expiryRows(
         id: review.id,
         workspaceId: review.workspaceId,
         workspaceName: review.workspaceName,
+        agentId: review.agentId ?? null,
         agentName: review.agentName,
         versionNumber: review.versionNumber,
         status,
