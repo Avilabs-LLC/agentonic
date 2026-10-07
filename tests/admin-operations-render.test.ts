@@ -93,7 +93,7 @@ describe("Admin operations screens", () => {
       "Versión en uso",
       "Próxima versión",
       "En funcionamiento",
-      "Versión 1 · VM · pruebas · En reposo",
+      "Versión 1 · vm-agents-01 · En reposo",
       "En revisión",
       "Versión 2",
       "Ninguna",
@@ -178,7 +178,8 @@ describe("Admin operations screens", () => {
     for (const text of [
       "Detenido",
       "Pendiente de activación",
-      "Versión 2 · VM · pruebas",
+      "Versión 2 · vm-agents-01",
+      "Versión 1 · vm-agents-01",
       "Web",
       "Propuestas",
       "Versión 2 · Revisión 6",
@@ -341,7 +342,7 @@ describe("Admin operations screens", () => {
           },
         ],
       })
-    ).toContain("Agentes en la VM de pruebas")
+    ).toContain("1 instalación")
     expect(
       html(ui.OperationsDeploymentsTable, {
         deployments: [
@@ -362,7 +363,7 @@ describe("Admin operations screens", () => {
           },
         ],
       })
-    ).toContain("Estado desconocido")
+    ).toMatch(/Estado desconocido[\s\S]*No aplica/)
   })
   it("gives each screen a loading state", () => {
     expect(Object.keys(skeletons)).toHaveLength(7)

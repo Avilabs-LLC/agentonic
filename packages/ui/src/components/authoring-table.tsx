@@ -1,4 +1,5 @@
 "use client"
+import { WorkspaceName } from "@workspace/ui/components/workspace-name"
 import Link from "next/link"
 import { useId, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
@@ -172,7 +173,7 @@ export function AuthoringTable({
         <DataTableColumnHeader column={column} title="Agente" />
       ),
       cell: ({ row }) => (
-        <div className="max-w-56 min-w-32 whitespace-normal">
+        <div>
           {row.original.canEdit ? (
             <AgentLink
               href={`/agents/${row.original.id}?workspace=${row.original.workspaceId}`}
@@ -189,6 +190,7 @@ export function AuthoringTable({
       header: ({ column }) => (
         <DataTableColumnHeader column={column} title="Espacio de trabajo" />
       ),
+      cell: ({ row }) => <WorkspaceName name={row.original.workspaceName} />,
     },
     {
       id: "resources",
@@ -244,7 +246,8 @@ export function AuthoringTable({
     },
     ...agentVersionColumns<(typeof agents)[number]>(
       (agent) => agent.configuration?.summary ?? null,
-      unavailable
+      unavailable,
+      "customer"
     ),
   ]
   return (

@@ -24,11 +24,13 @@ import {
   submissionBadgeVariants,
 } from "@workspace/ui/lib/badge-status"
 import { Badge } from "@workspace/ui/components/badge"
-import { StatusIndicator } from "@workspace/ui/components/status-badge"
+import { restingColumn } from "@workspace/ui/components/resting-column"
+import { cn } from "@workspace/ui/lib/utils"
 import {
-  AgentVersionFacet,
-  facetTitles,
-} from "@workspace/ui/components/agent-versions"
+  iconTones,
+  StatusIndicator,
+} from "@workspace/ui/components/status-badge"
+import { facetTitles } from "@workspace/ui/components/agent-versions"
 import { capabilities } from "@workspace/ui/components/operations"
 import {
   DataTable,
@@ -90,6 +92,47 @@ function Stat({ label, value }: { label: string; value: string }) {
     </Card>
   )
 }
+// A metric tile: label, prominent value, detail. Every tile keeps all three
+// rows (a placeholder when a detail is missing) so their text lines up; the
+// value takes its state's colour instead of a badge.
+function Metric({
+  label,
+  value,
+  tone,
+  detail,
+}: {
+  label: string
+  value: string
+  tone?: string
+  detail: string | null
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardDescription className="text-xs font-medium tracking-wide uppercase">
+          {label}
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-1">
+        <p
+          className={cn(
+            "truncate text-lg leading-snug font-semibold",
+            tone ?? "text-foreground"
+          )}
+          title={value}
+        >
+          {value}
+        </p>
+        <p
+          className="truncate text-xs text-muted-foreground"
+          title={detail ?? undefined}
+        >
+          {detail ?? "—"}
+        </p>
+      </CardContent>
+    </Card>
+  )
+}
 function TabLabel({ title, count }: { title: string; count?: number }) {
   return (
     <>
@@ -112,33 +155,33 @@ export function OperationsAgentOverview({
   return (
     <>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {(["live", "next"] as const).map((facet) => (
-          <Card key={facet}>
-            <CardHeader>
-              <CardDescription className="text-xs font-medium tracking-wide uppercase">
-                {facetTitles[facet]}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <AgentVersionFacet view={view} facet={facet} />
-            </CardContent>
-          </Card>
-        ))}
-        <Card>
-          <CardHeader>
-            <CardDescription className="text-xs font-medium tracking-wide uppercase">
-              Capacidades de la última versión
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-1">
-            <p>{capabilities(agent.tools)}</p>
-            <p className="text-xs text-muted-foreground">
-              {agent.latestVersion
-                ? `Versión ${agent.latestVersion}`
-                : "Sin versiones congeladas"}
-            </p>
-          </CardContent>
-        </Card>
+        {(["live", "next"] as const).map((facet) => {
+          const f = view[facet]
+          return (
+            <Metric
+              key={facet}
+              label={facetTitles[facet]}
+              value={f.state?.label ?? "Ninguna"}
+              tone={f.state ? iconTones[f.state.variant] : undefined}
+              detail={
+                f.state
+                  ? `${f.detail}${f.more.length ? ` · y ${f.more.length} más` : ""}`
+                  : facet === "live"
+                    ? "Ninguna versión en funcionamiento"
+                    : f.detail
+              }
+            />
+          )
+        })}
+        <Metric
+          label="Capacidades de la última versión"
+          value={capabilities(agent.tools)}
+          detail={
+            agent.latestVersion
+              ? `Versión ${agent.latestVersion}`
+              : "Sin versiones congeladas"
+          }
+        />
       </div>
       <Tabs defaultValue="propuestas" className="gap-6">
         <TabsList variant="line" className="w-full justify-start border-b">
@@ -234,7 +277,7 @@ function ProposalsTable({
           return <span className="text-muted-foreground">Sin aprobación</span>
         const valid = p.approvalReason === "valid"
         return (
-          <div className="max-w-56 min-w-36 space-y-0.5 whitespace-normal">
+          <div className="space-y-0.5">
             <StatusIndicator
               state={statusDescriptor("approval", valid ? "valid" : "invalid")}
             />
@@ -316,18 +359,14 @@ function DeploymentsTable({
       accessorKey: "status",
       header: header("Estado"),
       cell: ({ row }) => (
-        <div className="space-y-1">
-          <Badge
-            variant={deploymentBadgeVariants[row.original.status] ?? "slate"}
-          >
-            {row.original.statusLabel}
-          </Badge>
-          {row.original.resting && row.original.status === "running" && (
-            <p className="text-xs text-muted-foreground">En reposo</p>
-          )}
-        </div>
+        <Badge
+          variant={deploymentBadgeVariants[row.original.status] ?? "slate"}
+        >
+          {row.original.statusLabel}
+        </Badge>
       ),
     },
+    restingColumn<Deployment>(),
     {
       accessorKey: "versionNumber",
       header: header("Versión"),

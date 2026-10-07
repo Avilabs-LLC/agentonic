@@ -229,7 +229,7 @@ function ProposalRow({
               {!confirmed && record.canEdit ? "Confirmar" : "Ver"}
             </Button>
           ) : (
-            <span className="text-sm text-muted-foreground">
+            <span className="text-muted-foreground">
               {status === "in_progress" &&
               record &&
               ["queued", "preparing"].includes(record.status)
@@ -257,7 +257,7 @@ function ProposalRow({
               Evaluar
             </Button>
           ) : (
-            <span className="text-sm text-muted-foreground">—</span>
+            <span className="text-muted-foreground">—</span>
           )}
         </TableCell>
       </TableRow>

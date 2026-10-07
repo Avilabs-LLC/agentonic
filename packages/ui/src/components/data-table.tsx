@@ -136,7 +136,7 @@ export function DataTable<T>({
             containerClassName="max-h-[32rem]"
             className={
               variant === "integrated"
-                ? "text-sm [&_td]:py-4 [&_td:first-child]:pl-0 [&_td:last-child]:pr-0 [&_th:first-child]:pl-0 [&_th:last-child]:pr-0"
+                ? "text-xs [&_td]:py-4 [&_td:first-child]:pl-0 [&_td:last-child]:pr-0 [&_th:first-child]:pl-0 [&_th:last-child]:pr-0"
                 : undefined
             }
           >

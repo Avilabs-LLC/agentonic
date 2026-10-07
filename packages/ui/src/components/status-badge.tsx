@@ -43,7 +43,7 @@ const icons = {
   x: XIcon,
 }
 // Centralized status palette for unboxed indicators. Text remains neutral except for exceptions.
-const iconTones: Record<StatusTone, string> = {
+export const iconTones: Record<StatusTone, string> = {
   success: "text-emerald-700 dark:text-emerald-300",
   warning: "text-yellow-800 dark:text-yellow-300",
   error: "text-red-700 dark:text-red-300",
@@ -82,7 +82,7 @@ export function StatusIndicator({
   return (
     <span
       className={cn(
-        "inline-flex min-w-0 items-center gap-1.5 text-sm text-muted-foreground",
+        "inline-flex min-w-0 items-center gap-1.5 text-muted-foreground",
         className
       )}
     >

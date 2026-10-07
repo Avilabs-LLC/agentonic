@@ -61,7 +61,7 @@ const columns: ColumnDef<CollectionRow>[] = [
       <DataTableColumnHeader column={column} title="Tu acceso" />
     ),
     cell: ({ row }) => (
-      <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
+      <span className="inline-flex items-center gap-1.5 text-muted-foreground">
         {row.original.canCurate ? (
           <Settings2Icon aria-hidden="true" className="size-3.5" />
         ) : (

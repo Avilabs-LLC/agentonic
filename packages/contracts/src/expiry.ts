@@ -26,11 +26,11 @@ export type RuntimeRegistrations = z.infer<typeof runtimeRegistrations>
 // Plain-language names: what each registration lets Agentonic run.
 export const registrationNames = {
   host: {
-    azure_staging: "Agentes en la VM de pruebas",
+    azure_staging: "Agentes en vm-agents-01",
     local: "Agentes en local (desarrollo)",
   },
   evaluator: {
-    azure_staging: "Evaluaciones en la VM de pruebas",
+    azure_staging: "Evaluaciones en vm-agents-01",
     local: "Evaluaciones en local (desarrollo)",
   },
 } as const

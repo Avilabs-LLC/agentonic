@@ -42,17 +42,20 @@ const nextOrder = [
   "rejected",
   "revoked",
 ]
-const where = (environment: keyof typeof environmentLabels) =>
-  environmentLabels[environment]
+type Places = Record<keyof typeof environmentLabels, string>
 const deployment = (status: string) => statusDescriptor("deployment", status)
 const rank = (order: string[], key: string) => {
   const index = order.indexOf(key)
   return index === -1 ? order.length : index
 }
 
+// Staff see the host (environmentLabels); customers pass
+// customerEnvironmentLabels.
 export function agentVersionsView(
-  summary: AgentVersionSummary
+  summary: AgentVersionSummary,
+  places: Places = environmentLabels
 ): AgentVersionsView {
+  const where = (environment: keyof Places) => places[environment]
   const [first, ...others] = summary.live
   const live: VersionFacet = summary.archived
     ? {

@@ -32,9 +32,11 @@ export const deploymentLabels: Record<string, string> = {
   superseded: "Reemplazado",
   unauthorized: "Autorización no vigente",
 }
+// Staff names for where something runs: the host itself while each
+// environment has one. Customers see customerEnvironmentLabels instead.
 export const environmentLabels = {
-  local: "Local · desarrollo",
-  azure_staging: "VM · pruebas",
+  local: "Local (desarrollo)",
+  azure_staging: "vm-agents-01",
 }
 export const lifecycleState = z.object({
   agentId: z.uuid(),

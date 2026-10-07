@@ -22,6 +22,11 @@ import { Badge } from "@workspace/ui/components/badge"
 import { StatusIndicator } from "@workspace/ui/components/status-badge"
 import { IdLink } from "@workspace/ui/components/id-link"
 import { AgentLink } from "@workspace/ui/components/agent-versions"
+import {
+  PlaceGroups,
+  type PlaceItem,
+} from "@workspace/ui/components/place-groups"
+import { WorkspaceName } from "@workspace/ui/components/workspace-name"
 import { CardEmptyState } from "@workspace/ui/components/card-empty-state"
 import {
   DataTable,
@@ -34,15 +39,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@workspace/ui/components/card"
-import {
-  Item,
-  ItemActions,
-  ItemContent,
-  ItemDescription,
-  ItemGroup,
-  ItemSeparator,
-  ItemTitle,
-} from "@workspace/ui/components/item"
 
 const past = (value: string, now: string) =>
   Date.parse(value) <= Date.parse(now)
@@ -71,12 +67,6 @@ function Deadline({ value, now }: { value: string | null; now: string }) {
   )
 }
 
-// Grouped by place, the VM first: every registration stays visible, since
-// a lapsed one stops agents or evaluations there.
-const places = [
-  { environment: "azure_staging", title: "VM de pruebas" },
-  { environment: "local", title: "Local (desarrollo)" },
-] as const
 export function RegistrationsCard({
   registrations,
   now,
@@ -84,19 +74,24 @@ export function RegistrationsCard({
   registrations: RuntimeRegistrations
   now: string
 }) {
-  const groups = places
-    .map((place) => ({
-      ...place,
-      items: [
-        ...registrations.hosts
-          .filter((r) => r.environment === place.environment)
-          .map((r) => ({ name: "Agentes", ...r })),
-        ...registrations.evaluators
-          .filter((r) => r.environment === place.environment)
-          .map((r) => ({ name: "Evaluaciones", ...r })),
-      ],
-    }))
-    .filter((group) => group.items.length > 0)
+  const describe = (r: Registration) =>
+    ["revoked", "retired"].includes(r.state)
+      ? `Verificada el ${utc(r.verifiedAt)}`
+      : `${past(r.expiresAt, now) ? "Venció" : "Vence"} el ${utc(r.expiresAt)} · Verificada el ${utc(r.verifiedAt)}`
+  const items: PlaceItem[] = [
+    ...registrations.hosts.map((r) => ({ name: "Agentes", r })),
+    ...registrations.evaluators.map((r) => ({ name: "Evaluaciones", r })),
+  ].map(({ name, r }) => ({
+    environment: r.environment,
+    name,
+    description: describe(r),
+    action: (
+      <StatusIndicator
+        appearance="badge"
+        state={statusDescriptor("registration", r.state)}
+      />
+    ),
+  }))
   return (
     <Card>
       <CardHeader>
@@ -108,77 +103,16 @@ export function RegistrationsCard({
         </CardDescription>
       </CardHeader>
       <CardContent>
-        {groups.length === 0 ? (
+        {items.length === 0 ? (
           <CardEmptyState title="Sin servidores registrados">
             Instala y registra un servidor para activar agentes o evaluar
             versiones.
           </CardEmptyState>
         ) : (
-          <div className="grid gap-6 md:grid-cols-2">
-            {groups.map((group) => (
-              <section
-                key={group.environment}
-                aria-labelledby={`registrations-${group.environment}`}
-                className="space-y-1"
-              >
-                <h3
-                  id={`registrations-${group.environment}`}
-                  className="text-xs font-medium tracking-wide text-muted-foreground uppercase"
-                >
-                  {group.title}
-                </h3>
-                <ItemGroup>
-                  {group.items.map((item, index) => (
-                    <RegistrationItem
-                      key={item.name}
-                      name={item.name}
-                      registration={item}
-                      now={now}
-                      separated={index > 0}
-                    />
-                  ))}
-                </ItemGroup>
-              </section>
-            ))}
-          </div>
+          <PlaceGroups items={items} />
         )}
       </CardContent>
     </Card>
-  )
-}
-
-function RegistrationItem({
-  name,
-  registration,
-  now,
-  separated,
-}: {
-  name: string
-  registration: Registration
-  now: string
-  separated: boolean
-}) {
-  const ended = ["revoked", "retired"].includes(registration.state)
-  return (
-    <>
-      {separated && <ItemSeparator className="my-0" />}
-      <Item size="sm" className="px-0">
-        <ItemContent>
-          <ItemTitle>{name}</ItemTitle>
-          <ItemDescription>
-            {ended
-              ? `Verificada el ${utc(registration.verifiedAt)}`
-              : `${past(registration.expiresAt, now) ? "Venció" : "Vence"} el ${utc(registration.expiresAt)} · Verificada el ${utc(registration.verifiedAt)}`}
-          </ItemDescription>
-        </ItemContent>
-        <ItemActions>
-          <StatusIndicator
-            appearance="badge"
-            state={statusDescriptor("registration", registration.state)}
-          />
-        </ItemActions>
-      </Item>
-    </>
   )
 }
 
@@ -205,7 +139,7 @@ export function ExpiryTable({ rows, now }: { rows: ExpiryRow[]; now: string }) {
         <DataTableColumnHeader column={column} title="Agente" />
       ),
       cell: ({ row }) => (
-        <div className="max-w-64 min-w-40 whitespace-normal">
+        <div className="space-y-1">
           <p className="font-medium">
             {row.original.agentId ? (
               <AgentLink
@@ -216,8 +150,9 @@ export function ExpiryTable({ rows, now }: { rows: ExpiryRow[]; now: string }) {
               row.original.agentName
             )}
           </p>
-          <p className="text-muted-foreground">
-            {row.original.workspaceName} · Versión {row.original.versionNumber}
+          <p className="flex items-center gap-x-1.5 text-muted-foreground">
+            <WorkspaceName name={row.original.workspaceName} />
+            <span>· Versión {row.original.versionNumber}</span>
           </p>
         </div>
       ),
@@ -292,7 +227,7 @@ export function ExpiryTable({ rows, now }: { rows: ExpiryRow[]; now: string }) {
       cell: ({ row }) => {
         const { actor, action, by } = row.original.next
         return (
-          <div className="max-w-72 min-w-52 whitespace-normal">
+          <div>
             <p className="font-medium">
               {actor ? `${expiryActorLabels[actor]} · ${action}` : action}
             </p>

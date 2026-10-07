@@ -1,5 +1,10 @@
 export const VERSION_HISTORY = [
   {
+    "version": "0.19.0",
+    "date": "2026-10-07",
+    "summary": "Administración más clara: servidores agrupados por lugar en Despliegues, icono de espacio de trabajo en cada nombre, columna En reposo, vm-agents-01 como nombre del servidor, instalaciones del runtime en un diálogo, métricas sin insignias y tablas a 12 px sin saltos de línea."
+  },
+  {
     "version": "0.18.0",
     "date": "2026-10-06",
     "summary": "Interfaz con el preset Nova de shadcn (tipografía Inter y tema esmeralda), menús desplegables que se abren debajo y muestran el nombre completo, y versión legible en los agentes de Administración."

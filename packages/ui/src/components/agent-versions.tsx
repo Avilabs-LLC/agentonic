@@ -4,6 +4,7 @@
 import Link from "next/link"
 import type { Column, ColumnDef } from "@tanstack/react-table"
 import type { AgentVersionSummary } from "@agentonic/contracts/agent-versions"
+import { customerEnvironmentLabels } from "@agentonic/contracts/availability"
 import {
   agentVersionsView,
   type AgentVersionsView,
@@ -26,7 +27,7 @@ export function AgentVersionFacet({
 }) {
   const f = view[facet]
   return (
-    <div className="max-w-56 min-w-36 space-y-1 whitespace-normal">
+    <div className="space-y-1">
       {f.state &&
         (view.primary === facet ? (
           <Badge variant={f.badge}>{f.state.label}</Badge>
@@ -53,11 +54,17 @@ export function AgentVersionFacet({
 /** "Versión en uso" and "Próxima versión" columns for a table of agents. */
 export function agentVersionColumns<T>(
   summary: (row: T) => AgentVersionSummary | null,
-  unavailable: React.ReactNode = null
+  unavailable: React.ReactNode = null,
+  audience: "staff" | "customer" = "staff"
 ): ColumnDef<T>[] {
   const view = (row: T) => {
     const s = summary(row)
-    return s ? agentVersionsView(s) : null
+    return s
+      ? agentVersionsView(
+          s,
+          audience === "customer" ? customerEnvironmentLabels : undefined
+        )
+      : null
   }
   return (["live", "next"] as const).map((facet) => ({
     id: facet,
