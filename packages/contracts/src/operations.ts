@@ -150,6 +150,8 @@ export const operationsDeployments = z.object({
       environment,
       status: z.string(),
       resting: z.boolean(),
+      // Migration 53; optional while an older database is still serving.
+      versionNumber: count.optional(),
       broker: z.string().nullable(),
       authorizedUntil: time,
       budgetUsd: usd,

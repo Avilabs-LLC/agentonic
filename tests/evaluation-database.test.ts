@@ -2433,6 +2433,7 @@ async function modelReview() {
     "202610060045_general_connections",
     "202610060046_usage_events",
     "202610060047_evaluation_tool_cases",
+    "202610070052_registration_validity",
   ])
     await db.exec(
       readFileSync(
@@ -3772,7 +3773,7 @@ it("shows staff each expiry as its own fact and keeps registrations from custome
   expect(
     Date.parse(fresh.hosts[0]!.expiresAt) -
       Date.parse(fresh.hosts[0]!.verifiedAt)
-  ).toBe(7 * 24 * 3600_000)
+  ).toBe(30 * 24 * 3600_000)
   expect(fresh.evaluators).toContainEqual(
     expect.objectContaining({ environment: "azure_staging", state: "valid" })
   )
@@ -3806,16 +3807,23 @@ it("shows staff each expiry as its own fact and keeps registrations from custome
     ).rejects.toMatchObject({ code: "42501" })
     await db.exec("ROLLBACK TO SAVEPOINT registrations")
   }
+  // Registrations last 30 days (C19): a week-old one still authorizes.
+  await sql(
+    "UPDATE agentonic.runtime_hosts SET verified_at=clock_timestamp()-interval '8 days' WHERE id=$1",
+    [host.id]
+  )
+  expect((await registrations()).hosts[0]).toMatchObject({ state: "valid" })
+  expect(await queued()).toMatchObject({ deploymentAuthorized: true })
   // Within a day of expiry the host shows as expiring and still authorizes.
   await sql(
-    "UPDATE agentonic.runtime_hosts SET verified_at=clock_timestamp()-interval '6 days 12 hours' WHERE id=$1",
+    "UPDATE agentonic.runtime_hosts SET verified_at=clock_timestamp()-interval '29 days 12 hours' WHERE id=$1",
     [host.id]
   )
   expect((await registrations()).hosts[0]).toMatchObject({ state: "expiring" })
   expect(await queued()).toMatchObject({ deploymentAuthorized: true })
-  // Past seven days the deployment loses authorization with it.
+  // Past thirty days the deployment loses authorization with it.
   await sql(
-    "UPDATE agentonic.runtime_hosts SET verified_at=clock_timestamp()-interval '7 days 1 second' WHERE id=$1",
+    "UPDATE agentonic.runtime_hosts SET verified_at=clock_timestamp()-interval '30 days 1 second' WHERE id=$1",
     [host.id]
   )
   expect((await registrations()).hosts[0]).toMatchObject({ state: "expired" })
@@ -3830,7 +3838,7 @@ it("shows staff each expiry as its own fact and keeps registrations from custome
     "UPDATE agentonic.evaluation_workers SET retired_at=clock_timestamp() WHERE database_role='agentonic_eval_azure' AND revoked_at IS NULL AND retired_at IS NULL"
   )
   await sql(
-    "INSERT INTO agentonic.evaluation_workers(database_role,environment,worker_sha256,verified_at,verification) VALUES('agentonic_eval_azure','azure_staging',repeat('e',64),clock_timestamp()-interval '6 days 12 hours','{\"reviewProtocol\":3,\"isolation\":true,\"recovery\":true,\"artifactIntegrity\":true}')"
+    "INSERT INTO agentonic.evaluation_workers(database_role,environment,worker_sha256,verified_at,verification) VALUES('agentonic_eval_azure','azure_staging',repeat('e',64),clock_timestamp()-interval '29 days 12 hours','{\"reviewProtocol\":3,\"isolation\":true,\"recovery\":true,\"artifactIntegrity\":true}')"
   )
   expect(
     (await registrations()).evaluators.filter(
@@ -3844,6 +3852,16 @@ it("shows staff each expiry as its own fact and keeps registrations from custome
       )
     ).rows[0]
   ).toEqual({ retired: "retired", revoked: "revoked" })
+  // No function still checks a registration against the old 7-day window.
+  const old = String.raw`verified_at\s*(>|<=|\+)[^;]{0,40}'7 days'`
+  expect(
+    (
+      await sql(
+        "SELECT p.proname FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='agentonic' AND p.prosrc ~ $1",
+        [old]
+      )
+    ).rows
+  ).toEqual([])
 })
 
 it("starts a resting copy only when a turn waits for it", async () => {

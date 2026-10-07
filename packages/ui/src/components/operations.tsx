@@ -477,6 +477,7 @@ export function OperationsDeploymentsTable({
     agentColumn<OperationsDeployment>(),
     workspaceColumn<OperationsDeployment>(),
     ...deploymentColumns<OperationsDeployment>({
+      version: (row) => row.versionNumber,
       worker: (row) => row.broker,
     }),
   ]

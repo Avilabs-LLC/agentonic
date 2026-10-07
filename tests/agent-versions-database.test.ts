@@ -7,6 +7,7 @@ import {
 import {
   operationsAgent,
   operationsAgents,
+  operationsDeployments,
 } from "../packages/contracts/src/operations"
 import {
   collection,
@@ -272,6 +273,17 @@ it("gives staff the agent page and editors the summary, as metadata only", async
   expect(listed[0]?.summary.live[0]?.status).toBe("running")
   // The human-readable version, not the internal release label.
   expect(listed[0]?.latestVersion).toBe("1")
+  // Despliegues shows each deployment's version too (migration 53).
+  const deployments = operationsDeployments.parse(
+    (
+      await f.db.query<{ result: unknown }>(
+        "SELECT agentonic.operations_deployments() result"
+      )
+    ).rows[0]!.result
+  )
+  expect(deployments.deployments).toEqual([
+    expect.objectContaining({ agentId: agent, versionNumber: 1 }),
+  ])
   expect(
     (
       await f.db.query<{ result: unknown }>(

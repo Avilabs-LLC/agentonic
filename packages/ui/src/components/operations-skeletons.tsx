@@ -149,12 +149,12 @@ export function OperationsWorkspacesSkeleton() {
     </Loading>
   )
 }
-/** Despliegues: the installations card (four registrations) and the ten-column table. */
+/** Despliegues: the installations card (four registrations) and the eleven-column table. */
 export function OperationsDeploymentsSkeleton() {
   return (
     <Loading label="Cargando despliegues">
       <PlaceGroupsCardSkeleton />
-      <TableSkeleton columns={10} />
+      <TableSkeleton columns={11} />
     </Loading>
   )
 }

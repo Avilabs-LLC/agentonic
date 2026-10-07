@@ -386,6 +386,7 @@ describe("Admin operations screens", () => {
           environment: "local",
           status: "mystery",
           resting: false,
+          versionNumber: 3,
           broker: null,
           authorizedUntil: now,
           budgetUsd: 1,
@@ -400,6 +401,7 @@ describe("Admin operations screens", () => {
       "Sin trabajador",
       "Sin activar",
       ">Entorno<",
+      ">Versión<",
       'data-slot="badge"',
     ])
       expect(deployments).toContain(text)

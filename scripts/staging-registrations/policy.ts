@@ -5,14 +5,21 @@
 
 export const HOUR = 3_600_000
 export const DAY = 24 * HOUR
-/** Database functions accept registrations verified within the last seven days. */
-export const VALIDITY_MS = 7 * DAY
-/** The scheduled job renews registrations that expire within this window. */
-export const RENEW_WITHIN_MS = 2 * DAY
+/** Database functions accept registrations verified within the last 30 days
+ * (migration 52, owner decision 7 Oct 2026: the VM keeps working for weeks
+ * with the Mac off). */
+export const VALIDITY_MS = 30 * DAY
+/** The scheduled job renews once a registration is a week old, so a Mac that
+ * goes off leaves 23 to 30 days before anything stops. Renewal restarts the
+ * evaluator, so it stays weekly rather than daily. */
+export const RENEW_WITHIN_MS = VALIDITY_MS - 7 * DAY
 /** Watched registrations closer than this to expiry raise an alert. */
 export const ALERT_WITHIN_MS = DAY
-/** The Action alerts when the Mac job has not reported for this long. */
+/** The Action alerts when the Mac job has not reported for this long... */
 export const STALE_REPORT_MS = 36 * HOUR
+/** ...and a watched registration expires within this window. A quiet Mac is
+ * expected for weeks at a time; it only needs a person before expiry. */
+export const STALE_MATTERS_WITHIN_MS = 5 * DAY
 /** Approval evidence stays usable for this long after an evaluation passes. */
 export const EVIDENCE_WINDOW_MS = DAY
 
@@ -979,7 +986,19 @@ export function problems(report: Report | null, now: Date): string[] {
   if (!report) return ["The renewal job on the Mac has never reported."]
   const out: string[] = []
   const age = now.getTime() - Date.parse(report.generatedAt)
-  if (!(age <= STALE_REPORT_MS))
+  // The earliest watched expiry; with nothing watched, silence always alerts.
+  const watched = report.registrations.filter((e) => isWatched(e.name))
+  const soonest = watched.length
+    ? Math.min(
+        ...watched.map((e) =>
+          e.validUntil ? Date.parse(e.validUntil) : -Infinity
+        )
+      )
+    : -Infinity
+  if (
+    !(age <= STALE_REPORT_MS) &&
+    soonest - now.getTime() <= STALE_MATTERS_WITHIN_MS
+  )
     out.push(
       `The renewal job on the Mac has not reported since ${utc(report.generatedAt)}. Wake the Mac or run \`pnpm staging:reverify --renew --publish\`.`
     )

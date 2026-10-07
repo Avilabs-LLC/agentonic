@@ -28,7 +28,7 @@ The Admin app has **Revisiones** (submissions, receipts, renewal and activation)
 
 ## Operations
 
-- **Verification.** Hosts and evaluators stay trusted for 7 days. A launchd job on the Mac runs `pnpm staging:reverify --renew --publish` at 09:00 and 21:00. It checks the installed files and services over SSH, renews only what passes, and renews anything within 2 days of expiry. Run `pnpm staging:reverify` (read-only) for live expiry dates and what each environment runs: its worker release and each runtime's version and source commit. The local deployment host has been expired since 26 September on purpose; run `install-staging --local` before using local staging chats.
+- **Verification.** Hosts and evaluators stay trusted for 30 days (migration 52; it was 7 until 7 October). A launchd job on the Mac runs `pnpm staging:reverify --renew --publish` at 09:00 and 21:00. It checks the installed files and services over SSH, renews only what passes, and renews anything a week old or more, so the VM keeps working for 23 to 30 days with the Mac off. The GitHub alert for a silent Mac only fires once an expiry is within 5 days. Run `pnpm staging:reverify` (read-only) for live expiry dates and what each environment runs: its worker release and each runtime's version and source commit. The local deployment host has been expired since 26 September on purpose; run `install-staging --local` before using local staging chats.
 - **Alerts.** A GitHub workflow opens one issue assigned to the owner when:
   - a check fails;
   - a registration expires within 24 hours;
@@ -51,7 +51,7 @@ The Admin app has **Revisiones** (submissions, receipts, renewal and activation)
 
 ## Not built yet
 
-- Hosted beta: SMTP and invitations (C13), renewal and VM checks that don't depend on the Mac (C19), and a paid Supabase plan (and transaction pooling once apps run several instances).
+- Hosted beta: SMTP and invitations (C13), and transaction pooling once apps run several instances. Renewal without the Mac (C19) is deferred: registrations now last 30 days.
 - Production: a separate project and keys, ongoing operating authorization instead of the 7-day staging limit, budgets per period, backups with a restore drill.
 - Product: external channels, automation, agent memory and Google verification. Chats, Gmail and costs now sit on the general model (architecture §§48–50).
 - Scale: multiple hosts, the 250-agent synthetic load test, and a tested path to 500 agents.
@@ -82,4 +82,4 @@ The ordered plan is architecture §37; the owner's audit brief tracks progress. 
 | Invitations, password reset and staff two-factor sign-in               | §54                  |
 | What is in use and what comes next; the Admin agent page               | §55                  |
 
-Presentation rules are in the [UI contract](ui/ui-contract.md). The [target schema](schema.dbml) describes 79 tables; 62 exist in the 51 checked-in migrations.
+Presentation rules are in the [UI contract](ui/ui-contract.md). The [target schema](schema.dbml) describes 79 tables; 62 exist in the 53 checked-in migrations.
