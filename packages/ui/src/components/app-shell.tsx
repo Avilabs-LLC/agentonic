@@ -28,7 +28,7 @@ import type {
   NavigationItem,
   ActionResult,
 } from "@agentonic/contracts/identity"
-import { formatPathSegment } from "@agentonic/contracts/format"
+import { pageTitle } from "@workspace/ui/lib/page-title"
 import { APP_NAME, APP_VERSION_LABEL } from "@workspace/ui/lib/version"
 import { notify } from "@workspace/ui/lib/toast"
 import {
@@ -248,15 +248,7 @@ export function AppShell({
                   )}
                   <BreadcrumbItem>
                     <BreadcrumbPage>
-                      {current?.title ??
-                        (pathname.endsWith("/new")
-                          ? "Crear agente"
-                          : pathname.endsWith("/preview")
-                            ? "Probar versión"
-                            : undefined) ??
-                        formatPathSegment(
-                          pathname.split("/").filter(Boolean).at(-1) ?? ""
-                        )}
+                      {current?.title ?? pageTitle(pathname)}
                     </BreadcrumbPage>
                   </BreadcrumbItem>
                 </>

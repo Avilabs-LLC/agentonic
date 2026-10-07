@@ -24,7 +24,10 @@ import {
   submissionBadgeVariants,
 } from "@workspace/ui/lib/badge-status"
 import { Badge } from "@workspace/ui/components/badge"
-import { restingColumn } from "@workspace/ui/components/resting-column"
+import {
+  deploymentResting,
+  restingColumn,
+} from "@workspace/ui/components/resting-column"
 import { cn } from "@workspace/ui/lib/utils"
 import {
   iconTones,
@@ -165,7 +168,7 @@ export function OperationsAgentOverview({
               tone={f.state ? iconTones[f.state.variant] : undefined}
               detail={
                 f.state
-                  ? `${f.detail}${f.more.length ? ` · y ${f.more.length} más` : ""}`
+                  ? `${f.detail}${facet === "live" && view.resting ? " · En reposo" : ""}${f.more.length ? ` · y ${f.more.length} más` : ""}`
                   : facet === "live"
                     ? "Ninguna versión en funcionamiento"
                     : f.detail
@@ -366,7 +369,7 @@ function DeploymentsTable({
         </Badge>
       ),
     },
-    restingColumn<Deployment>(),
+    restingColumn<Deployment>(deploymentResting),
     {
       accessorKey: "versionNumber",
       header: header("Versión"),

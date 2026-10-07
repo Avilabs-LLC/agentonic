@@ -12,6 +12,7 @@ import {
 import { Badge } from "@workspace/ui/components/badge"
 import { StatusIndicator } from "@workspace/ui/components/status-badge"
 import { DataTableColumnHeader } from "@workspace/ui/components/data-table"
+import { restingColumn } from "@workspace/ui/components/resting-column"
 
 export const facetTitles = {
   live: "Versión en uso",
@@ -51,7 +52,8 @@ export function AgentVersionFacet({
   )
 }
 
-/** "Versión en uso" and "Próxima versión" columns for a table of agents. */
+/** "Versión en uso", "En reposo" and "Próxima versión" columns for a table of
+ * agents. */
 export function agentVersionColumns<T>(
   summary: (row: T) => AgentVersionSummary | null,
   unavailable: React.ReactNode = null,
@@ -66,7 +68,7 @@ export function agentVersionColumns<T>(
         )
       : null
   }
-  return (["live", "next"] as const).map((facet) => ({
+  const facetColumn = (facet: "live" | "next"): ColumnDef<T> => ({
     id: facet,
     accessorFn: (row: T) => view(row)?.[facet].rank ?? Infinity,
     header: function SortableHeader({
@@ -82,7 +84,12 @@ export function agentVersionColumns<T>(
       const v = view(row.original)
       return v ? <AgentVersionFacet view={v} facet={facet} /> : unavailable
     },
-  }))
+  })
+  return [
+    facetColumn("live"),
+    restingColumn<T>((row) => view(row)?.resting, unavailable),
+    facetColumn("next"),
+  ]
 }
 
 /** An agent's name, opening its page (blue underlined link, UI contract §3). */

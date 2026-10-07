@@ -45,6 +45,19 @@ it("puts the badge on the version in use and the next proposal inline", () => {
   expect(v.next.detail).toBe("Versión 2")
 })
 
+it("keeps resting out of the detail; it applies only while running", () => {
+  const resting = { ...running(), resting: true }
+  const v = agentVersionsView(summary({ live: [resting] }))
+  expect(v.resting).toBe(true)
+  expect(v.live.detail).toBe("Versión 1 · vm-agents-01")
+  expect(agentVersionsView(summary({ live: [running()] })).resting).toBe(false)
+  expect(
+    agentVersionsView(summary({ live: [{ ...resting, status: "offline" }] }))
+      .resting
+  ).toBeNull()
+  expect(agentVersionsView(summary({})).resting).toBeNull()
+})
+
 it("reports an offline or unauthorized version in use truthfully", () => {
   expect(
     agentVersionsView(summary({ live: [running("offline")] })).live.state?.label

@@ -14,7 +14,7 @@ export function AgentsSkeleton() {
       <PageHeaderSkeleton />
       <FiltersCardSkeleton />
       <Skeleton className="h-5 w-4/5" />
-      <TableSkeleton columns={6} />
+      <TableSkeleton columns={7} />
     </>
   )
 }

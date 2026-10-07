@@ -1697,7 +1697,7 @@ Version numbers count an agent's prepared versions in order, as elsewhere (`agen
   - **Actividad:** last turn, turns and failures in seven days, and known spend in thirty.
 - **Content:** a proposal's instructions and documents stay behind its review and receipt, as before.
 
-**Every agent name opens the agent page.** That covers Agentes (which now also has the ID column, UI contract §3), Despliegues, Costos, Actividad, Vencimientos and Revisiones.
+**Every agent name opens the agent page.** That covers Agentes (where the name is the only link; its ID column was dropped on 7 October, UI contract §3), Despliegues, Costos, Actividad, Vencimientos and Revisiones.
 
 - **Read changes:** the deployment, cost, activity and review-queue reads now return the agent's ID. An activity event about an agent, a proposal or a deployment names its agent.
 - **Revisiones:** the agent name used to open the review. The **Revisión #** number does that now, so the name can lead to the agent.

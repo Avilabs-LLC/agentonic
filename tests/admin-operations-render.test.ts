@@ -93,7 +93,10 @@ describe("Admin operations screens", () => {
       "Versión en uso",
       "Próxima versión",
       "En funcionamiento",
-      "Versión 1 · vm-agents-01 · En reposo",
+      "Versión 1 · vm-agents-01",
+      ">En reposo<",
+      ">Sí<",
+      "No aplica",
       "En revisión",
       "Versión 2",
       "Ninguna",
@@ -104,6 +107,12 @@ describe("Admin operations screens", () => {
       expect(out).toContain(text)
     // The stored agent status is no longer shown.
     expect(out).not.toContain(">Estado<")
+    // The name is the only link to the agent page; no separate ID column.
+    expect(out).not.toContain(">ID<")
+    expect(out.split(`href="/agents/${id(1)}"`)).toHaveLength(2)
+    // The version number shows once per row, and resting has its own column.
+    expect(out).not.toContain("· En reposo")
+    expect(out.split("Versión 2")).toHaveLength(2)
   })
   it("shows one agent's versions, proposals, deployments and activity", () => {
     const out = html(agentPage.OperationsAgentOverview, {

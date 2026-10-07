@@ -34,9 +34,11 @@ import {
 } from "@workspace/ui/lib/badge-status"
 import { Badge } from "@workspace/ui/components/badge"
 import { StatusIndicator } from "@workspace/ui/components/status-badge"
-import { IdLink } from "@workspace/ui/components/id-link"
 import { WorkspaceName } from "@workspace/ui/components/workspace-name"
-import { restingColumn } from "@workspace/ui/components/resting-column"
+import {
+  deploymentResting,
+  restingColumn,
+} from "@workspace/ui/components/resting-column"
 import { Button } from "@workspace/ui/components/button"
 import {
   Dialog,
@@ -176,13 +178,6 @@ export function OperationsAgentsTable({
 }) {
   const columns: ColumnDef<OperationsAgent>[] = [
     {
-      accessorKey: "id",
-      header: header("ID"),
-      cell: ({ row }) => (
-        <IdLink id={row.original.id} href={`/agents/${row.original.id}`} />
-      ),
-    },
-    {
       accessorKey: "name",
       header: header("Agente"),
       cell: ({ row }) => (
@@ -200,17 +195,16 @@ export function OperationsAgentsTable({
     {
       id: "capabilities",
       accessorFn: (row) => capabilities(row.tools),
-      header: header("Capacidades de la última versión"),
-      cell: ({ row }) => (
-        <div>
-          <p>{capabilities(row.original.tools)}</p>
-          <p className="text-muted-foreground">
-            {row.original.latestVersion
-              ? `Versión ${row.original.latestVersion}`
-              : "Sin versiones congeladas"}
-          </p>
-        </div>
-      ),
+      header: header("Capacidades"),
+      // The version number shows once, in the version columns.
+      cell: ({ row }) =>
+        row.original.latestVersion ? (
+          capabilities(row.original.tools)
+        ) : (
+          <span className="text-muted-foreground">
+            Sin versiones congeladas
+          </span>
+        ),
     },
     ...agentVersionColumns<OperationsAgent>((row) => row.summary),
     {
@@ -584,7 +578,7 @@ export function OperationsDeploymentsTable({
         </Badge>
       ),
     },
-    restingColumn<OperationsDeployment>(),
+    restingColumn<OperationsDeployment>(deploymentResting),
   ]
   return (
     <DataTable

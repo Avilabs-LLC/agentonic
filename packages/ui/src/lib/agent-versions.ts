@@ -26,6 +26,8 @@ export type AgentVersionsView = {
   primary: "live" | "next"
   live: VersionFacet
   next: VersionFacet
+  // Whether the version in use rests; null when it is not running.
+  resting: boolean | null
 }
 
 const liveOrder = ["running", "offline", "unauthorized", "stopped", "failed"]
@@ -69,7 +71,7 @@ export function agentVersionsView(
       ? {
           state: deployment(first.status),
           badge: deploymentBadgeVariants[first.status] ?? "slate",
-          detail: `Versión ${first.versionNumber} · ${where(first.environment)}${first.resting && first.status === "running" ? " · En reposo" : ""}`,
+          detail: `Versión ${first.versionNumber} · ${where(first.environment)}`,
           more: others.map((l) => ({
             state: deployment(l.status),
             detail: `Versión ${l.versionNumber} · ${where(l.environment)}`,
@@ -137,5 +139,7 @@ export function agentVersionsView(
     primary: summary.archived || first ? "live" : "next",
     live,
     next,
+    resting:
+      !summary.archived && first?.status === "running" ? first.resting : null,
   }
 }
