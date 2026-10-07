@@ -172,18 +172,15 @@ export function AuthoringTable({
       header: ({ column }) => (
         <DataTableColumnHeader column={column} title="Agente" />
       ),
-      cell: ({ row }) => (
-        <div>
-          {row.original.canEdit ? (
-            <AgentLink
-              href={`/agents/${row.original.id}?workspace=${row.original.workspaceId}`}
-              name={row.original.name}
-            />
-          ) : (
-            <p className="text-xs font-medium">{row.original.name}</p>
-          )}
-        </div>
-      ),
+      cell: ({ row }) =>
+        row.original.canEdit ? (
+          <AgentLink
+            href={`/agents/${row.original.id}?workspace=${row.original.workspaceId}`}
+            name={row.original.name}
+          />
+        ) : (
+          row.original.name
+        ),
     },
     {
       accessorKey: "workspaceName",

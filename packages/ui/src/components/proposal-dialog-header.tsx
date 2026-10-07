@@ -10,12 +10,14 @@ export function ProposalDialogHeader({
   section,
   agentName,
   version,
-  revision,
+  review,
+  criteriaRevision,
 }: {
   section: "Propuesta" | "Criterios" | "Resultados"
   agentName?: string | null
   version?: number | null
-  revision?: number | null
+  review?: number | null
+  criteriaRevision?: number | null
 }) {
   return (
     <DialogHeader>
@@ -24,7 +26,7 @@ export function ProposalDialogHeader({
         <BotIcon className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
         <span className="min-w-0 break-words">
           {agentName ?? "Agente no disponible"} ·{" "}
-          {proposalDescriptor(version, revision)}
+          {proposalDescriptor(version, review, criteriaRevision)}
         </span>
       </DialogDescription>
     </DialogHeader>

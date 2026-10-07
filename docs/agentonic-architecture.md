@@ -1697,7 +1697,7 @@ Version numbers count an agent's prepared versions in order, as elsewhere (`agen
   - **Actividad:** last turn, turns and failures in seven days, and known spend in thirty.
 - **Content:** a proposal's instructions and documents stay behind its review and receipt, as before.
 
-**Every agent name opens the agent page.** That covers Agentes (which now also has the ID column, UI contract §3), Despliegues, Costos, Actividad, Vencimientos and Revisiones.
+**Every agent name opens the agent page.** That covers Agentes (where the name is the only link; its ID column was dropped on 7 October, UI contract §3), Despliegues, Costos, Actividad, Vencimientos and Revisiones.
 
 - **Read changes:** the deployment, cost, activity and review-queue reads now return the agent's ID. An activity event about an agent, a proposal or a deployment names its agent.
 - **Revisiones:** the agent name used to open the review. The **Revisión #** number does that now, so the name can lead to the agent.
@@ -1720,3 +1720,5 @@ Version numbers count an agent's prepared versions in order, as elsewhere (`agen
 **Not covered.** Proposals for versions between the one running and the newest are not shown in the lists; the agent page lists them all. The customer agent page keeps its own Activación tab.
 
 **Follow-up (migration 51).** Admin → Agentes showed the latest version as its internal release label ("Versión r2-63c0a65a") next to "Versión 1" in the new columns. `operations_agents` now returns the counted number as `latestVersion`, still as text, so the installed v0.17.0 app shows "Versión 1" once the migration is applied, without a new release.
+
+**Follow-up, 7 October 2026 — one rendering per data point (UI contract §3.1).** An audit of every table in both apps found the same fact drawn in different ways: workspaces sometimes stacked under agent names, versions as "Versión 1", "1" or inside a sentence, badges stacked over text, an ID column and a name leading to the same page, deployment colours differing between a badge and an inline indicator, and "Revisión" meaning the review number in Admin but the criteria's saved edits in the customer app (§39.6). The shared table cells, deployment columns and agent version columns now render each data point once, in one way. "Revisión" is the review number everywhere, and the criteria's edits read "Criterios, edición N". The agent lists show the deployment state as their one badge and the two version facets as labelled stacks. No data or migration changed; Despliegues still lacks the version number, which would need its read function to return it.

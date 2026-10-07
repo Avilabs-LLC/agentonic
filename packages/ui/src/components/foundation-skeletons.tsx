@@ -115,7 +115,7 @@ export function DashboardSkeleton({
   )
 }
 // Vencimientos: header, servers-and-evaluators card (four registrations) and
-// the seven-column deadlines table.
+// the ten-column deadlines table.
 export function ExpirySkeleton() {
   return (
     <div aria-label="Cargando vencimientos" role="status" className="space-y-6">
@@ -147,7 +147,7 @@ export function ExpirySkeleton() {
           ))}
         </CardContent>
       </Card>
-      <TableSkeleton columns={7} />
+      <TableSkeleton columns={10} />
     </div>
   )
 }

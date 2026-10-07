@@ -46,7 +46,7 @@ export function ReviewCriteriaSummary({
         section="Criterios"
         agentName={record.agentName}
         version={record.versionNumber}
-        revision={revision}
+        criteriaRevision={revision}
       />
       <div className="min-h-0 space-y-6 overflow-y-auto">
         <Table

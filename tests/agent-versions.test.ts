@@ -35,14 +35,30 @@ const proposal = (
   ...fields,
 })
 
-it("puts the badge on the version in use and the next proposal inline", () => {
+it("gives each facet its state and its facts as separate fields", () => {
   const v = agentVersionsView(
     summary({ live: [running()], next: proposal({ status: "in_review" }) })
   )
-  expect(v.primary).toBe("live")
   expect(v.live.state?.label).toBe("En funcionamiento")
+  expect(v.live.versionNumber).toBe(1)
+  expect(v.live.place).toBe("vm-agents-01")
   expect(v.next.state?.label).toBe("En revisión")
+  expect(v.next.versionNumber).toBe(2)
+  expect(v.next.place).toBeNull()
   expect(v.next.detail).toBe("Versión 2")
+})
+
+it("keeps resting out of the detail; it applies only while running", () => {
+  const resting = { ...running(), resting: true }
+  const v = agentVersionsView(summary({ live: [resting] }))
+  expect(v.resting).toBe(true)
+  expect(v.live.detail).toBe("Versión 1 · vm-agents-01")
+  expect(agentVersionsView(summary({ live: [running()] })).resting).toBe(false)
+  expect(
+    agentVersionsView(summary({ live: [{ ...resting, status: "offline" }] }))
+      .resting
+  ).toBeNull()
+  expect(agentVersionsView(summary({})).resting).toBeNull()
 })
 
 it("reports an offline or unauthorized version in use truthfully", () => {
@@ -58,7 +74,7 @@ it("reports an offline or unauthorized version in use truthfully", () => {
   )
 })
 
-it("puts the badge on the next version when nothing runs", () => {
+it("shows a stopped version in use and an approved next version", () => {
   const pending = agentVersionsView(
     summary({
       ended: {
@@ -76,7 +92,6 @@ it("puts the badge on the next version when nothing runs", () => {
       }),
     })
   )
-  expect(pending.primary).toBe("next")
   expect(pending.live.state?.label).toBe("Detenido")
   expect(pending.next.state?.label).toBe("Pendiente de activación")
   const lapsed = agentVersionsView(
@@ -84,17 +99,15 @@ it("puts the badge on the next version when nothing runs", () => {
       next: proposal({ status: "approved", approvalReason: "expired" }),
     })
   )
-  expect(lapsed.next.state?.label).toBe("Aprobación no vigente")
-  expect(lapsed.next.detail).toBe("Versión 2 · Vencida")
+  expect(lapsed.next.state?.label).toBe("Vencida")
+  expect(lapsed.next.detail).toBe("Versión 2")
 })
 
 it("calls an agent with nothing proposed a draft, and marks archived agents", () => {
   const draft = agentVersionsView(summary())
-  expect(draft.primary).toBe("next")
   expect(draft.live.detail).toBe("Ninguna")
   expect(draft.next.state?.label).toBe("Borrador")
   const archived = agentVersionsView(summary({ archived: true }))
-  expect(archived.primary).toBe("live")
   expect(archived.live.state?.label).toBe("Archivado")
 })
 

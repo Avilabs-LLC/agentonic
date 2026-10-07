@@ -52,6 +52,8 @@ export type ExpiryRow = {
   agentId: string | null
   agentName: string
   versionNumber: number
+  // The review number, which opens the approval receipt.
+  number: number
   status: string
   environment: z.infer<typeof environment> | null
   approvalExpiresAt: string | null
@@ -174,6 +176,7 @@ export function expiryRows(
         agentId: review.agentId ?? null,
         agentName: review.agentName,
         versionNumber: review.versionNumber,
+        number: review.number,
         status,
         environment: deployed ? review.deploymentEnvironment! : null,
         approvalExpiresAt: review.approvalExpiresAt ?? null,

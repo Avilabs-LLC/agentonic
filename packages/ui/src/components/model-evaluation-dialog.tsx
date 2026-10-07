@@ -95,7 +95,7 @@ export function ModelResultsDialog({
           section="Resultados"
           agentName={record.agentName}
           version={record.versionNumber}
-          revision={batch?.revision ?? record.revision}
+          criteriaRevision={batch?.revision ?? record.revision}
         />
         {!batch ? (
           <p className="text-sm text-muted-foreground">

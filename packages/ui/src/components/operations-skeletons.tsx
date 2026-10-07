@@ -93,11 +93,11 @@ function Loading({
     </div>
   )
 }
-/** Agentes: the seven-column agents table. */
+/** Agentes: the ten-column agents table. */
 export function OperationsAgentsSkeleton() {
   return (
     <Loading label="Cargando agentes">
-      <TableSkeleton columns={7} />
+      <TableSkeleton columns={10} />
     </Loading>
   )
 }
@@ -127,52 +127,52 @@ export function OperationsAgentSkeleton() {
           <Skeleton key={i} className="h-5 w-24" />
         ))}
       </div>
-      <TableSkeleton columns={5} />
+      <TableSkeleton columns={6} />
     </div>
   )
 }
-/** Actividad: five stat tiles and the five-column changes table. */
+/** Actividad: five stat tiles and the seven-column changes table. */
 export function OperationsActivitySkeleton() {
   return (
     <Loading label="Cargando actividad">
       <StatsSkeleton count={5} />
-      <TableSkeleton columns={5} />
+      <TableSkeleton columns={7} />
     </Loading>
   )
 }
-/** Espacios de trabajo: the six-column workspaces table and the staff card. */
+/** Espacios de trabajo: the eight-column workspaces table and the staff card. */
 export function OperationsWorkspacesSkeleton() {
   return (
     <Loading label="Cargando espacios de trabajo">
-      <TableSkeleton columns={6} />
+      <TableSkeleton columns={8} />
       <ListCardSkeleton items={2} />
     </Loading>
   )
 }
-/** Despliegues: the installations card (four registrations) and the five-column table. */
+/** Despliegues: the installations card (four registrations) and the ten-column table. */
 export function OperationsDeploymentsSkeleton() {
   return (
     <Loading label="Cargando despliegues">
       <PlaceGroupsCardSkeleton />
-      <TableSkeleton columns={6} />
+      <TableSkeleton columns={10} />
     </Loading>
   )
 }
-/** Costos: the provider card, the four-column daily table and the agents card. */
+/** Costos: the provider card, the five-column daily table and the agents card. */
 export function OperationsCostsSkeleton() {
   return (
     <Loading label="Cargando costos">
       <ListCardSkeleton items={3} />
-      <TableSkeleton columns={4} />
+      <TableSkeleton columns={5} />
       <ListCardSkeleton items={3} />
     </Loading>
   )
 }
-/** Runtime: the five-column releases table. */
+/** Runtime: the seven-column releases table. */
 export function OperationsReleasesSkeleton() {
   return (
     <Loading label="Cargando versiones del runtime">
-      <TableSkeleton columns={5} />
+      <TableSkeleton columns={7} />
     </Loading>
   )
 }

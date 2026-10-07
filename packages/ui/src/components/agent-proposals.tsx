@@ -8,10 +8,7 @@ import {
   BanIcon,
   PlayIcon,
 } from "lucide-react"
-import {
-  type AgentView,
-  type FormResult,
-} from "@agentonic/contracts/authoring"
+import { type AgentView, type FormResult } from "@agentonic/contracts/authoring"
 import {
   batchRunning,
   type ReviewFlowState,
@@ -58,6 +55,7 @@ import {
 } from "@workspace/ui/components/dropdown-menu"
 import { notify } from "@workspace/ui/lib/toast"
 import { ProposalStatusBadge } from "@workspace/ui/components/status-badge"
+import { CellButton } from "@workspace/ui/components/table-cells"
 import { Button } from "@workspace/ui/components/button"
 import {
   Table,
@@ -107,10 +105,9 @@ function ProposalRow({
   const version = candidate
     ? preparedVersionLabel(candidate)
     : "Versión no disponible"
-  const descriptor = proposalDescriptor(
-    record?.versionNumber ?? candidate?.number ?? candidate?.revision,
-    record?.revision
-  )
+  const versionNumber =
+    record?.versionNumber ?? candidate?.number ?? candidate?.revision
+  const descriptor = proposalDescriptor(versionNumber, submission.number)
   const confirmed = record && record.confirmedRevision === record.revision
   const running = batchRunning(record?.batches[0])
   const approval = approvals.find((item) => item.id === submission.id)
@@ -203,16 +200,15 @@ function ProposalRow({
             </DropdownMenuContent>
           </DropdownMenu>
         </TableCell>
-        <TableCell className="font-medium">
-          <Button
-            variant="link"
-            size="sm"
-            className="h-auto p-0 no-underline hover:no-underline"
+        <TableCell className="tabular-nums">{versionNumber ?? "—"}</TableCell>
+        <TableCell>
+          <CellButton
+            className="tabular-nums"
             aria-label={`Ver detalle de ${descriptor.toLowerCase()}`}
             onClick={() => setView("details")}
           >
-            {descriptor}
-          </Button>
+            {submission.number}
+          </CellButton>
         </TableCell>
         <TableCell>
           <ProposalStatusBadge status={status} />
@@ -274,7 +270,7 @@ function ProposalRow({
             version={
               record?.versionNumber ?? candidate?.number ?? candidate?.revision
             }
-            revision={record?.revision}
+            review={submission.number}
           />
           <ProposalConfigurationSummary snapshot={candidate?.snapshot} />
         </DialogContent>
@@ -391,7 +387,8 @@ export function AgentProposals(props: ProposalProps) {
               <TableHead className="w-12">
                 <span className="sr-only">Acciones</span>
               </TableHead>
-              <TableHead>Propuesta</TableHead>
+              <TableHead>Versión</TableHead>
+              <TableHead>Revisión</TableHead>
               <TableHead>Estado</TableHead>
               <TableHead>Criterios</TableHead>
               <TableHead>Resultados</TableHead>

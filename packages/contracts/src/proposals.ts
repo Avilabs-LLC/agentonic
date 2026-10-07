@@ -10,11 +10,20 @@ export const proposalLabels = {
 }
 export type ProposalStatus = keyof typeof proposalLabels
 
+// "Revisión" is the review number in both apps (the submission number Admin
+// shows in Revisiones); the criteria's saved edits are "Criterios, edición N".
 export function proposalDescriptor(
   version: number | null | undefined,
-  revision: number | null | undefined
+  review?: number | null,
+  criteriaRevision?: number | null
 ) {
-  return `Versión ${version ?? "—"} · Revisión ${revision ?? "—"}`
+  return [
+    `Versión ${version ?? "—"}`,
+    ...(review != null ? [`Revisión ${review}`] : []),
+    ...(criteriaRevision != null
+      ? [`Criterios, edición ${criteriaRevision}`]
+      : []),
+  ].join(" · ")
 }
 
 /** Presentation only. Approval validity and action permissions come from the server. */

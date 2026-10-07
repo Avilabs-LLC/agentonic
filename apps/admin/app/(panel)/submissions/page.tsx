@@ -26,6 +26,7 @@ export default async function Page({
         workspaces={listing.workspaces}
         selectedWorkspace={workspace ?? "all"}
         selectedState={state}
+        now={new Date().toISOString()}
         openReview={beginReview}
         revokeApproval={
           identity.staff &&

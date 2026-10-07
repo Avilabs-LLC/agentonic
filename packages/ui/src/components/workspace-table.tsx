@@ -1,9 +1,10 @@
 "use client"
 import type { ColumnDef } from "@tanstack/react-table"
-import {
-  DataTable,
-  DataTableColumnHeader,
-} from "@workspace/ui/components/data-table"
+import { memberRoleLabels } from "@agentonic/contracts/access"
+import { workspaceKindLabels } from "@agentonic/contracts/operations"
+import { DataTable } from "@workspace/ui/components/data-table"
+import { sortableHeader } from "@workspace/ui/components/table-cells"
+import { WorkspaceName } from "@workspace/ui/components/workspace-name"
 type WorkspaceRow = {
   id: string
   name: string
@@ -11,39 +12,25 @@ type WorkspaceRow = {
   role: string
   timezone: string
 }
-const roles: Record<string, string> = {
-  owner: "Propietario",
-  admin: "Administrador",
-  member: "Miembro",
-  viewer: "Lector",
-}
 const columns: ColumnDef<WorkspaceRow>[] = [
   {
     accessorKey: "name",
-    header: ({ column }) => (
-      <DataTableColumnHeader column={column} title="Espacio" />
-    ),
+    header: sortableHeader<WorkspaceRow>("Espacio de trabajo"),
+    cell: ({ row }) => <WorkspaceName name={row.original.name} />,
   },
   {
-    accessorKey: "kind",
-    header: ({ column }) => (
-      <DataTableColumnHeader column={column} title="Tipo" />
-    ),
-    cell: ({ row }) =>
-      row.original.kind === "personal" ? "Personal" : "Organización",
+    id: "kind",
+    accessorFn: (row) => workspaceKindLabels[row.kind] ?? row.kind,
+    header: sortableHeader<WorkspaceRow>("Tipo"),
   },
   {
-    accessorKey: "role",
-    header: ({ column }) => (
-      <DataTableColumnHeader column={column} title="Tu rol" />
-    ),
-    cell: ({ row }) => roles[row.original.role] ?? row.original.role,
+    id: "role",
+    accessorFn: (row) => memberRoleLabels[row.role] ?? row.role,
+    header: sortableHeader<WorkspaceRow>("Tu rol"),
   },
   {
     accessorKey: "timezone",
-    header: ({ column }) => (
-      <DataTableColumnHeader column={column} title="Zona horaria" />
-    ),
+    header: sortableHeader<WorkspaceRow>("Zona horaria"),
   },
 ]
 export function WorkspaceTable({ workspaces }: { workspaces: WorkspaceRow[] }) {
