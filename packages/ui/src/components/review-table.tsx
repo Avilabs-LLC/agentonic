@@ -1,21 +1,21 @@
 "use client"
 import { WorkspaceName } from "@workspace/ui/components/workspace-name"
 import { AgentLink } from "@workspace/ui/components/agent-versions"
-import { approvalBadgeVariants } from "@workspace/ui/lib/badge-status"
-import { Badge } from "@workspace/ui/components/badge"
-
+import { statusDescriptor } from "@workspace/ui/lib/badge-status"
+import { StatusIndicator } from "@workspace/ui/components/status-badge"
 import {
-  approvalLabels,
-  deploymentLabels,
-} from "@agentonic/contracts/lifecycle"
+  Absent,
+  CellButton,
+  Count,
+  Deadline,
+  sortableHeader,
+  timeKey,
+} from "@workspace/ui/components/table-cells"
 import { useId, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import type { ColumnDef } from "@tanstack/react-table"
 import type { FormResult, ReviewListing } from "@agentonic/contracts/authoring"
-import {
-  DataTable,
-  DataTableColumnHeader,
-} from "@workspace/ui/components/data-table"
+import { DataTable } from "@workspace/ui/components/data-table"
 import { Button } from "@workspace/ui/components/button"
 import {
   Tabs,
@@ -67,7 +67,9 @@ export function ReviewTable({
   selectedState = "submitted",
   openReview,
   revokeApproval,
+  now,
 }: {
+  now: string
   reviews: ReviewListing
   workspaces: { id: string; name: string }[]
   selectedWorkspace: string
@@ -194,9 +196,7 @@ export function ReviewTable({
     },
     {
       accessorKey: "agentName",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Agente" />
-      ),
+      header: sortableHeader<Review>("Agente"),
       // The name opens the agent page; the review number opens the review.
       cell: ({ row }) =>
         row.original.agentId ? (
@@ -205,35 +205,32 @@ export function ReviewTable({
             name={row.original.agentName}
           />
         ) : (
-          <span className="text-xs font-medium">{row.original.agentName}</span>
+          row.original.agentName
         ),
     },
     {
       accessorKey: "workspaceName",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Espacio de trabajo" />
-      ),
+      header: sortableHeader<Review>("Espacio de trabajo"),
       cell: ({ row }) => <WorkspaceName name={row.original.workspaceName} />,
     },
     {
       accessorKey: "userEmail",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Correo electrónico" />
-      ),
-      cell: ({ row }) => (
-        <span>{row.original.userEmail ?? "No disponible"}</span>
-      ),
+      header: sortableHeader<Review>("Correo electrónico"),
+      cell: ({ row }) =>
+        row.original.userEmail ?? <Absent>No disponible</Absent>,
+    },
+    {
+      accessorKey: "versionNumber",
+      header: sortableHeader<Review>("Versión"),
+      cell: ({ row }) => <Count value={row.original.versionNumber} />,
     },
     {
       accessorKey: "number",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Revisión #" />
-      ),
+      header: sortableHeader<Review>("Revisión"),
       cell: ({ row }) =>
         row.original.canOpen || row.original.status === "approved" ? (
-          <Button
-            variant="link"
-            className="h-auto p-0 text-xs font-medium text-blue-600 tabular-nums underline underline-offset-4 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
+          <CellButton
+            className="tabular-nums"
             disabled={pending}
             aria-label={`Ver revisión ${row.original.number} de ${row.original.agentName}`}
             onClick={() => open(row.original)}
@@ -242,57 +239,65 @@ export function ReviewTable({
             {pending && openingId === row.original.id && (
               <span className="sr-only"> · Abriendo…</span>
             )}
-          </Button>
+          </CellButton>
         ) : (
-          <div>
-            <span className="tabular-nums">{row.original.number}</span>
-            <p className="text-xs text-muted-foreground">
-              {["submitted", "in_review"].includes(row.original.status)
-                ? "Sin autorización vigente"
-                : "Revisión cerrada"}
-            </p>
-          </div>
+          <span
+            className="tabular-nums"
+            title={
+              ["submitted", "in_review"].includes(row.original.status)
+                ? "Sin autorización vigente para abrirla"
+                : "Revisión cerrada"
+            }
+          >
+            {row.original.number}
+          </span>
         ),
     },
     {
-      accessorKey: "versionNumber",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Versión #" />
-      ),
+      id: "approval",
+      accessorFn: (row) => row.approvalReason ?? "",
+      header: sortableHeader<Review>("Aprobación"),
+      cell: ({ row }) =>
+        row.original.approvalReason ? (
+          <StatusIndicator
+            state={statusDescriptor("approval", row.original.approvalReason)}
+          />
+        ) : (
+          <Absent>No disponible</Absent>
+        ),
+    },
+    {
+      id: "approvalExpiresAt",
+      accessorFn: (row) => timeKey(row.approvalExpiresAt),
+      header: sortableHeader<Review>("Plazo para activar"),
       cell: ({ row }) => (
-        <span className="tabular-nums">{row.original.versionNumber}</span>
+        <Deadline
+          value={
+            row.original.approvalReason === "valid"
+              ? row.original.approvalExpiresAt
+              : null
+          }
+          now={now}
+        />
       ),
     },
-    ...[
-      {
-        id: "approvalValidity",
-        header: "Autorización",
-        cell: ({ row }: { row: { original: Review } }) => (
-          <Badge
-            variant={
-              approvalBadgeVariants[
-                row.original
-                  .approvalReason as keyof typeof approvalBadgeVariants
-              ] ?? "slate"
-            }
-          >
-            {approvalLabels[
-              row.original.approvalReason as keyof typeof approvalLabels
-            ] ?? "No disponible"}
-          </Badge>
+    {
+      id: "deployment",
+      accessorFn: (row) => row.deploymentStatus ?? "none",
+      header: sortableHeader<Review>("Despliegue"),
+      cell: ({ row }) =>
+        (row.original.deploymentStatus ?? "none") === "none" ? (
+          <Absent>Sin despliegue</Absent>
+        ) : (
+          <StatusIndicator
+            appearance="badge"
+            state={statusDescriptor(
+              "deployment",
+              row.original.deploymentStatus!
+            )}
+          />
         ),
-      },
-      {
-        id: "deployment",
-        header: "Despliegue",
-        cell: ({ row }: { row: { original: Review } }) => (
-          <span>
-            {deploymentLabels[row.original.deploymentStatus ?? "none"] ??
-              "No disponible"}
-          </span>
-        ),
-      },
-    ],
+    },
   ]
 
   return (
@@ -378,7 +383,11 @@ export function ReviewTable({
                   ? columns
                   : columns.filter(
                       (c) =>
-                        c.id !== "approvalValidity" && c.id !== "deployment"
+                        ![
+                          "approval",
+                          "approvalExpiresAt",
+                          "deployment",
+                        ].includes(c.id ?? "")
                     )
               }
               data={reviews.filter((review) => review.status === state.value)}

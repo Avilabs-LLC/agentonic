@@ -1,26 +1,22 @@
 "use client"
 import type { ColumnDef } from "@tanstack/react-table"
-import {
-  formatUtcMinute as utc,
-  formatUtcParts,
-} from "@agentonic/contracts/format"
+import { formatUtcMinute as utc } from "@agentonic/contracts/format"
 import {
   expiryActorLabels,
   type ExpiryRow,
   type Registration,
   type RuntimeRegistrations,
 } from "@agentonic/contracts/expiry"
-import {
-  deploymentLabels,
-  environmentLabels,
-} from "@agentonic/contracts/lifecycle"
-import {
-  deploymentBadgeVariants,
-  statusDescriptor,
-} from "@workspace/ui/lib/badge-status"
-import { Badge } from "@workspace/ui/components/badge"
+import { environmentLabels } from "@agentonic/contracts/lifecycle"
+import { statusDescriptor } from "@workspace/ui/lib/badge-status"
 import { StatusIndicator } from "@workspace/ui/components/status-badge"
-import { IdLink } from "@workspace/ui/components/id-link"
+import {
+  Absent,
+  CellLink,
+  Count,
+  Deadline,
+  sortableHeader,
+} from "@workspace/ui/components/table-cells"
 import { AgentLink } from "@workspace/ui/components/agent-versions"
 import {
   PlaceGroups,
@@ -28,10 +24,7 @@ import {
 } from "@workspace/ui/components/place-groups"
 import { WorkspaceName } from "@workspace/ui/components/workspace-name"
 import { CardEmptyState } from "@workspace/ui/components/card-empty-state"
-import {
-  DataTable,
-  DataTableColumnHeader,
-} from "@workspace/ui/components/data-table"
+import { DataTable } from "@workspace/ui/components/data-table"
 import {
   Card,
   CardContent,
@@ -42,30 +35,6 @@ import {
 
 const past = (value: string, now: string) =>
   Date.parse(value) <= Date.parse(now)
-
-// A deadline as plain text; a lapsed one is a nested outcome (§9.1).
-function Deadline({ value, now }: { value: string | null; now: string }) {
-  if (value === null)
-    return <span className="text-muted-foreground">No aplica</span>
-  const { date, time } = formatUtcParts(value)
-  return (
-    <div className="tabular-nums">
-      {past(value, now) ? (
-        <StatusIndicator
-          className="text-xs"
-          state={{
-            label: `Venció el ${date}`,
-            variant: "warning",
-            icon: "clock",
-          }}
-        />
-      ) : (
-        <p>{date}</p>
-      )}
-      <p className="text-muted-foreground">{time}</p>
-    </div>
-  )
-}
 
 export function RegistrationsCard({
   registrations,
@@ -120,71 +89,74 @@ const time = (value: string | null) =>
   value === null ? Infinity : Date.parse(value)
 
 export function ExpiryTable({ rows, now }: { rows: ExpiryRow[]; now: string }) {
+  const header = sortableHeader<ExpiryRow>
   const columns: ColumnDef<ExpiryRow>[] = [
     {
-      accessorKey: "id",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="ID" />
-      ),
+      accessorKey: "agentName",
+      header: header("Agente"),
+      cell: ({ row }) =>
+        row.original.agentId ? (
+          <AgentLink
+            href={`/agents/${row.original.agentId}`}
+            name={row.original.agentName}
+          />
+        ) : (
+          row.original.agentName
+        ),
+    },
+    {
+      accessorKey: "workspaceName",
+      header: header("Espacio de trabajo"),
+      cell: ({ row }) => <WorkspaceName name={row.original.workspaceName} />,
+    },
+    {
+      accessorKey: "versionNumber",
+      header: header("Versión"),
+      cell: ({ row }) => <Count value={row.original.versionNumber} />,
+    },
+    {
+      accessorKey: "number",
+      header: header("Revisión"),
+      // As in Revisiones, the review number opens its approval receipt.
       cell: ({ row }) => (
-        <IdLink
-          id={row.original.id}
+        <CellLink
           href={`/submissions/${row.original.id}/receipt?workspace=${row.original.workspaceId}`}
-        />
+          className="tabular-nums"
+        >
+          <span className="sr-only">Ver comprobante de la revisión </span>
+          {row.original.number}
+        </CellLink>
       ),
     },
     {
-      accessorKey: "agentName",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Agente" />
-      ),
-      cell: ({ row }) => (
-        <div className="space-y-1">
-          <p className="font-medium">
-            {row.original.agentId ? (
-              <AgentLink
-                href={`/agents/${row.original.agentId}`}
-                name={row.original.agentName}
-              />
-            ) : (
-              row.original.agentName
-            )}
-          </p>
-          <p className="flex items-center gap-x-1.5 text-muted-foreground">
-            <WorkspaceName name={row.original.workspaceName} />
-            <span>· Versión {row.original.versionNumber}</span>
-          </p>
-        </div>
-      ),
+      id: "environment",
+      accessorFn: (row) =>
+        row.environment ? environmentLabels[row.environment] : "",
+      header: header("Entorno"),
+      cell: ({ row }) =>
+        row.original.environment ? (
+          environmentLabels[row.original.environment]
+        ) : (
+          <Absent>No aplica</Absent>
+        ),
     },
     {
       accessorKey: "status",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Despliegue" />
-      ),
-      cell: ({ row }) => (
-        <div className="space-y-1">
-          <Badge
-            variant={deploymentBadgeVariants[row.original.status] ?? "slate"}
-          >
-            {row.original.status === "unauthorized"
-              ? "Autorización no vigente"
-              : (deploymentLabels[row.original.status] ?? "Estado desconocido")}
-          </Badge>
-          {row.original.environment && (
-            <p className="text-xs text-muted-foreground">
-              {environmentLabels[row.original.environment]}
-            </p>
-          )}
-        </div>
-      ),
+      header: header("Despliegue"),
+      cell: ({ row }) =>
+        row.original.status === "none" ? (
+          <Absent>Sin despliegue</Absent>
+        ) : (
+          <StatusIndicator
+            appearance="badge"
+            state={statusDescriptor("deployment", row.original.status)}
+          />
+        ),
     },
     {
       id: "approval",
       accessorFn: (row) => time(row.approvalExpiresAt),
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Plazo para activar" />
-      ),
+      header: header("Plazo para activar"),
       cell: ({ row }) => (
         <Deadline value={row.original.approvalExpiresAt} now={now} />
       ),
@@ -192,9 +164,7 @@ export function ExpiryTable({ rows, now }: { rows: ExpiryRow[]; now: string }) {
     {
       id: "consent",
       accessorFn: (row) => time(row.consentExpiresAt),
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Uso autorizado hasta" />
-      ),
+      header: header("Uso autorizado hasta"),
       cell: ({ row }) => (
         <Deadline value={row.original.consentExpiresAt} now={now} />
       ),
@@ -202,16 +172,10 @@ export function ExpiryTable({ rows, now }: { rows: ExpiryRow[]; now: string }) {
     {
       id: "host",
       accessorFn: (row) => time(row.host?.expiresAt ?? null),
-      header: ({ column }) => (
-        <DataTableColumnHeader
-          column={column}
-          title="Servidor verificado hasta"
-        />
-      ),
+      header: header("Servidor verificado hasta"),
       cell: ({ row }) =>
         row.original.host?.state === "revoked" ? (
           <StatusIndicator
-            className="text-xs"
             state={statusDescriptor("registration", "revoked")}
           />
         ) : (
@@ -220,24 +184,12 @@ export function ExpiryTable({ rows, now }: { rows: ExpiryRow[]; now: string }) {
     },
     {
       id: "next",
+      // Sorted by urgency; its deadline is the earliest one in this row.
       accessorFn: (row) => time(row.next.by),
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Próximo paso" />
-      ),
+      header: header("Próximo paso"),
       cell: ({ row }) => {
-        const { actor, action, by } = row.original.next
-        return (
-          <div>
-            <p className="font-medium">
-              {actor ? `${expiryActorLabels[actor]} · ${action}` : action}
-            </p>
-            {by && (
-              <p className="text-muted-foreground">
-                {past(by, now) ? "Venció el" : "Antes del"} {utc(by)}
-              </p>
-            )}
-          </div>
-        )
+        const { actor, action } = row.original.next
+        return actor ? `${expiryActorLabels[actor]} · ${action}` : action
       },
     },
   ]

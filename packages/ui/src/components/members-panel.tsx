@@ -14,7 +14,6 @@ import {
   type WorkspaceMember,
 } from "@agentonic/contracts/access"
 import type { ActionResult } from "@agentonic/contracts/identity"
-import { formatUtcParts } from "@agentonic/contracts/format"
 import { Button } from "@workspace/ui/components/button"
 import { Input } from "@workspace/ui/components/input"
 import {
@@ -45,6 +44,7 @@ import {
 } from "@workspace/ui/components/data-table"
 import { DataTableRowActions } from "@workspace/ui/components/data-table-row-actions"
 import { StatusIndicator } from "@workspace/ui/components/status-badge"
+import { When } from "@workspace/ui/components/table-cells"
 import { statusDescriptor } from "@workspace/ui/lib/badge-status"
 import { notify } from "@workspace/ui/lib/toast"
 
@@ -125,7 +125,7 @@ export function InvitationsTable({
         />
       ),
     },
-    { accessorKey: "email", header: header("Correo") },
+    { accessorKey: "email", header: header("Correo electrónico") },
     {
       id: "role",
       accessorFn: (row) => role(row.role),
@@ -134,15 +134,7 @@ export function InvitationsTable({
     {
       accessorKey: "expiresAt",
       header: header("Vence"),
-      cell: ({ row }) => {
-        const { date, time } = formatUtcParts(row.original.expiresAt)
-        return (
-          <div className="tabular-nums">
-            <p>{date}</p>
-            <p className="text-muted-foreground">{time}</p>
-          </div>
-        )
-      },
+      cell: ({ row }) => <When value={row.original.expiresAt} />,
     },
     {
       id: "state",

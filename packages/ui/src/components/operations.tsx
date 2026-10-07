@@ -2,7 +2,7 @@
 // Admin operations screens (architecture §52): agents, activity, workspaces,
 // deployments, costs and runtime releases. Metadata only; one badge per row
 // for the record's primary state, nested states inline (UI contract §9).
-import type { Column, ColumnDef } from "@tanstack/react-table"
+import type { ColumnDef } from "@tanstack/react-table"
 import {
   formatCount,
   formatMoney,
@@ -10,10 +10,7 @@ import {
   formatUtcParts,
 } from "@agentonic/contracts/format"
 import { registrationNames } from "@agentonic/contracts/expiry"
-import {
-  deploymentLabels,
-  environmentLabels,
-} from "@agentonic/contracts/lifecycle"
+import { environmentLabels } from "@agentonic/contracts/lifecycle"
 import {
   auditActionLabels,
   auditActorLabels,
@@ -28,18 +25,19 @@ import {
   type OperationsRelease,
   type OperationsWorkspace,
 } from "@agentonic/contracts/operations"
-import {
-  deploymentBadgeVariants,
-  statusDescriptor,
-} from "@workspace/ui/lib/badge-status"
-import { Badge } from "@workspace/ui/components/badge"
+import { statusDescriptor } from "@workspace/ui/lib/badge-status"
 import { StatusIndicator } from "@workspace/ui/components/status-badge"
 import { WorkspaceName } from "@workspace/ui/components/workspace-name"
+import { deploymentColumns } from "@workspace/ui/components/deployment-columns"
 import {
-  deploymentResting,
-  restingColumn,
-} from "@workspace/ui/components/resting-column"
-import { Button } from "@workspace/ui/components/button"
+  Absent,
+  CellButton,
+  Code,
+  Count,
+  sortableHeader,
+  timeKey,
+  When,
+} from "@workspace/ui/components/table-cells"
 import {
   Dialog,
   DialogContent,
@@ -57,10 +55,7 @@ import {
   agentVersionColumns,
 } from "@workspace/ui/components/agent-versions"
 import { CardEmptyState } from "@workspace/ui/components/card-empty-state"
-import {
-  DataTable,
-  DataTableColumnHeader,
-} from "@workspace/ui/components/data-table"
+import { DataTable } from "@workspace/ui/components/data-table"
 import {
   Card,
   CardContent,
@@ -78,69 +73,30 @@ import {
   ItemTitle,
 } from "@workspace/ui/components/item"
 
-/** A sortable header with this title, for any column. */
-function header<T>(title: string) {
-  function SortableHeader({ column }: { column: Column<T, unknown> }) {
-    return <DataTableColumnHeader column={column} title={title} />
-  }
-  return SortableHeader
-}
-function When({ value }: { value: string | null }) {
-  if (value === null)
-    return <span className="text-muted-foreground">Sin registro</span>
-  const { date, time } = formatUtcParts(value)
-  return (
-    <div className="tabular-nums">
-      <p>{date}</p>
-      <p className="text-muted-foreground">{time}</p>
-    </div>
-  )
-}
-const at = (value: string | null) =>
-  value === null ? -Infinity : Date.parse(value)
-function Named({
-  name,
-  detail,
-  icon = false,
-}: {
-  name: string
-  detail: string
-  // Shows `name` (a workspace) with the workspace icon.
-  icon?: boolean
-}) {
-  return (
-    <div className="space-y-1">
-      <p className="font-medium">
-        {icon ? <WorkspaceName name={name} /> : name}
-      </p>
-      <p className="text-muted-foreground">{detail}</p>
-    </div>
-  )
-}
-/** The agent's name over its workspace, with the workspace icon. */
-function AgentAndWorkspace({
-  agentId,
-  name,
-  workspaceName,
-}: {
-  agentId: string
-  name: string
-  workspaceName: string
-}) {
-  return (
-    <div className="space-y-1">
-      <p className="font-medium">
-        <AgentLink href={`/agents/${agentId}`} name={name} />
-      </p>
-      <WorkspaceName name={workspaceName} className="text-muted-foreground" />
-    </div>
-  )
-}
+const header = sortableHeader
+const at = timeKey
 function workspaceColumn<T extends { workspaceName: string }>(): ColumnDef<T> {
   return {
     accessorKey: "workspaceName",
     header: header("Espacio de trabajo"),
     cell: ({ row }) => <WorkspaceName name={row.original.workspaceName} />,
+  }
+}
+function agentColumn<
+  T extends { agentId: string | null; agentName: string },
+>(): ColumnDef<T> {
+  return {
+    accessorKey: "agentName",
+    header: header("Agente"),
+    cell: ({ row }) =>
+      row.original.agentId ? (
+        <AgentLink
+          href={`/agents/${row.original.agentId}`}
+          name={row.original.agentName}
+        />
+      ) : (
+        row.original.agentName
+      ),
   }
 }
 function Stat({ label, value }: { label: string; value: number }) {
@@ -176,18 +132,11 @@ export function OperationsAgentsTable({
 }: {
   agents: OperationsAgent[]
 }) {
-  const columns: ColumnDef<OperationsAgent>[] = [
-    {
-      accessorKey: "name",
-      header: header("Agente"),
-      cell: ({ row }) => (
-        <AgentAndWorkspace
-          agentId={row.original.id}
-          name={row.original.name}
-          workspaceName={row.original.workspaceName}
-        />
-      ),
-    },
+  const rows = agents.map((a) => ({ ...a, agentId: a.id, agentName: a.name }))
+  type Row = (typeof rows)[number]
+  const columns: ColumnDef<Row>[] = [
+    agentColumn<Row>(),
+    workspaceColumn<Row>(),
     {
       accessorKey: "ownerName",
       header: header("Responsable"),
@@ -201,29 +150,25 @@ export function OperationsAgentsTable({
         row.original.latestVersion ? (
           capabilities(row.original.tools)
         ) : (
-          <span className="text-muted-foreground">
-            Sin versiones congeladas
-          </span>
+          <Absent>Sin versiones congeladas</Absent>
         ),
     },
-    ...agentVersionColumns<OperationsAgent>((row) => row.summary),
+    ...agentVersionColumns<Row>((row) => row.summary),
     {
-      id: "activity",
+      id: "lastRunAt",
       accessorFn: (row) => at(row.lastRunAt),
       header: header("Último turno"),
-      cell: ({ row }) => (
-        <div className="tabular-nums">
-          <When value={row.original.lastRunAt} />
-          <p className="text-xs text-muted-foreground">
-            {formatCount(row.original.runs7d)} en 7 días
-          </p>
-        </div>
-      ),
+      cell: ({ row }) => <When value={row.original.lastRunAt} />,
+    },
+    {
+      accessorKey: "runs7d",
+      header: header("Turnos (7 días)"),
+      cell: ({ row }) => <Count value={row.original.runs7d} />,
     },
   ]
   return (
     <DataTable
-      data={agents}
+      data={rows}
       columns={columns}
       searchKeys={["name", "workspaceName", "ownerName"]}
       searchLabel="Buscar agentes, espacios o responsables"
@@ -253,7 +198,10 @@ export function OperationsActivityStats({
     </div>
   )
 }
-type ActivityRow = OperationsEvent & { actionLabel: string }
+type ActivityRow = OperationsEvent & {
+  actionLabel: string
+  resourceLabel: string
+}
 export function OperationsActivityTable({
   events,
 }: {
@@ -262,6 +210,7 @@ export function OperationsActivityTable({
   const rows: ActivityRow[] = events.map((e) => ({
     ...e,
     actionLabel: auditActionLabels[e.action] ?? e.action,
+    resourceLabel: auditResourceLabels[e.resourceType] ?? e.resourceType,
   }))
   const columns: ColumnDef<ActivityRow>[] = [
     {
@@ -274,22 +223,29 @@ export function OperationsActivityTable({
     {
       accessorKey: "actionLabel",
       header: header("Acción"),
+    },
+    {
+      accessorKey: "resourceLabel",
+      header: header("Recurso"),
       cell: ({ row }) => (
-        <div>
-          <p className="font-medium">{row.original.actionLabel}</p>
-          <p className="text-muted-foreground">
-            {auditResourceLabels[row.original.resourceType] ??
-              row.original.resourceType}{" "}
-            <span className="font-mono text-xs">{row.original.resourceId}</span>
-          </p>
-          {row.original.agentId && row.original.agentName && (
-            <AgentLink
-              href={`/agents/${row.original.agentId}`}
-              name={row.original.agentName}
-            />
-          )}
-        </div>
+        <span title={row.original.resourceId}>
+          {row.original.resourceLabel}{" "}
+          <Code>{row.original.resourceId.slice(0, 8)}</Code>
+        </span>
       ),
+    },
+    {
+      accessorKey: "agentName",
+      header: header("Agente"),
+      cell: ({ row }) =>
+        row.original.agentId && row.original.agentName ? (
+          <AgentLink
+            href={`/agents/${row.original.agentId}`}
+            name={row.original.agentName}
+          />
+        ) : (
+          <Absent>No aplica</Absent>
+        ),
     },
     {
       accessorKey: "actor",
@@ -324,42 +280,33 @@ export function OperationsWorkspacesTable({
 }: {
   workspaces: OperationsWorkspace[]
 }) {
-  const columns: ColumnDef<OperationsWorkspace>[] = [
+  const rows = workspaces.map((w) => ({ ...w, workspaceName: w.name }))
+  type Row = (typeof rows)[number]
+  const columns: ColumnDef<Row>[] = [
+    workspaceColumn<Row>(),
     {
-      accessorKey: "name",
-      header: header("Espacio de trabajo"),
-      cell: ({ row }) => (
-        <Named
-          name={row.original.name}
-          detail={`${workspaceKindLabels[row.original.kind] ?? row.original.kind} · ${row.original.timezone}`}
-          icon
-        />
-      ),
+      id: "kind",
+      accessorFn: (row) => workspaceKindLabels[row.kind] ?? row.kind,
+      header: header("Tipo"),
+    },
+    {
+      accessorKey: "timezone",
+      header: header("Zona horaria"),
     },
     {
       accessorKey: "members",
       header: header("Miembros activos"),
-      cell: ({ row }) => (
-        <span className="tabular-nums">
-          {formatCount(row.original.members)}
-        </span>
-      ),
+      cell: ({ row }) => <Count value={row.original.members} />,
     },
     {
       accessorKey: "agents",
       header: header("Agentes"),
-      cell: ({ row }) => (
-        <span className="tabular-nums">{formatCount(row.original.agents)}</span>
-      ),
+      cell: ({ row }) => <Count value={row.original.agents} />,
     },
     {
       accessorKey: "pendingInvitations",
       header: header("Invitaciones pendientes"),
-      cell: ({ row }) => (
-        <span className="tabular-nums">
-          {formatCount(row.original.pendingInvitations)}
-        </span>
-      ),
+      cell: ({ row }) => <Count value={row.original.pendingInvitations} />,
     },
     {
       id: "createdAt",
@@ -380,7 +327,7 @@ export function OperationsWorkspacesTable({
   ]
   return (
     <DataTable
-      data={workspaces}
+      data={rows}
       columns={columns}
       searchKeys={["name"]}
       searchLabel="Buscar espacios de trabajo"
@@ -527,58 +474,11 @@ export function OperationsDeploymentsTable({
   deployments: OperationsDeployment[]
 }) {
   const columns: ColumnDef<OperationsDeployment>[] = [
-    {
-      accessorKey: "agentName",
-      header: header("Agente"),
-      cell: ({ row }) => (
-        <AgentAndWorkspace
-          agentId={row.original.agentId}
-          name={row.original.agentName}
-          workspaceName={row.original.workspaceName}
-        />
-      ),
-    },
-    {
-      accessorKey: "environment",
-      header: header("Entorno"),
-      cell: ({ row }) => (
-        <div>
-          <p>{environmentLabels[row.original.environment]}</p>
-          <p className="font-mono text-xs text-muted-foreground">
-            {row.original.broker ?? "Sin trabajador"}
-          </p>
-        </div>
-      ),
-    },
-    {
-      id: "authorizedUntil",
-      accessorFn: (row) => at(row.authorizedUntil),
-      header: header("Uso autorizado hasta"),
-      cell: ({ row }) => <When value={row.original.authorizedUntil} />,
-    },
-    {
-      id: "spent",
-      accessorFn: (row) => row.spentUsd,
-      header: header("Gasto"),
-      cell: ({ row }) => (
-        <span className="tabular-nums">
-          {formatMoney(row.original.spentUsd)} de{" "}
-          {formatMoney(row.original.budgetUsd)}
-        </span>
-      ),
-    },
-    {
-      accessorKey: "status",
-      header: header("Estado"),
-      cell: ({ row }) => (
-        <Badge
-          variant={deploymentBadgeVariants[row.original.status] ?? "slate"}
-        >
-          {deploymentLabels[row.original.status] ?? "Estado desconocido"}
-        </Badge>
-      ),
-    },
-    restingColumn<OperationsDeployment>(deploymentResting),
+    agentColumn<OperationsDeployment>(),
+    workspaceColumn<OperationsDeployment>(),
+    ...deploymentColumns<OperationsDeployment>({
+      worker: (row) => row.broker,
+    }),
   ]
   return (
     <DataTable
@@ -655,12 +555,16 @@ export function OperationsCostsTable({ days }: { days: OperationsCostDay[] }) {
     {
       accessorKey: "date",
       header: header("Día"),
+      // The same day format as every other date (6/10/2026).
       cell: ({ row }) => (
-        <div className="tabular-nums">
-          <p>{row.original.date.split("-").reverse().join("/")}</p>
-          <p className="text-muted-foreground">{row.original.timezone}</p>
-        </div>
+        <span className="tabular-nums">
+          {formatUtcParts(`${row.original.date}T00:00:00Z`).date}
+        </span>
       ),
+    },
+    {
+      accessorKey: "timezone",
+      header: header("Zona horaria"),
     },
     workspaceColumn<OperationsCostDay>(),
     {
@@ -685,7 +589,7 @@ export function OperationsCostsTable({ days }: { days: OperationsCostDay[] }) {
             }}
           />
         ) : (
-          <span className="text-muted-foreground">Ninguna</span>
+          <Absent>Ninguna</Absent>
         ),
     },
   ]
@@ -766,8 +670,7 @@ type ReleaseRow = OperationsRelease & { installed: string; places: number }
 // Where a runtime is installed: a count that opens the full list, grouped by
 // place, instead of every location inline.
 function Installed({ release }: { release: ReleaseRow }) {
-  if (release.places === 0)
-    return <span className="text-muted-foreground">Sin instalar</span>
+  if (release.places === 0) return <Absent>Sin instalar</Absent>
   const where = (["azure_staging", "local"] as const)
     .map((environment) => ({
       environment,
@@ -779,9 +682,7 @@ function Installed({ release }: { release: ReleaseRow }) {
     .filter((place) => place.kinds.length > 0)
   return (
     <Dialog>
-      <DialogTrigger
-        render={<Button variant="link" className="h-auto p-0 tabular-nums" />}
-      >
+      <DialogTrigger render={<CellButton className="tabular-nums" />}>
         {formatCount(release.places)}{" "}
         {release.places === 1 ? "instalación" : "instalaciones"}
       </DialogTrigger>
@@ -825,13 +726,18 @@ export function OperationsReleasesTable({
       accessorKey: "version",
       header: header("Versión"),
       cell: ({ row }) => (
-        <div>
-          <p className="font-medium">{row.original.version}</p>
-          <p className="font-mono text-xs text-muted-foreground">
-            Commit {row.original.commit} · {row.original.artifact}
-          </p>
-        </div>
+        <span className="font-medium">{row.original.version}</span>
       ),
+    },
+    {
+      accessorKey: "commit",
+      header: header("Commit"),
+      cell: ({ row }) => <Code>{row.original.commit}</Code>,
+    },
+    {
+      accessorKey: "artifact",
+      header: header("Artefacto"),
+      cell: ({ row }) => <Code>{row.original.artifact}</Code>,
     },
     {
       id: "installed",
@@ -842,11 +748,7 @@ export function OperationsReleasesTable({
     {
       accessorKey: "workspaces",
       header: header("Espacios con acceso"),
-      cell: ({ row }) => (
-        <span className="tabular-nums">
-          {formatCount(row.original.workspaces)}
-        </span>
-      ),
+      cell: ({ row }) => <Count value={row.original.workspaces} />,
     },
     {
       id: "createdAt",

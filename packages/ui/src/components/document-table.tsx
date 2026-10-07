@@ -4,10 +4,9 @@ import { useRouter } from "next/navigation"
 import { FileTextIcon, Trash2Icon, RefreshCwIcon } from "lucide-react"
 import type { ColumnDef } from "@tanstack/react-table"
 import type { WorkspaceView, FormResult } from "@agentonic/contracts/authoring"
-import {
-  DataTable,
-  DataTableColumnHeader,
-} from "@workspace/ui/components/data-table"
+import { formatCount } from "@agentonic/contracts/format"
+import { DataTable } from "@workspace/ui/components/data-table"
+import { sortableHeader } from "@workspace/ui/components/table-cells"
 import { processingErrors } from "@agentonic/contracts/rag"
 import { DocumentStatusBadge } from "@workspace/ui/components/status-badge"
 import { DocumentDownload } from "@workspace/ui/components/document-download"
@@ -161,6 +160,24 @@ function DocumentActions({
     </>
   )
 }
+const documentType = (contentType: string) =>
+  contentType === "application/pdf"
+    ? "PDF"
+    : contentType === "text/markdown"
+      ? "Markdown"
+      : "Texto"
+function documentDetail(document: WorkspaceView["documents"][number]) {
+  if (document.status === "ready")
+    return `${formatCount(document.chunkCount)} ${document.chunkCount === 1 ? "fragmento" : "fragmentos"}`
+  return (
+    processingErrors[document.processingError ?? ""] ??
+    (document.processingStatus === "not_queued"
+      ? "Pendiente de iniciar"
+      : document.processingStatus === "failed"
+        ? processingErrors.attempts_exhausted
+        : "")
+  )
+}
 export function DocumentTable({
   data,
   collections,
@@ -174,37 +191,37 @@ export function DocumentTable({
   process: (id: string) => Promise<FormResult>
   remove: (id: string) => Promise<FormResult>
 }) {
-  const columns: ColumnDef<WorkspaceView["documents"][number]>[] = [
+  type Document = WorkspaceView["documents"][number]
+  const header = sortableHeader<Document>
+  const columns: ColumnDef<Document>[] = [
     {
       accessorKey: "title",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Documento" />
-      ),
+      header: header("Documento"),
       cell: ({ row }) => (
-        <div className="flex items-center gap-3">
-          <FileTextIcon className="size-5 shrink-0 text-muted-foreground" />
-          <div className="space-y-1">
-            <p
-              className="max-w-60 truncate font-medium"
-              title={row.original.title}
-            >
-              {row.original.title}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              {row.original.contentType === "application/pdf"
-                ? "PDF"
-                : row.original.contentType === "text/markdown"
-                  ? "Markdown"
-                  : "Texto"}{" "}
-              ·{" "}
-              {new Intl.NumberFormat("es-VE", {
-                style: "unit",
-                unit: "kilobyte",
-                maximumFractionDigits: 1,
-              }).format(row.original.size / 1024)}
-            </p>
-          </div>
-        </div>
+        <span className="flex items-center gap-2">
+          <FileTextIcon className="size-4 shrink-0 text-muted-foreground" />
+          <span className="max-w-60 truncate" title={row.original.title}>
+            {row.original.title}
+          </span>
+        </span>
+      ),
+    },
+    {
+      id: "type",
+      accessorFn: (document) => documentType(document.contentType),
+      header: header("Tipo"),
+    },
+    {
+      accessorKey: "size",
+      header: header("Tamaño"),
+      cell: ({ row }) => (
+        <span className="tabular-nums">
+          {new Intl.NumberFormat("es-VE", {
+            style: "unit",
+            unit: "kilobyte",
+            maximumFractionDigits: 1,
+          }).format(row.original.size / 1024)}
+        </span>
       ),
     },
     {
@@ -212,40 +229,33 @@ export function DocumentTable({
       accessorFn: (document) =>
         collections.find((c) => c.id === document.collectionId)?.name ??
         "Colección",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Colección" />
-      ),
+      header: header("Colección"),
       cell: ({ getValue }) => (
-        <p
-          className="max-w-44 truncate text-muted-foreground"
-          title={getValue<string>()}
-        >
+        <span className="block max-w-44 truncate" title={getValue<string>()}>
           {getValue<string>()}
-        </p>
+        </span>
       ),
     },
     {
       id: "processingState",
       accessorFn: (document) =>
         document.status === "ready" ? "ready" : document.processingStatus,
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Estado" />
-      ),
-      cell: ({ row }) => (
-        <div className="space-y-1">
-          <DocumentStatusBadge document={row.original} />
-          <p className="max-w-48 text-xs whitespace-normal text-muted-foreground">
-            {row.original.status === "ready"
-              ? `${row.original.chunkCount} fragmentos`
-              : (processingErrors[row.original.processingError ?? ""] ??
-                (row.original.processingStatus === "not_queued"
-                  ? "Pendiente de iniciar"
-                  : row.original.processingStatus === "failed"
-                    ? processingErrors.attempts_exhausted
-                    : ""))}
-          </p>
-        </div>
-      ),
+      header: header("Estado"),
+      cell: ({ row }) => <DocumentStatusBadge document={row.original} />,
+    },
+    {
+      id: "detail",
+      accessorFn: (document) => documentDetail(document),
+      header: header("Detalle"),
+      // Free text: an error explanation may wrap.
+      cell: ({ row }) =>
+        row.original.status === "ready" ? (
+          <span className="tabular-nums">{documentDetail(row.original)}</span>
+        ) : (
+          <span className="block max-w-56 whitespace-normal text-muted-foreground">
+            {documentDetail(row.original) || "—"}
+          </span>
+        ),
     },
     {
       id: "actions",

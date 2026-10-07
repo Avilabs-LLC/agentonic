@@ -14,7 +14,7 @@ export function AgentsSkeleton() {
       <PageHeaderSkeleton />
       <FiltersCardSkeleton />
       <Skeleton className="h-5 w-4/5" />
-      <TableSkeleton columns={7} />
+      <TableSkeleton columns={8} />
     </>
   )
 }
@@ -245,9 +245,14 @@ export function KnowledgeSkeleton() {
                 <Skeleton className="h-9 w-full max-w-sm" />
                 <div className="divide-y border-t">
                   <div className="flex justify-between gap-4 py-3">
-                    {Array.from({ length: 4 }, (_, column) => (
-                      <Skeleton key={column} className="h-4 w-20" />
-                    ))}
+                    {Array.from(
+                      // Documents: Documento, Tipo, Tamaño, Colección,
+                      // Estado, Detalle and actions; collections: four.
+                      { length: section === "documents" ? 7 : 4 },
+                      (_, column) => (
+                        <Skeleton key={column} className="h-4 w-20" />
+                      )
+                    )}
                   </div>
                   {[0, 1, 2].map((row) => (
                     <div key={row} className="flex items-center gap-4 py-4">

@@ -1,8 +1,4 @@
-import {
-  proposalLabels,
-  type ProposalStatus,
-} from "@agentonic/contracts/proposals"
-import { proposalBadgeVariants } from "@workspace/ui/lib/badge-status"
+import type { ProposalStatus } from "@agentonic/contracts/proposals"
 import {
   ActivityIcon,
   ArchiveIcon,
@@ -50,6 +46,9 @@ export const iconTones: Record<StatusTone, string> = {
   orange: "text-orange-800 dark:text-orange-300",
   sky: "text-sky-700 dark:text-sky-300",
   violet: "text-violet-700 dark:text-violet-300",
+  pink: "text-pink-700 dark:text-pink-300",
+  indigo: "text-indigo-700 dark:text-indigo-300",
+  teal: "text-teal-700 dark:text-teal-300",
   slate: "text-muted-foreground",
 }
 export function StatusIndicator({
@@ -149,8 +148,9 @@ export function DocumentStatusBadge({
 
 export function ProposalStatusBadge({ status }: { status: ProposalStatus }) {
   return (
-    <Badge variant={proposalBadgeVariants[status]}>
-      {proposalLabels[status]}
-    </Badge>
+    <StatusIndicator
+      appearance="badge"
+      state={statusDescriptor("proposal", status)}
+    />
   )
 }

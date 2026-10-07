@@ -31,6 +31,11 @@ describe("shared state colors", () => {
       expect(submissionBadgeVariants[status]).toBeTruthy()
     expect(approvalBadgeVariants.unapproved).toBe("slate")
     expect(approvalBadgeVariants.expired).toBe("warning")
+    // Inline approval indicators use the same tones as the badges.
+    for (const reason of approvalReason.options)
+      expect(statusDescriptor("approval", reason).variant).toBe(
+        approvalBadgeVariants[reason]
+      )
   })
 })
 
@@ -99,9 +104,9 @@ describe("status meaning and precedence", () => {
       variant: "slate",
       label: "Aprobación registrada",
     })
-    expect(statusDescriptor("approval", "invalid")).toMatchObject({
+    expect(statusDescriptor("approval", "expired")).toMatchObject({
       variant: "warning",
-      label: "Aprobación no vigente",
+      label: "Vencida",
     })
   })
   it("keeps a later terminal submission decision above earlier successful review evidence", () => {
@@ -165,5 +170,20 @@ describe("status meaning and precedence", () => {
           variant: "slate",
           icon: "help",
         })
+  })
+})
+
+describe("one look per state", () => {
+  it("gives a deployment badge and its inline indicator the same tone", () => {
+    for (const status of Object.keys(deploymentLabels))
+      expect(statusDescriptor("deployment", status).variant).toBe(
+        deploymentBadgeVariants[status]
+      )
+  })
+  it("gives a submission badge and its inline indicator the same tone", () => {
+    for (const status of Object.keys(submissionLabels))
+      expect(statusDescriptor("submission", status).variant).toBe(
+        submissionBadgeVariants[status]
+      )
   })
 })

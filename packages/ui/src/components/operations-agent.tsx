@@ -2,32 +2,30 @@
 // The Admin agent page (architecture §55): what is in use and what comes next,
 // then the agent's proposals, deployments and activity. Metadata only; a
 // proposal's content stays behind its review and receipt.
-import Link from "next/link"
-import type { Column, ColumnDef } from "@tanstack/react-table"
+import type { ColumnDef } from "@tanstack/react-table"
 import {
   formatCount,
   formatMoney,
-  formatUtcMinute as utc,
   formatUtcParts,
 } from "@agentonic/contracts/format"
 import { submissionLabels } from "@agentonic/contracts/authoring"
 import {
-  approvalLabels,
   deploymentLabels,
   environmentLabels,
 } from "@agentonic/contracts/lifecycle"
 import type { OperationsAgentDetail } from "@agentonic/contracts/operations"
 import { agentVersionsView } from "@workspace/ui/lib/agent-versions"
+import { statusDescriptor } from "@workspace/ui/lib/badge-status"
+import { deploymentColumns } from "@workspace/ui/components/deployment-columns"
 import {
-  deploymentBadgeVariants,
-  statusDescriptor,
-  submissionBadgeVariants,
-} from "@workspace/ui/lib/badge-status"
-import { Badge } from "@workspace/ui/components/badge"
-import {
-  deploymentResting,
-  restingColumn,
-} from "@workspace/ui/components/resting-column"
+  Absent,
+  CellLink,
+  Count,
+  Deadline,
+  sortableHeader,
+  timeKey,
+  When,
+} from "@workspace/ui/components/table-cells"
 import { cn } from "@workspace/ui/lib/utils"
 import {
   iconTones,
@@ -35,10 +33,7 @@ import {
 } from "@workspace/ui/components/status-badge"
 import { facetTitles } from "@workspace/ui/components/agent-versions"
 import { capabilities } from "@workspace/ui/components/operations"
-import {
-  DataTable,
-  DataTableColumnHeader,
-} from "@workspace/ui/components/data-table"
+import { DataTable } from "@workspace/ui/components/data-table"
 import {
   Card,
   CardContent,
@@ -61,28 +56,7 @@ type Deployment = OperationsAgentDetail["deployments"][number] & {
   environmentLabel: string
   statusLabel: string
 }
-const linkClass =
-  "text-blue-600 underline underline-offset-4 outline-none hover:text-blue-800 focus-visible:ring-2 focus-visible:ring-ring dark:text-blue-400 dark:hover:text-blue-300"
-
-function header<T>(title: string) {
-  function SortableHeader({ column }: { column: Column<T, unknown> }) {
-    return <DataTableColumnHeader column={column} title={title} />
-  }
-  return SortableHeader
-}
-function When({ value }: { value: string | null }) {
-  if (value === null)
-    return <span className="text-muted-foreground">Sin registro</span>
-  const { date, time } = formatUtcParts(value)
-  return (
-    <div className="tabular-nums">
-      <p>{date}</p>
-      <p className="text-muted-foreground">{time}</p>
-    </div>
-  )
-}
-const at = (value: string | null) =>
-  value === null ? -Infinity : Date.parse(value)
+const header = sortableHeader
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <Card>
@@ -151,8 +125,10 @@ function TabLabel({ title, count }: { title: string; count?: number }) {
 
 export function OperationsAgentOverview({
   agent,
+  now,
 }: {
   agent: OperationsAgentDetail
+  now: string
 }) {
   const view = agentVersionsView(agent.summary)
   return (
@@ -202,6 +178,7 @@ export function OperationsAgentOverview({
           <ProposalsTable
             proposals={agent.proposals}
             workspaceId={agent.workspaceId}
+            now={now}
           />
         </TabsContent>
         <TabsContent value="despliegues">
@@ -239,9 +216,11 @@ export function OperationsAgentOverview({
 function ProposalsTable({
   proposals,
   workspaceId,
+  now,
 }: {
   proposals: OperationsAgentDetail["proposals"]
   workspaceId: string
+  now: string
 }) {
   const rows: Proposal[] = proposals.map((p) => ({
     ...p,
@@ -250,85 +229,83 @@ function ProposalsTable({
   }))
   const columns: ColumnDef<Proposal>[] = [
     {
-      id: "proposal",
-      accessorFn: (p) => p.number,
-      header: header("Propuesta"),
-      cell: ({ row }) => (
-        <span className="font-medium whitespace-nowrap">
-          {row.original.label}
-        </span>
-      ),
+      accessorKey: "versionNumber",
+      header: header("Versión"),
+      cell: ({ row }) => <Count value={row.original.versionNumber} />,
+    },
+    {
+      accessorKey: "number",
+      header: header("Revisión"),
+      // As in Revisiones, the review number opens the review: its receipt
+      // once approved, otherwise Revisiones, which records the access.
+      cell: ({ row }) => {
+        const p = row.original
+        if (p.approvalReason !== null)
+          return (
+            <CellLink
+              href={`/submissions/${p.id}/receipt?workspace=${workspaceId}`}
+              className="tabular-nums"
+            >
+              <span className="sr-only">Ver comprobante de la revisión </span>
+              {p.number}
+            </CellLink>
+          )
+        if (["submitted", "in_review"].includes(p.status))
+          return (
+            <CellLink
+              href={`/submissions?workspace=${workspaceId}`}
+              className="tabular-nums"
+            >
+              <span className="sr-only">Abrir en Revisiones la revisión </span>
+              {p.number}
+            </CellLink>
+          )
+        return <Count value={p.number} />
+      },
     },
     {
       accessorKey: "status",
       header: header("Estado"),
       cell: ({ row }) => (
-        <Badge
-          variant={submissionBadgeVariants[row.original.status] ?? "slate"}
-        >
-          {row.original.statusLabel}
-        </Badge>
+        <StatusIndicator
+          appearance="badge"
+          state={statusDescriptor("submission", row.original.status)}
+        />
       ),
     },
     {
       id: "approval",
-      accessorFn: (p) => at(p.approvalExpiresAt),
+      accessorFn: (p) => p.approvalReason ?? "",
       header: header("Aprobación"),
-      cell: ({ row }) => {
-        const p = row.original
-        if (p.approvalReason === null)
-          return <span className="text-muted-foreground">Sin aprobación</span>
-        const valid = p.approvalReason === "valid"
-        return (
-          <div className="space-y-0.5">
-            <StatusIndicator
-              state={statusDescriptor("approval", valid ? "valid" : "invalid")}
-            />
-            <p className="text-xs text-muted-foreground">
-              {valid && p.approvalExpiresAt
-                ? `Plazo para activar: ${utc(p.approvalExpiresAt)}`
-                : (approvalLabels[
-                    p.approvalReason as keyof typeof approvalLabels
-                  ] ?? "Sin aprobación")}
-            </p>
-          </div>
-        )
-      },
+      cell: ({ row }) =>
+        row.original.approvalReason === null ? (
+          <Absent>Sin aprobación</Absent>
+        ) : (
+          <StatusIndicator
+            state={statusDescriptor("approval", row.original.approvalReason)}
+          />
+        ),
+    },
+    {
+      id: "approvalExpiresAt",
+      accessorFn: (p) => timeKey(p.approvalExpiresAt),
+      header: header("Plazo para activar"),
+      cell: ({ row }) => (
+        <Deadline
+          value={
+            row.original.approvalReason === "valid"
+              ? row.original.approvalExpiresAt
+              : null
+          }
+          now={now}
+        />
+      ),
     },
     {
       id: "submittedAt",
-      accessorFn: (p) => at(p.submittedAt),
+      accessorFn: (p) => timeKey(p.submittedAt),
       header: header("Enviada"),
       cell: ({ row }) => <When value={row.original.submittedAt} />,
-    },
-    {
-      id: "review",
-      header: "Revisión",
-      enableSorting: false,
-      // The receipt exists once a proposal was approved; an open review is
-      // opened from Revisiones, which records the access.
-      cell: ({ row }) => {
-        const p = row.original
-        if (p.approvalReason !== null)
-          return (
-            <Link
-              href={`/submissions/${p.id}/receipt?workspace=${workspaceId}`}
-              className={linkClass}
-            >
-              Ver comprobante
-            </Link>
-          )
-        if (["submitted", "in_review"].includes(p.status))
-          return (
-            <Link
-              href={`/submissions?workspace=${workspaceId}`}
-              className={linkClass}
-            >
-              Abrir en Revisiones
-            </Link>
-          )
-        return <span className="text-muted-foreground">Revisión cerrada</span>
-      },
     },
   ]
   return (
@@ -353,62 +330,9 @@ function DeploymentsTable({
     environmentLabel: environmentLabels[d.environment],
     statusLabel: deploymentLabels[d.status] ?? "Estado desconocido",
   }))
-  const columns: ColumnDef<Deployment>[] = [
-    {
-      accessorKey: "environmentLabel",
-      header: header("Entorno"),
-    },
-    {
-      accessorKey: "status",
-      header: header("Estado"),
-      cell: ({ row }) => (
-        <Badge
-          variant={deploymentBadgeVariants[row.original.status] ?? "slate"}
-        >
-          {row.original.statusLabel}
-        </Badge>
-      ),
-    },
-    restingColumn<Deployment>(deploymentResting),
-    {
-      accessorKey: "versionNumber",
-      header: header("Versión"),
-      cell: ({ row }) => (
-        <span className="tabular-nums">
-          Versión {row.original.versionNumber}
-        </span>
-      ),
-    },
-    {
-      id: "authorizedUntil",
-      accessorFn: (d) => at(d.authorizedUntil),
-      header: header("Autorizado hasta"),
-      cell: ({ row }) => <When value={row.original.authorizedUntil} />,
-    },
-    {
-      id: "spend",
-      accessorFn: (d) => d.spentUsd,
-      header: header("Gasto"),
-      cell: ({ row }) => (
-        <span className="tabular-nums">
-          {formatMoney(row.original.spentUsd)} de{" "}
-          {formatMoney(row.original.budgetUsd)}
-        </span>
-      ),
-    },
-    {
-      id: "createdAt",
-      accessorFn: (d) => at(d.createdAt),
-      header: header("Creado"),
-      cell: ({ row }) => <When value={row.original.createdAt} />,
-    },
-    {
-      id: "activatedAt",
-      accessorFn: (d) => at(d.activatedAt),
-      header: header("Activado"),
-      cell: ({ row }) => <When value={row.original.activatedAt} />,
-    },
-  ]
+  const columns = deploymentColumns<Deployment>({
+    version: (row) => row.versionNumber,
+  })
   return (
     <DataTable
       data={rows}

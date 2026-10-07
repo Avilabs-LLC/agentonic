@@ -35,6 +35,13 @@ const id = (n: number) =>
   `10000000-0000-4000-8000-${String(n).padStart(12, "0")}`
 const now = "2026-10-06T12:00:00.000Z"
 
+// A badge stands alone in its cell: no text stacked above or below it.
+function badgesStandAlone(out: string) {
+  for (const [, cell] of out.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/g))
+    if (cell!.includes('data-slot="badge"'))
+      expect(cell).not.toMatch(/<(p|dl|div)[\s>]/)
+}
+
 describe("Admin operations screens", () => {
   it("lists agents with the version in use, the next version and capabilities", () => {
     const agent = {
@@ -92,30 +99,38 @@ describe("Admin operations screens", () => {
       "Conocimiento (2 colecciones) · Gmail",
       "Versión en uso",
       "Próxima versión",
+      ">Despliegue<",
       "En funcionamiento",
-      "Versión 1 · vm-agents-01",
+      ">Versión:<",
+      ">Entorno:<",
+      ">vm-agents-01<",
+      ">Estado:<",
       ">En reposo<",
       ">Sí<",
       "No aplica",
       "En revisión",
-      "Versión 2",
       "Ninguna",
+      "Sin despliegue",
       "Borrador",
-      "Sin enviar a revisión",
       "Sin registro",
+      ">Espacio de trabajo<",
+      ">Turnos (7 días)<",
     ])
       expect(out).toContain(text)
+    badgesStandAlone(out)
     // The stored agent status is no longer shown.
     expect(out).not.toContain(">Estado<")
     // The name is the only link to the agent page; no separate ID column.
     expect(out).not.toContain(">ID<")
     expect(out.split(`href="/agents/${id(1)}"`)).toHaveLength(2)
-    // The version number shows once per row, and resting has its own column.
+    // Facts carry labels instead of running together; resting has its own
+    // column and capabilities no longer repeat the version.
     expect(out).not.toContain("· En reposo")
-    expect(out.split("Versión 2")).toHaveLength(2)
+    expect(out).not.toContain("Versión 2")
   })
   it("shows one agent's versions, proposals, deployments and activity", () => {
     const out = html(agentPage.OperationsAgentOverview, {
+      now,
       agent: {
         id: id(1),
         name: "Asistente sintético",
@@ -191,15 +206,17 @@ describe("Admin operations screens", () => {
       "Versión 1 · vm-agents-01",
       "Web",
       "Propuestas",
-      "Versión 2 · Revisión 6",
+      ">Revisión<",
+      "Ver comprobante de la revisión",
       "Aprobada",
-      "Aprobación vigente",
+      "Vigente",
       "Plazo para activar",
       `/submissions/${id(8)}/receipt?workspace=${id(2)}`,
       `/submissions?workspace=${id(2)}`,
       "Abrir en Revisiones",
     ])
       expect(out).toContain(text)
+    badgesStandAlone(out)
   })
   it("shows activity with Spanish actions and an unknown action by its code", () => {
     const out = html(ui.OperationsActivityTable, {
@@ -238,8 +255,10 @@ describe("Admin operations screens", () => {
       "Denegada",
       "Cliente",
       `href="/agents/${id(1)}"`,
+      ">Recurso<",
     ])
       expect(out).toContain(text)
+    badgesStandAlone(out)
     expect(
       html(ui.OperationsActivityStats, {
         runs: { succeeded: 3, failed: 1, active: 0 },
@@ -274,7 +293,8 @@ describe("Admin operations screens", () => {
         },
       ],
     })
-    expect(days).toContain("05/10/2026")
+    expect(days).toContain(">5/10/2026<")
+    expect(days).toContain(">America/Caracas<")
     expect(days).toContain("19 operaciones")
   })
   it("names what each server runs, and renders workspaces, staff and releases", () => {
@@ -306,23 +326,24 @@ describe("Admin operations screens", () => {
       "Sin pruebas de herramientas",
     ])
       expect(servers).toContain(text)
-    expect(
-      html(ui.OperationsWorkspacesTable, {
-        workspaces: [
-          {
-            id: id(2),
-            name: "Espacio A",
-            kind: "organization",
-            status: "suspended",
-            timezone: "UTC",
-            createdAt: now,
-            members: 2,
-            agents: 1,
-            pendingInvitations: 0,
-          },
-        ],
-      })
-    ).toContain("Suspendido")
+    const workspaces = html(ui.OperationsWorkspacesTable, {
+      workspaces: [
+        {
+          id: id(2),
+          name: "Espacio A",
+          kind: "organization",
+          status: "suspended",
+          timezone: "UTC",
+          createdAt: now,
+          members: 2,
+          agents: 1,
+          pendingInvitations: 0,
+        },
+      ],
+    })
+    for (const text of ["Suspendido", ">Organización<", ">UTC<"])
+      expect(workspaces).toContain(text)
+    badgesStandAlone(workspaces)
     expect(
       html(ui.OperationsStaffCard, {
         staff: [
@@ -335,44 +356,51 @@ describe("Admin operations screens", () => {
         ],
       })
     ).toContain("Operación · Desde el 6/10/2026")
-    expect(
-      html(ui.OperationsReleasesTable, {
-        releases: [
-          {
-            id: id(5),
-            version: "0.4.0",
-            commit: "0eb3369",
-            artifact: "9f24d0715da2",
-            status: "revoked",
-            createdAt: now,
-            hosts: ["azure_staging"],
-            evaluators: [],
-            workspaces: 3,
-          },
-        ],
-      })
-    ).toContain("1 instalación")
-    expect(
-      html(ui.OperationsDeploymentsTable, {
-        deployments: [
-          {
-            id: id(6),
-            agentId: id(1),
-            agentName: "Asistente sintético",
-            workspaceName: "Espacio A",
-            environment: "local",
-            status: "mystery",
-            resting: false,
-            broker: null,
-            authorizedUntil: now,
-            budgetUsd: 1,
-            spentUsd: 0.25,
-            createdAt: now,
-            activatedAt: null,
-          },
-        ],
-      })
-    ).toMatch(/Estado desconocido[\s\S]*No aplica/)
+    const releases = html(ui.OperationsReleasesTable, {
+      releases: [
+        {
+          id: id(5),
+          version: "0.4.0",
+          commit: "0eb3369",
+          artifact: "9f24d0715da2",
+          status: "revoked",
+          createdAt: now,
+          hosts: ["azure_staging"],
+          evaluators: [],
+          workspaces: 3,
+        },
+      ],
+    })
+    for (const text of ["1 instalación", ">0eb3369<", ">9f24d0715da2<"])
+      expect(releases).toContain(text)
+    const deployments = html(ui.OperationsDeploymentsTable, {
+      deployments: [
+        {
+          id: id(6),
+          agentId: id(1),
+          agentName: "Asistente sintético",
+          workspaceName: "Espacio A",
+          environment: "local",
+          status: "mystery",
+          resting: false,
+          broker: null,
+          authorizedUntil: now,
+          budgetUsd: 1,
+          spentUsd: 0.25,
+          createdAt: now,
+          activatedAt: null,
+        },
+      ],
+    })
+    expect(deployments).toMatch(/Estado desconocido[\s\S]*No aplica/)
+    for (const text of [
+      "Sin trabajador",
+      "Sin activar",
+      ">Entorno<",
+      'data-slot="badge"',
+    ])
+      expect(deployments).toContain(text)
+    badgesStandAlone(deployments)
   })
   it("gives each screen a loading state", () => {
     expect(Object.keys(skeletons)).toHaveLength(7)

@@ -9,6 +9,7 @@ import {
   DataTable,
   DataTableColumnHeader,
 } from "@workspace/ui/components/data-table"
+import { Count } from "@workspace/ui/components/table-cells"
 import { Button } from "@workspace/ui/components/button"
 import {
   Dialog,
@@ -49,11 +50,7 @@ const columns: ColumnDef<CollectionRow>[] = [
     header: ({ column }) => (
       <DataTableColumnHeader column={column} title="Documentos" />
     ),
-    cell: ({ row }) => (
-      <span className="text-muted-foreground tabular-nums">
-        {row.original.documentCount}
-      </span>
-    ),
+    cell: ({ row }) => <Count value={row.original.documentCount} />,
   },
   {
     accessorKey: "canCurate",

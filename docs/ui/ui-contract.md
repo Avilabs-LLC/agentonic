@@ -39,7 +39,7 @@ Retain the source contract's **Base UI** component architecture. The decoded pre
 
 Use shadcn components wherever an appropriate primitive exists, including buttons, fields, menus, dialogs, tables, empty states and tabs. Styling uses semantic tokens; no scattered palette classes. The new preset replaces Acachuchazo's Lyra geometry and green primary. Preserve its deliberate pill-shaped status badges, centralized status palette, blue underlined ID links and limited `text-highlight` token. The highlight remains a violet semantic token, used for at most one key value per card, never for status or a background surface; check its contrast against the new theme. Centralize these exceptions in shared components/tokens.
 
-**Owner direction, 2026-10-06.** Clickable text that is not an `IdLink` uses the semantic `link` token (`text-link`): the primary blue in light mode and a lighter blue in dark mode, so it stays readable on cards, tables and dialogs. Link-style buttons show the pointer cursor. Framed object icons use the shared `IconTile`, one tone per surface so no colour repeats: emerald for versions in Activación, yellow for Nueva versión and sky for Versión actual in Configuración. They are object markers, not status signals (§9).
+**Owner direction, 2026-10-06.** Clickable text uses the semantic `link` token (`text-link`): the primary blue in light mode and a lighter blue in dark mode, so it stays readable on cards, tables and dialogs. Link-style buttons show the pointer cursor. Framed object icons use the shared `IconTile`, one tone per surface so no colour repeats: emerald for versions in Activación, yellow for Nueva versión and sky for Versión actual in Configuración. They are object markers, not status signals (§9).
 
 Shared label maps, variants and formatting helpers live in modules without `"use client"`; server components must not import non-component values from client modules. Both apps consume a shared UI package, while navigation, customer/staff actions and server authorization remain app-specific.
 
@@ -60,10 +60,40 @@ Use pinned TanStack Table v8 and a shared `DataTable` for entity tables. Prefer 
 - Every data column has a sortable `DataTableColumnHeader`. The row-action column has no meaningless sort control.
 - Search sits above the table and covers common-sense entity fields with multi-term AND matching. Server-backed search, sorting and pagination must cover the authorized result set, not only the current browser page.
 - Provide Spanish pagination, page-size selection, a sticky header in a bounded scroll area, and a shadcn `Empty` state.
-- When an entity has a working detail route, its first column is an eight-character ID rendered by the shared blue underlined `IdLink`. Omit that column until the detail route exists. **Customer agent list override (owner direction, 2026-09-14):** the ellipsis action column comes first; the Agente cell shows only the name as a blue underlined detail link, without a description or description tooltip. The ID column is omitted, and Estado is the last column. Existing edit permission checks also govern the name link. **Admin Agentes override (owner direction, 2026-10-07):** the agent name already links to the agent page, so Agentes has no ID column; the agent page breadcrumb keeps the short ID.
+- Tables carry no ID column (owner direction, 2026-10-07; this replaces the earlier `IdLink` rule). A record opens from its own name or number: the agent name opens the agent page, the review number opens the review or its receipt. Two cells in one row never lead to the same page. **Customer agent list (owner direction, 2026-09-14):** the ellipsis action column comes first, and the Agente cell shows only the name, a link when the member may edit it. Existing edit permission checks also govern the name link.
 - Body cells use uniform vertical padding within each table and the shared middle alignment, including action and status cells. Set table density on the table rather than individual columns.
 - Primary record states may use pill badges under §9. Nested outcomes use inline icons and text. Badge tones use the source palette: `success`, `warning`, `error`, `orange`, `sky`, `violet`, `emerald`, `slate`, and the appropriate `inverse*` variants on colored surfaces. Light mode uses tinted surfaces/dark text; dark mode uses page-background surfaces/luminous text. Never use the solid primary `default` badge for statuses. Text communicates status as well as color.
 - Shared `status-badge` components and `lib/badge-status` descriptors assign the same labels, colors and icons in both apps. Primary and nested displays consume the same descriptor. See §9 for state semantics and exceptions; permissions, counts, environment and availability do not use badges. Unknown statuses use neutral “Estado desconocido” with a help icon. The palette remains centralized in `badge.tsx` and the inline status renderer; inverse variants are reserved for colored surfaces.
+
+### 3.1 Field standard (owner direction, 2026-10-07)
+
+One data point is rendered the same way in every table of both apps unless a difference is written down here. The shared cells live in `table-cells.tsx` (`When`, `Deadline`, `Count`, `Code`, `Absent`, `FieldStack`, `CellLink`, `CellButton`, `sortableHeader`), the deployment columns in `deployment-columns.tsx` and the agent version columns in `agent-versions.tsx`.
+
+- **One fact per cell.** A badge stands alone in its cell, never above or below text. When a cell must hold several facts, each carries its label in a `FieldStack`: the muted "Etiqueta:" over its value, as in corbero-cloud. The agent lists' Versión en uso and Próxima versión cells are the only stacks today.
+- **Order.** Identity first (Agente, Espacio de trabajo, owner or email), then Versión and Revisión, then place (Entorno, Trabajador), then states (Estado or Despliegue, En reposo, Aprobación), then amounts and counts, then dates.
+
+| Data point | Header | Rendering |
+|---|---|---|
+| Agent | Agente | Name; a `CellLink` to the agent page in Admin, to the editor in the customer list when the member may edit; plain text otherwise. |
+| Workspace | Espacio de trabajo | Its own column, `WorkspaceName` with the workspace icon. Never stacked under another name. |
+| Version | Versión | The bare number (tabular). |
+| Review | Revisión | The review (submission) number, a link that opens the review or its receipt where one exists. The criteria's saved edits are "Criterios, edición N", never "Revisión". |
+| Place | Entorno | `environmentLabels` for staff (`vm-agents-01`), `customerEnvironmentLabels` for customers; "No aplica" when nothing is deployed. |
+| Worker | Trabajador | Monospaced id; "Sin trabajador". |
+| Deployment state | Estado (deployment tables) or Despliegue | Always a badge from the deployment descriptor; "Sin despliegue" as muted text. |
+| Resting | En reposo | Sí, No, or "No aplica" when not running. |
+| Submission or proposal state | Estado | Badge from the submission or proposal descriptor. |
+| Approval | Aprobación | Inline indicator keyed by the approval reason (Vigente, Vencida…), never a badge; "Sin aprobación". |
+| Activation deadline | Plazo para activar | `Deadline`: date over time, "Venció el …" as a warning once past; only while the approval is valid. |
+| Other timestamps | Creado, Enviada, Activado, Publicada, Fecha, Último turno, Vence, Uso autorizado hasta | `When`: date (6/10/2026) over muted UTC time; "Sin registro" or a specific absence. |
+| Day | Día | The same date format, without time. |
+| Counts | the counted thing ("Turnos (7 días)", "Documentos") | `Count`: plain tabular numerals, not muted. |
+| Money | Gasto, Gasto conocido | `formatMoney`; spend against a budget as "USD x de USD y". |
+| Identifiers | Commit, Artefacto, Recurso | Monospaced; a resource is its Spanish type plus its short id. |
+| Workspace kind, timezone, role | Tipo, Zona horaria, Rol / Tu rol | Shared label maps (`workspaceKindLabels`, `memberRoleLabels`). |
+| Email | Correo electrónico | Plain text; "No disponible". |
+
+Badges and inline indicators of the same state share one descriptor (label, tone and icon), so a state looks alike in either form; tests hold the deployment, submission and approval maps to this.
 
 ## 4. Filters and row actions
 
@@ -95,7 +125,7 @@ Use shadcn `Sidebar` with `variant="inset"`, an Agentonic brand mark placeholder
 
 Nested pages render a separate ghost `BackRow` with left arrow immediately above `RecordHeader`, linking one route level up. Wrap the pair in `space-y-3`. Header actions remain available for operations and cross-links. `RecordHeader` contains title, one muted metadata line, the primary record state when useful and right-aligned actions; do not add an initials avatar there.
 
-For ordinary detail pages, use a responsive `lg:grid-cols-3` grid: operational content spans two columns, reference data occupies the side track. Use stat tiles with muted uppercase labels and tabular numeric values, shadcn `Item`/`ItemSeparator` for record lists and definition rows with `Separator` for attributes. Related records reuse `IdLink`; statuses reuse the shared maps.
+For ordinary detail pages, use a responsive `lg:grid-cols-3` grid: operational content spans two columns, reference data occupies the side track. Use stat tiles with muted uppercase labels and tabular numeric values, shadcn `Item`/`ItemSeparator` for record lists and definition rows with `Separator` for attributes. Related records open from their names or numbers (§3); statuses reuse the shared maps.
 
 When an agent has independent facets, use tabs under its record header, such as configuration, knowledge, connections and activity, with counts where useful. Dense workflows can have dedicated pages. Preserve the shared shell, form, feedback and loading rules across the customer editor, upload journey and chat.
 
@@ -168,7 +198,7 @@ Empty or unavailable card content uses the shared `CardEmptyState`: a muted, das
 
 The compact Propuestas table, five derived proposal states, version/revision descriptors, frozen configuration receipt and criteria/results dialogs in architecture §39.6 supersede earlier proposal presentation examples. Preserve distinct approval, submission and deployment colors from the shared maps.
 
-**Agent state columns — owner direction, 2026-10-06.** Both agent lists replace their state columns with **Versión en uso** and **Próxima versión** (architecture §55). In the customer list they replace En revisión, Actual and Estado, and are the last two columns; the loading state now mirrors six columns. In Admin they replace Despliegue and Estado; Agentes has no ID column, because the name is the link, and its Capacidades cell no longer repeats the version number, which only the version columns show (2026-10-07). Each row has one badge: on the version in use when one runs, otherwise on the next version or "Borrador"; the other facet is inline icon and text. Labels and colours come from the deployment, proposal and approval maps. Every agent name in Admin is a blue underlined link to the agent page; in Revisiones the review number opens the review. Vencimientos groups servers and evaluators by place in labelled groups, not tabs, so no lapsed registration is hidden.
+**Agent state columns — owner direction, 2026-10-06.** Both agent lists replace their state columns with **Versión en uso** and **Próxima versión** (architecture §55). In the customer list they replace En revisión, Actual and Estado, and are the last two columns; the loading state now mirrors six columns. In Admin they replace Despliegue and Estado; Agentes has no ID column, because the name is the link, and its Capacidades cell no longer repeats the version number, which only the version columns show (2026-10-07). Since 2026-10-07 each list shows the version in use's state as a lone **Despliegue** badge, followed by **En reposo**; Versión en uso and Próxima versión are labelled stacks (Versión, Entorno; Versión, Estado), with the next version's state inline (§3.1). Labels and colours come from the deployment, proposal and approval maps. Every agent name in Admin is a blue underlined link to the agent page; in Revisiones the review number opens the review. Vencimientos groups servers and evaluators by place in labelled groups, not tabs, so no lapsed registration is hidden.
 
 **Admin layout — owner direction, 2026-10-06 (evening).**
 

@@ -1,29 +1,23 @@
 import type { AgentVersionSummary } from "@agentonic/contracts/agent-versions"
+import { environmentLabels } from "@agentonic/contracts/lifecycle"
 import {
-  approvalLabels,
-  environmentLabels,
-} from "@agentonic/contracts/lifecycle"
-import {
-  deploymentBadgeVariants,
   statusDescriptor,
-  submissionBadgeVariants,
-  type BadgeVariant,
   type StatusDescriptor,
 } from "@workspace/ui/lib/badge-status"
 
 // Two facets of one agent (architecture §55): the version in use and the next
-// one. The row's single badge goes to the version in use when one runs, and
-// otherwise to the next version (or Borrador); the other facet is inline.
+// one. Tables show the version in use's state as the row's badge (Despliegue)
+// and each facet's facts as labelled fields; tiles use `detail`.
 export type VersionFacet = {
   state: StatusDescriptor | null
-  badge: BadgeVariant
   detail: string
-  // Further running versions (one per environment); shown inline.
+  versionNumber: number | null
+  place: string | null
+  // Further running versions (one per environment).
   more: { state: StatusDescriptor; detail: string }[]
   rank: number
 }
 export type AgentVersionsView = {
-  primary: "live" | "next"
   live: VersionFacet
   next: VersionFacet
   // Whether the version in use rests; null when it is not running.
@@ -62,16 +56,18 @@ export function agentVersionsView(
   const live: VersionFacet = summary.archived
     ? {
         state: statusDescriptor("agent", "archived"),
-        badge: "slate",
         detail: "Agente archivado",
+        versionNumber: null,
+        place: null,
         more: [],
         rank: liveOrder.length + 1,
       }
     : first
       ? {
           state: deployment(first.status),
-          badge: deploymentBadgeVariants[first.status] ?? "slate",
           detail: `Versión ${first.versionNumber} · ${where(first.environment)}`,
+          versionNumber: first.versionNumber,
+          place: where(first.environment),
           more: others.map((l) => ({
             state: deployment(l.status),
             detail: `Versión ${l.versionNumber} · ${where(l.environment)}`,
@@ -81,15 +77,17 @@ export function agentVersionsView(
       : summary.ended
         ? {
             state: deployment(summary.ended.status),
-            badge: deploymentBadgeVariants[summary.ended.status] ?? "slate",
             detail: `Versión ${summary.ended.versionNumber} · ${where(summary.ended.environment)}`,
+            versionNumber: summary.ended.versionNumber,
+            place: where(summary.ended.environment),
             more: [],
             rank: rank(liveOrder, summary.ended.status),
           }
         : {
             state: null,
-            badge: "slate",
             detail: "Ninguna",
+            versionNumber: null,
+            place: null,
             more: [],
             rank: liveOrder.length + 2,
           }
@@ -98,45 +96,49 @@ export function agentVersionsView(
   if (summary.archived || (!n && first))
     next = {
       state: null,
-      badge: "slate",
       detail: "Sin propuestas nuevas",
+      versionNumber: null,
+      place: null,
       more: [],
       rank: nextOrder.length + 1,
     }
   else if (!n)
     next = {
       state: statusDescriptor("agent", "draft"),
-      badge: "violet",
       detail: "Sin enviar a revisión",
+      versionNumber: null,
+      place: null,
       more: [],
       rank: nextOrder.length + 2,
     }
   else if (n.deployment)
     next = {
       state: deployment(n.deployment.status),
-      badge: deploymentBadgeVariants[n.deployment.status] ?? "slate",
       detail: `Versión ${n.versionNumber} · ${where(n.deployment.environment)}`,
+      versionNumber: n.versionNumber,
+      place: where(n.deployment.environment),
       more: [],
       rank: rank(nextOrder, n.deployment.status),
     }
   else if (n.status === "approved" && n.approvalReason !== "valid")
     next = {
-      state: statusDescriptor("approval", "invalid"),
-      badge: "warning",
-      detail: `Versión ${n.versionNumber} · ${approvalLabels[n.approvalReason as keyof typeof approvalLabels] ?? "Sin aprobación"}`,
+      state: statusDescriptor("approval", n.approvalReason ?? "unapproved"),
+      detail: `Versión ${n.versionNumber}`,
+      versionNumber: n.versionNumber,
+      place: null,
       more: [],
       rank: rank(nextOrder, "invalid"),
     }
   else
     next = {
       state: statusDescriptor("submission", n.status),
-      badge: submissionBadgeVariants[n.status] ?? "slate",
       detail: `Versión ${n.versionNumber}`,
+      versionNumber: n.versionNumber,
+      place: null,
       more: [],
       rank: rank(nextOrder, n.status),
     }
   return {
-    primary: summary.archived || first ? "live" : "next",
     live,
     next,
     resting:

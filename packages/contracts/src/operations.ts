@@ -261,6 +261,17 @@ export const auditActionLabels: Record<string, string> = {
   "deployment.restored": "Copia del agente restaurada",
   "catalog.publish": "Versión del runtime publicada",
   "authoring.denied": "Acceso denegado",
+  // Workspace access (architecture §54).
+  "member.list": "Miembros consultados",
+  "member.update": "Miembro actualizado",
+  "invite.list": "Invitaciones consultadas",
+  "invite.issue": "Invitación enviada",
+  "invite.accept": "Invitación aceptada",
+  "invite.revoke": "Invitación retirada",
+  "agent.share": "Agente compartido",
+  "agent.revoke": "Acceso al agente retirado",
+  "collection.share": "Colección compartida",
+  "collection.revoke": "Acceso a la colección retirado",
   "maintenance.agent.reset": "Mantenimiento: agente restablecido",
   "maintenance.agent.rename": "Mantenimiento: agente renombrado",
 }
@@ -273,6 +284,7 @@ export const auditResourceLabels: Record<string, string> = {
   evaluation_preparation: "Preparación de criterios",
   deployment: "Despliegue",
   code_release: "Versión del runtime",
+  workspace: "Espacio de trabajo",
 }
 export const auditActorLabels = {
   member: "Cliente",

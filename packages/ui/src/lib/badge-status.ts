@@ -1,17 +1,27 @@
-import type { ProposalStatus } from "@agentonic/contracts/proposals"
+import { proposalLabels } from "@agentonic/contracts/proposals"
 import {
   submissionLabels,
   type WorkspaceView,
 } from "@agentonic/contracts/authoring"
 import { evaluationStatus } from "@agentonic/contracts/evaluation"
 import type { RegistrationState } from "@agentonic/contracts/expiry"
+import { approvalLabels } from "@agentonic/contracts/lifecycle"
 import {
   reviewFlowLabels,
   type ReviewCriterion,
 } from "@agentonic/contracts/review-flow"
 
 export type StatusTone =
-  "success" | "warning" | "error" | "orange" | "sky" | "violet" | "slate"
+  | "success"
+  | "warning"
+  | "error"
+  | "orange"
+  | "sky"
+  | "violet"
+  | "pink"
+  | "indigo"
+  | "teal"
+  | "slate"
 export type StatusIcon =
   | "check"
   | "clock"
@@ -91,9 +101,32 @@ export const statusMaps = {
     failed: state("No superada", "error", "x"),
     needs_attention: state("Requiere atención", "warning", "alert"),
   },
+  // Approval validity by reason; the tones match approvalBadgeVariants.
   approval: {
-    valid: state("Aprobación vigente", "success", "check"),
-    invalid: state("Aprobación no vigente", "warning", "alert"),
+    unapproved: state(approvalLabels.unapproved, "slate", "minus"),
+    valid: state(approvalLabels.valid, "success", "check"),
+    expired: state(approvalLabels.expired, "warning", "clock"),
+    superseded: state(approvalLabels.superseded, "violet", "ban"),
+    consent: state(approvalLabels.consent, "pink", "alert"),
+    sources_changed: state(approvalLabels.sources_changed, "orange", "pencil"),
+    evidence_expired: state(approvalLabels.evidence_expired, "sky", "clock"),
+    authorization_changed: state(
+      approvalLabels.authorization_changed,
+      "error",
+      "alert"
+    ),
+  },
+  // Customer proposal states (architecture §39.6).
+  proposal: {
+    in_progress: state(proposalLabels.in_progress, "sky", "activity"),
+    approved: state(proposalLabels.approved, "success", "check"),
+    changes_requested: state(
+      proposalLabels.changes_requested,
+      "orange",
+      "pencil"
+    ),
+    needs_attention: state(proposalLabels.needs_attention, "warning", "alert"),
+    closed: state(proposalLabels.closed, "slate", "minus"),
   },
   // Admin operations (architecture §52).
   workspace: {
@@ -139,10 +172,12 @@ export const statusMaps = {
     preparing: state("Preparando despliegue", "sky", "activity"),
     running: state("En funcionamiento", "success", "check"),
     offline: state("Sin conexión", "orange", "alert"),
-    stopped: state("Detenido", "slate", "pause"),
+    // Tones match deploymentBadgeVariants, so a badge and an inline
+    // indicator of the same state look alike.
+    stopped: state("Detenido", "indigo", "pause"),
     failed: state("No se pudo activar", "error", "x"),
-    superseded: state("Reemplazado", "slate", "archive"),
-    unauthorized: state("Autorización no vigente", "warning", "alert"),
+    superseded: state("Reemplazado", "teal", "archive"),
+    unauthorized: state("Autorización no vigente", "pink", "alert"),
   },
   // Host and evaluator verification. "Vence pronto" means within a day, when
   // the twice-daily renewal should already have run.
@@ -227,14 +262,6 @@ export const submissionBadgeVariants: Record<string, BadgeVariant> = {
   withdrawn: "slate",
   approved: "success",
   revoked: "violet",
-}
-
-export const proposalBadgeVariants: Record<ProposalStatus, BadgeVariant> = {
-  in_progress: "sky",
-  approved: "success",
-  changes_requested: "orange",
-  needs_attention: "warning",
-  closed: "slate",
 }
 
 export type BadgeVariant =

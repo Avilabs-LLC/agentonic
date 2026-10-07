@@ -36,7 +36,7 @@ export default async function Page({
           }
         />
       </div>
-      <OperationsAgentOverview agent={agent} />
+      <OperationsAgentOverview agent={agent} now={new Date().toISOString()} />
     </>
   )
 }
