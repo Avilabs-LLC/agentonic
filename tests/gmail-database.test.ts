@@ -543,5 +543,66 @@ it("denies a cancelled Gmail write in the general model", async () => {
         [id(503)]
       )
     ).rows
-  ).toEqual([{ status: "denied", error_code: "cancelled", decision: "cancelled" }])
+  ).toEqual([
+    { status: "denied", error_code: "cancelled", decision: "cancelled" },
+  ])
+})
+it("sweeps expired Gmail data for every workspace, sparing writes still in flight", async () => {
+  const p = await privatePreview()
+  const propose = (n: number, hash: string) =>
+    p.tool("gmail-propose", {
+      connectionId: id(501),
+      operation: "gmail.send",
+      id: id(n),
+      argumentsCiphertext: "opaque-message",
+      hash: hash.repeat(64),
+    })
+  await propose(503, "a")
+  await propose(504, "b")
+  await propose(505, "c")
+  await f.actor()
+  await command("confirm", { id: id(504), hash: "b".repeat(64) })
+  await command("confirm", { id: id(505), hash: "c".repeat(64) })
+  // 503 is pending past its window; 504 has executed far past it (its worker
+  // is gone); 505 is executing just past it and may still record an outcome.
+  await f.sql(
+    "UPDATE agentonic.gmail_invocations SET expires_at=clock_timestamp()-CASE id WHEN $1::uuid THEN interval '1 minute' WHEN $2::uuid THEN interval '20 minutes' ELSE interval '1 minute' END",
+    [id(503), id(504)]
+  )
+  await f.sql(
+    "UPDATE agentonic.gmail_oauth_states SET expires_at=clock_timestamp()-interval '2 hours'"
+  )
+  // Only the worker may sweep.
+  await f.actor()
+  await expect(rpc("gmail_retention_sweep", [])).rejects.toThrow()
+  await f.db.exec("RESET ROLE; SET LOCAL ROLE agentonic_worker")
+  expect(await rpc("gmail_retention_sweep", [])).toEqual({
+    expired: 1,
+    uncertain: 1,
+    oauthStates: 1,
+  })
+  expect(
+    (
+      await f.sql(
+        "SELECT id,status,arguments_ciphertext IS NULL erased,arguments_sha256 IS NOT NULL audited FROM agentonic.gmail_invocations ORDER BY id"
+      )
+    ).rows
+  ).toEqual([
+    { id: id(503), status: "expired", erased: true, audited: true },
+    { id: id(504), status: "uncertain", erased: true, audited: true },
+    { id: id(505), status: "executing", erased: false, audited: true },
+  ])
+  // The in-flight write can still record its real outcome.
+  await f.actor()
+  await command("complete", {
+    id: id(505),
+    status: "succeeded",
+    result: { code: "sent" },
+  })
+  await f.db.exec("RESET ROLE; SET LOCAL ROLE agentonic_worker")
+  expect(await rpc("gmail_retention_sweep", [])).toEqual({
+    expired: 0,
+    uncertain: 0,
+    oauthStates: 0,
+  })
 })
