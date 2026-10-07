@@ -1,5 +1,10 @@
 export const VERSION_HISTORY = [
   {
+    "version": "0.21.0",
+    "date": "2026-10-07",
+    "summary": "Listas de agentes con un dato por columna (En uso, Entorno, Despliegue, En reposo, Próxima, Propuesta) y encabezados de tabla más cortos en ambas aplicaciones, con el nombre completo al pasar el cursor."
+  },
+  {
     "version": "0.20.0",
     "date": "2026-10-07",
     "summary": "Tablas coherentes en ambas aplicaciones: cada dato se muestra igual en todas las tablas, insignias solas en su celda, datos agrupados con etiquetas, sin columnas de ID y «Revisión» siempre es el número de revisión. Además, pies de tarjeta sin recortar y rutas de navegación con mayúscula."
