@@ -206,6 +206,18 @@ it("reports an offline or unauthorized version in use from observed facts", asyn
     [d]
   )
   expect((await summary()).live[0]?.status).toBe("unauthorized")
+  // Despliegues says the same (migration 55).
+  await f.actor(staff, w, "agentonic_admin")
+  const listed = operationsDeployments.parse(
+    (
+      await f.db.query<{ result: unknown }>(
+        "SELECT agentonic.operations_deployments() result"
+      )
+    ).rows[0]!.result
+  )
+  expect(listed.deployments.find((x) => x.id === d)?.status).toBe(
+    "unauthorized"
+  )
 })
 
 it("keeps the last stopped deployment and offers the version again", async () => {

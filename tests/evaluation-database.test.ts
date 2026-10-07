@@ -3930,3 +3930,89 @@ it("moves a resting deployment to a new broker without starting its old copy", a
   expect(m.log).toEqual(["start e", "remove f"])
   expect(m.failures).toEqual([])
 })
+
+it("renews before expiry and recovers after it without replaying paid work or extending consent (A1)", async () => {
+  const { deploymentId: dep, hostId, leased } = await servingOnBroker()
+  const facts = async () =>
+    (
+      await sql(
+        "SELECT d.authorized_until,d.committed_microusd::text spent,(SELECT count(*) FROM agentonic.retrieval_provider_operations)::int operations FROM agentonic.deployments d WHERE d.id=$1",
+        [dep]
+      )
+    ).rows[0]
+  const turn = async () =>
+    (
+      await sql(
+        "SELECT status,error_code,started_at FROM agentonic.staging_turns WHERE id=$1",
+        [leased.id]
+      )
+    ).rows[0] as { status: string; error_code: string | null; started_at: Date }
+  const age = (interval: string) =>
+    sql(
+      `UPDATE agentonic.runtime_hosts SET verified_at=clock_timestamp()-interval '${interval}' WHERE id=$1`,
+      [hostId]
+    )
+  // The renewal job's own guarded update: same host, not revoked.
+  const renew = () =>
+    sql(
+      "UPDATE agentonic.runtime_hosts SET verified_at=clock_timestamp() WHERE id=$1 AND revoked_at IS NULL",
+      [hostId]
+    )
+  // What Admin and the customer's availability are built on.
+  const shown = async () =>
+    (
+      await sql(
+        "SELECT agentonic.deployment_authorized(d) authorized,agentonic.deployment_online(d) online FROM agentonic.deployments d WHERE d.id=$1",
+        [dep]
+      )
+    ).rows[0]
+  const before = await facts()
+  const started = (await turn()).started_at
+
+  // Renewal before expiry: nothing is interrupted, nothing restarts or resets.
+  await age("29 days 23 hours")
+  expect(await controller(brokers.f, "poll", null)).toBeTruthy()
+  await renew()
+  expect(await controller(brokers.f, "poll", null)).toBeTruthy()
+  expect(await work(dep, serviceSecret, "claim")).toBeNull()
+  expect(await turn()).toMatchObject({ status: "running", started_at: started })
+  expect(await facts()).toEqual(before)
+
+  // Expiry: a powered-on host is not an authorized runtime. The controller and
+  // the agent's copy are refused, and staff no longer see it running.
+  await age("30 days 1 second")
+  await expect(controller(brokers.f, "poll", null)).rejects.toThrow()
+  await expect(work(dep, serviceSecret, "claim")).rejects.toThrow()
+  expect(await copy("heartbeat", dep, serviceSecret)).toEqual({
+    ok: false,
+    code: "unavailable",
+  })
+  // Its last heartbeat ages out within a minute; then it reads offline too.
+  expect(await shown()).toMatchObject({ authorized: false })
+  await sql(
+    "UPDATE agentonic.deployments SET heartbeat_at=clock_timestamp()-interval '2 minutes' WHERE id=$1",
+    [dep]
+  )
+  expect(await shown()).toEqual({ authorized: false, online: false })
+  // The turn's lease runs out while the host is expired.
+  await sql(
+    "UPDATE agentonic.staging_turns SET lease_until=clock_timestamp()-interval '1 second' WHERE id=$1",
+    [leased.id]
+  )
+
+  // Recovery: renewal restores service. The interrupted turn fails instead of
+  // running again; consent, spend and provider calls are exactly as before.
+  await renew()
+  expect(await controller(brokers.f, "poll", null)).toBeTruthy()
+  expect(await work(dep, serviceSecret, "claim")).toBeNull()
+  expect(await turn()).toMatchObject({
+    status: "failed",
+    error_code: "lease_lost",
+    started_at: started,
+  })
+  expect(await facts()).toEqual(before)
+  expect(await copy("heartbeat", dep, serviceSecret)).toMatchObject({
+    ok: true,
+  })
+  expect(await shown()).toEqual({ authorized: true, online: true })
+})

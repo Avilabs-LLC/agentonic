@@ -16,6 +16,7 @@ import { setTimeout as sleep } from "node:timers/promises"
 import { parse } from "dotenv"
 import pg from "pg"
 import { z } from "zod"
+import { logJob } from "./job-log"
 import { processJob, type Execute, type Lease } from "./pipeline"
 import { verifyRuntime } from "./runtime"
 import {
@@ -550,6 +551,7 @@ async function serviceLoop() {
     }
     served = true
     const lease = job
+    const startedAt = Date.now()
     active = new AbortController()
     const controller = active
     // Draining keeps the lease: only a refused or unavailable deployment aborts the turn.
@@ -575,9 +577,24 @@ async function serviceLoop() {
         },
         controller.signal
       )
+      logJob({
+        service: "staging_turn",
+        job: lease,
+        deploymentId: id,
+        startedAt,
+        finishedAt: Date.now(),
+      })
     } catch (error) {
       const code = error instanceof Error ? error.message : "lease_lost"
       await execute("fail", lease, { code }).catch(() => {})
+      logJob({
+        service: "staging_turn",
+        job: lease,
+        deploymentId: id,
+        startedAt,
+        finishedAt: Date.now(),
+        code,
+      })
     } finally {
       clearInterval(timer)
       active = undefined

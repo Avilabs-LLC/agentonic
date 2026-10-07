@@ -10,6 +10,8 @@ export type Lease = {
   id: string
   token: string
   kind: "ingest" | "purge" | "retrieve"
+  /** When the job was queued (migration 56), for the job log's queue delay. */
+  queuedAt?: string | null
 }
 export type Execute = (
   operation: string,

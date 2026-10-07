@@ -15,21 +15,16 @@
 2. **C2** — the 250-agent load test, now that Supabase is on a paid plan.
 3. **C5 → C13** — email for invitations and password resets.
 4. **B1** — a test mailbox, then **B2** — live Gmail write acceptance.
-5. **A1, A2** — the two remaining stabilization items.
 
 ## Follow-ups from recent work
 
 | ID  | Action                                                                                                                                                                                                         | Who   | Status           | Done when                                                                |
 | --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----- | ---------------- | ------------------------------------------------------------------------ |
-| N2  | Test the controller with two running deployments during a worker upgrade: one move at a time, the second waits. SQL enforces this, but no controller test covers it.                                           | Build | Open             | A controller test with two deployments fails if both move at once.       |
 | N6  | The local deployment host has been expired since 26 Sep on purpose. Before local staging chats are needed again, reinstall it with `install-staging --local --start`, which now also starts the local gateway. | Build | Deferred (5 Oct) | Local re-verification shows _verified_ and a local staging chat answers. |
 
 ## A · Stabilize (P0)
 
-| ID  | Action                                                                                                                                                                                                                                           | Who   | Status | Done when                                                                         |
-| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----- | ------ | --------------------------------------------------------------------------------- |
-| A1  | Test renewal before expiry and recovery after expiry end to end: controller authorization failure, restart limits and stale deployment records. Show that no paid work replays and no consent is extended (§37.3).                               | Build | Open   | Synthetic tests drive each case through the real functions and pass.              |
-| A2  | Record per-job timings and outcomes: completed and failed times, queue delay, duration, error category, deployment and job correlation. No message bodies or secrets. Separate process liveness, dependency readiness and authorization (§37.3). | Build | Open   | The journal lines carry these fields and a test checks that they hold no content. |
+All stabilization items are closed (A1 and A2 on 7 October; see Recently closed).
 
 ## B · Finish Gmail (P2/P3)
 
@@ -150,3 +145,6 @@ Gate: the §14 acceptance suite with at least two workspaces and several users.
 | Registrations last 30 days and renew weekly; silent-Mac alert only near expiry (C19 deferred); Despliegues shows each deployment's version                                                                                                                                                      | 7 Oct  | PR #55          |
 | Gmail checklist reconciled: every §37.4–37.6 item marked done, not applicable or open (closes B0)                                                                                                                                                                                               | 7 Oct  | PR #56          |
 | Scheduled cleanup of expired Gmail proposals and OAuth states for every workspace, every 15 minutes (closes B3)                                                                                                                                                                                 | 7 Oct  | PR #56          |
+| Renewal before and after expiry tested through the real functions: refused controller and copy, no replayed turn, consent and spend unchanged; Despliegues shows lapsed deployments as unauthorized (closes A1)                                                                                 | 7 Oct  | PR #57          |
+| One allowlisted log line per finished job with queue delay, duration, outcome and error category; claims carry their queue time (closes A2)                                                                                                                                                     | 7 Oct  | PR #57          |
+| Controller test: two deployments during a worker upgrade move one at a time (closes N2)                                                                                                                                                                                                         | 7 Oct  | PR #57          |

@@ -82,4 +82,4 @@ The ordered plan is architecture §37; the owner's audit brief tracks progress. 
 | Invitations, password reset and staff two-factor sign-in               | §54                  |
 | What is in use and what comes next; the Admin agent page               | §55                  |
 
-Presentation rules are in the [UI contract](ui/ui-contract.md). The [target schema](schema.dbml) describes 79 tables; 62 exist in the 54 checked-in migrations.
+Presentation rules are in the [UI contract](ui/ui-contract.md). The [target schema](schema.dbml) describes 79 tables; 62 exist in the 56 checked-in migrations.

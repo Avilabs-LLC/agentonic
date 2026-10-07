@@ -123,3 +123,115 @@ describe("resting agents", () => {
     expect(restDue(REST_AFTER_MS, true)).toBe(true)
   })
 })
+
+describe("worker upgrades (N2)", () => {
+  // Two running deployments on the old broker; the controller runs the new
+  // one. The fake database mirrors deployment_host: a move sets the
+  // successor, and it refuses a second move while one is in progress.
+  it("moves one deployment at a time; the second waits for the first's successor", async () => {
+    const [old, next] = ["0".repeat(64), "1".repeat(64)]
+    const db = new Map<string, Deployment>(
+      [1, 2].map((n) => [
+        uuid(n),
+        metadata.parse({
+          id: uuid(n),
+          workspaceId: uuid(100 + n),
+          agentId: uuid(200 + n),
+          environment: "azure_staging",
+          status: "running",
+          desired: "running",
+          heartbeatAt: null,
+          broker: old,
+          resting: false,
+          pending: false,
+        }),
+      ])
+    )
+    const processes = new Set([`${old}:${uuid(1)}`, `${old}:${uuid(2)}`])
+    const configs = new Set(processes)
+    const moves: string[] = []
+    const system: ControllerSystem = {
+      brokerHash: next,
+      host: async (operation, id) => {
+        if (operation === "move") {
+          if ([...db.values()].some((d) => d.successorBroker))
+            throw new Error("another move is in progress")
+          db.set(id, { ...db.get(id)!, successorBroker: next })
+          moves.push(id)
+        }
+        return { manifestHash: "m".repeat(64) }
+      },
+      brokerConfig: () => ({ AGENTONIC_BROKER_SHA256: next }),
+      install: () => ({
+        destination: "/instances/synthetic",
+        manifestHash: "m".repeat(64),
+      }),
+      switchCurrent: () => {},
+      removeAssets: () => {},
+      configure: (broker, id) => {
+        configs.add(`${broker}:${id}`)
+      },
+      running: (broker, id) => processes.has(`${broker}:${id}`),
+      startable: () => true,
+      start: (broker, id) => {
+        processes.add(`${broker}:${id}`)
+      },
+      remove: (broker, id) => {
+        processes.delete(`${broker}:${id}`)
+        configs.delete(`${broker}:${id}`)
+      },
+      secret: () => "1".repeat(64),
+      now: () => 0,
+    }
+    const failures: string[] = []
+    const controller = new Controller(system)
+    const pass = () => {
+      const onDisk = new Map<string, Set<string>>()
+      for (const name of configs) {
+        const [broker, id] = name.split(":") as [string, string]
+        onDisk.set(id, (onDisk.get(id) ?? new Set()).add(broker))
+      }
+      return controller.pass(
+        [...db.values()],
+        [
+          { sha256: old, live: true },
+          { sha256: next, live: true },
+        ],
+        onDisk,
+        {
+          due: () => true,
+          ok: () => {},
+          fail: (_d, f) => {
+            failures.push(`${f.step}:${f.reason}`)
+          },
+        }
+      )
+    }
+    // The successor reports ready: it serves, and the old copy drains.
+    const ready = (id: string) =>
+      db.set(id, {
+        ...db.get(id)!,
+        broker: next,
+        successorBroker: null,
+        drainingBroker: old,
+        drainingSince: new Date(0).toISOString(),
+      })
+
+    await pass()
+    expect(moves).toEqual([uuid(1)])
+    // While the first move waits for its successor, the second never starts.
+    await pass()
+    await pass()
+    expect(moves).toEqual([uuid(1)])
+    expect(processes.has(`${next}:${uuid(2)}`)).toBe(false)
+    ready(uuid(1))
+    await pass()
+    expect(moves).toEqual([uuid(1), uuid(2)])
+    ready(uuid(2))
+    await pass()
+    expect(failures).toEqual([])
+    // Both serve on the new broker; old copies drain and exit by themselves.
+    expect(processes.has(`${next}:${uuid(1)}`)).toBe(true)
+    expect(processes.has(`${next}:${uuid(2)}`)).toBe(true)
+  })
+})

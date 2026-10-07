@@ -2,6 +2,7 @@ import { readFileSync, existsSync } from "node:fs"
 import { parse } from "dotenv"
 import { setTimeout as delay } from "node:timers/promises"
 import pg from "pg"
+import { logJob } from "./job-log"
 import { runReviewCase } from "./evaluation-case"
 import { prepareCriteria, gradeAnswer } from "./review-ai"
 import { processJob, type Execute, type Lease } from "./pipeline"
@@ -124,6 +125,8 @@ async function run() {
         active = new AbortController()
         const controller = active
         const broker = preparing ? prepareExecute : execute
+        const startedAt = Date.now()
+        const service = preparing ? "preparation" : "evaluation"
         const heartbeat = setInterval(() => {
           void broker("heartbeat", job!).catch(() => controller.abort())
         }, 20000)
@@ -157,12 +160,7 @@ async function run() {
                 )
               else await processJob(job, execute, config, controller.signal)
             }
-          console.log(
-            JSON.stringify({
-              event: "evaluation_finished",
-              evaluationId: job.id,
-            })
-          )
+          logJob({ service, job, startedAt, finishedAt: Date.now() })
         } catch (error) {
           const code =
             error instanceof Error &&
@@ -175,13 +173,7 @@ async function run() {
               ? error.message
               : "lease_lost"
           await broker("fail", job, { code }).catch(() => {})
-          console.log(
-            JSON.stringify({
-              event: "evaluation_interrupted",
-              evaluationId: job.id,
-              code,
-            })
-          )
+          logJob({ service, job, startedAt, finishedAt: Date.now(), code })
         } finally {
           clearInterval(heartbeat)
           active = undefined
