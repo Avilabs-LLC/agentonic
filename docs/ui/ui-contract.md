@@ -67,15 +67,16 @@ Use pinned TanStack Table v8 and a shared `DataTable` for entity tables. Prefer 
 
 ### 3.1 Field standard (owner direction, 2026-10-07)
 
-One data point is rendered the same way in every table of both apps unless a difference is written down here. The shared cells live in `table-cells.tsx` (`When`, `Deadline`, `Count`, `Code`, `Absent`, `FieldStack`, `CellLink`, `CellButton`, `sortableHeader`), the deployment columns in `deployment-columns.tsx` and the agent version columns in `agent-versions.tsx`.
+One data point is rendered the same way in every table of both apps unless a difference is written down here. The shared cells live in `table-cells.tsx` (`When`, `Deadline`, `Count`, `Code`, `Absent`, `CellLink`, `CellButton`, `sortableHeader`), the deployment columns in `deployment-columns.tsx` and the agent version columns in `agent-versions.tsx`.
 
-- **One fact per cell.** A badge stands alone in its cell, never above or below text. When a cell must hold several facts, each carries its label in a `FieldStack`: the muted "Etiqueta:" over its value, as in corbero-cloud. The agent lists' Versión en uso and Próxima versión cells are the only stacks today.
+- **One fact per cell.** A badge stands alone in its cell, never above or below text. A fact that has its own column in one table has its own column in every table that shows it; cells do not stack several facts (owner direction, 2026-10-07, which retired the agent lists' labelled stacks).
+- **Short headers.** Headers use the shortest clear name to save width (Espacio, Activar hasta, Uso hasta, Servidor hasta, Correo, Miembros, Invitaciones, Gasto, Sin resultado, Turnos 7 d, Zona); `sortableHeader(title, description)` keeps the full name as the header's tooltip and accessible name.
 - **Order.** Identity first (Agente, Espacio de trabajo, owner or email), then Versión and Revisión, then place (Entorno, Trabajador), then states (Estado or Despliegue, En reposo, Aprobación), then amounts and counts, then dates.
 
 | Data point | Header | Rendering |
 |---|---|---|
 | Agent | Agente | Name; a `CellLink` to the agent page in Admin, to the editor in the customer list when the member may edit; plain text otherwise. |
-| Workspace | Espacio de trabajo | Its own column, `WorkspaceName` with the workspace icon. Never stacked under another name. |
+| Workspace | Espacio | Its own column, `WorkspaceName` with the workspace icon. Never stacked under another name. |
 | Version | Versión | The bare number (tabular). |
 | Review | Revisión | The review (submission) number, a link that opens the review or its receipt where one exists. The criteria's saved edits are "Criterios, edición N", never "Revisión". |
 | Place | Entorno | `environmentLabels` for staff (`vm-agents-01`), `customerEnvironmentLabels` for customers; "No aplica" when nothing is deployed. |
@@ -84,14 +85,16 @@ One data point is rendered the same way in every table of both apps unless a dif
 | Resting | En reposo | Sí, No, or "No aplica" when not running. |
 | Submission or proposal state | Estado | Badge from the submission or proposal descriptor. |
 | Approval | Aprobación | Inline indicator keyed by the approval reason (Vigente, Vencida…), never a badge; "Sin aprobación". |
-| Activation deadline | Plazo para activar | `Deadline`: date over time, "Venció el …" as a warning once past; only while the approval is valid. |
-| Other timestamps | Creado, Enviada, Activado, Publicada, Fecha, Último turno, Vence, Uso autorizado hasta | `When`: date (6/10/2026) over muted UTC time; "Sin registro" or a specific absence. |
+| Activation deadline | Activar hasta | `Deadline`: date over time, "Venció el …" as a warning once past; only while the approval is valid. |
+| Server verification | Servidor hasta | `Deadline`; a revoked registration as an inline indicator. |
+| Other timestamps | Creado, Enviada, Activado, Publicada, Fecha, Último turno, Vence, Uso hasta | `When`: date (6/10/2026) over muted UTC time; "Sin registro" or a specific absence. |
 | Day | Día | The same date format, without time. |
-| Counts | the counted thing ("Turnos (7 días)", "Documentos") | `Count`: plain tabular numerals, not muted. |
-| Money | Gasto, Gasto conocido | `formatMoney`; spend against a budget as "USD x de USD y". |
+| Counts | the counted thing ("Turnos 7 d", "Documentos", "Miembros") | `Count`: plain tabular numerals, not muted. |
+| Money | Gasto | `formatMoney`; spend against a budget as "USD x de USD y". |
 | Identifiers | Commit, Artefacto, Recurso | Monospaced; a resource is its Spanish type plus its short id. |
-| Workspace kind, timezone, role | Tipo, Zona horaria, Rol / Tu rol | Shared label maps (`workspaceKindLabels`, `memberRoleLabels`). |
-| Email | Correo electrónico | Plain text; "No disponible". |
+| Workspace kind, timezone, role | Tipo, Zona, Rol / Tu rol | Shared label maps (`workspaceKindLabels`, `memberRoleLabels`). |
+| Email | Correo | Plain text; "No disponible". |
+| Agent versions | En uso, Entorno, Despliegue, En reposo, Próxima, Propuesta | Both agent lists: the version numbers in use and next, the place of the version in use, its state as the row's one badge, resting, and the next version's state inline. |
 
 Badges and inline indicators of the same state share one descriptor (label, tone and icon), so a state looks alike in either form; tests hold the deployment, submission and approval maps to this.
 
@@ -198,7 +201,7 @@ Empty or unavailable card content uses the shared `CardEmptyState`: a muted, das
 
 The compact Propuestas table, five derived proposal states, version/revision descriptors, frozen configuration receipt and criteria/results dialogs in architecture §39.6 supersede earlier proposal presentation examples. Preserve distinct approval, submission and deployment colors from the shared maps.
 
-**Agent state columns — owner direction, 2026-10-06.** Both agent lists replace their state columns with **Versión en uso** and **Próxima versión** (architecture §55). In the customer list they replace En revisión, Actual and Estado, and are the last two columns; the loading state now mirrors six columns. In Admin they replace Despliegue and Estado; Agentes has no ID column, because the name is the link, and its Capacidades cell no longer repeats the version number, which only the version columns show (2026-10-07). Since 2026-10-07 each list shows the version in use's state as a lone **Despliegue** badge, followed by **En reposo**; Versión en uso and Próxima versión are labelled stacks (Versión, Entorno; Versión, Estado), with the next version's state inline (§3.1). Labels and colours come from the deployment, proposal and approval maps. Every agent name in Admin is a blue underlined link to the agent page; in Revisiones the review number opens the review. Vencimientos groups servers and evaluators by place in labelled groups, not tabs, so no lapsed registration is hidden.
+**Agent state columns — owner direction, 2026-10-06.** Both agent lists replace their state columns with **Versión en uso** and **Próxima versión** (architecture §55). In the customer list they replace En revisión, Actual and Estado, and are the last two columns; the loading state now mirrors six columns. In Admin they replace Despliegue and Estado; Agentes has no ID column, because the name is the link, and its Capacidades cell no longer repeats the version number, which only the version columns show (2026-10-07). Since 2026-10-07 each list shows them as separate columns (§3.1): En uso, Entorno, Despliegue (the row's one badge), En reposo, Próxima and Propuesta (the next version's state, inline). Labels and colours come from the deployment, proposal and approval maps. Every agent name in Admin is a blue underlined link to the agent page; in Revisiones the review number opens the review. Vencimientos groups servers and evaluators by place in labelled groups, not tabs, so no lapsed registration is hidden.
 
 **Admin layout — owner direction, 2026-10-06 (evening).**
 

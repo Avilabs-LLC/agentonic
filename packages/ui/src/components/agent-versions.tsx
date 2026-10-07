@@ -13,9 +13,7 @@ import {
   Absent,
   CellLink,
   Count,
-  FieldStack,
   sortableHeader,
-  type StackField,
 } from "@workspace/ui/components/table-cells"
 import { restingColumn } from "@workspace/ui/components/resting-column"
 
@@ -23,40 +21,6 @@ export const facetTitles = {
   live: "Versión en uso",
   next: "Próxima versión",
 } as const
-
-/** A facet's facts as labelled fields (UI contract §3, field standard). The
- * version in use's state is not here: it is the row's Despliegue badge. */
-export function AgentVersionFacet({
-  view,
-  facet,
-}: {
-  view: AgentVersionsView
-  facet: "live" | "next"
-}) {
-  const f = view[facet]
-  const fields: StackField[] = [
-    ...(f.versionNumber !== null
-      ? [{ label: "Versión", value: <Count value={f.versionNumber} /> }]
-      : []),
-    ...(facet === "next" && f.state
-      ? [{ label: "Estado", value: <StatusIndicator state={f.state} /> }]
-      : []),
-    ...(f.place ? [{ label: "Entorno", value: f.place }] : []),
-    ...(f.more.length
-      ? [
-          {
-            label: "Otros entornos",
-            value: f.more.map((m) => m.detail).join(" · "),
-          },
-        ]
-      : []),
-  ]
-  return fields.length ? (
-    <FieldStack fields={fields} />
-  ) : (
-    <Absent>{f.detail}</Absent>
-  )
-}
 
 /** The version in use's state: the row's one badge, alone in its cell. */
 export function AgentDeploymentBadge({ view }: { view: AgentVersionsView }) {
@@ -67,8 +31,9 @@ export function AgentDeploymentBadge({ view }: { view: AgentVersionsView }) {
   )
 }
 
-/** Versión en uso, Despliegue, En reposo and Próxima versión for a table of
- * agents. */
+/** The agent version columns for a table of agents, one fact each (UI
+ * contract §3.1): En uso, Entorno, Despliegue, En reposo, Próxima and
+ * Propuesta (the next version's state, inline). */
 export function agentVersionColumns<T>(
   summary: (row: T) => AgentVersionSummary | null,
   unavailable: React.ReactNode = null,
@@ -86,7 +51,8 @@ export function agentVersionColumns<T>(
   const column = (
     id: string,
     title: string,
-    sortKey: (v: AgentVersionsView) => number,
+    description: string | undefined,
+    sortKey: (v: AgentVersionsView) => number | string,
     render: (v: AgentVersionsView) => React.ReactNode
   ): ColumnDef<T> => ({
     id,
@@ -94,31 +60,65 @@ export function agentVersionColumns<T>(
       const v = view(row)
       return v ? sortKey(v) : Infinity
     },
-    header: sortableHeader<T>(title),
+    header: sortableHeader<T>(title, description),
     cell: ({ row }) => {
       const v = view(row.original)
       return v ? render(v) : unavailable
     },
   })
+  const version = (n: number | null) =>
+    n === null ? <Absent>Ninguna</Absent> : <Count value={n} />
   return [
     column(
       "live",
+      "En uso",
       facetTitles.live,
       (v) => v.live.versionNumber ?? Infinity,
-      (v) => <AgentVersionFacet view={v} facet="live" />
+      (v) => version(v.live.versionNumber)
+    ),
+    column(
+      "environment",
+      "Entorno",
+      "Entorno de la versión en uso",
+      (v) => v.live.place ?? "",
+      (v) =>
+        v.live.place ? (
+          <span
+            title={v.live.more.map((m) => m.detail).join(" · ") || undefined}
+          >
+            {v.live.place}
+            {v.live.more.length > 0 && ` y ${v.live.more.length} más`}
+          </span>
+        ) : (
+          <Absent>No aplica</Absent>
+        )
     ),
     column(
       "deployment",
       "Despliegue",
+      undefined,
       (v) => v.live.rank,
       (v) => <AgentDeploymentBadge view={v} />
     ),
     restingColumn<T>((row) => view(row)?.resting, unavailable),
     column(
       "next",
+      "Próxima",
       facetTitles.next,
+      (v) => v.next.versionNumber ?? Infinity,
+      (v) => version(v.next.versionNumber)
+    ),
+    column(
+      "proposal",
+      "Propuesta",
+      "Estado de la próxima versión",
       (v) => v.next.rank,
-      (v) => <AgentVersionFacet view={v} facet="next" />
+      (v) =>
+        v.next.state ? (
+          <StatusIndicator state={v.next.state} />
+        ) : (
+          <Absent>No aplica</Absent>
+        )
     ),
   ]
 }

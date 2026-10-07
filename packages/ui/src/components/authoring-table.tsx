@@ -185,7 +185,11 @@ export function AuthoringTable({
     {
       accessorKey: "workspaceName",
       header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Espacio de trabajo" />
+        <DataTableColumnHeader
+          column={column}
+          title="Espacio"
+          description="Espacio de trabajo"
+        />
       ),
       cell: ({ row }) => <WorkspaceName name={row.original.workspaceName} />,
     },

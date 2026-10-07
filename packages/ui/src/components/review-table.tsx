@@ -210,12 +210,12 @@ export function ReviewTable({
     },
     {
       accessorKey: "workspaceName",
-      header: sortableHeader<Review>("Espacio de trabajo"),
+      header: sortableHeader<Review>("Espacio", "Espacio de trabajo"),
       cell: ({ row }) => <WorkspaceName name={row.original.workspaceName} />,
     },
     {
       accessorKey: "userEmail",
-      header: sortableHeader<Review>("Correo electrónico"),
+      header: sortableHeader<Review>("Correo", "Correo electrónico"),
       cell: ({ row }) =>
         row.original.userEmail ?? <Absent>No disponible</Absent>,
     },
@@ -269,7 +269,7 @@ export function ReviewTable({
     {
       id: "approvalExpiresAt",
       accessorFn: (row) => timeKey(row.approvalExpiresAt),
-      header: sortableHeader<Review>("Plazo para activar"),
+      header: sortableHeader<Review>("Activar hasta", "Plazo para activar"),
       cell: ({ row }) => (
         <Deadline
           value={

@@ -1,7 +1,7 @@
 "use client"
 import { useId, useState } from "react"
 import { useRouter } from "next/navigation"
-import type { Column, ColumnDef } from "@tanstack/react-table"
+import type { ColumnDef } from "@tanstack/react-table"
 import { useForm, Controller } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { ArchiveIcon, PlusIcon } from "lucide-react"
@@ -38,25 +38,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@workspace/ui/components/select"
-import {
-  DataTable,
-  DataTableColumnHeader,
-} from "@workspace/ui/components/data-table"
+import { DataTable } from "@workspace/ui/components/data-table"
 import { DataTableRowActions } from "@workspace/ui/components/data-table-row-actions"
 import { StatusIndicator } from "@workspace/ui/components/status-badge"
-import { When } from "@workspace/ui/components/table-cells"
+import { sortableHeader, When } from "@workspace/ui/components/table-cells"
 import { statusDescriptor } from "@workspace/ui/lib/badge-status"
 import { notify } from "@workspace/ui/lib/toast"
 
 // The Miembros page (architecture §54): members and invitations of one
 // workspace, for its owners and admins.
 
-function header<T>(title: string) {
-  function SortableHeader({ column }: { column: Column<T, unknown> }) {
-    return <DataTableColumnHeader column={column} title={title} />
-  }
-  return SortableHeader
-}
+const header = sortableHeader
 const role = (value: string) => memberRoleLabels[value] ?? value
 
 export function MembersTable({ members }: { members: WorkspaceMember[] }) {
@@ -125,7 +117,7 @@ export function InvitationsTable({
         />
       ),
     },
-    { accessorKey: "email", header: header("Correo electrónico") },
+    { accessorKey: "email", header: header("Correo", "Correo electrónico") },
     {
       id: "role",
       accessorFn: (row) => role(row.role),

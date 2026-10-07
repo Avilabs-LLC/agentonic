@@ -93,11 +93,11 @@ function Loading({
     </div>
   )
 }
-/** Agentes: the ten-column agents table. */
+/** Agentes: the twelve-column agents table. */
 export function OperationsAgentsSkeleton() {
   return (
     <Loading label="Cargando agentes">
-      <TableSkeleton columns={10} />
+      <TableSkeleton columns={12} />
     </Loading>
   )
 }

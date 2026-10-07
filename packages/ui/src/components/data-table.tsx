@@ -44,9 +44,12 @@ import {
 export function DataTableColumnHeader<T>({
   column,
   title,
+  description,
 }: {
   column: Column<T>
   title: string
+  // The full name behind a shortened header, shown on hover and read aloud.
+  description?: string
 }) {
   const direction = column.getIsSorted()
   const Icon =
@@ -60,7 +63,8 @@ export function DataTableColumnHeader<T>({
       variant="ghost"
       onClick={() => column.toggleSorting(direction === "asc")}
       className="-ml-2"
-      aria-label={`Ordenar por ${title}`}
+      title={description}
+      aria-label={`Ordenar por ${description ?? title}`}
     >
       <span>{title}</span>
       <Icon />

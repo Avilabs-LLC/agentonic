@@ -1,7 +1,6 @@
 "use client"
-// Shared table cells (UI contract §3, field standard): every table renders the
-// same data point the same way. One fact per cell; a badge stands alone; when a
-// cell must hold several facts, each carries its label (FieldStack).
+// Shared table cells (UI contract §3.1, field standard): every table renders
+// the same data point the same way, one fact per cell, a badge alone.
 import Link from "next/link"
 import type { Column } from "@tanstack/react-table"
 import { formatCount, formatUtcParts } from "@agentonic/contracts/format"
@@ -9,10 +8,17 @@ import { cn } from "@workspace/ui/lib/utils"
 import { DataTableColumnHeader } from "@workspace/ui/components/data-table"
 import { StatusIndicator } from "@workspace/ui/components/status-badge"
 
-/** A sortable header with this title, for any column. */
-export function sortableHeader<T>(title: string) {
+/** A sortable header with this title, for any column. Headers stay short to
+ * save width; `description` keeps the full name as a tooltip. */
+export function sortableHeader<T>(title: string, description?: string) {
   function SortableHeader({ column }: { column: Column<T, unknown> }) {
-    return <DataTableColumnHeader column={column} title={title} />
+    return (
+      <DataTableColumnHeader
+        column={column}
+        title={title}
+        description={description}
+      />
+    )
   }
   return SortableHeader
 }
@@ -82,21 +88,6 @@ export function Count({ value }: { value: number }) {
 /** Monospaced identifiers: commits, artifacts, workers, record ids. */
 export function Code({ children }: { children: React.ReactNode }) {
   return <span className="font-mono">{children}</span>
-}
-
-export type StackField = { label: string; value: React.ReactNode }
-/** Several facts in one cell, each under its label (as in corbero-cloud). */
-export function FieldStack({ fields }: { fields: StackField[] }) {
-  return (
-    <dl className="flex flex-col gap-1">
-      {fields.map((field) => (
-        <div key={field.label} className="flex flex-col gap-0.5">
-          <dt className="text-muted-foreground">{field.label}:</dt>
-          <dd>{field.value}</dd>
-        </div>
-      ))}
-    </dl>
-  )
 }
 
 // Clickable text in tables: one style for links and link buttons.

@@ -99,12 +99,13 @@ describe("Admin operations screens", () => {
       "Conocimiento (2 colecciones) · Gmail",
       "Versión en uso",
       "Próxima versión",
+      ">En uso<",
+      ">Entorno<",
       ">Despliegue<",
+      ">Próxima<",
+      ">Propuesta<",
       "En funcionamiento",
-      ">Versión:<",
-      ">Entorno:<",
       ">vm-agents-01<",
-      ">Estado:<",
       ">En reposo<",
       ">Sí<",
       "No aplica",
@@ -113,8 +114,9 @@ describe("Admin operations screens", () => {
       "Sin despliegue",
       "Borrador",
       "Sin registro",
-      ">Espacio de trabajo<",
-      ">Turnos (7 días)<",
+      ">Espacio<",
+      'title="Espacio de trabajo"',
+      ">Turnos 7 d<",
     ])
       expect(out).toContain(text)
     badgesStandAlone(out)
@@ -123,8 +125,9 @@ describe("Admin operations screens", () => {
     // The name is the only link to the agent page; no separate ID column.
     expect(out).not.toContain(">ID<")
     expect(out.split(`href="/agents/${id(1)}"`)).toHaveLength(2)
-    // Facts carry labels instead of running together; resting has its own
-    // column and capabilities no longer repeat the version.
+    // One fact per column: no labelled stacks, resting in its own column, and
+    // capabilities no longer repeat the version.
+    expect(out).not.toContain("<dl")
     expect(out).not.toContain("· En reposo")
     expect(out).not.toContain("Versión 2")
   })

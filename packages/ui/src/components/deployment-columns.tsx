@@ -87,7 +87,7 @@ export function deploymentColumns<T extends DeploymentRow>({
     {
       id: "authorizedUntil",
       accessorFn: (row) => timeKey(row.authorizedUntil),
-      header: header("Uso autorizado hasta"),
+      header: header("Uso hasta", "Uso autorizado hasta"),
       cell: ({ row }) => <When value={row.original.authorizedUntil} />,
     },
     {

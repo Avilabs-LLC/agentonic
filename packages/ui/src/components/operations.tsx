@@ -78,7 +78,7 @@ const at = timeKey
 function workspaceColumn<T extends { workspaceName: string }>(): ColumnDef<T> {
   return {
     accessorKey: "workspaceName",
-    header: header("Espacio de trabajo"),
+    header: header("Espacio", "Espacio de trabajo"),
     cell: ({ row }) => <WorkspaceName name={row.original.workspaceName} />,
   }
 }
@@ -162,7 +162,7 @@ export function OperationsAgentsTable({
     },
     {
       accessorKey: "runs7d",
-      header: header("Turnos (7 días)"),
+      header: header("Turnos 7 d", "Turnos en los últimos 7 días"),
       cell: ({ row }) => <Count value={row.original.runs7d} />,
     },
   ]
@@ -291,11 +291,11 @@ export function OperationsWorkspacesTable({
     },
     {
       accessorKey: "timezone",
-      header: header("Zona horaria"),
+      header: header("Zona", "Zona horaria"),
     },
     {
       accessorKey: "members",
-      header: header("Miembros activos"),
+      header: header("Miembros", "Miembros activos"),
       cell: ({ row }) => <Count value={row.original.members} />,
     },
     {
@@ -305,7 +305,7 @@ export function OperationsWorkspacesTable({
     },
     {
       accessorKey: "pendingInvitations",
-      header: header("Invitaciones pendientes"),
+      header: header("Invitaciones", "Invitaciones pendientes"),
       cell: ({ row }) => <Count value={row.original.pendingInvitations} />,
     },
     {
@@ -564,12 +564,12 @@ export function OperationsCostsTable({ days }: { days: OperationsCostDay[] }) {
     },
     {
       accessorKey: "timezone",
-      header: header("Zona horaria"),
+      header: header("Zona", "Zona horaria"),
     },
     workspaceColumn<OperationsCostDay>(),
     {
       accessorKey: "knownUsd",
-      header: header("Gasto conocido"),
+      header: header("Gasto", "Gasto conocido"),
       cell: ({ row }) => (
         <span className="tabular-nums">
           {formatMoney(row.original.knownUsd)}
@@ -578,7 +578,7 @@ export function OperationsCostsTable({ days }: { days: OperationsCostDay[] }) {
     },
     {
       accessorKey: "unknownOperations",
-      header: header("Sin resultado conocido"),
+      header: header("Sin resultado", "Operaciones sin resultado conocido"),
       cell: ({ row }) =>
         row.original.unknownOperations > 0 ? (
           <StatusIndicator
@@ -747,7 +747,7 @@ export function OperationsReleasesTable({
     },
     {
       accessorKey: "workspaces",
-      header: header("Espacios con acceso"),
+      header: header("Espacios", "Espacios con acceso"),
       cell: ({ row }) => <Count value={row.original.workspaces} />,
     },
     {
