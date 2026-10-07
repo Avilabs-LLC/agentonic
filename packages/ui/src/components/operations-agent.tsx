@@ -289,7 +289,7 @@ function ProposalsTable({
     {
       id: "approvalExpiresAt",
       accessorFn: (p) => timeKey(p.approvalExpiresAt),
-      header: header("Plazo para activar"),
+      header: header("Activar hasta", "Plazo para activar"),
       cell: ({ row }) => (
         <Deadline
           value={

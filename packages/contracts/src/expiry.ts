@@ -38,7 +38,7 @@ export const registrationNames = {
 export type ExpiryActor = "customer" | "staff"
 export const expiryActorLabels: Record<ExpiryActor, string> = {
   customer: "Cliente",
-  staff: "Equipo de Agentonic",
+  staff: "Agentonic",
 }
 export type NextStep = {
   actor: ExpiryActor | null

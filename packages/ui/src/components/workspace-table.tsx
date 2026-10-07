@@ -15,7 +15,7 @@ type WorkspaceRow = {
 const columns: ColumnDef<WorkspaceRow>[] = [
   {
     accessorKey: "name",
-    header: sortableHeader<WorkspaceRow>("Espacio de trabajo"),
+    header: sortableHeader<WorkspaceRow>("Espacio", "Espacio de trabajo"),
     cell: ({ row }) => <WorkspaceName name={row.original.name} />,
   },
   {
@@ -30,7 +30,7 @@ const columns: ColumnDef<WorkspaceRow>[] = [
   },
   {
     accessorKey: "timezone",
-    header: sortableHeader<WorkspaceRow>("Zona horaria"),
+    header: sortableHeader<WorkspaceRow>("Zona", "Zona horaria"),
   },
 ]
 export function WorkspaceTable({ workspaces }: { workspaces: WorkspaceRow[] }) {

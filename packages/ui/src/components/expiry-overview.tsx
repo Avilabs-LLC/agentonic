@@ -106,7 +106,7 @@ export function ExpiryTable({ rows, now }: { rows: ExpiryRow[]; now: string }) {
     },
     {
       accessorKey: "workspaceName",
-      header: header("Espacio de trabajo"),
+      header: header("Espacio", "Espacio de trabajo"),
       cell: ({ row }) => <WorkspaceName name={row.original.workspaceName} />,
     },
     {
@@ -156,7 +156,7 @@ export function ExpiryTable({ rows, now }: { rows: ExpiryRow[]; now: string }) {
     {
       id: "approval",
       accessorFn: (row) => time(row.approvalExpiresAt),
-      header: header("Plazo para activar"),
+      header: header("Activar hasta", "Plazo para activar"),
       cell: ({ row }) => (
         <Deadline value={row.original.approvalExpiresAt} now={now} />
       ),
@@ -164,7 +164,7 @@ export function ExpiryTable({ rows, now }: { rows: ExpiryRow[]; now: string }) {
     {
       id: "consent",
       accessorFn: (row) => time(row.consentExpiresAt),
-      header: header("Uso autorizado hasta"),
+      header: header("Uso hasta", "Uso autorizado hasta"),
       cell: ({ row }) => (
         <Deadline value={row.original.consentExpiresAt} now={now} />
       ),
@@ -172,7 +172,7 @@ export function ExpiryTable({ rows, now }: { rows: ExpiryRow[]; now: string }) {
     {
       id: "host",
       accessorFn: (row) => time(row.host?.expiresAt ?? null),
-      header: header("Servidor verificado hasta"),
+      header: header("Servidor hasta", "Servidor verificado hasta"),
       cell: ({ row }) =>
         row.original.host?.state === "revoked" ? (
           <StatusIndicator
