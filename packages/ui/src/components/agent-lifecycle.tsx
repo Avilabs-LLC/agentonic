@@ -14,11 +14,15 @@ import {
   PackageIcon,
 } from "lucide-react"
 import {
+  PERIOD_BUDGET,
   approvalLabels,
   deploymentLabels,
   environmentLabels,
+  renewalBlockedLabels,
   type LifecycleState,
 } from "@agentonic/contracts/lifecycle"
+import { iconTones } from "@workspace/ui/components/status-badge"
+import { cn } from "cn"
 import type { FormResult } from "@agentonic/contracts/authoring"
 import { AgentSettingsCard } from "@workspace/ui/components/agent-settings-card"
 import { CardEmptyState } from "@workspace/ui/components/card-empty-state"
@@ -76,6 +80,10 @@ export function AgentLifecycle({
   } | null>(null)
   const [consent, setConsent] = useState(false),
     [budget, setBudget] = useState("0.25"),
+    [autoRenew, setAutoRenew] = useState(true),
+    [renewalFor, setRenewalFor] = useState<
+      (typeof state.deployments)[number] | null
+    >(null),
     [environment, setEnvironment] = useState<"local" | "azure_staging">(
       "azure_staging"
     ),
@@ -115,10 +123,19 @@ export function AgentLifecycle({
       }
     })
   }
+  // Approval renewal keeps its review ceiling; a deployment budgets each
+  // 30-day period (§59).
+  const bounds =
+    form?.operation === "authorize"
+      ? { min: PERIOD_BUDGET.min, max: PERIOD_BUDGET.max, step: "1" }
+      : { min: 0.05, max: 1, step: "0.05" }
   function open(operation: "renew" | "authorize", id: string) {
     setError("")
     setConsent(false)
-    setBudget("0.25")
+    setAutoRenew(true)
+    setBudget(
+      operation === "authorize" ? String(PERIOD_BUDGET.default) : "0.25"
+    )
     setForm({ operation, submissionId: id, requestId: crypto.randomUUID() })
   }
   return (
@@ -241,7 +258,7 @@ export function AgentLifecycle({
       <AgentSettingsCard
         title={customer ? "Uso en pruebas" : "Despliegues de pruebas"}
         icon={<RocketIcon />}
-        description="Uso privado y de solo lectura. La autorización dura hasta siete días y conserva su propio límite de consumo."
+        description="Uso privado y de solo lectura. La autorización dura 30 días y se renueva sola mientras nada cambie; cada período tiene su propio presupuesto."
       >
         {!deployments.length ? (
           customer ? (
@@ -280,17 +297,22 @@ export function AgentLifecycle({
                         {customerAvailability(d, state, new Date(now))}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        Consumo: USD {(d.committedMicrousd / 1e6).toFixed(4)} de
-                        USD {d.budgetUsd.toFixed(2)} autorizados.
+                        {d.periodBudgetUsd != null
+                          ? `Este período: USD ${(d.periodCommittedMicrousd / 1e6).toFixed(4)} de USD ${d.periodBudgetUsd.toFixed(2)}.`
+                          : `Consumo: USD ${(d.committedMicrousd / 1e6).toFixed(4)} de USD ${d.budgetUsd.toFixed(2)} autorizados.`}
                       </p>
+                      <RenewalLine deployment={d} />
                     </div>
                   ) : (
-                    <p className="text-xs text-muted-foreground">
-                      Uso y reservas: USD{" "}
-                      {(d.committedMicrousd / 1e6).toFixed(4)} de USD{" "}
-                      {d.budgetUsd.toFixed(2)} · Hasta{" "}
-                      {formatUtcDateTime(d.expiresAt)} UTC.
-                    </p>
+                    <div className="space-y-1">
+                      <p className="text-xs text-muted-foreground">
+                        Uso y reservas: USD{" "}
+                        {(d.committedMicrousd / 1e6).toFixed(4)} de USD{" "}
+                        {d.budgetUsd.toFixed(2)} · Hasta{" "}
+                        {formatUtcDateTime(d.expiresAt)} UTC.
+                      </p>
+                      <RenewalLine deployment={d} />
+                    </div>
                   )}
                   <div className="flex flex-wrap gap-2">
                     {d.canActivate && (
@@ -316,6 +338,36 @@ export function AgentLifecycle({
                         }
                       >
                         Abrir chat
+                      </Button>
+                    )}
+                    {d.canRenewNow && (
+                      <Button
+                        variant="outline"
+                        disabled={pending}
+                        onClick={() =>
+                          run({
+                            operation: "extend",
+                            payload: { deploymentId: d.id },
+                          })
+                        }
+                      >
+                        Renovar ahora
+                      </Button>
+                    )}
+                    {d.canChangeRenewal && (
+                      <Button
+                        variant="outline"
+                        disabled={pending}
+                        onClick={() => {
+                          setError("")
+                          setAutoRenew(d.autoRenew)
+                          setBudget(
+                            String(d.periodBudgetUsd ?? PERIOD_BUDGET.default)
+                          )
+                          setRenewalFor(d)
+                        }}
+                      >
+                        Ajustar renovación
                       </Button>
                     )}
                     {d.canStop && (
@@ -360,7 +412,7 @@ export function AgentLifecycle({
             <DialogDescription>
               {form?.operation === "renew"
                 ? "Se abrirá una nueva revisión de esta misma versión. Se prepararán criterios para que los revises y confirmes antes de evaluar. La aprobación anterior se conserva."
-                : "Autoriza el uso privado de esta versión y su conocimiento durante un máximo de siete días. El equipo activará el agente; podrás detenerlo en cualquier momento."}
+                : "Autoriza el uso privado de esta versión y su conocimiento durante 30 días, con un presupuesto por período. Si nada cambia, la autorización se renueva sola cada 30 días; puedes desactivarlo o detener el agente en cualquier momento. El equipo activará el agente."}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-5">
@@ -406,18 +458,30 @@ export function AgentLifecycle({
             )}
             <Field>
               <FieldLabel htmlFor={`${fieldId}-budget`}>
-                Límite total autorizado (USD)
+                {form?.operation === "authorize"
+                  ? "Presupuesto por período de 30 días (USD)"
+                  : "Límite total autorizado (USD)"}
               </FieldLabel>
               <Input
                 id={`${fieldId}-budget`}
                 type="number"
-                min="0.05"
-                max="1"
-                step="0.05"
+                min={bounds.min}
+                max={bounds.max}
+                step={bounds.step}
                 value={budget}
                 onChange={(e) => setBudget(e.target.value)}
               />
             </Field>
+            {form?.operation === "authorize" && (
+              <ConsentCheckbox
+                checked={autoRenew}
+                onCheckedChange={setAutoRenew}
+                disabled={pending}
+              >
+                Renovar automáticamente cada 30 días mientras nada cambie en la
+                versión, sus documentos o mis permisos.
+              </ConsentCheckbox>
+            )}
             <ConsentCheckbox
               checked={consent}
               onCheckedChange={setConsent}
@@ -445,8 +509,8 @@ export function AgentLifecycle({
               disabled={
                 pending ||
                 !consent ||
-                Number(budget) < 0.05 ||
-                Number(budget) > 1 ||
+                Number(budget) < bounds.min ||
+                Number(budget) > bounds.max ||
                 !Number.isFinite(Number(budget)) ||
                 (form?.operation === "authorize" &&
                   !state.hosts.some(
@@ -462,7 +526,9 @@ export function AgentLifecycle({
                     requestId: form.requestId,
                     budgetUsd: Number(budget),
                     consent: true,
-                    ...(form.operation === "authorize" ? { environment } : {}),
+                    ...(form.operation === "authorize"
+                      ? { environment, autoRenew }
+                      : {}),
                   },
                 })
               }
@@ -475,6 +541,111 @@ export function AgentLifecycle({
           </div>
         </DialogContent>
       </Dialog>
+      <Dialog
+        open={!!renewalFor}
+        onOpenChange={(open) => {
+          if (!pending && !open) setRenewalFor(null)
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Renovación</DialogTitle>
+            <DialogDescription>
+              Mientras nada cambie, la autorización se renueva sola 3 días antes
+              de terminar, por 30 días más y con este presupuesto.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-5">
+            <ConsentCheckbox
+              checked={autoRenew}
+              onCheckedChange={setAutoRenew}
+              disabled={pending}
+            >
+              Renovar automáticamente cada 30 días.
+            </ConsentCheckbox>
+            <Field>
+              <FieldLabel htmlFor={`${fieldId}-period-budget`}>
+                Presupuesto por período de 30 días (USD)
+              </FieldLabel>
+              <Input
+                id={`${fieldId}-period-budget`}
+                type="number"
+                min={PERIOD_BUDGET.min}
+                max={PERIOD_BUDGET.max}
+                step="1"
+                value={budget}
+                onChange={(e) => setBudget(e.target.value)}
+              />
+            </Field>
+            {error && (
+              <p role="alert" className="text-sm text-destructive">
+                {error}
+              </p>
+            )}
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="outline"
+              disabled={pending}
+              onClick={() => setRenewalFor(null)}
+            >
+              Cancelar
+            </Button>
+            <Button
+              disabled={
+                pending ||
+                !Number.isFinite(Number(budget)) ||
+                Number(budget) < PERIOD_BUDGET.min ||
+                Number(budget) > PERIOD_BUDGET.max
+              }
+              onClick={() => {
+                if (!renewalFor) return
+                run({
+                  operation: "renewal",
+                  payload: {
+                    deploymentId: renewalFor.id,
+                    autoRenew,
+                    budgetUsd: Number(budget),
+                  },
+                })
+                setRenewalFor(null)
+              }}
+            >
+              {pending && <Loader2Icon className="animate-spin" />}
+              Guardar renovación
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
+  )
+}
+/** Whether and when a deployment renews, or what stops it (§59). */
+export function RenewalLine({
+  deployment: d,
+}: {
+  deployment: LifecycleState["deployments"][number]
+}) {
+  if (
+    !["awaiting_activation", "queued", "preparing", "running"].includes(
+      d.status
+    )
+  )
+    return null
+  if (d.renewalBlocked)
+    return (
+      <p className={cn("text-xs", iconTones.warning)}>
+        No se renovará:{" "}
+        {renewalBlockedLabels[d.renewalBlocked] ?? renewalBlockedLabels.changed}
+      </p>
+    )
+  return (
+    <p className="text-xs text-muted-foreground">
+      {d.autoRenew && d.renewsAt
+        ? `Se renovará automáticamente el ${formatUtcDateTime(d.renewsAt)} UTC por 30 días más${d.periodBudgetUsd != null ? `, con USD ${d.periodBudgetUsd.toFixed(2)} por período` : ""}.`
+        : d.autoRenew
+          ? "Se renovará automáticamente cada 30 días mientras nada cambie."
+          : `No se renovará automáticamente; termina el ${formatUtcDateTime(d.expiresAt)} UTC.`}
+    </p>
   )
 }

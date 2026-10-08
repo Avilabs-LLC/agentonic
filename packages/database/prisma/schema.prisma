@@ -1114,6 +1114,11 @@ model Deployment {
  heartbeatAt DateTime? @map("heartbeat_at") @db.Timestamptz
  errorCode String? @map("error_code")
  manifestSha256 String? @map("manifest_sha256")
+ autoRenew Boolean @default(true) @map("auto_renew")
+ periodBudgetUsd Decimal? @map("period_budget_usd") @db.Decimal(20,8)
+ periodStartedAt DateTime? @map("period_started_at") @db.Timestamptz
+ periodBaseMicrousd BigInt @default(0) @map("period_base_microusd")
+ renewalBlocked String? @map("renewal_blocked")
  brokerSha256 String? @map("broker_sha256")
  successorBrokerSha256 String? @map("successor_broker_sha256")
  successorTokenSha256 String? @map("successor_token_sha256")
@@ -1172,6 +1177,7 @@ model StagingTurn {
  createdAt DateTime @default(dbgenerated("clock_timestamp()")) @map("created_at") @db.Timestamptz
  errorCode String? @map("error_code")
  scrubbedAt DateTime? @map("scrubbed_at") @db.Timestamptz
+ deploymentId String? @map("deployment_id") @db.Uuid
  @@unique([conversationId,requestId])
  @@unique([conversationId,number])
  @@map("staging_turns")
@@ -1203,6 +1209,21 @@ model GmailConnection {
   @@unique([workspaceId,agentId,id])
   @@map("gmail_connections")
   @@schema("agentonic")
+}
+// Ongoing operating authorization (migration 63): each 30-day renewal.
+model DeploymentRenewal {
+ id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+ workspaceId String @map("workspace_id") @db.Uuid
+ deploymentId String @map("deployment_id") @db.Uuid
+ kind String
+ renewedByMemberId String? @map("renewed_by_member_id") @db.Uuid
+ previousUntil DateTime @map("previous_until") @db.Timestamptz
+ authorizedUntil DateTime @map("authorized_until") @db.Timestamptz
+ periodBudgetUsd Decimal @map("period_budget_usd") @db.Decimal(20,8)
+ createdAt DateTime @default(dbgenerated("clock_timestamp()")) @map("created_at") @db.Timestamptz
+ @@unique([workspaceId,id])
+ @@map("deployment_renewals")
+ @@schema("agentonic")
 }
 // Scheduled jobs (migration 62): a member's instruction for an agent, run on
 // their running deployment; pre-authorized writes per the owner's direction.

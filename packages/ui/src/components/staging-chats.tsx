@@ -351,8 +351,19 @@ export function StagingChats({
                 conversationId={selected}
               />
               <div className="min-h-64 space-y-5" role="log" aria-live="polite">
-                {state.turns.map((t) => (
+                {state.turns.map((t, n) => (
                   <div key={t.id} className="space-y-3">
+                    {/* Conversations carry on across versions (§59). */}
+                    {n > 0 &&
+                      t.version != null &&
+                      state.turns[n - 1]!.version != null &&
+                      t.version !== state.turns[n - 1]!.version && (
+                        <p className="flex items-center gap-3 text-xs text-muted-foreground">
+                          <span className="h-px flex-1 bg-border" />
+                          Desde aquí responde la versión {t.version}
+                          <span className="h-px flex-1 bg-border" />
+                        </p>
+                      )}
                     <div className="ml-6 rounded-xl bg-muted p-4">
                       <p className="mb-1 text-xs text-muted-foreground">Tú</p>
                       <p className="text-sm whitespace-pre-wrap">{t.query}</p>
@@ -387,11 +398,20 @@ export function StagingChats({
                   </div>
                 ))}
               </div>
-              {!state.online && (
+              {!state.canSend ? (
                 <p className="mt-6 text-sm text-muted-foreground">
-                  {unavailableOnOurSide} Podrás escribir cuando vuelva a estar
-                  disponible; esta conversación se conserva.
+                  El agente no tiene una versión en funcionamiento para esta
+                  conversación. Puedes leerla hasta el{" "}
+                  {formatUtcMinute(state.expiresAt)}; para seguir, activa una
+                  versión del agente.
                 </p>
+              ) : (
+                !state.online && (
+                  <p className="mt-6 text-sm text-muted-foreground">
+                    {unavailableOnOurSide} Podrás escribir cuando vuelva a estar
+                    disponible; esta conversación se conserva.
+                  </p>
+                )
               )}
               <div className="mt-6">
                 <ChatComposer
@@ -400,9 +420,13 @@ export function StagingChats({
                   onChange={setQuery}
                   onSubmit={() => void run("turn")}
                   placeholder="Escribe tu pregunta"
-                  disabled={busy || waiting || !state.online}
+                  disabled={busy || waiting || !state.online || !state.canSend}
                   canSubmit={
-                    !busy && !waiting && state.online && !!query.trim()
+                    !busy &&
+                    !waiting &&
+                    state.online &&
+                    state.canSend &&
+                    !!query.trim()
                   }
                   model={
                     <ModelPicker
@@ -417,8 +441,9 @@ export function StagingChats({
                     <p>
                       Consumo: USD {(state.committedMicrousd / 1e6).toFixed(4)}{" "}
                       de USD {state.budgetUsd.toFixed(2)} autorizados. Esta
-                      conversación y sus mensajes están disponibles hasta el{" "}
-                      {formatUtcMinute(state.expiresAt)}.
+                      conversación se conserva hasta el{" "}
+                      {formatUtcMinute(state.expiresAt)}, 30 días después del
+                      último mensaje.
                     </p>
                   }
                 />

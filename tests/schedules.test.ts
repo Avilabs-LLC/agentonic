@@ -2,6 +2,7 @@ import { afterEach, expect, it, vi } from "vitest"
 import { digest, keyring, seal } from "../packages/connectors/src/secrets"
 import {
   runScheduledAction,
+  tickRenewals,
   tickSchedules,
   type ScheduledAction,
 } from "../apps/worker/src/schedules"
@@ -173,4 +174,20 @@ it("validates a schedule form and describes its cadence in Spanish", () => {
       everyHours: 6,
     })
   ).toBe("Cada 6 h desde las 08:00")
+})
+
+it("logs only counts from the renewal tick (§59)", async () => {
+  const log = vi.fn()
+  await tickRenewals(
+    async () => ({ rows: [{ result: { renewed: 1, blocked: 2 } }] }),
+    log
+  )
+  expect(log).toHaveBeenCalledWith(
+    JSON.stringify({ event: "deployments_renewed", renewed: 1, blocked: 2 })
+  )
+  await tickRenewals(
+    async () => ({ rows: [{ result: { renewed: 0, blocked: 0 } }] }),
+    log
+  )
+  expect(log).toHaveBeenCalledTimes(1)
 })
