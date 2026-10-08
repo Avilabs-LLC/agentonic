@@ -214,7 +214,9 @@ export function DataTable<T>({
           <Select
             value={String(table.getState().pagination.pageSize)}
             onValueChange={(value) => {
-              if (value) table.setPageSize(Number(value))
+              const size = Number(value)
+              if (size && size !== table.getState().pagination.pageSize)
+                table.setPageSize(size)
             }}
           >
             <SelectTrigger aria-label="Filas por página">

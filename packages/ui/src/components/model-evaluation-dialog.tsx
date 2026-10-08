@@ -111,6 +111,8 @@ export function ModelResultsDialog({
                   label: `Ejecución ${record.batches.length - i}${i === 0 ? " · Más reciente" : ""}`,
                 }))}
                 onValueChange={(value) => {
+                  // Pressing the run already shown keeps the chosen model.
+                  if (value === batch.id) return
                   setSelectedBatch(value)
                   setSelectedModel(null)
                 }}

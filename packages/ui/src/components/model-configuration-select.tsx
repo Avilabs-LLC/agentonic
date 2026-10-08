@@ -39,6 +39,8 @@ export function ModelConfigurationSelect({
     <Select
       value={modelConfigurationKey(value)}
       onValueChange={(key) => {
+        // Pressing the option already chosen changes nothing.
+        if (key === modelConfigurationKey(value)) return
         const choice = options.find((m) => modelConfigurationKey(m) === key)
         if (choice) onChange(choice)
       }}

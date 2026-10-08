@@ -316,7 +316,11 @@ export function ReviewTable({
             items={workspaceOptions}
             value={selectedWorkspace}
             disabled={pending}
-            onValueChange={(value) => selectWorkspace(value ?? "all")}
+            onValueChange={(value) => {
+              // Pressing the workspace already chosen reloads nothing.
+              if ((value ?? "all") !== selectedWorkspace)
+                selectWorkspace(value ?? "all")
+            }}
           >
             <SelectTrigger id={filterId} className="w-full">
               <SelectValue />

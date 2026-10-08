@@ -69,10 +69,29 @@ export function AuthoringTable({
   const filterId = useId()
   const [pending, startTransition] = useTransition()
   const [tableReset, setTableReset] = useState(0)
-  const workspaceOptions = workspaces.map((workspace) => ({
-    value: workspace.id,
-    label: workspace.name,
-  }))
+  // "Todos los espacios" is an option too, so the filter can always return to
+  // every workspace; it is the selection while no workspace is chosen.
+  const ALL = "all"
+  const workspaceOptions = [
+    { value: ALL, label: "Todos los espacios" },
+    ...workspaces.map((workspace) => ({
+      value: workspace.id,
+      label: workspace.name,
+    })),
+  ]
+  const shown = selectedWorkspaceIds.length ? selectedWorkspaceIds : [ALL]
+  function changeWorkspaces(next: string[]) {
+    // Choosing "Todos los espacios" clears the rest; choosing a workspace
+    // replaces "Todos los espacios".
+    const ids =
+      next.includes(ALL) && !shown.includes(ALL)
+        ? []
+        : next.filter((value) => value !== ALL)
+    const same =
+      ids.length === selectedWorkspaceIds.length &&
+      ids.every((id) => selectedWorkspaceIds.includes(id))
+    if (!same) selectWorkspaces(ids)
+  }
   function selectWorkspaces(ids: string[]) {
     const query = new URLSearchParams()
     ids.forEach((id) => query.append("workspace", id))
@@ -266,9 +285,9 @@ export function AuthoringTable({
           <Select
             multiple
             items={workspaceOptions}
-            value={selectedWorkspaceIds}
+            value={shown}
             disabled={pending}
-            onValueChange={selectWorkspaces}
+            onValueChange={changeWorkspaces}
           >
             <SelectTrigger id={filterId} className="w-full">
               <SelectValue>

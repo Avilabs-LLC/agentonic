@@ -1,5 +1,10 @@
 export const VERSION_HISTORY = [
   {
+    "version": "0.23.0",
+    "date": "2026-10-08",
+    "summary": "Selector original de shadcn: volver a elegir la opción ya seleccionada no recarga ni reinicia nada, «Todos los espacios» vuelve a poder elegirse, y el espacio de prueba B se llama ACME."
+  },
+  {
     "version": "0.22.0",
     "date": "2026-10-08",
     "summary": "Verificaciones de servidores de 30 días, versión en Despliegues, limpieza programada de datos de Gmail, registros por trabajo con tiempos y resultados, y despliegues sin autorización vigente mostrados como tales."

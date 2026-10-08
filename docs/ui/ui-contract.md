@@ -102,6 +102,8 @@ Badges and inline indicators of the same state share one descriptor (label, tone
 
 Extra filters live in a shared `FiltersCard` titled `Filtros`, arranged in a responsive grid, with a `Limpiar` action resetting every filter. The page's table wrapper owns filter state.
 
+**Selects (owner direction, 2026-10-08).** `select.tsx` is shadcn's base-nova component exactly as `shadcn add select` installs it, with no local changes; its list opens aligned with the chosen item, as shadcn ships it. Base UI reports a change even when the pressed option is already selected, so every handler with side effects (navigation, resetting related choices) ignores a value that did not change. A filter whose empty state means "all" offers that as a real option ("Todos los espacios") so the person can always return to it; picking it clears the other choices.
+
 Row actions use a final-column ellipsis menu with icons. Destructive actions are red, separated at the bottom, and consequential operations require an `AlertDialog` with explicit title, consequence and confirmation label. A disabled or hidden control does not replace server-side authorization.
 
 ## 5. Forms and feedback
