@@ -68,7 +68,7 @@ try {
             [
               label === "customer-a"
                 ? "Pruebas · Cliente A"
-                : "Pruebas · Cliente B",
+                : "ACME",
               "bootstrap-" + label,
               retention,
             ]

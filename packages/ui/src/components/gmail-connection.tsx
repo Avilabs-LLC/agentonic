@@ -221,6 +221,8 @@ export function GmailConnection({
                 value={connection?.id ?? ""}
                 disabled={disabled || busy}
                 onValueChange={(value) => {
+                  // Pressing the account already chosen keeps its tools.
+                  if ((value ?? "") === (connection?.id ?? "")) return
                   setChosenAccount(value ?? "")
                   onGmailTools([])
                 }}
