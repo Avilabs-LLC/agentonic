@@ -5,7 +5,7 @@
 //
 //   pnpm staging:reverify                      show registrations and expiry (read-only)
 //   pnpm staging:reverify --verify             run every check, change nothing
-//   pnpm staging:reverify --renew              re-verify and renew what expires within 2 days
+//   pnpm staging:reverify --renew              re-verify and renew what is a week old or more
 //   pnpm staging:reverify --renew --now        ... even if not yet due
 //   pnpm staging:reverify --renew --only=local-host   name targets (also revives an expired local one)
 //   pnpm staging:reverify --renew --publish    also publish the report for the GitHub alert workflow

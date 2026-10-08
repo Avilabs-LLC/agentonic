@@ -36,7 +36,7 @@ export function deploymentColumns<T extends DeploymentRow>({
   version,
   worker,
 }: {
-  version?: (row: T) => number
+  version?: (row: T) => number | undefined
   worker?: (row: T) => string | null
 } = {}): ColumnDef<T>[] {
   const header = sortableHeader<T>
@@ -45,9 +45,16 @@ export function deploymentColumns<T extends DeploymentRow>({
       ? [
           {
             id: "version",
-            accessorFn: version,
+            accessorFn: (row: T) => version(row) ?? Infinity,
             header: header("Versión"),
-            cell: ({ row }) => <Count value={version(row.original)} />,
+            cell: ({ row }) => {
+              const n = version(row.original)
+              return n === undefined ? (
+                <Absent>No disponible</Absent>
+              ) : (
+                <Count value={n} />
+              )
+            },
           } satisfies ColumnDef<T>,
         ]
       : []),

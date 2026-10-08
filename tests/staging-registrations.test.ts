@@ -54,25 +54,25 @@ const registration = (
 })
 
 describe("renewal plan", () => {
-  it("keeps valid registrations alone until two days before expiry", () => {
+  it("renews a registration once it is a week old (30-day validity)", () => {
     expect(
       planRenewal({
         target: "azure-host",
-        registration: registration(4 * DAY),
+        registration: registration(6 * DAY),
         now,
       })
     ).toEqual({ renew: false, reason: "not_due" })
     expect(
       planRenewal({
         target: "azure-host",
-        registration: registration(5 * DAY + HOUR),
+        registration: registration(7 * DAY + HOUR),
         now,
       })
     ).toEqual({ renew: true, reason: "due" })
     expect(
       planRenewal({
         target: "local-evaluator",
-        registration: registration(6 * DAY),
+        registration: registration(20 * DAY),
         now,
       })
     ).toEqual({ renew: true, reason: "due" })
@@ -89,21 +89,21 @@ describe("renewal plan", () => {
     expect(
       planRenewal({
         target: "azure-evaluator",
-        registration: registration(8 * DAY),
+        registration: registration(31 * DAY),
         now,
       })
     ).toEqual({ renew: true, reason: "expired" })
     expect(
       planRenewal({
         target: "local-host",
-        registration: registration(8 * DAY),
+        registration: registration(31 * DAY),
         now,
       })
     ).toEqual({ renew: false, reason: "expired_local" })
     expect(
       planRenewal({
         target: "local-host",
-        registration: registration(8 * DAY),
+        registration: registration(31 * DAY),
         now,
         selected: ["local-host"],
       })
@@ -111,7 +111,7 @@ describe("renewal plan", () => {
     expect(
       planRenewal({
         target: "azure-host",
-        registration: registration(8 * DAY),
+        registration: registration(31 * DAY),
         now,
         selected: ["local-host"],
       })
@@ -778,6 +778,12 @@ describe("alerts", () => {
     expect(problems(null, now)).toEqual([
       "The renewal job on the Mac has never reported.",
     ])
+    // A quiet Mac is fine for weeks; it alerts once an expiry is near.
+    const quiet = report(
+      [{ name: "azure-host", validUntil: later(20 * DAY), outcome: "renewed" }],
+      later(-10 * DAY)
+    )
+    expect(problems(quiet, now)).toEqual([])
     const old = report(
       [{ name: "azure-host", validUntil: later(5 * DAY), outcome: "renewed" }],
       later(-37 * HOUR)

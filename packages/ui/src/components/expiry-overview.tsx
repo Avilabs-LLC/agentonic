@@ -66,9 +66,9 @@ export function RegistrationsCard({
       <CardHeader>
         <CardTitle>Servidores y evaluadores</CardTitle>
         <CardDescription>
-          Cada verificación dura siete días y la renueva el equipo de Agentonic
-          tras comprobar la instalación. Sin una verificación vigente, los
-          agentes o las evaluaciones de ese lugar se detienen.
+          Cada verificación dura 30 días y el equipo de Agentonic la renueva
+          cada semana tras comprobar la instalación. Sin una verificación
+          vigente, los agentes o las evaluaciones de ese lugar se detienen.
         </CardDescription>
       </CardHeader>
       <CardContent>
