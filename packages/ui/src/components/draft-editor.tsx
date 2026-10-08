@@ -285,6 +285,10 @@ export function DraftEditor({
               })
             }
             disabled={disabled || isSubmitting}
+            collections={collections
+              .filter((c) => c.canCurate)
+              .map((c) => ({ id: c.id, name: c.name }))}
+            agentCollectionIds={collectionIds}
           />
         ) : (
           <>

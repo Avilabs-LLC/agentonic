@@ -100,6 +100,39 @@ export async function uploadDocument(
     }
   }
   stage("reserve")
+  const stored = await storeDocument(
+    // Both were checked as UUIDs above.
+    {
+      workspaceId: workspaceId!,
+      collectionId: collectionId!,
+      filename,
+      bytes,
+      contentType,
+    },
+    stage
+  )
+  return stored.ok
+    ? Response.json(
+        { ok: true, id: stored.id },
+        { headers: { "Cache-Control": "private, no-store" } }
+      )
+    : denied(stored.code === "access_denied" ? 403 : 409, stored.code)
+}
+/**
+ * Reserves, uploads and completes one document as the signed-in customer: the
+ * upload route and an accepted style guide (§57) both store documents this way.
+ */
+export async function storeDocument(
+  document: {
+    workspaceId: string
+    collectionId: string
+    filename: string
+    bytes: Buffer
+    contentType: "application/pdf" | "text/plain" | "text/markdown"
+  },
+  stage: (value: UploadStage) => void = () => {}
+): Promise<{ ok: true; id: string } | { ok: false; code: DocumentError }> {
+  const { workspaceId, collectionId, filename, bytes, contentType } = document
   const reserved = await runAuthoringCommand("customer", {
     workspaceId,
     operation: "upload.reserve",
@@ -107,11 +140,11 @@ export async function uploadDocument(
       collectionId,
       title: filename,
       sha256: createHash("sha256").update(bytes).digest("hex"),
-      size,
+      size: bytes.byteLength,
       contentType,
     },
   })
-  if (!reserved.ok || !reserved.id) return denied(403, "access_denied")
+  if (!reserved.ok || !reserved.id) return { ok: false, code: "access_denied" }
   const objectId = reserved.id
   const objectKey = `${workspaceId}/${objectId}`
   let failure: DocumentError = "storage_failed"
@@ -134,10 +167,7 @@ export async function uploadDocument(
       payload: { objectId },
     })
     if (!completed.ok) throw new Error("Completion failed")
-    return Response.json(
-      { ok: true, id: objectId },
-      { headers: { "Cache-Control": "private, no-store" } }
-    )
+    return { ok: true, id: objectId }
   } catch {
     stage("cleanup")
     await runAuthoringCommand("customer", {
@@ -145,7 +175,7 @@ export async function uploadDocument(
       operation: "upload.fail",
       payload: { objectId },
     })
-    return denied(409, failure)
+    return { ok: false, code: failure }
   }
 }
 export async function downloadDocument(request: Request, objectId: string) {

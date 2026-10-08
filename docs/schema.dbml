@@ -2313,6 +2313,36 @@ Table agentonic.gmail_connections {
  indexes { (workspace_id,agent_id,id) [unique] }
  Note: 'Owner-only staging account. Authenticated ciphertext; decryption key outside DB. No direct application table grants. Frozen scope intersects live operations.'
 }
+Table agentonic.style_guides {
+ id uuid [pk]
+ workspace_id uuid [not null]
+ agent_id uuid [not null]
+ connection_id uuid [not null]
+ member_id uuid [not null]
+ request_id uuid [not null]
+ status text [not null]
+ window_days integer [not null]
+ max_messages integer [not null]
+ messages_total integer
+ messages_read integer [not null]
+ messages_used integer
+ batches_total integer
+ batches_done integer [not null]
+ budget_usd numeric(20,8) [not null]
+ committed_microusd bigint [not null]
+ guide text
+ object_id uuid
+ error_code text
+ consent jsonb [not null]
+ worker_lease uuid
+ lease_until timestamptz
+ created_at timestamptz [not null]
+ started_at timestamptz
+ finished_at timestamptz
+ expires_at timestamptz
+ indexes { (workspace_id,id) [unique] (member_id,request_id) [unique] }
+ Note: 'Aprender mi estilo (architecture section 57). Owner-only. Holds progress counts and, until the member decides, the drafted guide; never message content. Accepted guides become ordinary documents. No direct application table grants.'
+}
 Table agentonic.gmail_oauth_states {
  state_hash text [pk]
  workspace_id uuid [not null]

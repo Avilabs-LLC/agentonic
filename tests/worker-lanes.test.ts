@@ -13,6 +13,7 @@ const kinds = {
   ingest: "ingest",
   retrieve: "retrieve",
   preview: "retrieve",
+  style: "style",
 } as const
 let next = 0
 const job = (lane: Lane): LaneJob => ({

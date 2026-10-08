@@ -134,8 +134,12 @@ export function rawMessage(
   ]
   return Buffer.from(lines.join("\r\n")).toString("base64url")
 }
+const NO_TEXT = "Sin texto disponible. Los adjuntos no se descargan."
 // Return plain text only. Never render provider HTML or fetch embedded links/attachments.
-function message(value: unknown) {
+function message(
+  value: unknown,
+  headerNames = ["from", "to", "cc", "subject", "date"]
+) {
   const part: z.ZodType<{
     mimeType?: string
     body?: { data?: string }
@@ -173,12 +177,9 @@ function message(value: unknown) {
     id: m.id,
     threadId: m.threadId,
     headers: p.headers?.filter((h) =>
-      ["from", "to", "cc", "subject", "date"].includes(h.name.toLowerCase())
+      headerNames.includes(h.name.toLowerCase())
     ),
-    text:
-      text(m.payload) ||
-      m.snippet ||
-      "Sin texto disponible. Los adjuntos no se descargan.",
+    text: text(m.payload) || m.snippet || NO_TEXT,
     untrusted: true,
   }
 }
@@ -296,4 +297,80 @@ export async function gmail(
       message: z.object({ id: z.string() }).optional(),
     })
     .parse(data)
+}
+
+// Aprender mi estilo (architecture §57): the account's own sent mail, read once
+// in the worker's memory. Nothing here is stored.
+async function read(access: string, path: string) {
+  let response: Response
+  try {
+    response = await fetch(
+      `https://gmail.googleapis.com/gmail/v1/users/me/${path}`,
+      {
+        headers: { Authorization: `Bearer ${access}` },
+        signal: AbortSignal.timeout(15000),
+      }
+    )
+  } catch {
+    throw new GoogleError("unavailable")
+  }
+  if (!response.ok)
+    throw new GoogleError(response.status === 401 ? "reconnect" : "unavailable")
+  try {
+    return await json(response)
+  } catch {
+    throw new GoogleError("unavailable")
+  }
+}
+/** IDs of messages the account sent in the last `days` days, newest first. */
+export async function sentMessageIds(
+  access: string,
+  days: number,
+  max: number
+) {
+  const ids: string[] = []
+  let pageToken: string | undefined
+  do {
+    const page = z
+      .object({
+        messages: z.array(z.object({ id: z.string() })).optional(),
+        nextPageToken: z.string().optional(),
+      })
+      .parse(
+        await read(
+          access,
+          `messages?${new URLSearchParams({
+            q: `in:sent newer_than:${days}d -in:chats`,
+            maxResults: String(Math.min(100, max - ids.length)),
+            ...(pageToken ? { pageToken } : {}),
+          })}`
+        )
+      )
+    ids.push(...(page.messages ?? []).map((m) => m.id))
+    pageToken = page.nextPageToken
+  } while (pageToken && ids.length < max)
+  return ids.slice(0, max)
+}
+/** One sent message: the headers that tell who wrote it and how, and its text. */
+export async function readSentMessage(access: string, id: string) {
+  if (!/^[a-zA-Z0-9_-]{1,128}$/.test(id)) throw new GoogleError("rejected")
+  const m = message(await read(access, `messages/${id}?format=full`), [
+    "from",
+    "to",
+    "cc",
+    "subject",
+    "auto-submitted",
+    "in-reply-to",
+  ])
+  const header = (name: string) =>
+    m.headers?.find((h) => h.name.toLowerCase() === name)?.value ?? ""
+  return {
+    from: header("from"),
+    to: header("to"),
+    cc: header("cc"),
+    subject: header("subject"),
+    autoSubmitted: header("auto-submitted"),
+    reply: header("in-reply-to") !== "",
+    text: m.text === NO_TEXT ? "" : m.text,
+  }
 }

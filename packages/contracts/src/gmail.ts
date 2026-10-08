@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { styleGuide } from "./style-guide"
 export const gmailOperation = z.enum([
   "gmail.search",
   "gmail.read",
@@ -95,6 +96,8 @@ export const gmailConnection = z.object({
 export const gmailState = z.object({
   connections: z.array(gmailConnection),
   available: z.boolean().optional(),
+  /** The latest Aprender mi estilo guide of each of the member's accounts (§57). */
+  styleGuides: z.array(styleGuide).default([]),
 })
 export type GmailState = z.infer<typeof gmailState>
 export const gmailInvocation = z.object({
