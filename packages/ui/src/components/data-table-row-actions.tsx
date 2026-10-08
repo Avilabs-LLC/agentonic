@@ -9,6 +9,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@workspace/ui/components/dropdown-menu"
+import { actionsMenuClassName } from "@workspace/ui/lib/menus"
 import {
   AlertDialog,
   AlertDialogContent,
@@ -66,12 +67,7 @@ export function DataTableRowActions({ actions }: { actions: RowAction[] }) {
         >
           <EllipsisIcon />
         </DropdownMenuTrigger>
-        {/* The menu opens from a small icon button: size it to its labels so
-            they stay on one line. */}
-        <DropdownMenuContent
-          align="end"
-          className="w-auto min-w-40 whitespace-nowrap"
-        >
+        <DropdownMenuContent align="end" className={actionsMenuClassName}>
           {ordered.map((action, index) => (
             <div key={action.label}>
               {action.destructive &&

@@ -18,6 +18,7 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
 } from "@workspace/ui/components/dropdown-menu"
+import { actionsMenuClassName } from "@workspace/ui/lib/menus"
 import {
   AlertDialog,
   AlertDialogContent,
@@ -92,7 +93,10 @@ export function AgentAssetList({
                 >
                   <EllipsisIcon />
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-44">
+                <DropdownMenuContent
+                  align="end"
+                  className={actionsMenuClassName}
+                >
                   <DropdownMenuItem onClick={() => onView(row)}>
                     <EyeIcon />
                     Ver detalles

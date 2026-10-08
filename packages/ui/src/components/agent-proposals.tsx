@@ -53,6 +53,7 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
 } from "@workspace/ui/components/dropdown-menu"
+import { actionsMenuClassName } from "@workspace/ui/lib/menus"
 import { notify } from "@workspace/ui/lib/toast"
 import { ProposalStatusBadge } from "@workspace/ui/components/status-badge"
 import { CellButton } from "@workspace/ui/components/table-cells"
@@ -159,7 +160,7 @@ function ProposalRow({
             >
               <EllipsisIcon />
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="start">
+            <DropdownMenuContent align="start" className={actionsMenuClassName}>
               {recover && (
                 <DropdownMenuItem onClick={() => setView("prepare")}>
                   <ClipboardCheckIcon />
@@ -217,8 +218,14 @@ function ProposalRow({
           {record?.criteria.length ? (
             <Button
               variant={!confirmed && record.canEdit ? "default" : "link"}
-              size="sm"
-              className="h-auto whitespace-normal"
+              size="xs"
+              // Confirmar matches the Estado badge beside it: same height,
+              // shape and type size.
+              className={
+                !confirmed && record.canEdit
+                  ? "h-5 rounded-4xl px-2 text-xs"
+                  : "h-auto whitespace-normal"
+              }
               aria-label={`${!confirmed && record.canEdit ? "Confirmar" : "Ver"} criterios de ${version.toLowerCase()}`}
               onClick={() => setView("criteria")}
             >

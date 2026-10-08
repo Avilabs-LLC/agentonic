@@ -20,6 +20,7 @@ import {
   DropdownMenuGroup,
   DropdownMenuLabel,
 } from "@workspace/ui/components/dropdown-menu"
+import { actionsMenuClassName } from "@workspace/ui/lib/menus"
 import type { ColumnDef } from "@tanstack/react-table"
 import {
   SYSTEM_PROMPT_MIN_CHARACTERS,
@@ -89,7 +90,7 @@ export function AuthoringTable({
           >
             <EllipsisIcon />
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-56">
+          <DropdownMenuContent align="start" className={actionsMenuClassName}>
             {row.original.canEdit ? (
               <DropdownMenuItem
                 render={
