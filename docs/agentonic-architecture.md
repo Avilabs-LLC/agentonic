@@ -1888,3 +1888,81 @@ There is one active run per account, and requests are idempotent. The consent ve
 - **Rendering:** the row in each state (no spinner while queued, counts while reading, review, accepted, failure) and the account header.
 
 **Rollout.** Apply migration 61 and install platform 0.28.0; the knowledge worker already holds the Google settings and connection keys. Live check: run it on the hosted app with the owner's or a consenting customer's account.
+
+## 58. Scheduled jobs, with pre-authorized writes — 8 October 2026
+
+The owner asked for agents that can run tasks on a schedule. They are managed from a new **Programaciones** tab on the agent page, next to Configuración, Propuestas and Activación. Migration 62, platform 0.29.0.
+
+**Owner direction on autonomy (8 October).** Agentonic can only reach people in its own app for now. Until a channel such as Slack can prompt someone to confirm a run's action, a schedule may pre-authorize writes. "Any recipient": a schedule may exist to send a specific email to someone, not just reply in a thread.
+
+**The model:**
+
+- **What a schedule is.** `agent_schedules` belongs to one member and one agent. It holds:
+  - a name (60 characters) and an instruction (600);
+  - a cadence: daily, weekdays, weekly on an ISO day, or every N hours from a time within each day;
+  - a time and an IANA timezone, validated against `pg_timezone_names`;
+  - a model configuration (GPT-4.1 mini refused);
+  - the writes it pre-authorizes (`gmail.send` and the three draft operations), with the member's recorded consent to exactly those writes;
+  - its state: active, paused or deleted.
+- **Limits.** Up to 10 schedules per member and agent. `schedule_next` computes due times in the schedule's own timezone.
+- **Who may use them.** `schedule_command` and `schedule_state` (customer role) require that the member can invoke the agent. Commands are audited and idempotent.
+
+**Runs.** The knowledge worker calls `schedule_tick` every 30 s.
+
+- **One run per due schedule.** A due schedule launches one run, and its next time is computed from now, so missed times collapse into one run.
+- **Where it runs.** `schedule_launch` finds the agent's running, authorized deployment that the schedule's member authorized. If there is none it records a skipped run with a reason: no running version, offline, a run still in progress, member inactive, or agent unavailable.
+- **How it runs.** Otherwise it queues an ordinary staging turn in the schedule's own conversation ("Programación: …"), one per schedule and deployment, renewed when full or expiring. The turn wakes a resting agent as a chat message would, and the conversation appears in Chats.
+- **The turn's message.** The instruction is framed as a schedule: no one is present, and which writes, if any, run without further confirmation.
+- **Model.** The schedule's model when the approved version allows it, otherwise the deployment's first model.
+- **Tracking.** A run follows its turn's status through a trigger.
+- **Ejecutar ahora** launches a run at most once a minute.
+
+**Pre-authorized writes.** A Gmail write proposal still ends its turn (the broker's fixed answer), so a run proposes at most one write.
+
+- **Approval.** An insert trigger on `gmail_invocations` sets `approved_by_schedule_id` when all of these hold: the proposal comes from a scheduled run's turn, for the schedule's own member, the schedule authorized that operation, and the run has none approved yet. The proposal itself is unchanged.
+- **Execution.** The knowledge worker's new `action` lane claims such proposals with `schedule_action_claim`. That rechecks the authority the person's confirmation would check:
+  - the conversation is still authorized;
+  - the connection and its live grant are intact;
+  - the frozen version grants the operation;
+  - the schedule is not deleted and still authorizes it.
+
+  If all hold, the proposal moves to executing. The worker then does what the customer app does after a confirmation (`runScheduledAction`): it opens the arguments, checks them against their hash, refreshes the token and makes one Gmail call. It records the outcome with `schedule_action_complete`, never retrying. An uncertain send stays uncertain, and a refused token marks the account for reconnection.
+- **What the person can still do.** They cannot confirm a pre-authorized write, but they can cancel it from the conversation until it starts. Deleting the schedule cancels the ones not yet started.
+- **Wording.** `gmail_staging` now returns `automatic`, and the broker's fixed answer then says the schedule authorized the action and it will run automatically. Earlier brokers keep the confirmation wording until replaced.
+- **General model.** It records the owner as the approver, which is accurate: they pre-authorized it.
+
+**Presentation.** The tab is a card with a "Nueva programación" button and a table:
+
+- **Columns:** Nombre (opens the form), Frecuencia, Próxima (in the schedule's timezone), Última (the last run's outcome, which opens the history), Automáticas, Estado (the row's badge: Activa or En pausa), and actions (Ejecutar ahora, Pausar or Reanudar, Eliminar with confirmation).
+- **Form fields:** name, instruction, cadence, day or interval, time, timezone with suggestions, and model (the running version's passing models).
+- **Automatic actions:** a dashed section offers only the writes the running version is granted. It says plainly that they run without confirmation, once per run, to any recipient, and that they can be cancelled until they start. Choosing any write requires an explicit consent box naming them.
+- **History:** each run's time, outcome, reason, its actions (automatic or waiting for the person, done or not) and a link to its conversation. Chats now opens a conversation given by `?conversation=`.
+- **No running version:** the tab says runs will be skipped.
+- **The tab** shows only for members who can use the agent.
+
+**Not covered yet.** Proposing schedules from a chat (a runtime tool, with an evaluation case for it), confirmation through Slack, and schedules outliving the 7-day staging deployments (D5/D6).
+
+**Tests:**
+
+- **Database (replayed migrations):**
+  - due times in Caracas and Madrid for each cadence;
+  - validation: timezone, retired model, consent for writes, reads refused as autonomy;
+  - privacy between members, pause and resume, deletion;
+  - a skipped run without a deployment;
+  - a due schedule queuing one turn in its own conversation, once for missed times, then busy;
+  - run status following the turn.
+  - **The full write path:** a Gmail-tool version approved by staff and running; a scheduled run proposing two sends, where only the first is pre-authorized. The person cannot confirm it; the worker claims it once with the credential and completes it once, and the arguments are erased. The second waits for the person, and deleting the schedule cancels a pre-authorized write that has not started.
+- **Worker:**
+  - one send with exact arguments;
+  - changed arguments refused without a call;
+  - an uncertain send not retried;
+  - a refused token asks to reconnect;
+  - tick logs carry counts only;
+  - the broker's automatic answer.
+- **Contract and rendering:** form validation and the Spanish cadence wording; the tab when empty, without a running version, and with a schedule.
+
+**Rollout.**
+
+1. Apply migration 62.
+2. Install platform 0.29.0: the knowledge worker gains the tick and action lane, and the customer app gains the tab.
+3. Install a new staging broker (`install-staging --azure`, side by side) for the automatic wording; until then runs say the action awaits confirmation while it executes.

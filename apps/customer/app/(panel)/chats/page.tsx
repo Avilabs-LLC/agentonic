@@ -5,7 +5,11 @@ import { customerWorkspace } from "@/lib/workspace"
 export default async function Page({
   searchParams,
 }: {
-  searchParams: Promise<{ workspace?: string; deployment?: string }>
+  searchParams: Promise<{
+    workspace?: string
+    deployment?: string
+    conversation?: string
+  }>
 }) {
   const { selected } = await customerWorkspace(searchParams)
   const params = await searchParams
@@ -17,6 +21,7 @@ export default async function Page({
       workspaceId={selected.id}
       initial={data}
       initialDeployment={params.deployment}
+      initialConversation={params.conversation}
     />
   )
 }

@@ -31,7 +31,7 @@ import {
 } from "@agentonic/contracts/runtime-protocol"
 import {
   BUDGET_STOP_ANSWER,
-  PROPOSAL_ANSWER,
+  proposalAnswer,
   TurnBroker,
   runBrokeredTurn,
 } from "./broker"
@@ -354,7 +354,7 @@ export async function generatePreview(
       )
       if (!gmailReads.some((op) => op === operation))
         return {
-          text: PROPOSAL_ANSWER,
+          text: proposalAnswer(result),
           citations: [],
           insufficientEvidence: true,
         }

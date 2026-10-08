@@ -1,5 +1,7 @@
 import { ServerIcon } from "lucide-react"
 import { loadGmail } from "@agentonic/server/gmail"
+import { loadSchedules } from "@agentonic/server/schedules"
+import { AgentSchedules } from "@workspace/ui/components/agent-schedules"
 import { loadLifecycle } from "@agentonic/server/lifecycle"
 import { AgentLifecycle } from "@workspace/ui/components/agent-lifecycle"
 import { customerAgentAvailability } from "@agentonic/contracts/availability"
@@ -32,15 +34,24 @@ export default async function Page({
 }) {
   const { selected } = await customerWorkspace(searchParams)
   const { id } = await params
-  const [lifecycle, data, workspace, evaluations, reviewFlow, gmail] =
-    await Promise.all([
-      loadLifecycle("customer", selected.id, id),
-      loadAgent(selected.id, id),
-      loadWorkspace(selected.id),
-      loadEvaluations("customer", selected.id, id),
-      loadReviewFlow("customer", selected.id, id),
-      loadGmail(selected.id, id),
-    ])
+  const [
+    lifecycle,
+    data,
+    workspace,
+    evaluations,
+    reviewFlow,
+    gmail,
+    schedules,
+  ] = await Promise.all([
+    loadLifecycle("customer", selected.id, id),
+    loadAgent(selected.id, id),
+    loadWorkspace(selected.id),
+    loadEvaluations("customer", selected.id, id),
+    loadReviewFlow("customer", selected.id, id),
+    loadGmail(selected.id, id),
+    // Only members who may use the agent see its schedules.
+    loadSchedules(selected.id, id).catch(() => null),
+  ])
   if (!data || !workspace || !lifecycle) notFound()
   if (!evaluations || !reviewFlow)
     throw new Error("No se pudieron cargar las evaluaciones.")
@@ -61,6 +72,15 @@ export default async function Page({
         }
       />
       <AgentPageTabs
+        schedules={
+          schedules && (
+            <AgentSchedules
+              workspaceId={selected.id}
+              agentId={id}
+              initial={schedules}
+            />
+          )
+        }
         activation={
           <AgentLifecycle
             state={lifecycle}

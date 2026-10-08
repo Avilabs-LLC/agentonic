@@ -9,7 +9,7 @@ import { RAG_MODEL, RAG_DIMENSIONS } from "@agentonic/contracts/rag"
 export type Lease = {
   id: string
   token: string
-  kind: "ingest" | "purge" | "retrieve" | "style"
+  kind: "ingest" | "purge" | "retrieve" | "style" | "action"
   /** When the job was queued (migration 56), for the job log's queue delay. */
   queuedAt?: string | null
 }

@@ -10,6 +10,12 @@ import { scheduleRetention } from "./retention"
 import { directProviders, providerKeys } from "./providers"
 import { storageSession } from "./storage-session"
 import { runStyleGuide, StyleStopped, type StyleJob } from "./style-guide"
+import {
+  runScheduledAction,
+  scheduledAction,
+  scheduleTicks,
+  type ScheduledAction,
+} from "./schedules"
 const env = {
   ...(existsSync(new URL("../.env.local", import.meta.url))
     ? parse(readFileSync(new URL("../.env.local", import.meta.url)))
@@ -144,8 +150,33 @@ async function runStyle(job: StyleJob & LaneJob, stopping: AbortSignal) {
     clearInterval(heartbeat)
   }
 }
+async function runAction(job: ScheduledAction & LaneJob) {
+  const startedAt = Date.now()
+  let failed: string | undefined
+  await runScheduledAction(
+    job,
+    async (outcome, detail) => {
+      if (outcome !== "succeeded") failed = String(detail.code ?? outcome)
+      await pool.query(
+        "SELECT agentonic.schedule_action_complete($1::uuid,$2,$3::jsonb) result",
+        [job.id, outcome, JSON.stringify(detail)]
+      )
+    },
+    keys.google!
+  ).catch(() => {
+    failed = "lease_lost"
+  })
+  logJob({
+    service: "knowledge",
+    job,
+    startedAt,
+    finishedAt: Date.now(),
+    code: failed,
+  })
+}
 async function run(job: LaneJob, stopping: AbortSignal) {
   if (job.lane === "style") return runStyle(job as StyleJob & LaneJob, stopping)
+  if (job.lane === "action") return runAction(job as ScheduledAction & LaneJob)
   const lost = new AbortController()
   const signal = AbortSignal.any([stopping, lost.signal])
   const heartbeat = setInterval(() => {
@@ -180,8 +211,11 @@ async function main() {
       lanes,
     })
   )
-  if (!process.argv.includes("--once"))
+  if (!process.argv.includes("--once")) {
     scheduleRetention((sql) => pool.query(sql), stop.signal)
+    // Due schedules queue their runs (§58); deployments wake for them.
+    scheduleTicks((sql, params) => pool.query(sql, params), stop.signal)
+  }
   try {
     await serveLanes({
       lanes,
@@ -199,7 +233,15 @@ async function main() {
               ).rows[0].result
             )
           : null
-        if (job || !free.includes("style") || !keys.google) return job
+        if (job || !keys.google) return job
+        // A pre-authorized write waits seconds at most; it goes before a guide.
+        if (free.includes("action")) {
+          const action = (
+            await pool.query("SELECT agentonic.schedule_action_claim() result")
+          ).rows[0].result
+          if (action) return scheduledAction.parse(action)
+        }
+        if (!free.includes("style")) return null
         return styleClaimed.parse(
           (await pool.query("SELECT agentonic.style_guide_claim() result"))
             .rows[0].result

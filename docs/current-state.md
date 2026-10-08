@@ -1,6 +1,6 @@
 # Agentonic: current state
 
-**As of 8 October 2026 · platform v0.28.0 · nonproduction only.** A short summary of what runs where, what works and what doesn't exist yet. [The architecture record](agentonic-architecture.md) keeps the full, dated history. If the two disagree about the present, fix this page. Update it whenever a change alters what runs where.
+**As of 8 October 2026 · platform v0.29.0 · nonproduction only.** A short summary of what runs where, what works and what doesn't exist yet. [The architecture record](agentonic-architecture.md) keeps the full, dated history. If the two disagree about the present, fix this page. Update it whenever a change alters what runs where.
 
 ## What runs where
 
@@ -33,7 +33,9 @@ On 6 October the whole flow ran on the hosted names with no Agentonic process on
 
 Existing agents move to runtime 0.5.0 with their next version.
 
-**Aprender mi estilo (architecture §57), merged in platform v0.28.0, not yet installed.** In each Gmail account's frame in Configuración, the person who connected it can have the knowledge worker read the mail they sent in the last 90 days (at most 200 messages, never stored) and draft a writing-style guide. They review and edit it before it is added to a collection they curate. Until installed, Configuración shows Gmail accounts as before.
+**Aprender mi estilo (architecture §57), installed 8 October with platform v0.28.0.** In each Gmail account's frame in Configuración, the person who connected it can have the knowledge worker read the mail they sent in the last 90 days (at most 200 messages, never stored) and draft a writing-style guide. They review and edit it before it is added to a collection they curate.
+
+**Scheduled jobs (architecture §58), merged in platform v0.29.0, not yet installed.** A Programaciones tab on the agent page lets a member schedule an instruction for an agent whose running version they authorized. Each run is an ordinary turn in the schedule's own conversation in Chats. By owner direction, a schedule may pre-authorize one Gmail write per run (to any recipient), which the platform executes without asking. The person can cancel it until it starts. Until installed, nothing runs on a schedule.
 
 The Admin app has **Revisiones** (submissions, receipts, renewal and activation), **Vencimientos** (what expires, when and who must act), and the operations screens **Agentes**, **Despliegues**, **Actividad**, **Costos**, **Espacios de trabajo** and **Runtime** (architecture §52). Both agent lists show each agent's Recursos (the saved draft's counts), version in use and next version, Admin has a page per agent that every agent name opens, and Vencimientos groups servers by place (architecture §55). Installing servers, publishing runtimes and renewing verification are still done with scripts on the Mac; the screens show their state.
 
@@ -94,5 +96,6 @@ The ordered plan is architecture §37; the owner's audit brief tracks progress. 
 | What is in use and what comes next; the Admin agent page               | §55                  |
 | Evaluation lessons: criteria as requests, rubric 5, per-model approval | §56                  |
 | Aprender mi estilo: a style guide from the member's own sent mail      | §57                  |
+| Scheduled jobs and pre-authorized writes                               | §58                  |
 
-Presentation rules are in the [UI contract](ui/ui-contract.md). The [target schema](schema.dbml) describes 80 tables; 63 exist in the 61 checked-in migrations.
+Presentation rules are in the [UI contract](ui/ui-contract.md). The [target schema](schema.dbml) describes 82 tables; 65 exist in the 62 checked-in migrations.
