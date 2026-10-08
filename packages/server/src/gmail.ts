@@ -3,6 +3,7 @@ import { randomBytes, timingSafeEqual } from "node:crypto"
 import { cookies } from "next/headers"
 import { withIdentity } from "@agentonic/database/client"
 import { requireVerifiedUser } from "./auth"
+import { loadStyleGuides } from "./style-guide"
 import {
   gmailState,
   gmailArguments,
@@ -62,9 +63,11 @@ async function command(
   })
 }
 export async function loadGmail(workspace: string, agentId: string) {
-  const state = gmailState.parse(
-    await command(workspace, "list", { agentId: uuid.parse(agentId) })
-  )
+  const [connections, styleGuides] = await Promise.all([
+    command(workspace, "list", { agentId: uuid.parse(agentId) }),
+    loadStyleGuides(workspace, agentId),
+  ])
+  const state = gmailState.parse({ ...connections, styleGuides })
   let available = true
   try {
     googleConfig()

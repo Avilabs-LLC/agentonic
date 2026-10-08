@@ -6,9 +6,10 @@ import { useRouter } from "next/navigation"
 import {
   PlugIcon,
   WrenchIcon,
-  MailIcon,
   CheckIcon,
+  CircleCheckIcon,
   PlusIcon,
+  TriangleAlertIcon,
 } from "lucide-react"
 import {
   gmailLabels,
@@ -35,6 +36,10 @@ import {
   SelectItem,
 } from "@workspace/ui/components/select"
 import { notify } from "@workspace/ui/lib/toast"
+import { GmailIcon } from "@workspace/ui/components/gmail-icon"
+import { StyleLearning } from "@workspace/ui/components/style-learning"
+import { iconTones } from "@workspace/ui/components/status-badge"
+import { cn } from "cn"
 export async function gmailCommand(
   workspace: string,
   operation: string,
@@ -51,6 +56,40 @@ export async function gmailCommand(
     throw new Error(String(result.error ?? "No se pudo completar la acción."))
   return result
 }
+/** An account's identity and connection state: Gmail's logo, the address and a check. */
+export function GmailAccount({
+  account,
+  status,
+}: {
+  account: string
+  status: GmailState["connections"][number]["status"]
+}) {
+  return (
+    <div className="flex min-w-0 items-center gap-3">
+      <GmailIcon className="size-6 shrink-0" />
+      <div className="min-w-0">
+        <p className="text-sm font-medium">Gmail</p>
+        <p className="text-sm break-all text-muted-foreground">{account}</p>
+        <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
+          {status === "connected" ? (
+            <CircleCheckIcon
+              className={cn("size-3.5", iconTones.success)}
+              aria-hidden="true"
+            />
+          ) : (
+            <TriangleAlertIcon
+              className={cn("size-3.5", iconTones.warning)}
+              aria-hidden="true"
+            />
+          )}
+          {status === "connected"
+            ? "Cuenta conectada"
+            : "Necesita volver a conectarse"}
+        </p>
+      </div>
+    </div>
+  )
+}
 export function GmailConnection({
   state,
   workspaceId,
@@ -58,6 +97,8 @@ export function GmailConnection({
   tools,
   onTools,
   disabled,
+  collections = [],
+  agentCollectionIds = [],
 }: {
   state: GmailState
   workspaceId: string
@@ -65,6 +106,9 @@ export function GmailConnection({
   tools: AgentView["draft"]["requestedAccess"]["tools"]
   onTools: (tools: AgentView["draft"]["requestedAccess"]["tools"]) => void
   disabled: boolean
+  /** Collections the member curates, for an accepted style guide (§57). */
+  collections?: { id: string; name: string }[]
+  agentCollectionIds?: string[]
 }) {
   const router = useRouter(),
     [busy, setBusy] = useState(false),
@@ -119,37 +163,37 @@ export function GmailConnection({
         title="Conexiones"
         icon={<PlugIcon />}
         description="Conecta una cuenta y elige qué puede hacer este agente."
-        footer="La cuenta es privada y solo tú puedes autorizar acciones. Conectarla no importa correos a Conocimiento. Puedes habilitar sus herramientas al iniciar Probar agente; después de la activación también se usan desde Chats."
+        footer="La cuenta es privada y solo tú puedes autorizar acciones. Conectarla no importa correos a Conocimiento; Aprender mi estilo solo agrega la guía que revises. Puedes habilitar sus herramientas al iniciar Probar agente; después de la activación también se usan desde Chats."
       >
         <div className="space-y-4">
           {state.connections.length ? (
             state.connections.map((c) => (
-              <div
-                key={c.id}
-                className="flex flex-wrap items-center justify-between gap-4 rounded-lg border p-4"
-              >
-                <div className="flex min-w-0 items-center gap-3">
-                  <MailIcon className="size-5 shrink-0 text-muted-foreground" />
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium">Gmail</p>
-                    <p className="text-sm break-all text-muted-foreground">
-                      {c.account}
-                    </p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {c.status === "connected"
-                        ? "Cuenta conectada"
-                        : "Necesita volver a conectarse"}
-                    </p>
-                  </div>
+              <div key={c.id} className="space-y-4 rounded-lg border p-4">
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                  <GmailAccount account={c.account} status={c.status} />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={disabled || busy}
+                    onClick={() => setRemove(c.id)}
+                  >
+                    Desconectar
+                  </Button>
                 </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={disabled || busy}
-                  onClick={() => setRemove(c.id)}
-                >
-                  Desconectar
-                </Button>
+                {c.status === "connected" && (
+                  <StyleLearning
+                    workspaceId={workspaceId}
+                    agentId={agentId}
+                    connection={c}
+                    initial={state.styleGuides.find(
+                      (g) => g.connectionId === c.id
+                    )}
+                    collections={collections}
+                    agentCollectionIds={agentCollectionIds}
+                    disabled={disabled || busy}
+                    onAccepted={() => router.refresh()}
+                  />
+                )}
               </div>
             ))
           ) : (

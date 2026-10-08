@@ -11,7 +11,7 @@
 
 ## Next up
 
-1. **N10** — "Aprender mi estilo": a writing-style guide from the member's own sent mail (owner request, 8 October), in progress.
+1. **N10** — "Aprender mi estilo": built (§57); install platform 0.28.0 and run it live.
 2. **N9** — scheduled jobs for agents (owner request, 8 October).
 3. **C13** — the owner's live password reset and Admin authenticator sign-in; the invitation passed on 8 October.
 4. **B8** — tell the agent which Gmail actions were confirmed since its last turn (found in B2).

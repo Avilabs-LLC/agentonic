@@ -1203,6 +1203,40 @@ model GmailConnection {
   @@map("gmail_connections")
   @@schema("agentonic")
 }
+// Aprender mi estilo (migration 61): progress, cost and, until the member
+// decides, the drafted guide. Never message content. Functions only.
+model StyleGuide {
+ id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+ workspaceId String @map("workspace_id") @db.Uuid
+ agentId String @map("agent_id") @db.Uuid
+ connectionId String @map("connection_id") @db.Uuid
+ memberId String @map("member_id") @db.Uuid
+ requestId String @map("request_id") @db.Uuid
+ status String @default("queued")
+ windowDays Int @default(90) @map("window_days")
+ maxMessages Int @default(200) @map("max_messages")
+ messagesTotal Int? @map("messages_total")
+ messagesRead Int @default(0) @map("messages_read")
+ messagesUsed Int? @map("messages_used")
+ batchesTotal Int? @map("batches_total")
+ batchesDone Int @default(0) @map("batches_done")
+ budgetUsd Decimal @map("budget_usd") @db.Decimal(20,8)
+ committedMicrousd BigInt @default(0) @map("committed_microusd")
+ guide String?
+ objectId String? @map("object_id") @db.Uuid
+ errorCode String? @map("error_code")
+ consent Json
+ workerLease String? @map("worker_lease") @db.Uuid
+ leaseUntil DateTime? @map("lease_until") @db.Timestamptz
+ createdAt DateTime @default(dbgenerated("clock_timestamp()")) @map("created_at") @db.Timestamptz
+ startedAt DateTime? @map("started_at") @db.Timestamptz
+ finishedAt DateTime? @map("finished_at") @db.Timestamptz
+ expiresAt DateTime? @map("expires_at") @db.Timestamptz
+ @@unique([workspaceId,id])
+ @@unique([memberId,requestId])
+ @@map("style_guides")
+ @@schema("agentonic")
+}
 model GmailOauthState {
   stateHash String @id @map("state_hash")
   workspaceId String @map("workspace_id") @db.Uuid

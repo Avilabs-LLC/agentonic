@@ -4,14 +4,29 @@
 // picks the job, sharing each lane fairly between workspaces.
 import type { Lease } from "./pipeline"
 
-export const LANES = ["purge", "ingest", "retrieve", "preview"] as const
+export const LANES = [
+  "purge",
+  "ingest",
+  "retrieve",
+  "preview",
+  "style",
+] as const
 export type Lane = (typeof LANES)[number]
+/** Lanes the database's knowledge claim serves; "style" has its own (§57). */
+export const KNOWLEDGE_LANES = [
+  "purge",
+  "ingest",
+  "retrieve",
+  "preview",
+] as const
 /** Jobs the worker runs at once in each lane. */
 export const LANE_SLOTS: Readonly<Record<Lane, number>> = {
   purge: 1,
   ingest: 2,
   retrieve: 2,
   preview: 4,
+  // Aprender mi estilo reads up to 200 messages; one run at a time is enough.
+  style: 1,
 }
 export type LaneJob = Lease & { lane: Lane }
 

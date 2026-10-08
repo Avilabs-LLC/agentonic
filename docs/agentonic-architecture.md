@@ -1802,3 +1802,89 @@ Unit tests cover:
 Agents move to runtime 0.5.0 with their next version.
 
 **Not changed.** Evaluations still test situations one at a time and without the customer's live tools (D17).
+
+## 57. Aprender mi estilo: a writing-style guide from the member's own sent mail — 8 October 2026
+
+The owner asked for agents to write like the person they help. Earlier the same day, a request to scan a customer's sent mail directly was declined: that meant decrypting the customer's Google token outside every platform control. This feature is the consented path instead. Migration 61, platform 0.28.0.
+
+**Where it lives.** It is a row inside each Gmail account's frame in the Conexiones card of Configuración, not among the Herramientas checkboxes.
+
+- **Not a tool.** Those checkboxes are permissions a version holds and review checks. Learning is a one-off job the account holder runs, and it produces a document.
+- **Distinct look.** The row uses a round box, a sparkle mark and a dashed primary frame.
+- **Account header.** The frame now shows Gmail's coloured logo, and a check beside "Cuenta conectada" (a warning icon beside "Necesita volver a conectarse").
+
+**Consent.** Ticking the box opens a dialog. It states that:
+
+- only mail the person sent in the last 90 days is read, at most 200 messages;
+- forwards, automatic replies and other people's quoted text are skipped;
+- the mail is analyzed with OpenAI and not stored;
+- the guide describes style, not content;
+- they review the guide before it joins Conocimiento, and it is erased after 7 days without a decision.
+
+The person sets a spending limit of US$0.25–2 (default US$0.50) and gives explicit consent.
+
+**Who may run it.** `style_guide_command` (customer role) starts a run only for:
+
+- the member who connected the account;
+- on an agent they can edit;
+- while the account is connected.
+
+There is one active run per account, and requests are idempotent. The consent version and time are recorded, and every command is audited.
+
+**The run.** It runs in the knowledge worker's new `style` lane (one slot), under a lease, through `style_guide_claim` and `style_guide_worker` (worker role).
+
+- **Checks before every step:** the account is still connected and its owner is still an active member. A lapsed lease fails the run without retrying; reservations stay charged.
+- **Reading:** the worker refreshes the token and lists `in:sent newer_than:90d -in:chats`. It reads each message and keeps only messages from the account itself, with their own text. Quoted replies (Spanish, English and Outlook forms), signatures and `>` lines are cut, and messages under 40 characters are skipped.
+- **What the analysis sees:** the text, plus the audience shape (internal, external or mixed, from domains), the recipient count and whether it is a reply. Never names, addresses or subjects.
+- **Analysis:** batches of up to 15 messages and 18,000 characters are analyzed by GPT-5.4 mini at low reasoning. The prompts forbid names, figures and phrases over six words. A last call writes the guide in fixed sections: rules for the assistant and three invented examples.
+- **Copied-phrase guard:** any guide line sharing nine consecutive words with the mail is removed, and addresses become "[correo]".
+- **Too little mail:** fewer than 5 usable messages ends the run as `not_enough_mail` before any model call.
+- **Lost authorization:** a 401 from Google marks the connection for reconnection.
+
+**What is stored.** `style_guides` holds progress counts, cost, the error code and, only while it waits for a decision, the drafted guide. It never holds message content. Progress steps only move forward and carry counts only.
+
+**Review.** "Revisar guía" opens the guide as editable Markdown, with a choice among the collections the person curates. The dialog warns when the collection is not one the agent uses.
+
+- **Accept:** the customer app stores the reviewed text through the ordinary upload path (`storeDocument`, refactored out of the upload route) as the person. The run records the stored object, and the draft is erased.
+- **Discard or expiry:** the draft is erased.
+- **When the agent uses it:** from its next version.
+
+**Presentation.** The row is a live stepper polled every 3 s while a run is queued or running:
+
+1. Leer tus correos enviados, with "120 de 200".
+2. Analizar tu estilo, with the batch.
+3. Redactar la guía.
+4. Revisar y agregar a Conocimiento.
+
+- **Spinner:** only for a running step. A queued run shows a clock and "Empezará en cuanto haya un turno libre".
+- **Progress bar:** determinate, only where counts exist.
+- **Background note:** the person may close the page.
+- **States:** labels and tones come from the shared `styleGuide` descriptor map.
+- **Done:** an animated check (reduced-motion aware) says "Agregada a Conocimiento", with the document and collection, and points to preparing a new version.
+
+**Spend.** Usage events attribute these operations to a new `style_guide` source.
+
+**Tests:**
+
+- **Database (replayed migrations):**
+  - only the owner may start, read or cancel;
+  - one run at a time, idempotent;
+  - the worker lane and lease;
+  - forward-only progress with counts only;
+  - GPT-5.4 mini metering against the run's budget;
+  - no guide while a reservation is open;
+  - accept links the person's own document and erases the draft; discard and expiry erase it;
+  - lapsed leases, cancellation and disconnection;
+  - no direct table access, and other roles refused.
+- **Worker, with Gmail and the model mocked:**
+  - quote, forward, signature and auto-reply handling;
+  - audience shape without addresses;
+  - batching and the copied-phrase guard;
+  - the sent-mail query;
+  - the analysis input carries no address or subject;
+  - nothing the database receives contains mail text;
+  - too little mail stops before any model call;
+  - a Google refusal asks to reconnect.
+- **Rendering:** the row in each state (no spinner while queued, counts while reading, review, accepted, failure) and the account header.
+
+**Rollout.** Apply migration 61 and install platform 0.28.0; the knowledge worker already holds the Google settings and connection keys. Live check: run it on the hosted app with the owner's or a consenting customer's account.

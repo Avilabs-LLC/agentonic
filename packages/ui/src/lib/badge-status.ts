@@ -5,6 +5,7 @@ import {
 } from "@agentonic/contracts/authoring"
 import { evaluationStatus } from "@agentonic/contracts/evaluation"
 import type { RegistrationState } from "@agentonic/contracts/expiry"
+import type { StyleGuideStatus } from "@agentonic/contracts/style-guide"
 import { approvalLabels } from "@agentonic/contracts/lifecycle"
 import {
   reviewFlowLabels,
@@ -179,6 +180,18 @@ export const statusMaps = {
     superseded: state("Reemplazado", "teal", "archive"),
     unauthorized: state("Autorización no vigente", "pink", "alert"),
   },
+  // Aprender mi estilo (architecture §57): inline in each Gmail account's frame.
+  styleGuide: {
+    queued: state("En cola", "warning", "clock"),
+    reading: state("Leyendo tus correos enviados", "sky", "activity"),
+    analyzing: state("Analizando tu estilo", "sky", "activity"),
+    writing: state("Redactando la guía", "sky", "activity"),
+    ready: state("Lista para revisar", "warning", "alert"),
+    accepted: state("Agregada a Conocimiento", "success", "check"),
+    discarded: state("Descartada", "slate", "minus"),
+    failed: state("No se pudo completar", "error", "x"),
+    cancelled: state("Cancelada", "slate", "minus"),
+  } satisfies Record<StyleGuideStatus, StatusDescriptor>,
   // Host and evaluator verification. "Vence pronto" means within a day, when
   // the twice-daily renewal should already have run.
   registration: {

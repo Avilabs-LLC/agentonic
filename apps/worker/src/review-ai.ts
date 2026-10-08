@@ -7,7 +7,11 @@ import type { Execute, Lease } from "./pipeline"
  * The model that writes criteria or grades. A run's grader snapshot binds its
  * rubric version to one of these, and the database meters only that model.
  */
-type Reviewer = { model: string; reasoning: "low" | null; maxOutput: number }
+export type Reviewer = {
+  model: string
+  reasoning: "low" | null
+  maxOutput: number
+}
 const legacyGrader: Reviewer = {
   model: "gpt-4.1-mini-2025-04-14",
   reasoning: null,
@@ -109,7 +113,8 @@ La configuración (systemPrompt y skills) define el comportamiento propio del ag
 Si la situación pregunta al agente por sí mismo en vez de pedirle una tarea, evalúa si su descripción coincide con la configuración y propone en suggestion reescribirla como una petición concreta que muestre el comportamiento.
 Decir que no puede confirmar algo que la configuración establece, o seguir un documento que la contradice, es needs_changes: en suggestion nombra la regla de la configuración y, si aplica, el documento que la contradice, y pide alinearlos.
 suggestion propone un cambio concreto en la configuración, los documentos o la situación. Nunca pidas registros, más evidencia en general ni que se pegue la configuración. Usa uncertain solo cuando configuración, fuentes y fixtures juntos no permiten decidir, y explica qué falta en términos que el cliente pueda corregir.`
-async function structured(
+/** One metered structured-output call; also used by Aprender mi estilo. */
+export async function structured(
   input: unknown,
   instructions: string,
   schema: unknown,

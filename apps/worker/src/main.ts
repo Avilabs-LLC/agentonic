@@ -3,12 +3,13 @@ import { parse } from "dotenv"
 import pg from "pg"
 import { z } from "zod"
 import { workerFailure } from "./failure"
-import { LANES, serveLanes, type LaneJob } from "./lanes"
+import { KNOWLEDGE_LANES, LANES, serveLanes, type LaneJob } from "./lanes"
 import { logJob } from "./job-log"
 import { processJob, type Execute } from "./pipeline"
 import { scheduleRetention } from "./retention"
 import { directProviders, providerKeys } from "./providers"
 import { storageSession } from "./storage-session"
+import { runStyleGuide, StyleStopped, type StyleJob } from "./style-guide"
 const env = {
   ...(existsSync(new URL("../.env.local", import.meta.url))
     ? parse(readFileSync(new URL("../.env.local", import.meta.url)))
@@ -52,11 +53,12 @@ pool.on("error", () => {
   console.error(JSON.stringify({ event: "knowledge_worker_connection_lost" }))
 })
 // Storage through the worker's own account; it holds no Supabase secret key.
+const keys = providerKeys(env)
 const config = {
   storage: storageSession(env),
   rerankEnabled: env.AGENTONIC_RERANK_ENABLED === "true",
   runtimeRoot: env.AGENTONIC_RUNTIME_ROOT,
-  providers: directProviders(providerKeys(env)),
+  providers: directProviders(keys),
 }
 const execute: Execute = async (operation, job, payload = {}) => {
   const result = await pool.query(
@@ -69,6 +71,33 @@ const execute: Execute = async (operation, job, payload = {}) => {
   )
   return result.rows[0].result
 }
+// Aprender mi estilo has its own functions, lease and budget (migration 61).
+const styleExecute: Execute = async (operation, job, payload = {}) =>
+  (
+    await pool.query(
+      "SELECT agentonic.style_guide_worker($1,$2::uuid,$3::uuid,$4::jsonb) result",
+      [operation, job.id, job.token, JSON.stringify(payload)]
+    )
+  ).rows[0].result
+const styleClaimed = z
+  .object({
+    id: z.uuid(),
+    token: z.uuid(),
+    kind: z.literal("style"),
+    lane: z.literal("style"),
+    queuedAt: z.string().nullable().optional(),
+    connectionId: z.uuid(),
+    windowDays: z.number().int(),
+    maxMessages: z.number().int(),
+  })
+  .nullable()
+const STYLE_FAILURES = [
+  "configuration_required",
+  "gmail_unavailable",
+  "not_enough_mail",
+  "budget_exhausted",
+  "provider_unavailable",
+]
 const stop = new AbortController()
 process.once("SIGTERM", () => stop.abort())
 process.once("SIGINT", () => stop.abort())
@@ -81,7 +110,42 @@ const claimed = z
     queuedAt: z.string().nullable().optional(),
   })
   .nullable()
+async function runStyle(job: StyleJob & LaneJob, stopping: AbortSignal) {
+  const lost = new AbortController()
+  const signal = AbortSignal.any([stopping, lost.signal])
+  const heartbeat = setInterval(() => {
+    void styleExecute("heartbeat", job).catch(() => lost.abort())
+  }, 20000)
+  const startedAt = Date.now()
+  try {
+    await runStyleGuide(
+      job,
+      styleExecute,
+      { google: keys.google, openaiKey: keys.openaiKey },
+      signal
+    )
+    logJob({ service: "knowledge", job, startedAt, finishedAt: Date.now() })
+  } catch (error) {
+    // Codes only: a failure never carries message text.
+    const code =
+      error instanceof Error && STYLE_FAILURES.includes(error.message)
+        ? error.message
+        : "lease_lost"
+    if (!(error instanceof StyleStopped))
+      await styleExecute("fail", job, { code }).catch(() => {})
+    logJob({
+      service: "knowledge",
+      job,
+      startedAt,
+      finishedAt: Date.now(),
+      code: error instanceof StyleStopped ? "reconnect" : code,
+    })
+  } finally {
+    clearInterval(heartbeat)
+  }
+}
 async function run(job: LaneJob, stopping: AbortSignal) {
+  if (job.lane === "style") return runStyle(job as StyleJob & LaneJob, stopping)
   const lost = new AbortController()
   const signal = AbortSignal.any([stopping, lost.signal])
   const heartbeat = setInterval(() => {
@@ -121,14 +185,26 @@ async function main() {
   try {
     await serveLanes({
       lanes,
-      claim: async (free) =>
-        claimed.parse(
-          (
-            await pool.query("SELECT agentonic.knowledge_claim($1) result", [
-              free,
-            ])
-          ).rows[0].result
-        ),
+      claim: async (free) => {
+        const knowledge = free.filter((lane) =>
+          (KNOWLEDGE_LANES as readonly string[]).includes(lane)
+        )
+        const job = knowledge.length
+          ? claimed.parse(
+              (
+                await pool.query(
+                  "SELECT agentonic.knowledge_claim($1) result",
+                  [knowledge]
+                )
+              ).rows[0].result
+            )
+          : null
+        if (job || !free.includes("style") || !keys.google) return job
+        return styleClaimed.parse(
+          (await pool.query("SELECT agentonic.style_guide_claim() result"))
+            .rows[0].result
+        )
+      },
       run,
       unavailable: () =>
         console.error(
