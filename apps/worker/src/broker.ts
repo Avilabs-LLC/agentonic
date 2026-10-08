@@ -27,6 +27,13 @@ export const BUDGET_STOP_ANSWER =
   "La búsqueda alcanzó el presupuesto disponible antes de completar la respuesta. No pude terminar la verificación de todos tus criterios. La búsqueda se ha detenido; no continuará en segundo plano."
 export const PROPOSAL_ANSWER =
   "He preparado una acción de Gmail. Revisa la cuenta, los destinatarios y el contenido en la tarjeta de confirmación. Todavía no se ha realizado ningún cambio."
+/** A write the run's schedule pre-authorized (§58): the platform executes it. */
+export const SCHEDULED_ACTION_ANSWER =
+  "He preparado una acción de Gmail que esta programación autorizó. Se ejecutará automáticamente; su resultado aparecerá en la tarjeta de la acción."
+export const proposalAnswer = (result: unknown) =>
+  (result as { automatic?: unknown } | null)?.automatic === true
+    ? SCHEDULED_ACTION_ANSWER
+    : PROPOSAL_ANSWER
 
 type Options = {
   job: Lease
@@ -285,7 +292,7 @@ export class TurnBroker {
     )
     if (!gmailReads.some((read) => read === op.operation)) {
       await this.finish({
-        text: PROPOSAL_ANSWER,
+        text: proposalAnswer(result),
         citations: [],
         insufficientEvidence: true,
       })

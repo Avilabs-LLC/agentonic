@@ -24,6 +24,23 @@ export function AgentEditorSkeleton() {
       <BackRowSkeleton />
       <RecordHeaderSkeleton indicator="metadata" />
       <AgentPageTabs
+        schedules={
+          <Card className="gap-5 py-6 [--card-spacing:--spacing(6)]">
+            <CardHeader className="gap-2">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5">
+                  <Skeleton className="size-5" />
+                  <Skeleton className="h-7 w-48 max-w-full" />
+                </div>
+                <Skeleton className="h-9 w-44" />
+              </div>
+              <Skeleton className="h-5 w-4/5" />
+            </CardHeader>
+            <CardContent>
+              <TableSkeleton columns={7} />
+            </CardContent>
+          </Card>
+        }
         activation={
           <div className="space-y-6">
             <Card className="gap-5 py-6 [--card-spacing:--spacing(6)]">

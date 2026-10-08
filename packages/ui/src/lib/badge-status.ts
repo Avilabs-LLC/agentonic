@@ -180,6 +180,20 @@ export const statusMaps = {
     superseded: state("Reemplazado", "teal", "archive"),
     unauthorized: state("Autorización no vigente", "pink", "alert"),
   },
+  // Scheduled jobs (architecture §58): a schedule's state is its row's badge;
+  // each run's outcome is inline.
+  schedule: {
+    active: state("Activa", "success", "check"),
+    paused: state("En pausa", "warning", "pause"),
+  },
+  scheduleRun: {
+    queued: state("En cola", "warning", "clock"),
+    running: state("En curso", "sky", "activity"),
+    succeeded: state("Completada", "success", "check"),
+    failed: state("Falló", "error", "x"),
+    cancelled: state("Cancelada", "slate", "minus"),
+    skipped: state("Omitida", "slate", "minus"),
+  },
   // Aprender mi estilo (architecture §57): inline in each Gmail account's frame.
   styleGuide: {
     queued: state("En cola", "warning", "clock"),

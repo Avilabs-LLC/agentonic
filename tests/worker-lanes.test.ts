@@ -14,6 +14,7 @@ const kinds = {
   retrieve: "retrieve",
   preview: "retrieve",
   style: "style",
+  action: "action",
 } as const
 let next = 0
 const job = (lane: Lane): LaneJob => ({

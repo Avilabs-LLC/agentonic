@@ -2313,6 +2313,47 @@ Table agentonic.gmail_connections {
  indexes { (workspace_id,agent_id,id) [unique] }
  Note: 'Owner-only staging account. Authenticated ciphertext; decryption key outside DB. No direct application table grants. Frozen scope intersects live operations.'
 }
+Table agentonic.agent_schedules {
+ id uuid [pk]
+ workspace_id uuid [not null]
+ agent_id uuid [not null]
+ member_id uuid [not null]
+ request_id uuid [not null]
+ name text [not null]
+ instruction text [not null]
+ cadence text [not null, note: 'daily | weekdays | weekly | hours']
+ time_of_day time [not null]
+ weekday smallint
+ every_hours smallint
+ timezone text [not null]
+ model text [not null]
+ reasoning text
+ autonomy jsonb [not null, note: 'Gmail writes the schedule pre-authorizes, one per run']
+ consent jsonb
+ status text [not null]
+ next_run_at timestamptz
+ last_run_at timestamptz
+ created_at timestamptz [not null]
+ updated_at timestamptz [not null]
+ indexes { (workspace_id,id) [unique] (member_id,request_id) [unique] }
+ Note: 'Scheduled jobs (architecture section 58). Runs on the member\'s running deployment; pre-authorized writes per the owner\'s direction until a channel can ask for confirmation.'
+}
+Table agentonic.agent_schedule_runs {
+ id uuid [pk]
+ workspace_id uuid [not null]
+ schedule_id uuid [not null]
+ scheduled_for timestamptz [not null]
+ manual boolean [not null]
+ status text [not null]
+ reason text
+ deployment_id uuid
+ conversation_id uuid
+ turn_id uuid [unique]
+ actions_approved integer [not null]
+ created_at timestamptz [not null]
+ finished_at timestamptz
+ indexes { (workspace_id,id) [unique] }
+}
 Table agentonic.style_guides {
  id uuid [pk]
  workspace_id uuid [not null]
@@ -2373,6 +2414,7 @@ Table agentonic.gmail_invocations {
  approved_at timestamptz
  finished_at timestamptz
  result jsonb
+ approved_by_schedule_id uuid [note: 'Set when a scheduled run proposed a write its schedule pre-authorized (section 58); the platform executes it, the owner may cancel it until it starts']
  Note: 'Durable exact-argument one-use write approval and result; pending/executing/succeeded/failed/uncertain/cancelled/expired. No automatic replay of uncertain writes. Private arguments erased independently of content-free audit.'
 }
 Ref: agentonic.gmail_connections.(workspace_id,agent_id) > agentonic.agents.(workspace_id,id)

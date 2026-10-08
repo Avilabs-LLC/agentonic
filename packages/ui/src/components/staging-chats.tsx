@@ -41,16 +41,23 @@ export function StagingChats({
   workspaceId,
   initial,
   initialDeployment,
+  initialConversation,
 }: {
   workspaceId: string
   initial: z.infer<typeof chatList>
   initialDeployment?: string
+  /** Opens this conversation, for example a schedule's run (§58). */
+  initialConversation?: string
 }) {
   const fieldId = useId(),
     lock = useRef(false),
     epoch = useRef(0)
   const [listing, setListing] = useState(initial),
-    [selected, setSelected] = useState<string | null>(null),
+    [selected, setSelected] = useState<string | null>(
+      initial.conversations.some((c) => c.id === initialConversation)
+        ? initialConversation!
+        : null
+    ),
     [state, setState] = useState<ChatState | null>(null)
   const [deployment, setDeployment] = useState(
     initial.agents.some((a) => a.id === initialDeployment)

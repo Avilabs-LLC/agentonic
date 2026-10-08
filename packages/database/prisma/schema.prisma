@@ -1146,6 +1146,7 @@ model StagingConversation {
  createdAt DateTime @default(dbgenerated("clock_timestamp()")) @map("created_at") @db.Timestamptz
  expiresAt DateTime @map("expires_at") @db.Timestamptz
  closedAt DateTime? @map("closed_at") @db.Timestamptz
+ scheduleId String? @map("schedule_id") @db.Uuid
  @@unique([workspaceId,id])
  @@index([deploymentId],map:"staging_conversations_deployment_id_idx")
  @@map("staging_conversations")
@@ -1202,6 +1203,53 @@ model GmailConnection {
   @@unique([workspaceId,agentId,id])
   @@map("gmail_connections")
   @@schema("agentonic")
+}
+// Scheduled jobs (migration 62): a member's instruction for an agent, run on
+// their running deployment; pre-authorized writes per the owner's direction.
+model AgentSchedule {
+ id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+ workspaceId String @map("workspace_id") @db.Uuid
+ agentId String @map("agent_id") @db.Uuid
+ memberId String @map("member_id") @db.Uuid
+ requestId String @map("request_id") @db.Uuid
+ name String
+ instruction String
+ cadence String
+ timeOfDay DateTime @map("time_of_day") @db.Time(6)
+ weekday Int? @db.SmallInt
+ everyHours Int? @map("every_hours") @db.SmallInt
+ timezone String
+ model String
+ reasoning String?
+ autonomy Json @default("[]")
+ consent Json?
+ status String @default("active")
+ nextRunAt DateTime? @map("next_run_at") @db.Timestamptz
+ lastRunAt DateTime? @map("last_run_at") @db.Timestamptz
+ createdAt DateTime @default(dbgenerated("clock_timestamp()")) @map("created_at") @db.Timestamptz
+ updatedAt DateTime @default(dbgenerated("clock_timestamp()")) @map("updated_at") @db.Timestamptz
+ @@unique([workspaceId,id])
+ @@unique([memberId,requestId])
+ @@map("agent_schedules")
+ @@schema("agentonic")
+}
+model AgentScheduleRun {
+ id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+ workspaceId String @map("workspace_id") @db.Uuid
+ scheduleId String @map("schedule_id") @db.Uuid
+ scheduledFor DateTime @map("scheduled_for") @db.Timestamptz
+ manual Boolean @default(false)
+ status String
+ reason String?
+ deploymentId String? @map("deployment_id") @db.Uuid
+ conversationId String? @map("conversation_id") @db.Uuid
+ turnId String? @unique @map("turn_id") @db.Uuid
+ actionsApproved Int @default(0) @map("actions_approved")
+ createdAt DateTime @default(dbgenerated("clock_timestamp()")) @map("created_at") @db.Timestamptz
+ finishedAt DateTime? @map("finished_at") @db.Timestamptz
+ @@unique([workspaceId,id])
+ @@map("agent_schedule_runs")
+ @@schema("agentonic")
 }
 // Aprender mi estilo (migration 61): progress, cost and, until the member
 // decides, the drafted guide. Never message content. Functions only.
@@ -1268,6 +1316,7 @@ model GmailInvocation {
   approvedAt DateTime? @map("approved_at") @db.Timestamptz
   finishedAt DateTime? @map("finished_at") @db.Timestamptz
   result Json?
+  approvedByScheduleId String? @map("approved_by_schedule_id") @db.Uuid
   @@index([conversationId,createdAt],map:"gmail_invocations_conversation")
   @@map("gmail_invocations")
   @@schema("agentonic")

@@ -10,9 +10,10 @@ export const LANES = [
   "retrieve",
   "preview",
   "style",
+  "action",
 ] as const
 export type Lane = (typeof LANES)[number]
-/** Lanes the database's knowledge claim serves; "style" has its own (§57). */
+/** Lanes the database's knowledge claim serves; "style" (§57) and "action" (§58) have their own. */
 export const KNOWLEDGE_LANES = [
   "purge",
   "ingest",
@@ -27,6 +28,8 @@ export const LANE_SLOTS: Readonly<Record<Lane, number>> = {
   preview: 4,
   // Aprender mi estilo reads up to 200 messages; one run at a time is enough.
   style: 1,
+  // A write a schedule pre-authorized (§58): one provider call each.
+  action: 1,
 }
 export type LaneJob = Lease & { lane: Lane }
 

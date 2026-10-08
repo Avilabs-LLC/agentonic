@@ -1,5 +1,10 @@
 export const VERSION_HISTORY = [
   {
+    "version": "0.29.0",
+    "date": "2026-10-08",
+    "summary": "Scheduled jobs: a Programaciones tab, runs on the running version, and pre-authorized Gmail writes per schedule"
+  },
+  {
     "version": "0.28.0",
     "date": "2026-10-08",
     "summary": "Aprender mi estilo: a writing-style guide from the member's own sent mail, reviewed before it joins Conocimiento; Gmail logo and connected check"

@@ -2435,6 +2435,7 @@ async function modelReview() {
     "202610060047_evaluation_tool_cases",
     "202610070052_registration_validity",
     "202610080060_evaluation_lessons",
+    "202610080062_agent_schedules",
   ])
     await db.exec(
       readFileSync(
@@ -2767,6 +2768,449 @@ describe("evaluation lessons (§56)", () => {
         microusd: 50000,
       })
     ).rejects.toMatchObject({ code: "42501" })
+  })
+})
+
+describe("scheduled jobs (§58)", () => {
+  const trace = id(1100)
+  async function schedule(operation: string, payload: Record<string, unknown>) {
+    await db.exec("SAVEPOINT schedule")
+    try {
+      const r = await db.query<{ r: Record<string, unknown> }>(
+        "SELECT agentonic.schedule_command($1,$2::jsonb,$3::uuid) r",
+        [operation, JSON.stringify(payload), trace]
+      )
+      await db.exec("RELEASE SAVEPOINT schedule")
+      return r.rows[0]!.r
+    } catch (e) {
+      await db.exec(
+        "ROLLBACK TO SAVEPOINT schedule; RELEASE SAVEPOINT schedule"
+      )
+      throw e
+    }
+  }
+  const state = async () =>
+    (
+      await db.query<{
+        r: {
+          deployment: { models: unknown[]; writes: string[] } | null
+          schedules: (Record<string, unknown> & {
+            runs: (Record<string, unknown> & {
+              actions: Record<string, unknown>[]
+            })[]
+          })[]
+        }
+      }>("SELECT agentonic.schedule_state($1) r", [a])
+    ).rows[0]!.r
+  async function asWorker<T>(query: string, params: unknown[] = []) {
+    await db.exec(
+      "RESET ROLE; SET LOCAL ROLE agentonic_worker; SAVEPOINT schedule_worker"
+    )
+    try {
+      const r = await db.query<{ r: T }>(query, params)
+      await db.exec("RELEASE SAVEPOINT schedule_worker")
+      return r.rows[0]!.r
+    } catch (e) {
+      await db.exec(
+        "ROLLBACK TO SAVEPOINT schedule_worker; RELEASE SAVEPOINT schedule_worker"
+      )
+      throw e
+    }
+  }
+  const tick = () =>
+    asWorker<{ queued: number; skipped: number }>(
+      "SELECT agentonic.schedule_tick() r"
+    )
+  const base = {
+    name: "Resumen diario",
+    instruction: "Resume los correos importantes de ayer.",
+    cadence: "daily",
+    timeOfDay: "08:00",
+    weekday: null,
+    everyHours: null,
+    timezone: "America/Caracas",
+    model: "gpt-5.4-mini",
+    reasoning: "medium",
+    autonomy: [],
+    consent: false,
+  }
+  /** A version approved with GPT-5.4 mini and running, with Gmail tools when asked. */
+  async function running(gmail = false) {
+    if (gmail) {
+      await sql(
+        "INSERT INTO agentonic.gmail_connections(id,workspace_id,agent_id,owner_member_id,account,credential_ciphertext,operations) VALUES($1,$2,$3,$4,'synthetic@example.invalid','opaque','[\"gmail.read\",\"gmail.send\"]')",
+        [id(770), w, a, member]
+      )
+      requested.tools = [
+        { connectionId: id(770), operations: ["gmail.read", "gmail.send"] },
+      ]
+    }
+    const p = await modelReview()
+    await actor()
+    await flow("run", {
+      preparationId: p.preparationId,
+      revision: 1,
+      models: [{ model: "gpt-5.4-mini", reasoning: "medium" }],
+      budgetUsd: 3,
+      consent: true,
+      requestId: id(1101),
+    })
+    const job = (await evalClaim())!
+    await finishFlow(job, "passed", true, "gpt-5.4-mini")
+    // Versions with tools need staff approval.
+    if (gmail)
+      expect(await approve({ ...p, evaluationId: job.id })).toMatchObject({
+        ok: true,
+      })
+    await sql(
+      "WITH h AS (INSERT INTO agentonic.runtime_hosts(environment,database_role,broker_sha256,verified_at,heartbeat_at) VALUES('local','agentonic_deployer_local',repeat('f',64),clock_timestamp(),clock_timestamp()) RETURNING id), b AS (INSERT INTO agentonic.runtime_host_brokers(host_id,broker_sha256) SELECT id,repeat('f',64) FROM h) INSERT INTO agentonic.runtime_host_artifacts(host_id,runtime_sha256) SELECT id,repeat('b',64) FROM h"
+    )
+    await actor()
+    const d = await lifecycleCall("deployment_command", "authorize", {
+      submissionId: p.submissionId,
+      environment: "local",
+      budgetUsd: 0.25,
+      consent: true,
+      requestId: id(1102),
+    })
+    expect(d.ok).toBe(true)
+    await readyStaging({ ...p, deploymentId: String(d.id) })
+    await actor()
+    return { ...p, deploymentId: String(d.id) }
+  }
+
+  it("computes due times in the schedule's own timezone", async () => {
+    await modelReview()
+    const next = async (
+      cadence: string,
+      at: string,
+      weekday: number | null,
+      hours: number | null,
+      tz: string,
+      after: string
+    ) =>
+      (
+        (
+          await sql(
+            "SELECT agentonic.schedule_next($1,$2::time,$3::smallint,$4::smallint,$5,$6::timestamptz) t",
+            [cadence, at, weekday, hours, tz, after]
+          )
+        ).rows[0] as { t: Date }
+      ).t.toISOString()
+    // Caracas is UTC-4. 09:00 there has passed 08:00, so tomorrow.
+    expect(
+      await next(
+        "daily",
+        "08:00",
+        null,
+        null,
+        "America/Caracas",
+        "2026-10-08T13:00:00Z"
+      )
+    ).toBe("2026-10-09T12:00:00.000Z")
+    // From a Friday afternoon, weekdays resume on Monday.
+    expect(
+      await next(
+        "weekdays",
+        "08:00",
+        null,
+        null,
+        "America/Caracas",
+        "2026-10-09T13:00:00Z"
+      )
+    ).toBe("2026-10-12T12:00:00.000Z")
+    // Wednesdays at 18:30 in Madrid (UTC+2 in October), from a Thursday.
+    expect(
+      await next(
+        "weekly",
+        "18:30",
+        3,
+        null,
+        "Europe/Madrid",
+        "2026-10-08T10:00:00Z"
+      )
+    ).toBe("2026-10-14T16:30:00.000Z")
+    // Every 6 hours from 08:00: 08, 14, 20, then 08 the next day.
+    expect(
+      await next(
+        "hours",
+        "08:00",
+        null,
+        6,
+        "America/Caracas",
+        "2026-10-08T15:00:00Z"
+      )
+    ).toBe("2026-10-08T18:00:00.000Z")
+    expect(
+      await next(
+        "hours",
+        "08:00",
+        null,
+        6,
+        "America/Caracas",
+        "2026-10-09T00:30:00Z"
+      )
+    ).toBe("2026-10-09T12:00:00.000Z")
+  })
+
+  it("keeps a member's schedules to themselves, validated, and pausable", async () => {
+    await modelReview()
+    await actor()
+    const create = (overrides: Record<string, unknown>, n: number) =>
+      schedule("create", {
+        ...base,
+        agentId: a,
+        requestId: id(n),
+        ...overrides,
+      })
+    await expect(create({ timezone: "Mars/Olympus" }, 1110)).rejects.toThrow()
+    await expect(
+      create({ model: "gpt-4.1-mini-2025-04-14", reasoning: null }, 1111)
+    ).rejects.toThrow()
+    // Pre-authorizing a write needs consent, and only writes can be pre-authorized.
+    await expect(create({ autonomy: ["gmail.send"] }, 1112)).rejects.toThrow()
+    await expect(
+      create({ autonomy: ["gmail.read"], consent: true }, 1113)
+    ).rejects.toThrow()
+    const made = await create({ autonomy: ["gmail.send"], consent: true }, 1114)
+    expect(made).toMatchObject({ ok: true })
+    expect(await create({}, 1114)).toEqual(made)
+    const listed = (await state()).schedules
+    expect(listed).toMatchObject([
+      {
+        name: "Resumen diario",
+        cadence: "daily",
+        timeOfDay: "08:00",
+        autonomy: ["gmail.send"],
+        status: "active",
+      },
+    ])
+    expect(listed[0]!.nextRunAt).toBeTruthy()
+    await schedule("pause", { id: made.id })
+    expect((await state()).schedules[0]).toMatchObject({
+      status: "paused",
+      nextRunAt: null,
+    })
+    await schedule("resume", { id: made.id })
+    expect((await state()).schedules[0]!.nextRunAt).toBeTruthy()
+    await actor(other, otherW)
+    await expect(schedule("pause", { id: made.id })).rejects.toThrow()
+    await actor()
+    await schedule("delete", { id: made.id })
+    expect((await state()).schedules).toEqual([])
+  })
+
+  it("queues one turn in its own conversation when due, collapsing missed times, and skips when it cannot run", async () => {
+    // Without a running deployment a run is skipped, not queued.
+    await modelReview()
+    await actor()
+    const lonely = await schedule("create", {
+      ...base,
+      agentId: a,
+      requestId: id(1120),
+    })
+    expect(await schedule("run", { id: lonely.id })).toMatchObject({
+      status: "skipped",
+      reason: "no_deployment",
+    })
+  })
+
+  it("runs a due schedule on the member's running deployment, once for missed times", async () => {
+    const p = await running()
+    const made = await schedule("create", {
+      ...base,
+      agentId: a,
+      requestId: id(1121),
+    })
+    await sql(
+      "UPDATE agentonic.agent_schedules SET next_run_at=clock_timestamp()-interval '3 hours' WHERE id=$1",
+      [made.id]
+    )
+    expect(await tick()).toEqual({ queued: 1, skipped: 0 })
+    expect(await tick()).toEqual({ queued: 0, skipped: 0 })
+    await actor()
+    const run = (await state()).schedules[0]!.runs[0]!
+    expect(run).toMatchObject({ status: "queued", manual: false })
+    const turn = (
+      await sql(
+        "SELECT t.query,t.response_model,c.title,c.schedule_id FROM agentonic.staging_turns t JOIN agentonic.staging_conversations c ON c.id=t.conversation_id WHERE c.id=$1",
+        [run.conversationId]
+      )
+    ).rows[0] as Record<string, string>
+    expect(turn).toMatchObject({
+      title: "Programación: Resumen diario",
+      schedule_id: made.id,
+      response_model: "gpt-5.4-mini",
+    })
+    expect(turn.query).toContain("Resume los correos importantes de ayer.")
+    expect(turn.query).toContain("Se ejecuta sin una persona presente")
+    expect(
+      (
+        (
+          await sql(
+            "SELECT next_run_at>clock_timestamp() later FROM agentonic.agent_schedules WHERE id=$1",
+            [made.id]
+          )
+        ).rows[0] as { later: boolean }
+      ).later
+    ).toBe(true)
+    // A run waiting in the conversation makes the next one skip.
+    await actor()
+    expect(await schedule("run", { id: made.id })).toMatchObject({
+      status: "skipped",
+      reason: "busy",
+    })
+    // The run follows its turn.
+    await stagingWork(p.deploymentId, "claim")
+    await actor()
+    expect((await state()).schedules[0]!.runs.at(-1)).toMatchObject({
+      status: "running",
+    })
+  })
+
+  it("executes the one write a run proposes when its schedule pre-authorized it, and nothing else", async () => {
+    const p = await running(true)
+    expect((await state()).deployment?.writes).toEqual(["gmail.send"])
+    const made = await schedule("create", {
+      ...base,
+      agentId: a,
+      requestId: id(1130),
+      autonomy: ["gmail.send"],
+      consent: true,
+    })
+    expect(await schedule("run", { id: made.id })).toMatchObject({
+      status: "queued",
+    })
+    const job = (await stagingWork(p.deploymentId, "claim")) as unknown as Job
+    const tool = async (payload: Record<string, unknown>) => {
+      await db.exec(
+        "RESET ROLE; SET LOCAL ROLE agentonic_runtime_local; SAVEPOINT tool"
+      )
+      const r = await db.query<{ r: Record<string, unknown> }>(
+        "SELECT agentonic.gmail_staging('gmail-propose',$1,$2,$3,$4,$5) r",
+        [
+          p.deploymentId,
+          serviceSecret,
+          job.id,
+          job.token,
+          JSON.stringify(payload),
+        ]
+      )
+      await db.exec("RELEASE SAVEPOINT tool")
+      return r.rows[0]!.r
+    }
+    const send = (n: number) => ({
+      connectionId: id(770),
+      operation: "gmail.send",
+      id: id(n),
+      argumentsCiphertext: "opaque-message",
+      hash: "a".repeat(64),
+    })
+    expect(await tool(send(1131))).toMatchObject({
+      pendingApproval: true,
+      automatic: true,
+    })
+    // One write per run: a second proposal waits for the person.
+    expect(await tool(send(1132))).toMatchObject({ automatic: false })
+    // The person cannot confirm the pre-authorized write, only cancel it.
+    await actor()
+    await expect(
+      gmailCommand("confirm", { id: id(1131), hash: "a".repeat(64) })
+    ).rejects.toThrow()
+    expect(
+      (
+        (
+          await gmailCommand("invocations", {
+            conversationId: (await state()).schedules[0]!.runs[0]!
+              .conversationId,
+          })
+        ).items as Record<string, unknown>[]
+      ).map((i) => i.automatic)
+    ).toEqual([true, false])
+    // The worker runs it once, with the credential, and records the outcome.
+    const claimed = await asWorker<Record<string, unknown>>(
+      "SELECT agentonic.schedule_action_claim() r"
+    )
+    expect(claimed).toMatchObject({
+      id: id(1131),
+      lane: "action",
+      operation: "gmail.send",
+      credential: "opaque",
+      argumentsCiphertext: "opaque-message",
+    })
+    expect(
+      await asWorker("SELECT agentonic.schedule_action_claim() r")
+    ).toBeNull()
+    await asWorker(
+      "SELECT agentonic.schedule_action_complete($1,'succeeded',$2::jsonb) r",
+      [id(1131), JSON.stringify({ id: "sent-1" })]
+    )
+    await expect(
+      asWorker(
+        "SELECT agentonic.schedule_action_complete($1,'succeeded','{}'::jsonb) r",
+        [id(1131)]
+      )
+    ).rejects.toThrow()
+    expect(
+      (
+        await sql(
+          "SELECT id,status,arguments_ciphertext IS NULL erased FROM agentonic.gmail_invocations ORDER BY id",
+          []
+        )
+      ).rows
+    ).toEqual([
+      { id: id(1131), status: "succeeded", erased: true },
+      { id: id(1132), status: "pending", erased: false },
+    ])
+    await actor()
+    expect((await state()).schedules[0]!.runs[0]!.actions).toEqual([
+      { operation: "gmail.send", status: "succeeded", automatic: true },
+      { operation: "gmail.send", status: "pending", automatic: false },
+    ])
+  })
+
+  it("stops pre-authorized writes when the schedule loses that authority", async () => {
+    const p = await running(true)
+    const made = await schedule("create", {
+      ...base,
+      agentId: a,
+      requestId: id(1140),
+      autonomy: ["gmail.send"],
+      consent: true,
+    })
+    await schedule("run", { id: made.id })
+    const job = (await stagingWork(p.deploymentId, "claim")) as unknown as Job
+    await db.exec("RESET ROLE; SET LOCAL ROLE agentonic_runtime_local")
+    await db.query(
+      "SELECT agentonic.gmail_staging('gmail-propose',$1,$2,$3,$4,$5)",
+      [
+        p.deploymentId,
+        serviceSecret,
+        job.id,
+        job.token,
+        JSON.stringify({
+          connectionId: id(770),
+          operation: "gmail.send",
+          id: id(1141),
+          argumentsCiphertext: "opaque-message",
+          hash: "a".repeat(64),
+        }),
+      ]
+    )
+    // Deleting the schedule cancels what it pre-authorized and has not started.
+    await actor()
+    await schedule("delete", { id: made.id })
+    expect(
+      await asWorker("SELECT agentonic.schedule_action_claim() r")
+    ).toBeNull()
+    expect(
+      (
+        await sql(
+          "SELECT status,arguments_ciphertext FROM agentonic.gmail_invocations WHERE id=$1",
+          [id(1141)]
+        )
+      ).rows
+    ).toEqual([{ status: "cancelled", arguments_ciphertext: null }])
   })
 })
 
