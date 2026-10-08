@@ -21,7 +21,7 @@ Initial exclusions: attachments, HTML composition, inbox deletion/modification, 
 - RLS tables expose no direct customer/staff/worker reads. Scoped SQL functions verify current member, agent and connection. Runtime access additionally verifies the existing service token, host, operating consent, conversation owner and turn lease; frozen scope intersects live grants. A read rechecks before provider access and before returning data. Staff and automated evaluations never access the real mailbox. The owner’s private preview can access it when explicitly enabled at session start; its frozen tool scope intersects live grants and its ten-minute expiry.
 - Writes store encrypted immutable arguments and a SHA-256 digest before any provider side effect. Confirmation binds exact invocation, account, operation, arguments, current actor and active deployment. Refresh occurs before atomic execution claim. After claiming, one provider attempt is made; uncertain network/provider outcomes stay uncertain. There is no exactly-once claim for Gmail itself. Stable Message-ID aids manual investigation but is not provider idempotency.
 - A proposal ends the current model turn. Confirmation executes the durable proposal without replaying or charging that turn again; the next user message starts a new turn. Automatic post-confirmation model continuation is deliberately absent in v1.
-- Offboarding/disconnect fences access and erases stored credentials/proposals. Chat closure erases pending arguments. Expired proposals are scrubbed on subsequent workspace Gmail operations; a scheduled retention sweep is required before hosted beta. Content-free operation IDs, hashes and outcomes remain audit evidence. Mail excerpts in chat answers follow existing private chat retention.
+- Offboarding/disconnect fences access and erases stored credentials/proposals. Chat closure erases pending arguments. Expired proposals are scrubbed on subsequent workspace Gmail operations and, since 7 October, by a scheduled sweep (migration 54, `gmail_retention_sweep`) that the knowledge worker runs every 15 minutes for all workspaces; a write still executing is spared for 15 minutes past its window so it can record its real outcome. Content-free operation IDs, hashes and outcomes remain audit evidence. Mail excerpts in chat answers follow existing private chat retention.
 - Automatic version approval remains restricted to **no-tool** versions. Gmail versions require staff review after normal evaluations. Evaluations assess frozen instructions/knowledge with no mailbox network access; synthetic deterministic connector tests are separate evidence, not a claim that an arbitrary customer's mailbox has been tested.
 
 ## Configuration and rollout
@@ -92,3 +92,43 @@ Schema constraints checked against [OpenAI Structured Outputs](https://developer
 ### Release 0.10.0 acceptance checkpoint
 
 The owner confirmed the Gmail preview now works after the citation fix. This supplies live owner acceptance for connected-mailbox reading in private preview, in addition to the synthetic live-model regression evidence. Live draft modifications and sending are not recorded as accepted yet. The branch release groups connection/security foundations, broker/preview execution and shared UI/documentation. Mail ingestion and writing-profile personalization were discussed but are not part of this release.
+
+## Reconciliation with the §37.4–37.6 checklist — 7 October 2026 (B0)
+
+The architecture checklist in §37.4–37.6 predates the Gmail-first decision. Each item is listed against what this slice built; open work moves to [outstanding actions](outstanding-actions.md). "Synthetic" evidence means deterministic tests in `tests/gmail-database.test.ts` and `tests/gmail.test.ts`; live evidence against a real mailbox is still B2.
+
+### §37.4 Connection and tool contract
+
+| Item | Status | Evidence or remaining work |
+|---|---|---|
+| Connection, source and tool are separate records and permissions | Done | Connecting grants zero operations; per-agent operation grants are separate; mail is never imported into knowledge (no source records). Tests: "binds OAuth to actor and workspace … defaults to zero agent capabilities", "requires explicit per-agent permission". |
+| Map `connections`, `agent_connection_grants`, `configuration_tools`, `tool_invocations`, `tool_approvals` onto the schema | Done for Gmail | Migrations 29–30 (Gmail tables) and 45 (general connections, grants, tool invocations and approvals kept in step). Tests: "keeps the general connection and grant in step", "records each Gmail write as a tool invocation with a one-time approval". A general approval model for other tools stays E4. |
+| OAuth state binding, identity, refresh, revocation, token encryption, environment separation | Done | PKCE S256, single-use state bound to actor, workspace and agent; identity from Google's profile; AES-256-GCM with the key outside the database and rotation (§44); disconnect erases credentials. Live refresh and reconnect: B2. |
+| Tool argument and result schemas, bounds, side effects, limits, errors; permission check before execution and before returning | Done | Ten search IDs, 500-character excerpts, 20,000-character messages, three tools per turn; header injection and URLs as IDs rejected. Test: "rechecks authorization before a read and before returning its result". |
+| Versioned requested-access snapshot and runtime protocol; old no-tool agents keep working | Done | `gmailContract:1` on a new artifact; frozen snapshots pin connection and operations; no-tool versions still approve automatically, tool versions need staff review. |
+| Bounded tool execution, continuation after confirmation or crash | Partly | Bounded execution and one-time durable proposals are built; a proposal ends the turn and there is **no automatic continuation** after confirmation (deliberate in v1). Resumable sessions stay E3. |
+| Customer connection selection and Admin review receipts | Done | Conexiones and Herramientas in the editor; the Admin review and receipt show the account's tools without tokens (`gmail-scope-summary`). |
+| **Gate:** wrong workspace, account, resource; revoked connection; removed actor; changed arguments; expired approval; unauthorized tool; injected action requests | Done (synthetic) | The tests listed above, plus "blocks staff, direct table access and unbound execution", "intersects live permissions with frozen scope and stops on disconnect", "expires pending writes". |
+
+### §37.5 First connection and read capabilities
+
+| Item | Status | Evidence or remaining work |
+|---|---|---|
+| OAuth application, exact callbacks, test users, smallest scopes; provider verification and test-mode lifetime | Done for staging | Local and hosted callbacks registered (C12); `gmail.readonly` and `gmail.compose`. Google verification is B5/B6 ([google-restricted-scope-verification.md](google-restricted-scope-verification.md)). |
+| Drive `drive.file` prototype, formats, selected-source ingestion | Not applicable | Drive is deferred; mail is not ingested into knowledge. Drive returns under F7. |
+| Live read tool against current provider state | Done (synthetic) | Search and read call Gmail at request time, not cached content. Live: B2. |
+| Evaluation and deployment authorization permit exactly the reviewed scope | Done | `gmail_deployment_scope` inside deployment authorization; evaluations never reach a mailbox. |
+| **Gate:** connect, ask, read current state; revoked permission, disconnect, refresh failure, account mismatch, injected content | Synthetic done; live B2 | — |
+
+### §37.6 One useful write tool
+
+| Item | Status | Evidence or remaining work |
+|---|---|---|
+| Exact proposed account and content, one-time approval bound to arguments, actor, environment and expiry | Done | Revisar acción; ten-minute approval consumed once; changed arguments invalidate it. |
+| Persist before the provider call, single execution claim, no blind retry of unknown outcomes | Done | Test: "never automatically retries a send with an unknown outcome". |
+| Recheck rights at confirmation and execution; resume without repeating paid work | Done, without automatic resume | No continuation after confirmation (see §37.4). |
+| Truthful completed, denied, failed and uncertain outcomes; content-free audit | Done | Outcomes survive refresh; audit keeps IDs, hashes and outcomes only. |
+| Double clicks, duplicates, timeout after success, crash, expiry, wrong approver, revocation | Synthetic done; live B2 | — |
+| Richer before/after preview and concurrency check for draft updates | Open | New item B7. |
+| Scheduled cleanup of expired proposals and Gmail data | Done | Migration 54 and the knowledge worker's 15-minute sweep (B3). |
+| **Gate:** the deployed test agent proposes, the customer approves once, exactly one external effect | Live B2 | Needs B1 (test mailbox and recipient). |

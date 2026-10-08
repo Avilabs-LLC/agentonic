@@ -5,6 +5,7 @@ import { z } from "zod"
 import { workerFailure } from "./failure"
 import { LANES, serveLanes, type LaneJob } from "./lanes"
 import { processJob, type Execute } from "./pipeline"
+import { scheduleRetention } from "./retention"
 import { directProviders, providerKeys } from "./providers"
 import { storageSession } from "./storage-session"
 const env = {
@@ -122,6 +123,8 @@ async function main() {
       lanes,
     })
   )
+  if (!process.argv.includes("--once"))
+    scheduleRetention((sql) => pool.query(sql), stop.signal)
   try {
     await serveLanes({
       lanes,
@@ -135,7 +138,9 @@ async function main() {
         ),
       run,
       unavailable: () =>
-        console.error(JSON.stringify({ event: "knowledge_worker_unavailable" })),
+        console.error(
+          JSON.stringify({ event: "knowledge_worker_unavailable" })
+        ),
       stop: stop.signal,
       once: process.argv.includes("--once"),
     })
