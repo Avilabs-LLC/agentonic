@@ -1,5 +1,10 @@
 export const VERSION_HISTORY = [
   {
+    "version": "0.30.0",
+    "date": "2026-10-08",
+    "summary": "Ongoing authorization: 30-day periods renewing automatically while nothing changed, a budget per period, and conversations that carry on across versions"
+  },
+  {
     "version": "0.29.0",
     "date": "2026-10-08",
     "summary": "Scheduled jobs: a Programaciones tab, runs on the running version, and pre-authorized Gmail writes per schedule"

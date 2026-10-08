@@ -32,14 +32,35 @@ export async function tickSchedules(query: Query, log = console.log) {
     return undefined
   }
 }
+/**
+ * Renews running deployments in their last three days while nothing changed
+ * (§59), or records what stops them; logs counts only.
+ */
+export async function tickRenewals(query: Query, log = console.log) {
+  try {
+    const result = (
+      await query("SELECT agentonic.deployment_renewal_tick() result")
+    ).rows[0]?.result as { renewed: number; blocked: number } | undefined
+    if (result && (result.renewed || result.blocked))
+      log(JSON.stringify({ event: "deployments_renewed", ...result }))
+    return result
+  } catch {
+    log(JSON.stringify({ event: "deployments_renewal_failed" }))
+    return undefined
+  }
+}
 /** Ticks now and then on an interval until `stop` aborts. */
 export function scheduleTicks(
   query: Query,
   stop: AbortSignal,
   interval = TICK_INTERVAL_MS
 ) {
-  void tickSchedules(query)
-  const timer = setInterval(() => void tickSchedules(query), interval)
+  const tick = async () => {
+    await tickRenewals(query)
+    await tickSchedules(query)
+  }
+  void tick()
+  const timer = setInterval(() => void tick(), interval)
   stop.addEventListener("abort", () => clearInterval(timer), { once: true })
   return timer
 }

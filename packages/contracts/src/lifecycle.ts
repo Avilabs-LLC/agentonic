@@ -77,6 +77,16 @@ export const lifecycleState = z.object({
       budgetUsd: z.number(),
       committedMicrousd: z.number(),
       errorCode: z.string().nullable(),
+      // Ongoing operating authorization (§59).
+      autoRenew: z.boolean().default(false),
+      periodBudgetUsd: z.number().nullable().default(null),
+      periodStartedAt: z.string().nullable().default(null),
+      periodCommittedMicrousd: z.number().default(0),
+      renewalBlocked: z.string().nullable().default(null),
+      renewsAt: z.string().nullable().default(null),
+      renewals: z.number().default(0),
+      canChangeRenewal: z.boolean().default(false),
+      canRenewNow: z.boolean().default(false),
       canActivate: z.boolean(),
       canStop: z.boolean(),
       canChat: z.boolean(),
@@ -84,6 +94,25 @@ export const lifecycleState = z.object({
   ),
 })
 export type LifecycleState = z.infer<typeof lifecycleState>
+/** A deployment authorizes 30 days at a time, each period with this budget (§59). */
+export const DEPLOYMENT_PERIOD_DAYS = 30
+export const PERIOD_BUDGET = { min: 1, max: 20, default: 5 } as const
+const periodBudget = z
+  .number()
+  .min(PERIOD_BUDGET.min, "El mínimo es US$1.")
+  .max(PERIOD_BUDGET.max, "El máximo es US$20.")
+/** Why a running deployment will not renew, in words the customer can act on. */
+export const renewalBlockedLabels: Record<string, string> = {
+  sources:
+    "Cambiaron los documentos que respaldan esta versión. Prepara y evalúa una nueva versión para seguir usándolo.",
+  member: "Ya no tienes acceso para editar este agente.",
+  approval:
+    "La aprobación de esta versión cambió o fue revocada. Revisa Propuestas.",
+  revoked: "Detuviste este agente.",
+  expired: "La autorización ya terminó.",
+  changed:
+    "Algo cambió desde la aprobación (la versión, su entorno o tus permisos). Prepara una nueva versión.",
+}
 export const lifecycleCommand = z.discriminatedUnion("operation", [
   z
     .object({
@@ -110,12 +139,32 @@ export const lifecycleCommand = z.discriminatedUnion("operation", [
       payload: z
         .object({
           submissionId: z.uuid(),
-          budgetUsd: z.number().min(0.05).max(1),
+          budgetUsd: periodBudget,
           environment: z.enum(["local", "azure_staging"]),
+          autoRenew: z.boolean(),
           consent: z.literal(true),
           requestId: z.uuid(),
         })
         .strict(),
+    })
+    .strict(),
+  // Renewal settings, and renewing by hand in the last 10 days (§59).
+  z
+    .object({
+      operation: z.literal("renewal"),
+      payload: z
+        .object({
+          deploymentId: z.uuid(),
+          autoRenew: z.boolean(),
+          budgetUsd: periodBudget,
+        })
+        .strict(),
+    })
+    .strict(),
+  z
+    .object({
+      operation: z.literal("extend"),
+      payload: z.object({ deploymentId: z.uuid() }).strict(),
     })
     .strict(),
   z
@@ -188,6 +237,8 @@ export const chatState = z.object({
   title: z.string(),
   agentId: z.uuid(),
   expiresAt: z.string(),
+  /** Messages go to the agent's current, authorized version (§59). */
+  canSend: z.boolean().default(true),
   online: z.boolean(),
   models: z.array(modelConfiguration).default([]),
   budgetUsd: z.number(),
@@ -196,6 +247,8 @@ export const chatState = z.object({
     z.object({
       id: z.uuid(),
       number: z.number(),
+      /** The version that answered, so a change of version can be shown. */
+      version: z.number().nullable().optional(),
       model: modelId.optional(),
       reasoning: reasoningLevel.nullable().optional(),
       query: z.string(),
@@ -224,4 +277,7 @@ export const lifecycleErrors: Record<string, string> = {
   provider_unavailable:
     "No se pudo completar la respuesta. El consumo o la reserva pendiente se conserva.",
   lease_lost: "La respuesta se interrumpió. Puedes enviar un nuevo mensaje.",
+  too_early: "Puedes renovar a mano en los últimos 10 días de la autorización.",
+  budget_required: "Elige un presupuesto por período antes de renovar.",
+  ...renewalBlockedLabels,
 }

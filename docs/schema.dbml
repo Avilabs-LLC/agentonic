@@ -2313,6 +2313,19 @@ Table agentonic.gmail_connections {
  indexes { (workspace_id,agent_id,id) [unique] }
  Note: 'Owner-only staging account. Authenticated ciphertext; decryption key outside DB. No direct application table grants. Frozen scope intersects live operations.'
 }
+Table agentonic.deployment_renewals {
+ id uuid [pk]
+ workspace_id uuid [not null]
+ deployment_id uuid [not null]
+ kind text [not null, note: 'automatic | manual']
+ renewed_by_member_id uuid
+ previous_until timestamptz [not null]
+ authorized_until timestamptz [not null]
+ period_budget_usd numeric(20,8) [not null]
+ created_at timestamptz [not null]
+ indexes { (workspace_id,id) [unique] }
+ Note: 'Ongoing operating authorization (architecture section 59): one row per 30-day renewal, automatic while nothing changed or by the customer in the last 10 days.'
+}
 Table agentonic.agent_schedules {
  id uuid [pk]
  workspace_id uuid [not null]

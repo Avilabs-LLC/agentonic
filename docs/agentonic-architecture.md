@@ -1966,3 +1966,75 @@ The owner asked for agents that can run tasks on a schedule. They are managed fr
 1. Apply migration 62.
 2. Install platform 0.29.0: the knowledge worker gains the tick and action lane, and the customer app gains the tab.
 3. Install a new staging broker (`install-staging --azure`, side by side) for the automatic wording; until then runs say the action awaits confirmation while it executes.
+
+## 59. Ongoing operating authorization; conversations that outlive versions — 8 October 2026
+
+This closes outstanding actions **D5** (operating terms, owner decisions of 8 October) and **D6** (the lifecycle that replaces the 7-day, US$1 staging limit). Migration 63, platform 0.30.0.
+
+**Why.** An activated agent stopped after 7 days. Getting it back meant a new review, a paid evaluation, a new authorization and a new activation, because an approval only allows activation within 24 hours. Separately, a new version's activation and every expiry erased the member's conversations: they were tied to one deployment, and the host's cleanup scrubbed anything not on the current, authorized deployment. The owner's position: an agent people rely on must not go dark if nothing has changed.
+
+**Owner decisions (D5):**
+
+- **Window:** authorization lasts 30 days.
+- **Renewal:** automatic and opt-out while nothing changed, with in-app reminders.
+- **Budget:** each 30-day period has its own budget, US$1–20 (default US$5); renewing adds the same period budget.
+- **Conversations:** content is kept 30 days from the last message.
+
+**Renewal (D6):**
+
+- **New columns.** `deployments` gains `auto_renew` (true for new deployments; false for those authorized earlier, which keep their terms until their customer opts in), `period_budget_usd`, `period_started_at`, `period_base_microusd` and `renewal_blocked`.
+- **Limits loosened.** The 7-day window and the US$1 ceiling constraints are replaced by `authorized_until > created_at` and `budget_usd > 0`. The immutability trigger now lets the window and the ceiling change, but only to grow.
+- **"Nothing changed"** is exactly `deployment_authorized`:
+  - the same approved decision with no later one, and the submission still approved;
+  - the configuration and code releases not retired or revoked;
+  - the member still able to author and read the collections;
+  - the sources' definitions and cited evidence unchanged;
+  - tools valid;
+  - the host verified.
+- **The tick.** Every 30 s the knowledge worker calls `deployment_renewal_tick`. Running deployments with renewal on, in their last 3 days, get one more period through `deployment_renew`: the window moves 30 days from the old end, and the ceiling becomes what was spent plus the period budget, so the agent pauses for the rest of the period if that runs out. Each renewal is recorded in `deployment_renewals` (automatic, or manual with the member).
+- **Blocked renewals.** `deployment_change` names what stopped a renewal (sources, member, approval, revoked, expired or changed) in `renewal_blocked`. The agent then ends at its time, as before.
+- **Unchanged rules.** A renewal never re-evaluates and never extends an approval's activation deadline; revocation still stops a deployment at once.
+
+**Customer controls.** `deployment_command` changes and gains two operations:
+
+- **`authorize`** now takes 30 days, a period budget (validated in SQL as US$0.05–20 for apps not yet updated) and `autoRenew` (default on).
+- **`renewal`** turns renewal on or off and sets the period budget. Only the member who authorized the deployment may use it.
+- **`extend`** renews by hand in the last 10 days; earlier is refused as `too_early`.
+- **`lifecycle_state`** reports for each deployment: renewal, the period budget and its spend, `renewalBlocked`, `renewsAt`, the number of renewals, and whether the member can change or renew now.
+
+**Conversations follow the agent:**
+
+- **Following versions.** A trigger on `agent_environments` re-points the readable conversations of an agent's earlier deployments to the deployment that becomes current, when its authorizing member owns them. This covers both a new version and a re-activation after a lapse.
+- **Version of each answer.** `staging_turns.deployment_id` records the deployment that answered, and Chats marks "Desde aquí responde la versión N" where it changes.
+- **Retention.** Each turn extends its conversation to 30 days from that message. Existing conversations moved to the same rule.
+- **Readable versus sendable.** `staging_conversation_readable` means: not closed, not expired, deployment not revoked, approval not revoked, member active. Reading and the conversation's Gmail actions need only that. Sending still needs `staging_conversation_authorized`: the agent's current, authorized version.
+- **Host cleanup.** It now erases content only when a conversation is no longer readable: on expiry, closing, revocation or offboarding. A superseded or lapsed version no longer erases anything.
+- **Lapsed versions.** Chats shows that no running version can answer and that the conversation can still be read until it expires. Schedule conversations follow the same rule.
+
+**Presentation.**
+
+- **Activación:**
+  - **Authorize dialog:** a period budget and a "Renovar automáticamente" box, checked by default.
+  - **Each deployment shows:** this period's spend against its budget, and when it renews or what stops it (from `renewalBlockedLabels`).
+  - **Actions:** "Renovar ahora" in the last 10 days, and "Ajustar renovación" for on/off and budget.
+- **Chats:** version markers, a read-only state with its reason, and "se conserva hasta …, 30 días después del último mensaje".
+
+**Tests (replayed migrations):**
+
+- 30-day authorization with its period budget;
+- renewal in the last 3 days, recorded as automatic with the new ceiling, then nothing more until the next window;
+- no renewal when the cited evidence changed, with `sources` shown to the customer;
+- renewal turned off, budget changed, manual renewal refused early and recorded near the end, and another workspace refused;
+- conversations re-pointed to a new version with the answering deployment kept;
+- a lapsed version leaving the conversation readable but not sendable, with the host cleanup keeping content;
+- revocation erasing it at once.
+
+**Not covered.**
+
+- **Email reminders** (in-app only).
+- **Workspace-level budget periods.**
+- **Knowledge changes still stop an agent.** Changing a version's documents stops it (the evidence check) instead of letting it run on the frozen snapshot. The customer prepares a new version. Making that gentler is a separate decision.
+
+**Fix to §56.** Migration 60 ordered Chats' models by run creation time, which can tie, so the default model could change between reads. `deployment_models` now returns the passing models in the batch's own order, the same order as before §56 when every model passed.
+
+**Rollout.** Apply migration 63, then install platform 0.30.0.

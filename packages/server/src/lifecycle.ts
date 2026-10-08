@@ -66,6 +66,8 @@ export async function runLifecycle(
         activate:
           "Activación en cola. El estado cambiará cuando se verifique el agente.",
         stop: "Agente detenido. El consumo registrado se conserva.",
+        renewal: "Renovación guardada.",
+        extend: "Autorización renovada por 30 días más.",
       }[parsed.data.operation],
     }
   } catch {

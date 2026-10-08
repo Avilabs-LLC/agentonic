@@ -2436,6 +2436,7 @@ async function modelReview() {
     "202610070052_registration_validity",
     "202610080060_evaluation_lessons",
     "202610080062_agent_schedules",
+    "202610080063_ongoing_deployments",
   ])
     await db.exec(
       readFileSync(
@@ -3211,6 +3212,273 @@ describe("scheduled jobs (§58)", () => {
         )
       ).rows
     ).toEqual([{ status: "cancelled", arguments_ciphertext: null }])
+  })
+})
+
+describe("ongoing deployments (§59)", () => {
+  /** A routine version approved with GPT-5.4 mini and running with a US$5 period. */
+  async function running() {
+    const p = await modelReview()
+    await actor()
+    await flow("run", {
+      preparationId: p.preparationId,
+      revision: 1,
+      models: [{ model: "gpt-5.4-mini", reasoning: "medium" }],
+      budgetUsd: 3,
+      consent: true,
+      requestId: id(1201),
+    })
+    await finishFlow((await evalClaim())!, "passed", true, "gpt-5.4-mini")
+    await sql(
+      "WITH h AS (INSERT INTO agentonic.runtime_hosts(environment,database_role,broker_sha256,verified_at,heartbeat_at) VALUES('local','agentonic_deployer_local',repeat('f',64),clock_timestamp(),clock_timestamp()) RETURNING id), b AS (INSERT INTO agentonic.runtime_host_brokers(host_id,broker_sha256) SELECT id,repeat('f',64) FROM h) INSERT INTO agentonic.runtime_host_artifacts(host_id,runtime_sha256) SELECT id,repeat('b',64) FROM h"
+    )
+    await actor()
+    const d = await lifecycleCall("deployment_command", "authorize", {
+      submissionId: p.submissionId,
+      environment: "local",
+      budgetUsd: 5,
+      consent: true,
+      requestId: id(1202),
+    })
+    expect(d.ok).toBe(true)
+    await readyStaging({ ...p, deploymentId: String(d.id) })
+    await actor()
+    return { ...p, deploymentId: String(d.id) }
+  }
+  /** Moves a deployment's end, which renewal itself may only extend. */
+  async function endsIn(deploymentId: string, interval: string) {
+    await sql(
+      "ALTER TABLE agentonic.deployments DISABLE TRIGGER deployment_immutable"
+    )
+    await sql(
+      `UPDATE agentonic.deployments SET authorized_until=clock_timestamp()+interval '${interval}' WHERE id=$1`,
+      [deploymentId]
+    )
+    await sql(
+      "ALTER TABLE agentonic.deployments ENABLE TRIGGER deployment_immutable"
+    )
+  }
+  const deployment = async (deploymentId: string) =>
+    (
+      await sql(
+        "SELECT round(extract(epoch FROM authorized_until-created_at)/86400)::int days,auto_renew,period_budget_usd::float budget,budget_usd::float ceiling,renewal_blocked FROM agentonic.deployments WHERE id=$1",
+        [deploymentId]
+      )
+    ).rows[0] as Record<string, unknown>
+  async function renewalTick() {
+    await db.exec("RESET ROLE; SET LOCAL ROLE agentonic_worker")
+    return (
+      await db.query<{ r: Record<string, number> }>(
+        "SELECT agentonic.deployment_renewal_tick() r"
+      )
+    ).rows[0]!.r
+  }
+  const customerDeployment = async (deploymentId: string) => {
+    await actor()
+    const state = (
+      await db.query<{ r: { deployments: Record<string, unknown>[] } }>(
+        "SELECT agentonic.lifecycle_state($1) r",
+        [a]
+      )
+    ).rows[0]!.r
+    return state.deployments.find((d) => d.id === deploymentId)!
+  }
+
+  it("authorizes 30 days with a period budget and renews automatically while nothing changed", async () => {
+    const p = await running()
+    expect(await deployment(p.deploymentId)).toMatchObject({
+      days: 30,
+      auto_renew: true,
+      budget: 5,
+    })
+    expect(await renewalTick()).toEqual({ renewed: 0, blocked: 0 })
+    await endsIn(p.deploymentId, "2 days")
+    expect(await renewalTick()).toEqual({ renewed: 1, blocked: 0 })
+    const renewed = (
+      await sql(
+        "SELECT kind,renewed_by_member_id,round(extract(epoch FROM authorized_until-previous_until)/86400)::int days,period_budget_usd::float budget FROM agentonic.deployment_renewals WHERE deployment_id=$1",
+        [p.deploymentId]
+      )
+    ).rows
+    expect(renewed).toEqual([
+      {
+        kind: "automatic",
+        renewed_by_member_id: null,
+        days: 30,
+        budget: 5,
+      },
+    ])
+    expect(await customerDeployment(p.deploymentId)).toMatchObject({
+      autoRenew: true,
+      renewals: 1,
+      renewalBlocked: null,
+      periodCommittedMicrousd: 0,
+    })
+    expect(await renewalTick()).toEqual({ renewed: 0, blocked: 0 })
+  })
+
+  it("does not renew a deployment whose sources changed, and says why", async () => {
+    const p = await running()
+    await endsIn(p.deploymentId, "2 days")
+    await sql(
+      "UPDATE agentonic.document_chunks SET content_sha256=repeat('9',64) WHERE id IN (SELECT (hit->>'id')::uuid FROM agentonic.deployments d CROSS JOIN LATERAL jsonb_array_elements(d.evidence_sources) hit WHERE d.id=$1)",
+      [p.deploymentId]
+    )
+    expect(await renewalTick()).toEqual({ renewed: 0, blocked: 1 })
+    expect(await deployment(p.deploymentId)).toMatchObject({
+      renewal_blocked: "sources",
+    })
+    expect(await customerDeployment(p.deploymentId)).toMatchObject({
+      renewalBlocked: "sources",
+      canRenewNow: false,
+    })
+  })
+
+  it("lets the customer turn renewal off, change the period budget and renew by hand near the end", async () => {
+    const p = await running()
+    await actor()
+    expect(
+      await lifecycleCall("deployment_command", "renewal", {
+        deploymentId: p.deploymentId,
+        autoRenew: false,
+        budgetUsd: 8,
+      })
+    ).toMatchObject({ ok: true })
+    expect(await deployment(p.deploymentId)).toMatchObject({
+      auto_renew: false,
+      budget: 8,
+    })
+    await endsIn(p.deploymentId, "2 days")
+    expect(await renewalTick()).toEqual({ renewed: 0, blocked: 0 })
+    await endsIn(p.deploymentId, "20 days")
+    await actor()
+    expect(
+      await lifecycleCall("deployment_command", "extend", {
+        deploymentId: p.deploymentId,
+      })
+    ).toEqual({ ok: false, code: "too_early" })
+    await endsIn(p.deploymentId, "5 days")
+    await actor()
+    expect(
+      await lifecycleCall("deployment_command", "extend", {
+        deploymentId: p.deploymentId,
+      })
+    ).toMatchObject({ ok: true })
+    expect(
+      (
+        await sql(
+          "SELECT kind,renewed_by_member_id FROM agentonic.deployment_renewals WHERE deployment_id=$1",
+          [p.deploymentId]
+        )
+      ).rows
+    ).toEqual([{ kind: "manual", renewed_by_member_id: member }])
+    // Only the customer who authorized it controls its renewal.
+    await actor(other, otherW)
+    await expect(
+      lifecycleCall("deployment_command", "renewal", {
+        deploymentId: p.deploymentId,
+        autoRenew: true,
+        budgetUsd: 5,
+      })
+    ).rejects.toThrow()
+  })
+
+  it("keeps conversations across a version change and past the old version's end, until 30 days after the last message", async () => {
+    const p = await running()
+    const conversation = await chat("start", {
+      deploymentId: p.deploymentId,
+      title: "Synthetic continuity",
+    })
+    await chat("turn", {
+      conversationId: conversation.id,
+      requestId: id(1210),
+      query: "Synthetic question",
+    })
+    const kept = (
+      await sql(
+        "SELECT expires_at-clock_timestamp()>interval '29 days' long FROM agentonic.staging_conversations WHERE id=$1",
+        [conversation.id]
+      )
+    ).rows[0] as { long: boolean }
+    expect(kept.long).toBe(true)
+    // A new version the same member authorized takes over.
+    const next = id(1211)
+    await sql(
+      "UPDATE agentonic.deployments SET status='superseded',desired_state='stopped',service_token_sha256=NULL WHERE id=$1",
+      [p.deploymentId]
+    )
+    await sql(
+      "INSERT INTO agentonic.deployments(id,workspace_id,agent_id,code_release_id,configuration_release_id,submission_id,approval_id,host_id,environment,authorized_by_member_id,request_id,status,desired_state,budget_usd,authorized_until,evidence_sources,auto_renew,period_budget_usd,activated_at,heartbeat_at,manifest_sha256,broker_sha256) SELECT $2,workspace_id,agent_id,code_release_id,configuration_release_id,submission_id,approval_id,host_id,environment,authorized_by_member_id,$3,'running','running',budget_usd,authorized_until,evidence_sources,true,period_budget_usd,clock_timestamp(),clock_timestamp(),manifest_sha256,broker_sha256 FROM agentonic.deployments WHERE id=$1",
+      [p.deploymentId, next, id(1212)]
+    )
+    await sql(
+      "UPDATE agentonic.agent_environments SET current_deployment_id=$1 WHERE agent_id=$2",
+      [next, a]
+    )
+    expect(
+      (
+        await sql(
+          "SELECT c.deployment_id,t.deployment_id answered_by FROM agentonic.staging_conversations c JOIN agentonic.staging_turns t ON t.conversation_id=c.id WHERE c.id=$1",
+          [conversation.id]
+        )
+      ).rows
+    ).toEqual([{ deployment_id: next, answered_by: p.deploymentId }])
+    await actor()
+    expect(
+      await chat("state", { conversationId: conversation.id })
+    ).toMatchObject({
+      ok: true,
+      canSend: true,
+      turns: [{ query: "Synthetic question", version: 1 }],
+    })
+    // The version's authorization ends: still readable, no longer sendable,
+    // and the host's cleanup keeps the content.
+    await sql(
+      "ALTER TABLE agentonic.deployments DISABLE TRIGGER deployment_immutable"
+    )
+    await sql(
+      "UPDATE agentonic.deployments SET created_at=clock_timestamp()-interval '31 days',authorized_until=clock_timestamp()-interval '1 second' WHERE id=$1",
+      [next]
+    )
+    await sql(
+      "ALTER TABLE agentonic.deployments ENABLE TRIGGER deployment_immutable"
+    )
+    await hostCall("poll")
+    await actor()
+    expect(
+      await chat("state", { conversationId: conversation.id })
+    ).toMatchObject({
+      ok: true,
+      canSend: false,
+      turns: [{ query: "Synthetic question" }],
+    })
+    expect(
+      await chat("turn", {
+        conversationId: conversation.id,
+        requestId: id(1213),
+        query: "Another question",
+      })
+    ).toMatchObject({ ok: false, code: "unavailable" })
+    // Revocation still erases at once.
+    await sql(
+      "ALTER TABLE agentonic.deployments DISABLE TRIGGER deployment_immutable"
+    )
+    await sql(
+      "UPDATE agentonic.deployments SET revoked_at=clock_timestamp() WHERE id=$1",
+      [next]
+    )
+    await sql(
+      "ALTER TABLE agentonic.deployments ENABLE TRIGGER deployment_immutable"
+    )
+    await hostCall("poll")
+    expect(
+      (
+        await sql(
+          "SELECT query,scrubbed_at IS NOT NULL scrubbed FROM agentonic.staging_turns WHERE conversation_id=$1",
+          [conversation.id]
+        )
+      ).rows
+    ).toEqual([{ query: "", scrubbed: true }])
   })
 })
 
