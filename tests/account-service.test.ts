@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   issue: vi.fn(),
   command: vi.fn(),
   accept: vi.fn(),
+  setName: vi.fn(),
   listFactors: vi.fn(),
   enroll: vi.fn(),
   unenroll: vi.fn(),
@@ -45,6 +46,7 @@ vi.mock("../packages/server/src/access", () => ({
   issueWorkspaceInvitation: mocks.issue,
   runAccessCommand: mocks.command,
   acceptWorkspaceInvitation: mocks.accept,
+  setOwnDisplayName: mocks.setName,
 }))
 import {
   changePassword,
@@ -52,6 +54,7 @@ import {
   inviteMember,
   requestPasswordReset,
   startAuthenticator,
+  updateDisplayName,
   verifyAuthenticator,
 } from "../packages/server/src/account"
 import { publicUrl } from "../packages/server/src/env"
@@ -256,4 +259,20 @@ it("verifies staff codes against their enrolled authenticator, and replaces aban
     secret: "S",
   })
   expect(mocks.unenroll).toHaveBeenCalledWith({ factorId: "f-abandoned" })
+})
+it("saves a person's own name only when it is a usable name (N7)", async () => {
+  mocks.setName.mockResolvedValue(true)
+  for (const displayName of ["   ", "x".repeat(121), "Ana\nBcc: x"])
+    expect((await updateDisplayName("customer", { displayName })).ok).toBe(
+      false
+    )
+  expect(mocks.setName).not.toHaveBeenCalled()
+  expect(
+    await updateDisplayName("admin", { displayName: "  Ana Pérez " })
+  ).toEqual({ ok: true })
+  expect(mocks.setName).toHaveBeenCalledWith("admin", "Ana Pérez")
+  mocks.setName.mockResolvedValue(false)
+  expect((await updateDisplayName("customer", { displayName: "Ana" })).ok).toBe(
+    false
+  )
 })

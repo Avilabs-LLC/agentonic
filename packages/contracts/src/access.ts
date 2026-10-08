@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { uuid } from "./identity"
+import { displayNameSchema, uuid } from "./identity"
 
 const name = z.string().trim().min(1).max(120)
 const slug = z
@@ -143,7 +143,11 @@ export const invitationRequest = z
   })
   .strict()
 export const invitationAcceptance = z
-  .object({ workspaceId: uuid, token: z.string().regex(/^[a-f0-9]{64}$/) })
+  .object({
+    workspaceId: uuid,
+    token: z.string().regex(/^[a-f0-9]{64}$/),
+    displayName: displayNameSchema.shape.displayName,
+  })
   .strict()
 export const accessResult = z.discriminatedUnion("ok", [
   z.object({ ok: z.literal(true), id: uuid.nullable(), data: z.unknown() }),

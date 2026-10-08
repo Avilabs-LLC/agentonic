@@ -137,14 +137,45 @@ it("acceptance takes no caller-supplied email and hashes the token before queryi
     ).ok
   ).toBe(false)
   expect(mocks.transaction).not.toHaveBeenCalled()
+  // A name is required (N7), and it is saved in the acceptance's transaction.
   expect((await acceptWorkspaceInvitation({ workspaceId, token })).ok).toBe(
-    true
+    false
   )
+  mocks.query
+    .mockResolvedValueOnce([
+      { result: { ok: true, id: workspaceId, data: null } },
+    ])
+    .mockResolvedValueOnce([{ ok: true }])
+  expect(
+    (
+      await acceptWorkspaceInvitation({
+        workspaceId,
+        token,
+        displayName: "  Ana Pérez ",
+      })
+    ).ok
+  ).toBe(true)
   expect(JSON.stringify(mocks.query.mock.calls)).not.toContain(token)
+  expect(JSON.stringify(mocks.query.mock.calls.at(-1))).toContain("Ana Pérez")
   expect(mocks.transaction).toHaveBeenCalledWith(
     authId,
     workspaceId,
     expect.any(Function),
     "verified@example.invalid"
   )
+  // If the name cannot be saved, nothing is accepted.
+  mocks.query
+    .mockResolvedValueOnce([
+      { result: { ok: true, id: workspaceId, data: null } },
+    ])
+    .mockResolvedValueOnce([{ ok: false }])
+  expect(
+    (
+      await acceptWorkspaceInvitation({
+        workspaceId,
+        token,
+        displayName: "Ana",
+      })
+    ).ok
+  ).toBe(false)
 })

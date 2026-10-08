@@ -5,10 +5,13 @@ import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { CheckIcon, ShieldCheckIcon } from "lucide-react"
 import {
+  displayNameSchema,
   emailOnlySchema,
   mfaCodeSchema,
   newPasswordSchema,
+  PLACEHOLDER_NAME,
   type ActionResult,
+  type DisplayNameInput,
   type EmailOnlyInput,
   type MfaCodeInput,
   type NewPasswordInput,
@@ -395,17 +398,29 @@ export function AuthenticatorCard({
 export function InvitationAcceptance({
   accept,
   email,
+  name = "",
 }: {
-  accept: () => Promise<ActionResult>
+  accept: (input: DisplayNameInput) => Promise<ActionResult>
   email: string
+  /** The person's current name, when they already chose one. */
+  name?: string
 }) {
   const router = useRouter()
   const [busy, setBusy] = useState(false)
   const [accepted, setAccepted] = useState(false)
-  async function submit() {
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isValid },
+  } = useForm<DisplayNameInput>({
+    resolver: zodResolver(displayNameSchema),
+    mode: "onChange",
+    defaultValues: { displayName: name },
+  })
+  async function submit(input: DisplayNameInput) {
     setBusy(true)
     try {
-      const result = await accept()
+      const result = await accept(input)
       if (!result.ok) {
         notify.destructive(result.message)
         return
@@ -447,14 +462,118 @@ export function InvitationAcceptance({
       </div>
     )
   return (
-    <div className="space-y-4">
+    <form onSubmit={handleSubmit(submit)} noValidate className="space-y-4">
       <p className="text-sm">
         Entraste como <span className="break-all">{email}</span>. La invitación
         solo vale para ese correo.
       </p>
-      <Button type="button" disabled={busy} onClick={submit}>
+      <Field data-invalid={Boolean(errors.displayName)}>
+        <FieldLabel htmlFor="invitation-name">Tu nombre</FieldLabel>
+        <Input
+          id="invitation-name"
+          autoComplete="name"
+          maxLength={120}
+          aria-invalid={Boolean(errors.displayName)}
+          {...register("displayName")}
+        />
+        <FieldDescription>
+          Así te verán las personas de tu espacio de trabajo.
+        </FieldDescription>
+        <FieldError errors={[errors.displayName]} />
+      </Field>
+      <Button type="submit" disabled={busy || !isValid}>
         {busy ? "Aceptando…" : "Aceptar invitación"}
       </Button>
-    </div>
+    </form>
+  )
+}
+
+/** The Nombre row of Mi cuenta in both apps: shown, then edited in place (N7). */
+export function DisplayNameEditor({
+  name,
+  save,
+}: {
+  name: string
+  save: (input: DisplayNameInput) => Promise<ActionResult>
+}) {
+  const router = useRouter()
+  const [editing, setEditing] = useState(false)
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors, isValid, isSubmitting },
+  } = useForm<DisplayNameInput>({
+    resolver: zodResolver(displayNameSchema),
+    mode: "onChange",
+    defaultValues: { displayName: name === PLACEHOLDER_NAME ? "" : name },
+  })
+  async function submit(input: DisplayNameInput) {
+    try {
+      const result = await save(input)
+      if (!result.ok) {
+        notify.destructive(result.message)
+        return
+      }
+      notify.success("Nombre guardado.")
+      setEditing(false)
+      router.refresh()
+    } catch {
+      notify.destructive("No se pudo guardar tu nombre. Inténtalo de nuevo.")
+    }
+  }
+  if (!editing)
+    return (
+      <span className="flex flex-wrap items-center gap-3">
+        <span>{name}</span>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            reset({ displayName: name === PLACEHOLDER_NAME ? "" : name })
+            setEditing(true)
+          }}
+        >
+          {name === PLACEHOLDER_NAME ? "Añadir tu nombre" : "Cambiar nombre"}
+        </Button>
+      </span>
+    )
+  return (
+    <form
+      onSubmit={handleSubmit(submit)}
+      noValidate
+      // The row sizes to its content, so the editor sets its own width.
+      className="flex w-80 max-w-full flex-col gap-2"
+    >
+      <Field data-invalid={Boolean(errors.displayName)}>
+        <FieldLabel htmlFor="account-name" className="sr-only">
+          Nombre
+        </FieldLabel>
+        <Input
+          id="account-name"
+          autoComplete="name"
+          maxLength={120}
+          autoFocus
+          aria-invalid={Boolean(errors.displayName)}
+          {...register("displayName")}
+        />
+        <FieldError errors={[errors.displayName]} />
+      </Field>
+      <span className="flex justify-end gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={isSubmitting}
+          onClick={() => setEditing(false)}
+        >
+          Cancelar
+        </Button>
+        <Button type="submit" size="sm" disabled={!isValid || isSubmitting}>
+          {isSubmitting ? "Guardando…" : "Guardar"}
+        </Button>
+      </span>
+    </form>
   )
 }

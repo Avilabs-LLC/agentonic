@@ -1,6 +1,6 @@
 # Agentonic: current state
 
-**As of 8 October 2026 · platform v0.25.0 · nonproduction only.** A short summary of what runs where, what works and what doesn't exist yet. [The architecture record](agentonic-architecture.md) keeps the full, dated history. If the two disagree about the present, fix this page. Update it whenever a change alters what runs where.
+**As of 8 October 2026 · platform v0.26.0 · nonproduction only.** A short summary of what runs where, what works and what doesn't exist yet. [The architecture record](agentonic-architecture.md) keeps the full, dated history. If the two disagree about the present, fix this page. Update it whenever a change alters what runs where.
 
 ## What runs where
 
@@ -82,4 +82,4 @@ The ordered plan is architecture §37; the owner's audit brief tracks progress. 
 | Invitations, password reset and staff two-factor sign-in               | §54                  |
 | What is in use and what comes next; the Admin agent page               | §55                  |
 
-Presentation rules are in the [UI contract](ui/ui-contract.md). The [target schema](schema.dbml) describes 79 tables; 62 exist in the 58 checked-in migrations.
+Presentation rules are in the [UI contract](ui/ui-contract.md). The [target schema](schema.dbml) describes 79 tables; 62 exist in the 59 checked-in migrations.

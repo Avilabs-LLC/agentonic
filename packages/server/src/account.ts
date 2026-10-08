@@ -1,6 +1,7 @@
 import "server-only"
 import { NextResponse } from "next/server"
 import {
+  displayNameSchema,
   emailOnlySchema,
   mfaCodeSchema,
   mfaEnrollmentCode,
@@ -26,6 +27,7 @@ import {
   acceptWorkspaceInvitation,
   issueWorkspaceInvitation,
   runAccessCommand,
+  setOwnDisplayName,
 } from "./access"
 
 // Account flows (architecture §54). Supabase Auth sends every email through the
@@ -202,6 +204,24 @@ export async function revokeInvitation(input: unknown): Promise<ActionResult> {
   return result.ok
     ? { ok: true }
     : { ok: false, message: "No se pudo retirar la invitación." }
+}
+
+export async function updateDisplayName(
+  app: AppKind,
+  input: unknown
+): Promise<ActionResult> {
+  const parsed = displayNameSchema.safeParse(input)
+  if (!parsed.success)
+    return {
+      ok: false,
+      message: parsed.error.issues[0]?.message ?? "Nombre no válido.",
+    }
+  return (await setOwnDisplayName(app, parsed.data.displayName))
+    ? { ok: true }
+    : {
+        ok: false,
+        message: "No se pudo guardar tu nombre. Inténtalo de nuevo.",
+      }
 }
 
 export async function acceptInvitation(input: unknown): Promise<ActionResult> {

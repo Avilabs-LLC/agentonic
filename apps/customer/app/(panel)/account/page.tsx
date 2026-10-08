@@ -5,6 +5,8 @@ import { Separator } from "@workspace/ui/components/separator"
 import { Button } from "@workspace/ui/components/button"
 import Link from "next/link"
 import { account } from "@/lib/navigation"
+import { DisplayNameEditor } from "@workspace/ui/components/account-forms"
+import { saveDisplayName } from "../../actions"
 export default async function Page() {
   const identity = await requireIdentity("customer")
   return (
@@ -24,7 +26,14 @@ export default async function Page() {
             <div className="flex flex-wrap justify-between gap-2">
               <dt className="text-muted-foreground">Nombre</dt>
               <dd>
-                {identity.user?.displayName ?? "Pendiente de vinculación"}
+                {identity.user ? (
+                  <DisplayNameEditor
+                    name={identity.user.displayName}
+                    save={saveDisplayName}
+                  />
+                ) : (
+                  "Pendiente de vinculación"
+                )}
               </dd>
             </div>
             <Separator />

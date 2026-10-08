@@ -96,7 +96,45 @@ export async function issueWorkspaceInvitation(input: unknown) {
 export async function acceptWorkspaceInvitation(input: unknown) {
   const parsed = invitationAcceptance.safeParse(input)
   if (!parsed.success) return { ok: false as const }
-  return execute("customer", parsed.data.workspaceId, "invite.accept", {
-    tokenHash: createHash("sha256").update(parsed.data.token).digest("hex"),
-  })
+  const actor = await requireVerifiedUser("customer")
+  const tokenHash = createHash("sha256").update(parsed.data.token).digest("hex")
+  try {
+    // Joining and naming happen together: the name the person chose replaces
+    // the "Miembro" placeholder, or nothing is accepted (N7).
+    return await withIdentity(
+      actor.authId,
+      parsed.data.workspaceId,
+      async (tx) => {
+        const rows = await tx.$queryRaw<{ result: unknown }[]>`
+        SELECT agentonic.access_command('invite.accept', ${JSON.stringify({ tokenHash })}::jsonb, ${randomUUID()}::uuid) AS result`
+        const result = accessResult.parse(rows[0]?.result)
+        if (!result.ok) return result
+        const named = await tx.$queryRaw<{ ok: boolean }[]>`
+        SELECT agentonic.set_display_name(${parsed.data.displayName}) AS ok`
+        if (!named[0]?.ok) throw new Error("Name not saved")
+        return result
+      },
+      actor.email
+    )
+  } catch {
+    return { ok: false as const }
+  }
+}
+/** Changes only the signed-in person's own name (N7). */
+export async function setOwnDisplayName(app: AppKind, displayName: string) {
+  const actor = await requireVerifiedUser(app)
+  try {
+    return await withIdentity(
+      actor.authId,
+      null,
+      async (tx) => {
+        const rows = await tx.$queryRaw<{ ok: boolean }[]>`
+        SELECT agentonic.set_display_name(${displayName}) AS ok`
+        return Boolean(rows[0]?.ok)
+      },
+      actor.email
+    )
+  } catch {
+    return false
+  }
 }

@@ -1,6 +1,7 @@
 import Link from "next/link"
 import { redirect } from "next/navigation"
-import { signedInEmail } from "@agentonic/server/auth"
+import { requireIdentity, signedInEmail } from "@agentonic/server/auth"
+import { PLACEHOLDER_NAME } from "@agentonic/contracts/identity"
 import { AuthCard } from "@workspace/ui/components/auth-card"
 import { InvitationAcceptance } from "@workspace/ui/components/account-forms"
 import { acceptWorkspace } from "../actions"
@@ -18,6 +19,12 @@ export default async function InvitationPage({
     redirect(
       `/login?next=${encodeURIComponent(`/invitation?workspace=${workspace}&token=${token}`)}`
     )
+  // Someone who already chose a name keeps it unless they change it here.
+  const current = email ? (await requireIdentity("customer")).user : null
+  const name =
+    current && current.displayName !== PLACEHOLDER_NAME
+      ? current.displayName
+      : ""
   return (
     <AuthCard
       title="Invitación a Agentonic"
@@ -31,6 +38,7 @@ export default async function InvitationPage({
       {valid && email ? (
         <InvitationAcceptance
           email={email}
+          name={name}
           accept={acceptWorkspace.bind(null, workspace, token)}
         />
       ) : (

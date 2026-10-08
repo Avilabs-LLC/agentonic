@@ -1,5 +1,10 @@
 export const VERSION_HISTORY = [
   {
+    "version": "0.26.0",
+    "date": "2026-10-08",
+    "summary": "People choose their own name: on accepting an invitation and in Mi cuenta (N7)"
+  },
+  {
     "version": "0.25.0",
     "date": "2026-10-08",
     "summary": "Codex-style composer and model picker; wide lists and menus; Documentos filter; member emails; Admin Recursos; C6 closed"
