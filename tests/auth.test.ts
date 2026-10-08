@@ -78,8 +78,10 @@ it("derives identity from Auth; a customer session never gains admin access", as
   })
   expect((await requireIdentity("admin")).hasAccess).toBe(false)
   expect((await requireIdentity("customer")).hasAccess).toBe(true)
+  // The server-verified address goes along, never one from the browser.
   expect(mocks.overview).toHaveBeenCalledWith(
-    "11111111-1111-4111-8111-111111111111"
+    "11111111-1111-4111-8111-111111111111",
+    "synthetic@example.test"
   )
 })
 it("staff access does not imply customer workspace access", async () => {

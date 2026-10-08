@@ -41,7 +41,11 @@ import {
 import { DataTable } from "@workspace/ui/components/data-table"
 import { DataTableRowActions } from "@workspace/ui/components/data-table-row-actions"
 import { StatusIndicator } from "@workspace/ui/components/status-badge"
-import { sortableHeader, When } from "@workspace/ui/components/table-cells"
+import {
+  Absent,
+  sortableHeader,
+  When,
+} from "@workspace/ui/components/table-cells"
 import { statusDescriptor } from "@workspace/ui/lib/badge-status"
 import { notify } from "@workspace/ui/lib/toast"
 
@@ -54,6 +58,12 @@ const role = (value: string) => memberRoleLabels[value] ?? value
 export function MembersTable({ members }: { members: WorkspaceMember[] }) {
   const columns: ColumnDef<WorkspaceMember>[] = [
     { accessorKey: "displayName", header: header("Nombre") },
+    {
+      id: "email",
+      accessorFn: (row) => row.email ?? "",
+      header: header("Correo", "Correo electrónico"),
+      cell: ({ row }) => row.original.email ?? <Absent>Sin registro</Absent>,
+    },
     {
       id: "role",
       accessorFn: (row) => role(row.role),
@@ -74,7 +84,7 @@ export function MembersTable({ members }: { members: WorkspaceMember[] }) {
     <DataTable
       data={members}
       columns={columns}
-      searchKeys={["displayName"]}
+      searchKeys={["displayName", "email"]}
       searchLabel="Buscar miembros"
       emptyDescription="Este espacio aún no tiene miembros."
       getRowId={(row) => row.id}

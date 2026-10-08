@@ -25,6 +25,17 @@ export const operationsAgents = z.array(
       web: z.boolean(),
       collections: count,
     }),
+    // The saved draft's Recursos, as on the customer list (migration 58).
+    resources: z
+      .object({
+        promptCharacters: count,
+        skillsCount: count,
+        collectionsCount: count,
+        toolsCount: count,
+        connectionsCount: count,
+      })
+      .nullable()
+      .default(null),
     deployment: z
       .object({
         status: z.string(),

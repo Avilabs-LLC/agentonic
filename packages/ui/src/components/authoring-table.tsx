@@ -4,17 +4,12 @@ import Link from "next/link"
 import { useId, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import {
-  FileTextIcon,
   EllipsisIcon,
   PencilIcon,
   ChartNoAxesCombinedIcon,
   ScrollTextIcon,
   SquareIcon,
   Trash2Icon,
-  ListChecksIcon,
-  LibraryBigIcon,
-  WrenchIcon,
-  PlugIcon,
 } from "lucide-react"
 import {
   DropdownMenu,
@@ -35,20 +30,10 @@ import {
   DataTableColumnHeader,
 } from "@workspace/ui/components/data-table"
 import { Button } from "@workspace/ui/components/button"
-import {
-  Tooltip,
-  TooltipTrigger,
-  TooltipContent,
-} from "@workspace/ui/components/tooltip"
 import { FiltersCard } from "@workspace/ui/components/filters-card"
 import { Field, FieldLabel } from "@workspace/ui/components/field"
-import {
-  Select,
-  SelectTrigger,
-  SelectValue,
-  SelectContent,
-  SelectItem,
-} from "@workspace/ui/components/select"
+import { MultiSelectFilter } from "@workspace/ui/components/multi-select-filter"
+import { ResourceCounts } from "@workspace/ui/components/resource-counts"
 import {
   AgentLink,
   agentVersionColumns,
@@ -69,29 +54,6 @@ export function AuthoringTable({
   const filterId = useId()
   const [pending, startTransition] = useTransition()
   const [tableReset, setTableReset] = useState(0)
-  // "Todos los espacios" is an option too, so the filter can always return to
-  // every workspace; it is the selection while no workspace is chosen.
-  const ALL = "all"
-  const workspaceOptions = [
-    { value: ALL, label: "Todos los espacios" },
-    ...workspaces.map((workspace) => ({
-      value: workspace.id,
-      label: workspace.name,
-    })),
-  ]
-  const shown = selectedWorkspaceIds.length ? selectedWorkspaceIds : [ALL]
-  function changeWorkspaces(next: string[]) {
-    // Choosing "Todos los espacios" clears the rest; choosing a workspace
-    // replaces "Todos los espacios".
-    const ids =
-      next.includes(ALL) && !shown.includes(ALL)
-        ? []
-        : next.filter((value) => value !== ALL)
-    const same =
-      ids.length === selectedWorkspaceIds.length &&
-      ids.every((id) => selectedWorkspaceIds.includes(id))
-    if (!same) selectWorkspaces(ids)
-  }
   function selectWorkspaces(ids: string[]) {
     const query = new URLSearchParams()
     ids.forEach((id) => query.append("workspace", id))
@@ -109,22 +71,6 @@ export function AuthoringTable({
       Sin acceso
     </span>
   )
-  const resources = [
-    { key: "skillsCount", label: "Habilidades", icon: ListChecksIcon },
-    { key: "collectionsCount", label: "Colecciones", icon: LibraryBigIcon },
-    {
-      key: "toolsCount",
-      label: "Herramientas",
-      icon: WrenchIcon,
-      upcoming: true,
-    },
-    {
-      key: "connectionsCount",
-      label: "Conexiones",
-      icon: PlugIcon,
-      upcoming: true,
-    },
-  ] as const
   const columns: ColumnDef<(typeof agents)[number]>[] = [
     {
       id: "actions",
@@ -215,54 +161,12 @@ export function AuthoringTable({
     {
       id: "resources",
       header: "Recursos",
-      cell: ({ row }) => {
-        const configuration = row.original.configuration
-        if (!configuration) return unavailable
-        const ready =
-          configuration.promptCharacters >= SYSTEM_PROMPT_MIN_CHARACTERS
-        const instructions = `Instrucciones ${ready ? "listas" : "incompletas"}: ${configuration.promptCharacters} caracteres`
-        return (
-          <div className="flex items-center gap-4">
-            <Tooltip>
-              <TooltipTrigger
-                render={<span tabIndex={0} />}
-                aria-label={instructions}
-                className="inline-flex items-center gap-1.5 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                <FileTextIcon
-                  className="size-4 shrink-0 text-muted-foreground"
-                  aria-hidden="true"
-                />
-                <span className="tabular-nums" aria-hidden="true">
-                  {configuration.promptCharacters}
-                </span>
-              </TooltipTrigger>
-              <TooltipContent>{instructions}</TooltipContent>
-            </Tooltip>
-            {resources.map(({ key, label, icon: Icon, ...resource }) => {
-              const description = `${label}: ${configuration[key]}${"upcoming" in resource ? " · Próximamente" : ""}`
-              return (
-                <Tooltip key={key}>
-                  <TooltipTrigger
-                    render={<span tabIndex={0} />}
-                    aria-label={description}
-                    className="inline-flex items-center gap-1.5 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  >
-                    <Icon
-                      className="size-4 shrink-0 text-muted-foreground"
-                      aria-hidden="true"
-                    />
-                    <span className="tabular-nums" aria-hidden="true">
-                      {configuration[key]}
-                    </span>
-                  </TooltipTrigger>
-                  <TooltipContent>{description}</TooltipContent>
-                </Tooltip>
-              )
-            })}
-          </div>
-        )
-      },
+      cell: ({ row }) =>
+        row.original.configuration ? (
+          <ResourceCounts value={row.original.configuration} />
+        ) : (
+          unavailable
+        ),
     },
     ...agentVersionColumns<(typeof agents)[number]>(
       (agent) => agent.configuration?.summary ?? null,
@@ -282,32 +186,18 @@ export function AuthoringTable({
       >
         <Field>
           <FieldLabel htmlFor={filterId}>Espacios de trabajo</FieldLabel>
-          <Select
-            multiple
-            items={workspaceOptions}
-            value={shown}
+          <MultiSelectFilter
+            id={filterId}
+            allLabel="Todos los espacios"
+            countLabel={(count) => `${count} espacios seleccionados`}
+            options={workspaces.map((workspace) => ({
+              value: workspace.id,
+              label: workspace.name,
+            }))}
+            selected={selectedWorkspaceIds}
             disabled={pending}
-            onValueChange={changeWorkspaces}
-          >
-            <SelectTrigger id={filterId} className="w-full">
-              <SelectValue>
-                {selectedWorkspaceIds.length === 0
-                  ? "Todos los espacios"
-                  : selectedWorkspaceIds.length === 1
-                    ? workspaces.find(
-                        (workspace) => workspace.id === selectedWorkspaceIds[0]
-                      )?.name
-                    : `${selectedWorkspaceIds.length} espacios seleccionados`}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {workspaceOptions.map((workspace) => (
-                <SelectItem key={workspace.value} value={workspace.value}>
-                  {workspace.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            onChange={selectWorkspaces}
+          />
         </Field>
       </FiltersCard>
       <p className="text-sm text-muted-foreground">

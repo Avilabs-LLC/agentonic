@@ -13,7 +13,7 @@ export default async function Page() {
     <>
       <PageHeader
         title={operations.agents.title}
-        description="Todos los agentes de los clientes: capacidades de su última versión, despliegue y turnos recientes. No incluye instrucciones, documentos ni conversaciones."
+        description="Todos los agentes de los clientes: recursos del borrador guardado, versiones, despliegue y turnos recientes. No incluye instrucciones, documentos ni conversaciones."
         count={agents.length}
       />
       <OperationsAgentsTable agents={agents} />

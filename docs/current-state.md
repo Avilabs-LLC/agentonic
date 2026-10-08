@@ -20,11 +20,11 @@ On 5 October the nonproduction data was reset: no agents, documents or deploymen
 3. They submit it. AI drafts evaluation criteria, which the customer confirms.
 4. The version is evaluated on the VM, with several models if requested. Versions with Gmail or web tools also get platform tool cases run against synthetic fixtures (architecture §51). Routine versions are approved automatically; versions with tools need staff approval.
 5. The customer authorizes private staging use (up to 7 days and US$1), and staff activate it.
-6. The customer chats with the activated agent in **Chats**. Only that customer can read the conversation.
+6. The customer chats with the activated agent in **Chats**, choosing among the models the approved version was evaluated with. Only that customer can read the conversation.
 
 On 6 October the whole flow ran on the hosted names with no Agentonic process on the Mac: upload, processing, preview, criteria, evaluation, automatic approval, activation and chat, including an agent resting and waking for a second message on runtime 0.4.0 (architecture §53). Gmail was accepted live on 8 October on the hosted customer app: connecting, searching and reading, creating, editing and deleting a draft, and sending, each after one confirmation, plus cancellation, a refused second confirmation, an unconfirmed send that was never sent, and disconnecting ([gmail-connection.md](gmail-connection.md#live-acceptance-on-the-hosted-app--8-october-2026-b2)).
 
-The Admin app has **Revisiones** (submissions, receipts, renewal and activation), **Vencimientos** (what expires, when and who must act), and the operations screens **Agentes**, **Despliegues**, **Actividad**, **Costos**, **Espacios de trabajo** and **Runtime** (architecture §52). Both agent lists show each agent's version in use and next version, Admin has a page per agent that every agent name opens, and Vencimientos groups servers by place (architecture §55). Installing servers, publishing runtimes and renewing verification are still done with scripts on the Mac; the screens show their state.
+The Admin app has **Revisiones** (submissions, receipts, renewal and activation), **Vencimientos** (what expires, when and who must act), and the operations screens **Agentes**, **Despliegues**, **Actividad**, **Costos**, **Espacios de trabajo** and **Runtime** (architecture §52). Both agent lists show each agent's Recursos (the saved draft's counts), version in use and next version, Admin has a page per agent that every agent name opens, and Vencimientos groups servers by place (architecture §55). Installing servers, publishing runtimes and renewing verification are still done with scripts on the Mac; the screens show their state.
 
 ## Operations
 
@@ -82,4 +82,4 @@ The ordered plan is architecture §37; the owner's audit brief tracks progress. 
 | Invitations, password reset and staff two-factor sign-in               | §54                  |
 | What is in use and what comes next; the Admin agent page               | §55                  |
 
-Presentation rules are in the [UI contract](ui/ui-contract.md). The [target schema](schema.dbml) describes 79 tables; 62 exist in the 56 checked-in migrations.
+Presentation rules are in the [UI contract](ui/ui-contract.md). The [target schema](schema.dbml) describes 79 tables; 62 exist in the 58 checked-in migrations.

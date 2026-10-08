@@ -71,13 +71,21 @@ export type IdentityOverview = {
   }[]
 }
 export async function identityOverview(
-  authUserId: string
+  authUserId: string,
+  verifiedEmail: string | null = null
 ): Promise<IdentityOverview> {
-  return withIdentity(authUserId, null, async (tx) => {
-    const rows = await tx.$queryRaw<
-      { overview: IdentityOverview }[]
-    >`SELECT agentonic.identity_overview() AS overview`
-    if (!rows[0]) throw new Error("Identity discovery failed.")
-    return rows[0].overview
-  })
+  return withIdentity(
+    authUserId,
+    null,
+    async (tx) => {
+      // Keeps the copy managers see in Miembros current; writes only on change.
+      await tx.$executeRaw`SELECT agentonic.record_verified_email()`
+      const rows = await tx.$queryRaw<
+        { overview: IdentityOverview }[]
+      >`SELECT agentonic.identity_overview() AS overview`
+      if (!rows[0]) throw new Error("Identity discovery failed.")
+      return rows[0].overview
+    },
+    verifiedEmail
+  )
 }

@@ -54,6 +54,13 @@ describe("Admin operations screens", () => {
       createdAt: now,
       latestVersion: "2",
       tools: { gmail: true, web: false, collections: 2 },
+      resources: {
+        promptCharacters: 12345,
+        skillsCount: 2,
+        collectionsCount: 2,
+        toolsCount: 1,
+        connectionsCount: 0,
+      },
       deployment: null,
       lastRunAt: null,
       runs7d: 0,
@@ -89,6 +96,7 @@ describe("Admin operations screens", () => {
           ...agent,
           id: id(9),
           name: "Agente nuevo",
+          resources: null,
           summary: { archived: false, live: [], ended: null, next: null },
         },
       ],
@@ -96,7 +104,12 @@ describe("Admin operations screens", () => {
     for (const text of [
       `href="/agents/${id(1)}"`,
       "Asistente sintético",
-      "Conocimiento (2 colecciones) · Gmail",
+      // The customer list's Recursos, from the saved draft, in fixed slots.
+      ">Recursos<",
+      'aria-label="Instrucciones listas: 12345 caracteres"',
+      'aria-label="Herramientas: 1 · Próximamente"',
+      "min-w-[5ch]",
+      "Sin borrador",
       "Versión en uso",
       "Próxima versión",
       ">En uso<",
@@ -130,6 +143,7 @@ describe("Admin operations screens", () => {
     expect(out).not.toContain("<dl")
     expect(out).not.toContain("· En reposo")
     expect(out).not.toContain("Versión 2")
+    expect(out).not.toContain("Capacidades")
   })
   it("shows one agent's versions, proposals, deployments and activity", () => {
     const out = html(agentPage.OperationsAgentOverview, {

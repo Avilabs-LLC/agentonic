@@ -4,7 +4,8 @@ import {
   modelConfigurationKey,
   type ModelConfiguration,
 } from "@agentonic/contracts/models"
-import { ModelConfigurationSelect } from "@workspace/ui/components/model-configuration-select"
+import { ModelPicker } from "@workspace/ui/components/model-picker"
+import { ChatComposer } from "@workspace/ui/components/chat-composer"
 import { AgentAnswer } from "@workspace/ui/components/agent-answer"
 import { GmailApprovals } from "@workspace/ui/components/gmail-approvals"
 import { formatUtcMinute } from "@agentonic/contracts/format"
@@ -15,7 +16,7 @@ import {
 import { CardEmptyState } from "@workspace/ui/components/card-empty-state"
 import { useCallback, useEffect, useId, useRef, useState } from "react"
 import type { z } from "zod"
-import { MessageSquareIcon, SendIcon, Loader2Icon } from "lucide-react"
+import { MessageSquareIcon, Loader2Icon } from "lucide-react"
 import {
   chatList,
   chatState,
@@ -24,7 +25,6 @@ import {
 } from "@agentonic/contracts/lifecycle"
 import { Button } from "@workspace/ui/components/button"
 import { Input } from "@workspace/ui/components/input"
-import { Textarea } from "@workspace/ui/components/textarea"
 import { Field, FieldLabel } from "@workspace/ui/components/field"
 import {
   Select,
@@ -278,7 +278,9 @@ export function StagingChats({
                     <SelectTrigger id={`${fieldId}-agent`}>
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent>
+                    {/* Options wider than the trigger widen the list
+                        instead of being clipped. */}
+                    <SelectContent className="w-auto max-w-(--available-width) min-w-(--anchor-width)">
                       {listing.agents
                         .filter((a) =>
                           a.name.toLocaleLowerCase("es-VE").includes(term)
@@ -384,61 +386,46 @@ export function StagingChats({
                   disponible; esta conversación se conserva.
                 </p>
               )}
-              <form
-                className="mt-6 space-y-3"
-                onSubmit={(e) => {
-                  e.preventDefault()
-                  void run("turn")
-                }}
+              <div className="mt-6">
+                <ChatComposer
+                  id={`${fieldId}-message`}
+                  value={query}
+                  onChange={setQuery}
+                  onSubmit={() => void run("turn")}
+                  placeholder="Escribe tu pregunta"
+                  disabled={busy || waiting || !state.online}
+                  canSubmit={
+                    !busy && !waiting && state.online && !!query.trim()
+                  }
+                  model={
+                    <ModelPicker
+                      value={configuration}
+                      onChange={setChosenModel}
+                      options={state.models}
+                      disabled={busy || waiting}
+                      note="Solo puedes elegir los modelos con los que se evaluó la versión aprobada."
+                    />
+                  }
+                  tray={
+                    <p>
+                      Consumo: USD {(state.committedMicrousd / 1e6).toFixed(4)}{" "}
+                      de USD {state.budgetUsd.toFixed(2)} autorizados. Esta
+                      conversación y sus mensajes están disponibles hasta el{" "}
+                      {formatUtcMinute(state.expiresAt)}.
+                    </p>
+                  }
+                />
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="mt-4"
+                disabled={busy}
+                onClick={() => void run("close")}
               >
-                <Field>
-                  <FieldLabel htmlFor={`${fieldId}-message`}>
-                    Mensaje
-                  </FieldLabel>
-                  <ModelConfigurationSelect
-                    value={configuration}
-                    onChange={setChosenModel}
-                    options={state?.models ?? []}
-                    disabled={
-                      busy ||
-                      !!state?.turns.some((t) =>
-                        ["queued", "running"].includes(t.status)
-                      )
-                    }
-                  />
-                  <Textarea
-                    id={`${fieldId}-message`}
-                    value={query}
-                    maxLength={1000}
-                    disabled={busy || waiting || !state.online}
-                    onChange={(e) => setQuery(e.target.value)}
-                    placeholder="Escribe tu pregunta"
-                  />
-                </Field>
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    disabled={busy}
-                    onClick={() => void run("close")}
-                  >
-                    Cerrar y borrar mensajes
-                  </Button>
-                  <Button
-                    type="submit"
-                    disabled={busy || waiting || !state.online || !query.trim()}
-                  >
-                    <SendIcon />
-                    Enviar
-                  </Button>
-                </div>
-              </form>
-              <p className="mt-4 text-xs text-muted-foreground">
-                Consumo: USD {(state.committedMicrousd / 1e6).toFixed(4)} de USD{" "}
-                {state.budgetUsd.toFixed(2)} autorizados. Esta conversación y
-                sus mensajes están disponibles hasta el{" "}
-                {formatUtcMinute(state.expiresAt)}.
-              </p>
+                Cerrar y borrar mensajes
+              </Button>
             </>
           )}
           {error && (

@@ -91,6 +91,8 @@ it("gives staff every operations read, as metadata only", async () => {
       ownerName: "Owner",
       deployment: null,
       runs7d: 0,
+      // Counted from the saved draft, as on the customer agent list.
+      resources: expect.objectContaining({ connectionsCount: 0 }),
     }),
   ])
   const workspaces = await read("operations_workspaces")

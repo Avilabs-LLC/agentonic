@@ -66,7 +66,12 @@ export function DataTableRowActions({ actions }: { actions: RowAction[] }) {
         >
           <EllipsisIcon />
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
+        {/* The menu opens from a small icon button: size it to its labels so
+            they stay on one line. */}
+        <DropdownMenuContent
+          align="end"
+          className="w-auto min-w-40 whitespace-nowrap"
+        >
           {ordered.map((action, index) => (
             <div key={action.label}>
               {action.destructive &&

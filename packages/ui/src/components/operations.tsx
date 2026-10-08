@@ -55,6 +55,7 @@ import {
   agentVersionColumns,
 } from "@workspace/ui/components/agent-versions"
 import { CardEmptyState } from "@workspace/ui/components/card-empty-state"
+import { ResourceCounts } from "@workspace/ui/components/resource-counts"
 import { DataTable } from "@workspace/ui/components/data-table"
 import {
   Card,
@@ -142,15 +143,17 @@ export function OperationsAgentsTable({
       header: header("Responsable"),
     },
     {
-      id: "capabilities",
-      accessorFn: (row) => capabilities(row.tools),
-      header: header("Capacidades"),
-      // The version number shows once, in the version columns.
+      id: "resources",
+      // The same Recursos as the customer agent list (owner direction,
+      // 2026-10-08): the saved draft's counts, not the latest version's.
+      header: () => (
+        <span title="Recursos del borrador guardado">Recursos</span>
+      ),
       cell: ({ row }) =>
-        row.original.latestVersion ? (
-          capabilities(row.original.tools)
+        row.original.resources ? (
+          <ResourceCounts value={row.original.resources} />
         ) : (
-          <Absent>Sin versiones congeladas</Absent>
+          <Absent>Sin borrador</Absent>
         ),
     },
     ...agentVersionColumns<Row>((row) => row.summary),

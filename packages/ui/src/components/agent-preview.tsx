@@ -4,17 +4,17 @@ import {
   modelCatalog,
   type ModelConfiguration,
 } from "@agentonic/contracts/models"
-import { ModelConfigurationSelect } from "@workspace/ui/components/model-configuration-select"
+import { ModelPicker } from "@workspace/ui/components/model-picker"
+import { ChatComposer } from "@workspace/ui/components/chat-composer"
 import { AgentAnswer } from "@workspace/ui/components/agent-answer"
 import { useCallback, useEffect, useRef, useState } from "react"
-import { PlayIcon, SendIcon, SquareIcon, MessageSquareIcon } from "lucide-react"
+import { PlayIcon, SquareIcon, MessageSquareIcon } from "lucide-react"
 import {
   previewState,
   previewErrors,
   type PreviewState,
 } from "@agentonic/contracts/preview"
 import { Button } from "@workspace/ui/components/button"
-import { Textarea } from "@workspace/ui/components/textarea"
 import { Field, FieldLabel } from "@workspace/ui/components/field"
 import {
   Select,
@@ -122,7 +122,8 @@ export function AgentPreview({
       clearInterval(timer)
     }
   }, [previewId, command])
-  const last = state?.turns.at(-1)
+  const last = state?.turns.at(-1),
+    turnCount = state?.turns.length ?? 0
   const waiting = !!last && ["queued", "running"].includes(last.status)
   useEffect(() => {
     bottom.current?.scrollIntoView({ block: "nearest" })
@@ -262,47 +263,6 @@ export function AgentPreview({
         />
       )}
       <div className="overflow-hidden rounded-lg border bg-card">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b px-6 py-4">
-          <Field className="flex-1">
-            <FieldLabel htmlFor="preview-model">
-              Selecciona un modelo
-            </FieldLabel>
-            <div>
-              <ModelConfigurationSelect
-                id="preview-model"
-                className="min-w-56"
-                value={{ model, reasoning }}
-                disabled={busy || waiting}
-                onChange={(choice) => {
-                  setModel(choice.model)
-                  setReasoning(choice.reasoning)
-                }}
-              />
-            </div>
-            {/* The longest note always reserves its space, so choosing Astra
-                does not move the conversation below. */}
-            <p className="grid text-xs text-muted-foreground">
-              <span
-                aria-hidden="true"
-                className="invisible col-start-1 row-start-1"
-              >
-                {astraNote}. {astraNoteRestart}.
-              </span>
-              <span className="col-start-1 row-start-1">
-                {model === "gpt-6-astra" &&
-                  (state?.budgetUsd ?? budgetUsd) < 3 &&
-                  (previewId
-                    ? `${astraNote}. ${astraNoteRestart}.`
-                    : `${astraNote}.`)}
-              </span>
-            </p>
-          </Field>
-          <span className="text-sm text-muted-foreground">
-            {previewId
-              ? `${state?.turns.length ?? 0} de 10 mensajes`
-              : "Sin iniciar"}
-          </span>
-        </div>
         <div
           className="max-h-[55vh] min-h-64 space-y-6 overflow-y-auto p-6"
           role="log"
@@ -378,47 +338,51 @@ export function AgentPreview({
           ))}
           <div ref={bottom} />
         </div>
-        <form
-          onSubmit={(event) => {
-            event.preventDefault()
-            void act("turn")
-          }}
-          className="space-y-3 border-t p-4 sm:p-6"
-        >
-          <Field>
-            <FieldLabel htmlFor="preview-message">Mensaje</FieldLabel>
-            <Textarea
-              id="preview-message"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              maxLength={1000}
-              placeholder="Pregunta sobre el conocimiento de tu agente…"
-              disabled={
-                !previewId ||
-                busy ||
-                waiting ||
-                (state?.turns.length ?? 0) >= 10
-              }
-              className="min-h-20 resize-y"
-            />
-          </Field>
-          <div className="flex items-center justify-between gap-3">
-            <p className="text-xs text-muted-foreground">{query.length}/1000</p>
-            <Button
-              type="submit"
-              disabled={
-                !previewId ||
-                busy ||
-                waiting ||
-                !query.trim() ||
-                (state?.turns.length ?? 0) >= 10
-              }
-            >
-              <SendIcon aria-hidden="true" />
-              Enviar mensaje
-            </Button>
-          </div>
-        </form>
+        <div className="border-t p-4 sm:p-6">
+          <ChatComposer
+            id="preview-message"
+            value={query}
+            onChange={setQuery}
+            onSubmit={() => void act("turn")}
+            placeholder="Pregunta sobre el conocimiento de tu agente…"
+            disabled={!previewId || busy || waiting || turnCount >= 10}
+            canSubmit={
+              !!previewId &&
+              !busy &&
+              !waiting &&
+              !!query.trim() &&
+              turnCount < 10
+            }
+            model={
+              <ModelPicker
+                value={{ model, reasoning }}
+                disabled={busy || waiting}
+                onChange={(choice) => {
+                  setModel(choice.model)
+                  setReasoning(choice.reasoning)
+                }}
+              />
+            }
+            tray={
+              <>
+                <p className="flex flex-wrap justify-between gap-x-3 gap-y-1">
+                  <span>
+                    {previewId ? `${turnCount} de 10 mensajes` : "Sin iniciar"}
+                  </span>
+                  <span className="tabular-nums">{query.length}/1000</span>
+                </p>
+                {model === "gpt-6-astra" &&
+                  (state?.budgetUsd ?? budgetUsd) < 3 && (
+                    <p className="mt-1">
+                      {previewId
+                        ? `${astraNote}. ${astraNoteRestart}.`
+                        : `${astraNote}.`}
+                    </p>
+                  )}
+              </>
+            }
+          />
+        </div>
       </div>
       {error && (
         <p role="alert" className="text-sm text-destructive">

@@ -20,16 +20,16 @@ pnpm dlx shadcn@latest init --preset b1zBuS --template next
 
 The official CLI's read-only `preset decode b1zBuS --json` resolved the preset on 2026-10-06:
 
-| Setting | Agentonic |
-|---|---|
-| Style | Nova |
-| Base color | Neutral |
-| Theme | Emerald |
-| Font | Inter; headings inherit |
-| Icons | Lucide |
-| Radius | Default (`--radius: 0.625rem`) |
-| Chart color | Neutral |
-| Menu color / accent | Default / subtle |
+| Setting             | Agentonic                      |
+| ------------------- | ------------------------------ |
+| Style               | Nova                           |
+| Base color          | Neutral                        |
+| Theme               | Emerald                        |
+| Font                | Inter; headings inherit        |
+| Icons               | Lucide                         |
+| Radius              | Default (`--radius: 0.625rem`) |
+| Chart color         | Neutral                        |
+| Menu color / accent | Default / subtle               |
 
 Preset reference: [Agentonic preset](https://ui.shadcn.com/create?preset=b1zBuS). The [official CLI documentation](https://ui.shadcn.com/docs/cli) describes initialization and preset inspection. Preserve the generated token values; the preset's default radius matches the earlier owner override, so none is needed. Do not run `init` in the monorepo: it would overwrite the customized primitives and could create a third app at the repository root. Generate a reference project with the command above (with `--base base`) and port its tokens and primitives into `packages/ui`.
 
@@ -73,28 +73,30 @@ One data point is rendered the same way in every table of both apps unless a dif
 - **Short headers.** Headers use the shortest clear name to save width (Espacio, Activar hasta, Uso hasta, Servidor hasta, Correo, Miembros, Invitaciones, Gasto, Sin resultado, Turnos 7 d, Zona); `sortableHeader(title, description)` keeps the full name as the header's tooltip and accessible name.
 - **Order.** Identity first (Agente, Espacio de trabajo, owner or email), then Versión and Revisión, then place (Entorno, Trabajador), then states (Estado or Despliegue, En reposo, Aprobación), then amounts and counts, then dates.
 
-| Data point | Header | Rendering |
-|---|---|---|
-| Agent | Agente | Name; a `CellLink` to the agent page in Admin, to the editor in the customer list when the member may edit; plain text otherwise. |
-| Workspace | Espacio | Its own column, `WorkspaceName` with the workspace icon. Never stacked under another name. |
-| Version | Versión | The bare number (tabular). |
-| Review | Revisión | The review (submission) number, a link that opens the review or its receipt where one exists. The criteria's saved edits are "Criterios, edición N", never "Revisión". |
-| Place | Entorno | `environmentLabels` for staff (`vm-agents-01`), `customerEnvironmentLabels` for customers; "No aplica" when nothing is deployed. |
-| Worker | Trabajador | Monospaced id; "Sin trabajador". |
-| Deployment state | Estado (deployment tables) or Despliegue | Always a badge from the deployment descriptor; "Sin despliegue" as muted text. |
-| Resting | En reposo | Sí, No, or "No aplica" when not running. |
-| Submission or proposal state | Estado | Badge from the submission or proposal descriptor. |
-| Approval | Aprobación | Inline indicator keyed by the approval reason (Vigente, Vencida…), never a badge; "Sin aprobación". |
-| Activation deadline | Activar hasta | `Deadline`: date over time, "Venció el …" as a warning once past; only while the approval is valid. |
-| Server verification | Servidor hasta | `Deadline`; a revoked registration as an inline indicator. |
-| Other timestamps | Creado, Enviada, Activado, Publicada, Fecha, Último turno, Vence, Uso hasta | `When`: date (6/10/2026) over muted UTC time; "Sin registro" or a specific absence. |
-| Day | Día | The same date format, without time. |
-| Counts | the counted thing ("Turnos 7 d", "Documentos", "Miembros") | `Count`: plain tabular numerals, not muted. |
-| Money | Gasto | `formatMoney`; spend against a budget as "USD x de USD y". |
-| Identifiers | Commit, Artefacto, Recurso | Monospaced; a resource is its Spanish type plus its short id. |
-| Workspace kind, timezone, role | Tipo, Zona, Rol / Tu rol | Shared label maps (`workspaceKindLabels`, `memberRoleLabels`). |
-| Email | Correo | Plain text; "No disponible". |
-| Agent versions | En uso, Entorno, Despliegue, En reposo, Próxima, Propuesta | Both agent lists: the version numbers in use and next, the place of the version in use, its state as the row's one badge, resting, and the next version's state inline. |
+| Data point                     | Header                                                                      | Rendering                                                                                                                                                                                                                                                                                                                                                    |
+| ------------------------------ | --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Agent                          | Agente                                                                      | Name; a `CellLink` to the agent page in Admin, to the editor in the customer list when the member may edit; plain text otherwise.                                                                                                                                                                                                                            |
+| Workspace                      | Espacio                                                                     | Its own column, `WorkspaceName` with the workspace icon. Never stacked under another name.                                                                                                                                                                                                                                                                   |
+| Version                        | Versión                                                                     | The bare number (tabular).                                                                                                                                                                                                                                                                                                                                   |
+| Review                         | Revisión                                                                    | The review (submission) number, a link that opens the review or its receipt where one exists. The criteria's saved edits are "Criterios, edición N", never "Revisión".                                                                                                                                                                                       |
+| Place                          | Entorno                                                                     | `environmentLabels` for staff (`vm-agents-01`), `customerEnvironmentLabels` for customers; "No aplica" when nothing is deployed.                                                                                                                                                                                                                             |
+| Worker                         | Trabajador                                                                  | Monospaced id; "Sin trabajador".                                                                                                                                                                                                                                                                                                                             |
+| Deployment state               | Estado (deployment tables) or Despliegue                                    | Always a badge from the deployment descriptor; "Sin despliegue" as muted text.                                                                                                                                                                                                                                                                               |
+| Resting                        | En reposo                                                                   | Sí, No, or "No aplica" when not running.                                                                                                                                                                                                                                                                                                                     |
+| Submission or proposal state   | Estado                                                                      | Badge from the submission or proposal descriptor.                                                                                                                                                                                                                                                                                                            |
+| Approval                       | Aprobación                                                                  | Inline indicator keyed by the approval reason (Vigente, Vencida…), never a badge; "Sin aprobación".                                                                                                                                                                                                                                                          |
+| Activation deadline            | Activar hasta                                                               | `Deadline`: date over time, "Venció el …" as a warning once past; only while the approval is valid.                                                                                                                                                                                                                                                          |
+| Server verification            | Servidor hasta                                                              | `Deadline`; a revoked registration as an inline indicator.                                                                                                                                                                                                                                                                                                   |
+| Other timestamps               | Creado, Enviada, Activado, Publicada, Fecha, Último turno, Vence, Uso hasta | `When`: date (6/10/2026) over muted UTC time; "Sin registro" or a specific absence.                                                                                                                                                                                                                                                                          |
+| Day                            | Día                                                                         | The same date format, without time.                                                                                                                                                                                                                                                                                                                          |
+| Counts                         | the counted thing ("Turnos 7 d", "Documentos", "Miembros")                  | `Count`: plain tabular numerals, not muted.                                                                                                                                                                                                                                                                                                                  |
+| Money                          | Gasto                                                                       | `formatMoney`; spend against a budget as "USD x de USD y".                                                                                                                                                                                                                                                                                                   |
+| Identifiers                    | Commit, Artefacto, Recurso                                                  | Monospaced; a resource is its Spanish type plus its short id.                                                                                                                                                                                                                                                                                                |
+| Workspace kind, timezone, role | Tipo, Zona, Rol / Tu rol                                                    | Shared label maps (`workspaceKindLabels`, `memberRoleLabels`).                                                                                                                                                                                                                                                                                               |
+| Email                          | Correo                                                                      | Plain text; "No disponible". Members show the address of their latest verified session, "Sin registro" until they next sign in (migration 57).                                                                                                                                                                                                               |
+| Agent resources                | Recursos                                                                    | Both agent lists: the shared `ResourceCounts` cell with the saved draft's instruction characters, skills, collections, tools and connections, each an icon and a count in a fixed-width slot (five digits for characters, three for the rest) so the icons line up across rows. Admin no longer shows Capacidades in the list (owner direction, 2026-10-08). |
+| Document                       | Documento                                                                   | The name, with its type and size as a muted line under it (owner direction, 2026-10-08, an exception to one fact per cell); the Tipo and Tamaño columns stay defined but hidden.                                                                                                                                                                             |
+| Agent versions                 | En uso, Entorno, Despliegue, En reposo, Próxima, Propuesta                  | Both agent lists: the version numbers in use and next, the place of the version in use, its state as the row's one badge, resting, and the next version's state inline.                                                                                                                                                                                      |
 
 Badges and inline indicators of the same state share one descriptor (label, tone and icon), so a state looks alike in either form; tests hold the deployment, submission and approval maps to this.
 
@@ -102,7 +104,7 @@ Badges and inline indicators of the same state share one descriptor (label, tone
 
 Extra filters live in a shared `FiltersCard` titled `Filtros`, arranged in a responsive grid, with a `Limpiar` action resetting every filter. The page's table wrapper owns filter state.
 
-**Selects (owner direction, 2026-10-08).** `select.tsx` is shadcn's base-nova component exactly as `shadcn add select` installs it, with no local changes; its list opens aligned with the chosen item, as shadcn ships it. Base UI reports a change even when the pressed option is already selected, so every handler with side effects (navigation, resetting related choices) ignores a value that did not change. A filter whose empty state means "all" offers that as a real option ("Todos los espacios") so the person can always return to it; picking it clears the other choices.
+**Selects (owner direction, 2026-10-08).** `select.tsx` is shadcn's base-nova component exactly as `shadcn add select` installs it, with no local changes; its list opens aligned with the chosen item, as shadcn ships it. Base UI reports a change even when the pressed option is already selected, so every handler with side effects (navigation, resetting related choices) ignores a value that did not change. A filter whose empty state means "all" offers that as a real option ("Todos los espacios") so the person can always return to it; picking it clears the other choices. Multi-choice filters use the shared `MultiSelectFilter` (Agentes' workspaces, Documentos' collections, which sits at the right end of the search row). A list whose options can be wider than its trigger widens to fit (`w-auto min-w-(--anchor-width) max-w-(--available-width)` on `SelectContent`) instead of clipping them; row-action menus size to their labels and never wrap.
 
 Row actions use a final-column ellipsis menu with icons. Destructive actions are red, separated at the bottom, and consequential operations require an `AlertDialog` with explicit title, consequence and confirmation label. A disabled or hidden control does not replace server-side authorization.
 
@@ -140,9 +142,9 @@ Acachuchazo's credit-line meter, financial layouts, KYC tabs and single-customer
 
 The customer app must distinguish an editable draft, a frozen submission awaiting review and the currently deployed version. Clearly label staging previews, selected source scopes and requested capabilities. Customer actions create, personalize, preview and submit; staff actions review and deploy through the established approval boundary. Shared visual components do not collapse those responsibilities.
 
+**Message composer (owner direction, 2026-10-08).** Probar agente and Chats share `ChatComposer`, after the Codex composer: the text box on top, then a disabled "+" (attachments, not available yet), the `ModelPicker` and a round send button; Enter sends and Shift+Enter adds a line; a muted tray under it holds the conversation's limits and notes. `ModelPicker` is a pill with the model and its muted reasoning level that opens on a level slider; the model's name leads to the model list. Chats offer only the configurations the approved version was evaluated with. No access-level control or dictation for now.
+
 Keep chat access, configuration management, transcript access and knowledge sharing separate in the interface. Explain what is being shared before granting it. A connection's knowledge-import scope and live tool permissions are separate choices. Display unknown cost as unknown, and show deployment progress from observed status rather than treating a queued command as a successful release.
-
-
 
 ## 9. States, badges, metadata and icons
 
@@ -150,15 +152,15 @@ Keep chat access, configuration management, transcript access and knowledge shar
 
 ### 9.1 Choose emphasis by meaning and hierarchy
 
-| Information | Required default | Example |
-|---|---|---|
-| Primary record state | Text badge, with a meaningful state icon when useful | Agent `Activo`, proposal `En revisión` |
-| Nested outcome or secondary state | Unboxed icon + text | `✓ Superada` beneath an evaluation |
-| Familiar binary indicator in a labeled compact context | Standalone accessible icon | Prompt readiness beside its character count |
-| Count or progress | Plain text with tabular numerals | `8/10 superadas`, `3 seleccionadas` |
-| Permission, environment, object type or preview context | Plain/muted text, optionally a type icon | `Solo lectura`, `Prueba privada` |
-| Editing feedback or unmet prerequisite | Inline text near its action | `Cambios sin guardar` |
-| Historical decision | Secondary text and available provenance | Approval decision and date |
+| Information                                             | Required default                                     | Example                                     |
+| ------------------------------------------------------- | ---------------------------------------------------- | ------------------------------------------- |
+| Primary record state                                    | Text badge, with a meaningful state icon when useful | Agent `Activo`, proposal `En revisión`      |
+| Nested outcome or secondary state                       | Unboxed icon + text                                  | `✓ Superada` beneath an evaluation          |
+| Familiar binary indicator in a labeled compact context  | Standalone accessible icon                           | Prompt readiness beside its character count |
+| Count or progress                                       | Plain text with tabular numerals                     | `8/10 superadas`, `3 seleccionadas`         |
+| Permission, environment, object type or preview context | Plain/muted text, optionally a type icon             | `Solo lectura`, `Prueba privada`            |
+| Editing feedback or unmet prerequisite                  | Inline text near its action                          | `Cambios sin guardar`                       |
+| Historical decision                                     | Secondary text and available provenance              | Approval decision and date                  |
 
 Badges primarily represent an existing domain state: a table status/outcome, a persisted decision (including JSON criteria), or an authoritative server-derived state such as approval validity. A boolean, count, existing link or local form condition does not become a domain state merely because a component can color it.
 
@@ -191,7 +193,6 @@ Do not use pills for counts, permission labels, selected knowledge, environment,
 ### 9.4 Review checklist
 
 Before accepting UI changes, identify each remaining badge's domain source and why it owns primary emphasis. Inspect parent/child repetition and compare the same state across apps. Review synthetic examples for all-pass, failure/attention, exclusions, legacy confirmation, cancelled/queued/running, expired validity with historical success, unknown state and unavailable evidence. Check skeleton geometry, responsive wrapping, keyboard access and theme contrast before updating the skeleton baseline. Run typecheck, lint, relevant tests and `pnpm skeletons:check`; never run a production build for routine verification.
-
 
 **Customer agent list update (2026-09-16):** the only extra filter is a workspace multi-select, using repeated `workspace` URL parameters. No selection shows all active memberships; existing single-workspace URLs still select that workspace. Each selected workspace is read in its own verified transaction, and failed reads fail the complete listing. Rows retain trusted workspace IDs for links/actions. The sortable Espacio de trabajo column replaces Instrucciones; instruction character count is the leftmost Recursos item with a document icon and an accessible readiness tooltip. Limpiar restores all workspaces and clears table search. Agent creation offers a workspace choice when several selected workspaces permit creation. The loading state mirrors the filter card and seven-column table.
 
