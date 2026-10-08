@@ -8,6 +8,7 @@ import {
 } from "../packages/connectors/src/google"
 import { keyring, seal, unseal } from "../packages/connectors/src/secrets"
 import { executeGmail } from "../apps/worker/src/gmail"
+import { toolParameters } from "../apps/worker/src/broker"
 const key = "a".repeat(64),
   id = "10000000-0000-4000-8000-000000000001"
 const message = {
@@ -112,6 +113,63 @@ it("does not expose provider HTML, attachments or arbitrary metadata", async () 
     untrusted: true,
     headers: [{ name: "Subject", value: "Test" }],
   })
+})
+it("names draft and message IDs apart so drafts are edited by draft ID", async () => {
+  // B2, 8 October: the model edited a draft by the message ID that a draft
+  // read returned as its only `id`, which Gmail rejects.
+  const fetch = vi
+    .fn()
+    .mockResolvedValueOnce(
+      Response.json({
+        id: "r-1",
+        message: {
+          id: "m-1",
+          threadId: "t-1",
+          payload: {
+            mimeType: "text/plain",
+            body: { data: Buffer.from("Borrador").toString("base64url") },
+            headers: [{ name: "Subject", value: "Prueba" }],
+          },
+        },
+      })
+    )
+    .mockResolvedValueOnce(
+      Response.json({
+        drafts: [{ id: "r-1", message: { id: "m-1", threadId: "t-1" } }],
+      })
+    )
+  vi.stubGlobal("fetch", fetch)
+  const read = await gmail(
+    "synthetic",
+    "gmail.drafts.read",
+    { id: "r-1" },
+    "sender@example.invalid",
+    id
+  )
+  expect(read).toMatchObject({
+    draftId: "r-1",
+    messageId: "m-1",
+    threadId: "t-1",
+    text: "Borrador",
+  })
+  expect(read).not.toHaveProperty("id")
+  expect(
+    await gmail(
+      "synthetic",
+      "gmail.drafts.list",
+      { limit: 5 },
+      "sender@example.invalid",
+      id
+    )
+  ).toEqual({ drafts: [{ draftId: "r-1", messageId: "m-1", threadId: "t-1" }] })
+  for (const operation of [
+    "gmail.drafts.read",
+    "gmail.drafts.update",
+    "gmail.drafts.delete",
+  ] as const)
+    expect(
+      toolParameters({ kind: "gmail", operation }).properties?.id
+    ).toMatchObject({ description: expect.stringMatching(/Never a messageId/) })
 })
 it("proposes a write without accessing Google or exposing credentials", async () => {
   const fetch = vi.fn()

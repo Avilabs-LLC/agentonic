@@ -1,6 +1,6 @@
 # Agentonic: current state
 
-**As of 8 October 2026 · platform v0.23.0 · nonproduction only.** A short summary of what runs where, what works and what doesn't exist yet. [The architecture record](agentonic-architecture.md) keeps the full, dated history. If the two disagree about the present, fix this page. Update it whenever a change alters what runs where.
+**As of 8 October 2026 · platform v0.24.0 · nonproduction only.** A short summary of what runs where, what works and what doesn't exist yet. [The architecture record](agentonic-architecture.md) keeps the full, dated history. If the two disagree about the present, fix this page. Update it whenever a change alters what runs where.
 
 ## What runs where
 
@@ -22,7 +22,7 @@ On 5 October the nonproduction data was reset: no agents, documents or deploymen
 5. The customer authorizes private staging use (up to 7 days and US$1), and staff activate it.
 6. The customer chats with the activated agent in **Chats**. Only that customer can read the conversation.
 
-On 6 October the whole flow ran on the hosted names with no Agentonic process on the Mac: upload, processing, preview, criteria, evaluation, automatic approval, activation and chat, including an agent resting and waking for a second message on runtime 0.4.0 (architecture §53). Gmail reading was confirmed live on 18 September. Creating drafts and sending have not been tested live.
+On 6 October the whole flow ran on the hosted names with no Agentonic process on the Mac: upload, processing, preview, criteria, evaluation, automatic approval, activation and chat, including an agent resting and waking for a second message on runtime 0.4.0 (architecture §53). Gmail was accepted live on 8 October on the hosted customer app: connecting, searching and reading, creating, editing and deleting a draft, and sending, each after one confirmation, plus cancellation, a refused second confirmation, an unconfirmed send that was never sent, and disconnecting ([gmail-connection.md](gmail-connection.md#live-acceptance-on-the-hosted-app--8-october-2026-b2)).
 
 The Admin app has **Revisiones** (submissions, receipts, renewal and activation), **Vencimientos** (what expires, when and who must act), and the operations screens **Agentes**, **Despliegues**, **Actividad**, **Costos**, **Espacios de trabajo** and **Runtime** (architecture §52). Both agent lists show each agent's version in use and next version, Admin has a page per agent that every agent name opens, and Vencimientos groups servers by place (architecture §55). Installing servers, publishing runtimes and renewing verification are still done with scripts on the Mac; the screens show their state.
 
