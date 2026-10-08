@@ -60,6 +60,25 @@ export const mfaCodeSchema = z.object({
   code: z.string().regex(/^\d{6}$/, "Escribe los 6 dígitos de tu aplicación."),
 })
 export type MfaCodeInput = z.infer<typeof mfaCodeSchema>
+/** The name every account starts with until its person chooses one (N7). */
+export const PLACEHOLDER_NAME = "Miembro"
+// A person's own name, set when accepting an invitation or in Mi cuenta; the
+// database applies the same rules (migration 59).
+export const displayNameSchema = z.object({
+  displayName: z
+    .string()
+    .trim()
+    .min(1, "Escribe tu nombre.")
+    .max(120, "Usa como máximo 120 caracteres.")
+    .refine(
+      (value) =>
+        ![...value].some(
+          (c) => c.charCodeAt(0) < 32 || c.charCodeAt(0) === 127
+        ),
+      "Usa solo letras, números y signos habituales."
+    ),
+})
+export type DisplayNameInput = z.infer<typeof displayNameSchema>
 /** Only a path on this app; anything else falls back. */
 export function safeNext(next: unknown, fallback = "/") {
   if (

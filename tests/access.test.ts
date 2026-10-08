@@ -105,6 +105,7 @@ beforeAll(async () => {
     "202609130001_identity",
     "202609130002_access",
     "202610080057_member_emails",
+    "202610080059_display_names",
   ])
     await db.exec(
       readFileSync(
@@ -805,6 +806,56 @@ describe("contacts and offboarding", () => {
         })
       ).ok
     ).toBe(false)
+  })
+})
+
+describe("people's own names (N7)", () => {
+  const nameOf = async (user: string) =>
+    (
+      await ownerSql(
+        "SELECT display_name FROM agentonic.users WHERE auth_user_id=$1",
+        [user]
+      )
+    ).rows[0]
+  async function setName(
+    name: string,
+    user = owner,
+    role = "agentonic_customer"
+  ) {
+    await actor(user, null, role)
+    return (
+      await db.query<{ ok: boolean }>(
+        "SELECT agentonic.set_display_name($1) AS ok",
+        [name]
+      )
+    ).rows[0]!.ok
+  }
+  it("each person sets only their own name, trimmed, in either app", async () => {
+    expect(await setName("  Ana Pérez ")).toBe(true)
+    expect(await nameOf(owner)).toEqual({ display_name: "Ana Pérez" })
+    expect(await nameOf(colleague)).toEqual({
+      display_name: "Synthetic person",
+    })
+    expect(await setName("Equipo Agentonic", staff, "agentonic_admin")).toBe(
+      true
+    )
+    expect(await nameOf(staff)).toEqual({ display_name: "Equipo Agentonic" })
+  })
+  it("rejects empty, overlong and control-character names without a change", async () => {
+    for (const name of ["   ", "x".repeat(121), "Ana\nBcc: x", "Ana\u0007"])
+      expect(await setName(name)).toBe(false)
+    expect(await nameOf(owner)).toEqual({ display_name: "Synthetic person" })
+  })
+  it("workers and anonymous callers cannot set a name", async () => {
+    for (const [user, role] of [
+      [owner, "agentonic_worker"],
+      [null, "agentonic_customer"],
+    ] as const) {
+      await db.exec("SAVEPOINT name_denied")
+      await expect(setName("Intruso", user as string, role)).rejects.toThrow()
+      await db.exec("ROLLBACK TO SAVEPOINT name_denied")
+    }
+    expect(await nameOf(owner)).toEqual({ display_name: "Synthetic person" })
   })
 })
 

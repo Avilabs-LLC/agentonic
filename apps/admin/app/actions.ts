@@ -1,6 +1,7 @@
 "use server"
 import { passwordSignIn, signOut } from "@agentonic/server/actions"
 import type {
+  DisplayNameInput,
   EmailOnlyInput,
   MfaCodeInput,
   NewPasswordInput,
@@ -12,6 +13,7 @@ import {
   disableAuthenticator,
   requestPasswordReset,
   startAuthenticator,
+  updateDisplayName,
   verifyAuthenticator,
 } from "@agentonic/server/account"
 export async function login(input: SignInInput) {
@@ -37,4 +39,7 @@ export async function confirmMfa(input: { factorId: string; code: string }) {
 }
 export async function disableMfa() {
   return disableAuthenticator()
+}
+export async function saveDisplayName(input: DisplayNameInput) {
+  return updateDisplayName("admin", input)
 }

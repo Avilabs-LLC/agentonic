@@ -6,8 +6,16 @@ import { Button } from "@workspace/ui/components/button"
 import Link from "next/link"
 import { account } from "@/lib/navigation"
 import { authenticatorState } from "@agentonic/server/account"
-import { AuthenticatorCard } from "@workspace/ui/components/account-forms"
-import { confirmMfa, disableMfa, startMfa } from "../../actions"
+import {
+  AuthenticatorCard,
+  DisplayNameEditor,
+} from "@workspace/ui/components/account-forms"
+import {
+  confirmMfa,
+  disableMfa,
+  saveDisplayName,
+  startMfa,
+} from "../../actions"
 export default async function Page() {
   const identity = await requireIdentity("admin")
   const authenticator = await authenticatorState()
@@ -28,7 +36,14 @@ export default async function Page() {
             <div className="flex flex-wrap justify-between gap-2">
               <dt className="text-muted-foreground">Nombre</dt>
               <dd>
-                {identity.user?.displayName ?? "Pendiente de vinculación"}
+                {identity.user ? (
+                  <DisplayNameEditor
+                    name={identity.user.displayName}
+                    save={saveDisplayName}
+                  />
+                ) : (
+                  "Pendiente de vinculación"
+                )}
               </dd>
             </div>
             <Separator />

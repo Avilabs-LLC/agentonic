@@ -1,6 +1,7 @@
 "use server"
 import { passwordSignIn, signOut } from "@agentonic/server/actions"
 import type {
+  DisplayNameInput,
   EmailOnlyInput,
   NewPasswordInput,
   SignInInput,
@@ -9,6 +10,7 @@ import {
   acceptInvitation,
   changePassword,
   requestPasswordReset,
+  updateDisplayName,
 } from "@agentonic/server/account"
 export async function login(input: SignInInput) {
   return passwordSignIn("customer", input)
@@ -22,6 +24,17 @@ export async function requestReset(input: EmailOnlyInput) {
 export async function savePassword(input: NewPasswordInput) {
   return changePassword("customer", input)
 }
-export async function acceptWorkspace(workspaceId: string, token: string) {
-  return acceptInvitation({ workspaceId, token })
+export async function acceptWorkspace(
+  workspaceId: string,
+  token: string,
+  input: DisplayNameInput
+) {
+  return acceptInvitation({
+    workspaceId,
+    token,
+    displayName: input.displayName,
+  })
+}
+export async function saveDisplayName(input: DisplayNameInput) {
+  return updateDisplayName("customer", input)
 }
