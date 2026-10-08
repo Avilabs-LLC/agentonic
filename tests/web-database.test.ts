@@ -335,19 +335,28 @@ it("pins preview model per turn, meters the actual model and preserves retry ide
       }),
     ])
   ).rejects.toThrow()
+  // GPT-4.1 mini is retired for new test-chat turns (§56).
+  await expect(
+    rpc("preview_command", [
+      "turn",
+      JSON.stringify({
+        ...payload,
+        requestKey: id(753),
+        model: "gpt-4.1-mini-2025-04-14",
+      }),
+    ])
+  ).rejects.toThrow()
   await rpc("preview_command", [
     "turn",
     JSON.stringify({
       ...payload,
-      requestKey: id(753),
-      model: "gpt-4.1-mini-2025-04-14",
+      requestKey: id(754),
+      model: "gpt-5.4-mini",
     }),
   ])
   const next = await f.claim()
   await f.worker(next, "empty-search")
-  expect((await f.worker(next, "context")).previewModel).toBe(
-    "gpt-4.1-mini-2025-04-14"
-  )
+  expect((await f.worker(next, "context")).previewModel).toBe("gpt-5.4-mini")
   expect((await f.worker(next, "context")).history).toMatchObject([
     { answer: "No match." },
   ])

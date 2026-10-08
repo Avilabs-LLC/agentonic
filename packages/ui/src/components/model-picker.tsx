@@ -11,6 +11,7 @@ import {
   modelCatalog,
   modelConfigurationKey,
   reasoningLabels,
+  selectableModels,
   type ModelConfiguration,
 } from "@agentonic/contracts/models"
 import { Button } from "@workspace/ui/components/button"
@@ -22,7 +23,8 @@ import {
 import { Slider as SliderPrimitive } from "@base-ui/react/slider"
 import { cn } from "cn"
 
-const everyConfiguration: ModelConfiguration[] = modelCatalog.flatMap((m) =>
+// Test chats offer every model still offered; Chats pass their approved list.
+const everyConfiguration: ModelConfiguration[] = selectableModels.flatMap((m) =>
   (m.levels.length ? m.levels : [null]).map((reasoning) => ({
     model: m.id,
     reasoning,

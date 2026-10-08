@@ -362,7 +362,7 @@ function VersionCards({
                           <Input
                             id="review-budget"
                             type="number"
-                            min="0.05"
+                            min="0.1"
                             max="1"
                             step="0.01"
                             className="max-w-48"

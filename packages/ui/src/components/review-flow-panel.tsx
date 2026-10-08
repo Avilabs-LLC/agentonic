@@ -76,7 +76,7 @@ function useMutation(action: Action) {
   return { run, pending, error }
 }
 const prepareSchema = z.object({
-  budgetUsd: z.number().min(0.05).max(1),
+  budgetUsd: z.number().min(0.1, "El mínimo es US$0,10.").max(1),
   consent: z.boolean().refine(Boolean, "Confirma la autorización."),
 })
 export function PreparationForm({
@@ -115,7 +115,7 @@ export function PreparationForm({
           <Input
             id={id}
             type="number"
-            min="0.05"
+            min="0.1"
             max="1"
             step="0.01"
             className="max-w-48"

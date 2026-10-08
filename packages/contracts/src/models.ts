@@ -49,6 +49,9 @@ export const modelCatalog = [
     defaultLevel: null,
     inputRate: 0.4,
     outputRate: 1.6,
+    // Kept for history: earlier turns, results and approvals name it. It fell
+    // for hidden instructions in tool cases, so it is no longer offered (§56).
+    retired: true,
   },
 ] satisfies {
   id: z.infer<typeof modelId>
@@ -57,7 +60,14 @@ export const modelCatalog = [
   defaultLevel: z.infer<typeof reasoningLevel> | null
   inputRate: number
   outputRate: number
+  retired?: true
 }[]
+/** Models that new evaluations and test chats may choose. */
+export const selectableModels = modelCatalog.filter(
+  (m) => !("retired" in m && m.retired)
+)
+export const isSelectableModel = (id: string) =>
+  selectableModels.some((m) => m.id === id)
 export const modelConfiguration = z
   .object({ model: modelId, reasoning: reasoningLevel.nullable() })
   .strict()
@@ -69,7 +79,12 @@ export const modelConfiguration = z
   }, "Este nivel no está disponible para el modelo seleccionado.")
 export type ModelConfiguration = z.infer<typeof modelConfiguration>
 export const evaluationModels = z
-  .array(modelConfiguration)
+  .array(
+    modelConfiguration.refine(
+      (value) => isSelectableModel(value.model),
+      "Este modelo ya no está disponible."
+    )
+  )
   .min(1)
   .max(16)
   .refine(

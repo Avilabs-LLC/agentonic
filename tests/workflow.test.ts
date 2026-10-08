@@ -47,9 +47,9 @@ function state(
   }
 }
 describe("workflow button prerequisites", () => {
-  it("reopens an already-frozen revision with its engine, regardless of catalog order", () => {
+  it("reopens an already-frozen revision while its engine is still the newest", () => {
     const olderCode = "10000000-0000-4000-8000-000000000003"
-    const availableCodeIds = [olderCode, code]
+    const availableCodeIds = [code, olderCode]
     const candidates = [candidate]
     const codeReleaseId = defaultFreezeCode(candidates, availableCodeIds)
     expect(codeReleaseId).toBe(code)
@@ -58,30 +58,23 @@ describe("workflow button prerequisites", () => {
         state({ candidates, availableCodeIds, codeReleaseId })
       ).canFreeze
     ).toBe(false)
-    // Deliberately choosing another engine creates a different combination.
-    expect(
-      workflowRequirements(
-        state({ candidates, availableCodeIds, codeReleaseId: olderCode })
-      ).canFreeze
-    ).toBe(true)
   })
-  it("keeps the last engine after a new draft revision is saved", () => {
+  it("moves the next version to a newer engine, so runtime fixes reach existing agents", () => {
+    const newerCode = "10000000-0000-4000-8000-000000000003"
+    const availableCodeIds = [newerCode, code]
     const candidates = [candidate]
-    const codeReleaseId = defaultFreezeCode(candidates, [id, code])
-    expect(codeReleaseId).toBe(code)
+    const codeReleaseId = defaultFreezeCode(candidates, availableCodeIds)
+    expect(codeReleaseId).toBe(newerCode)
+    // The same draft on a newer engine is a different combination to freeze.
     expect(
       workflowRequirements(
-        state({ candidates, codeReleaseId, draft: { ...draft, revision: 2 } })
+        state({ candidates, availableCodeIds, codeReleaseId })
       ).canFreeze
     ).toBe(true)
   })
-  it("prefers the newest available frozen engine even after submission", () => {
-    expect(
-      defaultFreezeCode(
-        [{ ...candidate, codeReleaseId: id, canSubmit: false }, candidate],
-        [code, id]
-      )
-    ).toBe(id)
+  it("keeps a preferred capability family when one is required", () => {
+    expect(defaultFreezeCode([candidate], [id, code], [code])).toBe(code)
+    expect(defaultFreezeCode([candidate], [id, code], ["missing"])).toBe(id)
   })
   it("skips unavailable engines and handles agents without frozen versions", () => {
     expect(

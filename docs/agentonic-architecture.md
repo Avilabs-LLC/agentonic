@@ -1731,3 +1731,74 @@ Version numbers count an agent's prepared versions in order, as elsewhere (`agen
 **Follow-up, 7 October 2026 — stabilization (A1, A2, N2).** A1: a database test renews a host registration a day before expiry, lets it expire, and renews it again, through the real functions. Before expiry nothing is interrupted; during expiry the controller's poll and the agent copy's claim are refused, the copy's heartbeat is answered unavailable, and the deployment reads unauthorized and, once its last heartbeat ages out, offline; after renewal the turn whose lease lapsed fails as `lease_lost` instead of running again, and consent, spend and provider calls are unchanged. Migration 55 makes Despliegues report an active deployment whose authorization lapsed as "unauthorized", as the agent lists and agent page already did; it used to show "running" while the copy's last heartbeat was under a minute old. A2: migration 56 adds `queuedAt` to the four claim results (knowledge jobs, staging turns, evaluations, criteria preparations), and every worker writes one allowlisted line per finished job (`job-log.ts`): ids, kind, lane, outcome, error category, queued, started and finished times, queue delay and duration, never content. N2: a controller test runs two deployments through a worker upgrade and fails if both move at once.
 
 **Follow-up, 8 October 2026 — original shadcn select.** The owner asked to drop every local change to the select primitive. `select.tsx` is reinstalled with `shadcn add select` (base-nova), undoing the October 6 alignment and width changes. Two behaviours were bugs in the callers, not the primitive: Base UI calls `onValueChange` when the selected option is pressed again, which re-ran navigation in the Revisiones and customer Agentes filters and reset choices in the Gmail account, evaluation run and model selects; those handlers now ignore an unchanged value. The customer Agentes workspace filter (a multi-select) shows "Todos los espacios" as an option, so it can return to all workspaces. The synthetic customer B workspace is renamed ACME (data change, owner request), and the bootstrap script now creates it under that name.
+
+## 56. Evaluation lessons — 8 October 2026
+
+A customer's mail agent failed four evaluations in one day. Its last version ran 8 cases on 4 models, and 7 of the 32 graded answers failed. The owner asked for a diagnosis, and most causes were the platform's:
+
+- **The runtime would not use the agent's own instructions as evidence.** Runtime 0.4.0 told the model to use only retrieved passages for "knowledge questions". Asked whether it summarizes in three bullets, a rule written in its instructions, GPT-5.4, GPT-5.4 mini and GPT-6 Astra answered that the passages did not say so. Only GPT-4.1 mini, the model that follows that rule least closely, said yes.
+- **Criteria asked the agent about itself.** The criteria writer produced "¿El agente hace X?" questions. An answer to such a question shows nothing about behavior, so the grader asked for evidence.
+- **The grader asked for evidence one answer cannot give.** It judged a correct answer with an honest caveat as uncertain and suggested adding "registros de acciones del agente" (logs of the agent's actions). That advice led the customer to upload a document describing the agent and to write a note to the grader into an expected answer.
+- **One failing model blocked the others.** Approval needed every selected model to pass every case, so a version that passed on GPT-5.4 mini was still refused.
+
+The customer's own problems remain theirs: a document that contradicts the instructions, and instructions that promise notifications no tool provides.
+
+**What changed.** Platform 0.27.0, runtime 0.5.0 and migration 60:
+
+- **Runtime 0.5.0:**
+  - **Questions about itself.** The agent answers questions about its role, rules, format, tone and limits from its frozen instructions, without passage citations, and never claims capabilities it was not given (notifying, scheduling, memory across conversations).
+  - **Pasted content.** Content the user pastes into the conversation is worked on directly.
+  - **Other facts.** Knowledge questions about anything else still use only passages and tool results.
+  - **Which agents get it.** New versions now use the newest available engine (`defaultFreezeCode`). Customers no longer choose an engine, so keeping the last one used had left every existing agent on its first runtime. Frozen versions and previews keep their engine.
+- **The criteria writer:**
+  - **Requests, not questions.** Each situation is the message a person would send the agent, a task or request, never a question about it. Situations run without tools, so when one needs an email or text it includes a short fictional example with `@example.invalid` addresses. A write action is expected to be proposed for confirmation.
+  - **No ungranted capabilities.** The writer now sees the version's requested access, does not test capabilities the version lacks, and treats writes as a sensitive risk.
+  - **Conflicts.** When a document contradicts the instructions, the instructions decide the expectation and the conflict is named in the situation's basis.
+  - **The editor.** It now says the same under "Mensaje al agente".
+- **Rubric 5 (`grounded-review-v5`)** keeps version 4's rules and adds:
+  - **The configuration is the authority.** It is the authority for the agent's own behavior, even when no passage repeats it.
+  - **One answer.** One answer is all an evaluation observes, so the grader never asks for logs or operational proof, and an honest caveat is not a failure.
+  - **Clear failures.** Refusing to confirm a configured rule, or following a document that contradicts it, is `needs_changes`, with a suggestion naming both.
+  - **Actionable suggestions.** They propose a change to the configuration, documents or situation.
+  - **Self-description questions** are judged against the configuration, with a suggestion to rewrite them as requests.
+- **Reviewer models.** Criteria writing and rubric-5 grading use GPT-5.4 mini at low reasoning, metered at its own rates. Runs created under rubrics 2–4 keep GPT-4.1 mini, because their evidence names that model.
+  - **Rollout gate.** New runs get rubric 5 only while the Azure evaluator advertises `reviewRubric: 5`. `deploy-evaluation-staging.mjs` sets it; renewal carries it forward. The criteria writer accepts either model until then.
+  - **Minimum review budget.** It rises from US$0.05 to US$0.10. A typical GPT-5.4 mini reservation is US$0.03–0.08.
+- **Per-model approval:**
+  - **What passes.** A model passes when every level selected for it passes every case.
+  - **When a batch is decided.** Once every run has finished, the evidence is the first run of the first passing model (`evaluation_preparations.evaluation_id`). Automatic approval and staff approval use that run.
+  - **Chats.** `deployment_models` returns only the configurations of passing models, so Chats offer only those.
+  - **Unchanged.** A version with no passing model is decided as before. Batches approved before this change had passed in full, so they keep their models.
+  - **Summaries.** The approved summary says Chats offer only the models that passed. A tool version that passed with at least one model says staff must review it, instead of asking to clarify scope or evidence.
+- **GPT-4.1 mini is retired** for new evaluations and test chats:
+  - It fell for the hidden instruction in the web injection case on every evaluated version.
+  - The catalog marks it `retired`, and pickers and contracts offer `selectableModels`.
+  - Insert triggers refuse it for new evaluation batches and test-chat jobs.
+  - Earlier runs, turns and approvals that name it stay valid. No running deployment used it.
+
+**Tests.** Against the replayed migrations:
+
+- **Rubric 5:** it reaches runs only after an evaluator advertises it, with and without tool cases. Its grader model is metered, and other models are refused.
+- **Per-model decisions:** a batch where GPT-6 Astra passes one level and fails another is approved with GPT-5.4 mini only, and Chats refuse Astra. A batch with no passing model stays unapproved.
+- **Retired model:** GPT-4.1 mini batches are refused.
+- **Criteria writer:** it reserves GPT-5.4 mini and sees requested access.
+
+Unit tests cover:
+
+- the reviewers' request shape and rates per rubric version;
+- the writer's instructions;
+- the retired model in contracts;
+- the newest-engine default;
+- runtime 0.5.0's wording.
+
+**Rollout (pending at merge).** In this order:
+
+1. Apply migration 60.
+2. `pnpm setup:preview` registers runtime 0.5.0.
+3. `pnpm runtime:install --azure` installs it.
+4. Redeploy and register the evaluator with `reviewRubric: 5`, and register every runtime in use with it.
+5. `pnpm platform:install` installs 0.27.0.
+
+Agents move to runtime 0.5.0 with their next version.
+
+**Not changed.** Evaluations still test situations one at a time and without the customer's live tools (D17).

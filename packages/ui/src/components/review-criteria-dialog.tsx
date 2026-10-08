@@ -29,7 +29,11 @@ import {
   DialogDescription,
 } from "@workspace/ui/components/dialog"
 import { Button } from "@workspace/ui/components/button"
-import { Field, FieldLabel } from "@workspace/ui/components/field"
+import {
+  Field,
+  FieldDescription,
+  FieldLabel,
+} from "@workspace/ui/components/field"
 import {
   Tabs,
   TabsList,
@@ -374,8 +378,14 @@ export function ReviewCriteriaDialog({
                       className="min-h-20 border-primary/30 bg-primary/5 dark:bg-primary/5"
                       maxLength={1000}
                       value={current.question}
+                      aria-describedby={`${id}-question-help`}
                       onChange={(e) => edit({ question: e.target.value })}
                     />
+                    <FieldDescription id={`${id}-question-help`}>
+                      Escribe lo que una persona le pediría al agente, no una
+                      pregunta sobre él. Si necesita un correo o texto, pega un
+                      ejemplo breve: en la evaluación no usa Gmail ni la web.
+                    </FieldDescription>
                   </Field>
                   <Field>
                     <FieldLabel htmlFor={`${id}-answer`}>
