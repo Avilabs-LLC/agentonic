@@ -1,6 +1,6 @@
 # Agentonic: outstanding actions
 
-**Maintained by Claude · last updated 7 October 2026.** Every action still open, in the audit brief's order of work (stages A–F), with who acts and how we'll know it's done. [current-state.md](current-state.md) says what runs today. The [architecture record](agentonic-architecture.md) holds the design and the dated detail (§37 is the release checklist).
+**Maintained by Claude · last updated 8 October 2026.** Every action still open, in the audit brief's order of work (stages A–F), with who acts and how we'll know it's done. [current-state.md](current-state.md) says what runs today. The [architecture record](agentonic-architecture.md) holds the design and the dated detail (§37 is the release checklist).
 
 **How this page is kept**
 
@@ -147,4 +147,4 @@ Gate: the §14 acceptance suite with at least two workspaces and several users.
 | Scheduled cleanup of expired Gmail proposals and OAuth states for every workspace, every 15 minutes (closes B3)                                                                                                                                                                                 | 7 Oct  | PR #56          |
 | Renewal before and after expiry tested through the real functions: refused controller and copy, no replayed turn, consent and spend unchanged; Despliegues shows lapsed deployments as unauthorized (closes A1)                                                                                 | 7 Oct  | PR #57          |
 | One allowlisted log line per finished job with queue delay, duration, outcome and error category; claims carry their queue time (closes A2)                                                                                                                                                     | 7 Oct  | PR #57          |
-| Controller test: two deployments during a worker upgrade move one at a time (closes N2)                                                                                                                                                                                                         | 7 Oct  | PR #57          |
+| Controller test: two deployments during a worker upgrade move one at a time (closes N2); PRs #55–#57 released as platform v0.22.0                                                                                                                                                               | 7 Oct  | PR #57          |
