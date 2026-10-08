@@ -149,9 +149,8 @@ export function DocumentUpload({
             aria-describedby={`${id}-help ${id}-error`}
             {...register("file")}
           />
-          <FieldDescription id={`${id}-help`}>
-            PDF, texto UTF-8 o Markdown · Hasta 10 MB. El texto se enviará a
-            Voyage AI para crear el índice de búsqueda.
+          <FieldDescription id={`${id}-help`} className="text-xs">
+            PDF, texto UTF-8 o Markdown · Hasta 10 MB
           </FieldDescription>
           <FieldError id={`${id}-error`} errors={[errors.file]} />
         </Field>

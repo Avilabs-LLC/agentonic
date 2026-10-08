@@ -1,5 +1,5 @@
 "use client"
-import { useState } from "react"
+import { useState, type ReactNode } from "react"
 import {
   flexRender,
   getCoreRowModel,
@@ -79,6 +79,8 @@ export function DataTable<T>({
   searchLabel = "Buscar registros",
   emptyDescription = "Prueba con otros términos de búsqueda.",
   getRowId,
+  toolbar,
+  hiddenColumns = [],
 }: {
   data: T[]
   columns: ColumnDef<T>[]
@@ -87,6 +89,10 @@ export function DataTable<T>({
   searchLabel?: string
   emptyDescription?: string
   getRowId?: (row: T) => string
+  /** Extra filters at the right end of the search row. */
+  toolbar?: ReactNode
+  /** Column ids defined but not shown for now. */
+  hiddenColumns?: string[]
 }) {
   const [sorting, setSorting] = useState<SortingState>([])
   const [search, setSearch] = useState("")
@@ -115,19 +121,27 @@ export function DataTable<T>({
               .includes(term)
           )
         ),
-    initialState: { pagination: { pageSize: 10 } },
+    initialState: {
+      pagination: { pageSize: 10 },
+      columnVisibility: Object.fromEntries(
+        hiddenColumns.map((id) => [id, false])
+      ),
+    },
   })
   return (
     <div className="space-y-4">
-      <Input
-        aria-label={searchLabel}
-        placeholder={
-          searchLabel === "Buscar registros" ? "Buscar…" : `${searchLabel}…`
-        }
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        className="max-w-sm"
-      />
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <Input
+          aria-label={searchLabel}
+          placeholder={
+            searchLabel === "Buscar registros" ? "Buscar…" : `${searchLabel}…`
+          }
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="max-w-sm"
+        />
+        {toolbar}
+      </div>
       <div
         className={
           variant === "integrated"

@@ -361,25 +361,17 @@ export function RunModelEvaluationDialog({
             confirmados. Cada combinación ejecuta todas las situaciones.
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-4">
+        {/* Compact: levels in three columns of short rows (owner direction,
+            2026-10-08), so each model takes one or two rows. */}
+        <div className="space-y-3">
           {modelCatalog.map((m) => (
-            <fieldset
-              key={m.id}
-              disabled={pending}
-              className="space-y-2 border-b pb-4"
-            >
-              <legend className="mb-2 text-sm font-medium">{m.name}</legend>
-              <div
-                className="gap-2 sm:gap-x-4"
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-                }}
-              >
+            <fieldset key={m.id} disabled={pending} className="border-b pb-3">
+              <legend className="mb-1 text-sm font-medium">{m.name}</legend>
+              <div className="grid grid-cols-2 gap-x-4 sm:grid-cols-3">
                 {(m.levels.length ? m.levels : [null]).map((level) => (
                   <label
                     key={level ?? "default"}
-                    className="flex min-h-10 cursor-pointer items-center gap-3 text-sm"
+                    className="flex min-h-7 cursor-pointer items-center gap-2.5 text-sm"
                   >
                     <Checkbox.Root
                       className="size-4 shrink-0 rounded-sm border border-input data-checked:bg-primary"

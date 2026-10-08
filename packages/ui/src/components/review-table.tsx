@@ -45,6 +45,7 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
 } from "@workspace/ui/components/dropdown-menu"
+import { actionsMenuClassName } from "@workspace/ui/lib/menus"
 import { notify } from "@workspace/ui/lib/toast"
 import { RevokeApprovalDialog } from "@workspace/ui/components/revoke-approval-dialog"
 
@@ -158,7 +159,7 @@ export function ReviewTable({
           >
             <EllipsisIcon />
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-64">
+          <DropdownMenuContent align="start" className={actionsMenuClassName}>
             <DropdownMenuItem disabled>
               <UserRoundIcon />
               Ver usuario

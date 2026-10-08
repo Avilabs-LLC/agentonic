@@ -53,7 +53,7 @@ export const requirePasswordSession = cache((app: AppKind) =>
 )
 export const requireIdentity = cache(async (app: AppKind) => {
   const verified = await requireVerifiedUser(app)
-  const overview = await identityOverview(verified.authId)
+  const overview = await identityOverview(verified.authId, verified.email)
   return {
     ...overview,
     email: verified.email,

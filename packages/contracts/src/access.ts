@@ -167,6 +167,8 @@ export type MemberInvitationInput = z.infer<typeof memberInvitationInput>
 export const workspaceMember = z.object({
   id: uuid,
   displayName: z.string(),
+  // Null until the person signs in after migration 57.
+  email: z.string().nullable().default(null),
   role: z.string(),
   status: z.string(),
 })

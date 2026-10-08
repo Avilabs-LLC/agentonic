@@ -6,6 +6,7 @@ import type { ColumnDef } from "@tanstack/react-table"
 import type { WorkspaceView, FormResult } from "@agentonic/contracts/authoring"
 import { formatCount } from "@agentonic/contracts/format"
 import { DataTable } from "@workspace/ui/components/data-table"
+import { MultiSelectFilter } from "@workspace/ui/components/multi-select-filter"
 import { sortableHeader } from "@workspace/ui/components/table-cells"
 import { processingErrors } from "@agentonic/contracts/rag"
 import { DocumentStatusBadge } from "@workspace/ui/components/status-badge"
@@ -166,6 +167,12 @@ const documentType = (contentType: string) =>
     : contentType === "text/markdown"
       ? "Markdown"
       : "Texto"
+const documentSize = (bytes: number) =>
+  new Intl.NumberFormat("es-VE", {
+    style: "unit",
+    unit: "kilobyte",
+    maximumFractionDigits: 1,
+  }).format(bytes / 1024)
 function documentDetail(document: WorkspaceView["documents"][number]) {
   if (document.status === "ready")
     return `${formatCount(document.chunkCount)} ${document.chunkCount === 1 ? "fragmento" : "fragmentos"}`
@@ -193,15 +200,36 @@ export function DocumentTable({
 }) {
   type Document = WorkspaceView["documents"][number]
   const header = sortableHeader<Document>
+  const [chosenCollections, setShownCollections] = useState<string[]>([])
+  // A collection removed while chosen stops filtering.
+  const shownCollections = chosenCollections.filter((id) =>
+    collections.some((collection) => collection.id === id)
+  )
+  const rows = shownCollections.length
+    ? data.filter((document) =>
+        shownCollections.includes(document.collectionId)
+      )
+    : data
   const columns: ColumnDef<Document>[] = [
     {
       accessorKey: "title",
       header: header("Documento"),
+      // Owner direction, 2026-10-08: type and size sit under the name to save
+      // width; their own columns stay defined but hidden.
       cell: ({ row }) => (
         <span className="flex items-center gap-2">
           <FileTextIcon className="size-4 shrink-0 text-muted-foreground" />
-          <span className="max-w-60 truncate" title={row.original.title}>
-            {row.original.title}
+          <span className="min-w-0">
+            <span
+              className="block max-w-60 truncate"
+              title={row.original.title}
+            >
+              {row.original.title}
+            </span>
+            <span className="block text-muted-foreground tabular-nums">
+              {documentType(row.original.contentType)} ·{" "}
+              {documentSize(row.original.size)}
+            </span>
           </span>
         </span>
       ),
@@ -215,13 +243,7 @@ export function DocumentTable({
       accessorKey: "size",
       header: header("Tamaño"),
       cell: ({ row }) => (
-        <span className="tabular-nums">
-          {new Intl.NumberFormat("es-VE", {
-            style: "unit",
-            unit: "kilobyte",
-            maximumFractionDigits: 1,
-          }).format(row.original.size / 1024)}
-        </span>
+        <span className="tabular-nums">{documentSize(row.original.size)}</span>
       ),
     },
     {
@@ -272,11 +294,26 @@ export function DocumentTable({
   ]
   return (
     <DataTable
-      data={data}
+      data={rows}
       columns={columns}
       searchKeys={["title"]}
       variant="integrated"
       searchLabel="Buscar documentos"
+      hiddenColumns={["type", "size"]}
+      toolbar={
+        <MultiSelectFilter
+          label="Filtrar por colecciones"
+          allLabel="Todas las colecciones"
+          countLabel={(count) => `${count} colecciones seleccionadas`}
+          options={collections.map((collection) => ({
+            value: collection.id,
+            label: collection.name,
+          }))}
+          selected={shownCollections}
+          onChange={setShownCollections}
+          className="w-full sm:w-56"
+        />
+      }
       emptyDescription="Todavía no hay documentos. Selecciona una colección y sube tu primer archivo."
     />
   )

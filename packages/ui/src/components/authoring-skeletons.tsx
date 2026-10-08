@@ -242,13 +242,20 @@ export function KnowledgeSkeleton() {
               </div>
             ) : (
               <div className="space-y-4">
-                <Skeleton className="h-9 w-full max-w-sm" />
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <Skeleton className="h-9 w-full max-w-sm" />
+                  {/* Documents: the collections filter. */}
+                  {section === "documents" && (
+                    <Skeleton className="h-9 w-full sm:w-56" />
+                  )}
+                </div>
                 <div className="divide-y border-t">
                   <div className="flex justify-between gap-4 py-3">
                     {Array.from(
-                      // Documents: Documento, Tipo, Tamaño, Colección,
-                      // Estado, Detalle and actions; collections: four.
-                      { length: section === "documents" ? 7 : 4 },
+                      // Documents: Documento (with type and size under the
+                      // name), Colección, Estado, Detalle and actions;
+                      // collections: four.
+                      { length: section === "documents" ? 5 : 4 },
                       (_, column) => (
                         <Skeleton key={column} className="h-4 w-20" />
                       )

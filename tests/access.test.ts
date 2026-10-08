@@ -101,7 +101,11 @@ beforeAll(async () => {
   CREATE ROLE agentonic_admin NOSUPERUSER NOBYPASSRLS; CREATE ROLE agentonic_customer NOSUPERUSER NOBYPASSRLS; CREATE ROLE agentonic_worker NOSUPERUSER NOBYPASSRLS;
   CREATE SCHEMA agentonic_bootstrap;
   CREATE FUNCTION agentonic_bootstrap.link_auth_users() RETURNS void LANGUAGE sql SECURITY DEFINER SET search_path='' AS $f$ ALTER TABLE agentonic.users ADD CONSTRAINT users_auth_user_fk FOREIGN KEY(auth_user_id) REFERENCES auth.users(id) ON DELETE RESTRICT; $f$;`)
-  for (const migration of ["202609130001_identity", "202609130002_access"])
+  for (const migration of [
+    "202609130001_identity",
+    "202609130002_access",
+    "202610080057_member_emails",
+  ])
     await db.exec(
       readFileSync(
         `packages/database/prisma/migrations/${migration}/migration.sql`,
@@ -826,6 +830,14 @@ describe("single-use verified-email invitations", () => {
       (await db.query("SELECT role FROM agentonic.workspace_members")).rows
     ).toEqual([{ role: "member" }])
     expect((await db.query("SELECT * FROM agentonic.agents")).rows).toEqual([])
+    expect(
+      (
+        await ownerSql(
+          "SELECT email FROM agentonic.users WHERE auth_user_id=$1",
+          [newcomer]
+        )
+      ).rows
+    ).toEqual([{ email: "new@example.invalid" }])
   })
   it("revoked invitations cannot be accepted", async () => {
     const i = await invite()
@@ -869,6 +881,40 @@ describe("single-use verified-email invitations", () => {
     expect(JSON.stringify(r.data)).not.toContain(member(other))
     await actor(colleague)
     expect((await command("member.list")).ok).toBe(false)
+  })
+  it("shows managers each member's address from their latest verified session", async () => {
+    const emailOf = async (user: string) =>
+      (
+        await ownerSql(
+          "SELECT email FROM agentonic.users WHERE auth_user_id=$1",
+          [user]
+        )
+      ).rows[0]
+    await actor(owner, wa, "agentonic_customer", "  Owner@Example.INVALID ")
+    await db.query("SELECT agentonic.record_verified_email()")
+    expect(await emailOf(owner)).toEqual({ email: "owner@example.invalid" })
+    // No verified address, or a malformed one, changes nothing.
+    for (const email of ["", "not-an-address"]) {
+      await actor(owner, wa, "agentonic_customer", email)
+      await db.query("SELECT agentonic.record_verified_email()")
+    }
+    expect(await emailOf(owner)).toEqual({ email: "owner@example.invalid" })
+    // Workers cannot record one.
+    await actor(owner, wa, "agentonic_worker", "worker@example.invalid")
+    await db.exec("SAVEPOINT worker_email")
+    await expect(
+      db.query("SELECT agentonic.record_verified_email()")
+    ).rejects.toThrow()
+    await db.exec("ROLLBACK TO SAVEPOINT worker_email")
+    await actor()
+    const listed = (await command("member.list")).data as {
+      id: string
+      email: string | null
+    }[]
+    expect(listed.find((m) => m.id === member(owner))?.email).toBe(
+      "owner@example.invalid"
+    )
+    expect(listed.find((m) => m.id === member(colleague))?.email).toBeNull()
   })
 })
 it("strict input contracts reject invented authority, wildcard scopes and deployment commands", () => {
