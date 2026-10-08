@@ -4,6 +4,7 @@ import pg from "pg"
 import { z } from "zod"
 import { workerFailure } from "./failure"
 import { LANES, serveLanes, type LaneJob } from "./lanes"
+import { logJob } from "./job-log"
 import { processJob, type Execute } from "./pipeline"
 import { scheduleRetention } from "./retention"
 import { directProviders, providerKeys } from "./providers"
@@ -77,6 +78,7 @@ const claimed = z
     token: z.uuid(),
     kind: z.enum(["ingest", "purge", "retrieve"]),
     lane: z.enum(LANES),
+    queuedAt: z.string().nullable().optional(),
   })
   .nullable()
 async function run(job: LaneJob, stopping: AbortSignal) {
@@ -85,29 +87,20 @@ async function run(job: LaneJob, stopping: AbortSignal) {
   const heartbeat = setInterval(() => {
     void execute("heartbeat", job).catch(() => lost.abort())
   }, 20000)
+  const startedAt = Date.now()
   try {
     await processJob(job, execute, config, signal)
-    console.log(
-      JSON.stringify({
-        event: "knowledge_job_completed",
-        job: job.id,
-        kind: job.kind,
-        lane: job.lane,
-      })
-    )
+    logJob({ service: "knowledge", job, startedAt, finishedAt: Date.now() })
   } catch (error) {
     const { code, diagnostic } = workerFailure(error)
     await execute("fail", job, { code }).catch(() => {})
-    console.log(
-      JSON.stringify({
-        event: "knowledge_job_stopped",
-        job: job.id,
-        kind: job.kind,
-        lane: job.lane,
-        code,
-        diagnostic,
-      })
-    )
+    logJob({
+      service: "knowledge",
+      job,
+      startedAt,
+      finishedAt: Date.now(),
+      code: diagnostic,
+    })
   } finally {
     clearInterval(heartbeat)
   }

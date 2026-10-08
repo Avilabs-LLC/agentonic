@@ -196,6 +196,10 @@ async function privatePreview(enableTools = true) {
   })
   const job = await f.claim()
   expect(job).toBeTruthy()
+  // Claims carry the time the job was queued (migration 56, A2).
+  expect(
+    Date.parse(String((job as { queuedAt?: string }).queuedAt))
+  ).toBeGreaterThan(0)
   async function tool(
     operation: string,
     payload: Record<string, unknown> = {},

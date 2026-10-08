@@ -9,7 +9,12 @@ import {
 } from "@agentonic/contracts/evaluation-fixtures"
 import { toolGrants } from "@agentonic/contracts/tools"
 import { fixtureProviders } from "./evaluation-fixtures"
-import { processJob, type Configuration, type Execute, type Lease } from "./pipeline"
+import {
+  processJob,
+  type Configuration,
+  type Execute,
+  type Lease,
+} from "./pipeline"
 
 export type Grade = (
   input: Record<string, unknown>,
@@ -37,7 +42,8 @@ export async function runReviewCase(
     }
     // The frozen version's own grants, answered from fixtures: nothing live is consulted.
     if (fixtures && operation === "gmail-tools") return { tools }
-    if (fixtures && operation === "web-tools") return { enabled: !!fixtures.web }
+    if (fixtures && operation === "web-tools")
+      return { enabled: !!fixtures.web }
     const result = await execute(operation, lease, payload)
     if (operation === "context" && typeof result.accessJson === "string")
       tools = toolGrants.parse(

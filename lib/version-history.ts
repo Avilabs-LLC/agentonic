@@ -1,5 +1,10 @@
 export const VERSION_HISTORY = [
   {
+    "version": "0.22.0",
+    "date": "2026-10-08",
+    "summary": "Verificaciones de servidores de 30 días, versión en Despliegues, limpieza programada de datos de Gmail, registros por trabajo con tiempos y resultados, y despliegues sin autorización vigente mostrados como tales."
+  },
+  {
     "version": "0.21.0",
     "date": "2026-10-07",
     "summary": "Listas de agentes con un dato por columna (En uso, Entorno, Despliegue, En reposo, Próxima, Propuesta) y encabezados de tabla más cortos en ambas aplicaciones, con el nombre completo al pasar el cursor."
