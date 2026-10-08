@@ -11,10 +11,10 @@
 
 ## Next up
 
-1. **C6** — raise the GitHub Actions budget before the free minutes run out (Owner).
-2. **C2** — the 250-agent load test, now that Supabase is on a paid plan.
-3. **C5 → C13** — email for invitations and password resets.
-4. **B1** — a test mailbox, then **B2** — live Gmail write acceptance.
+1. **C6** — raise the GitHub Actions budget before the free minutes run out, or move to GitHub Team (Owner).
+2. **C13** — the owner's live password reset and Admin authenticator sign-in; the invitation passed on 8 October.
+3. **B2** — live Gmail acceptance with the owner's mailbox and the agreed recipient.
+4. **C2** — the 250-agent load test, deferred by the owner until other items are sorted.
 
 ## Follow-ups from recent work
 
@@ -30,7 +30,6 @@ All stabilization items are closed (A1 and A2 on 7 October; see Recently closed)
 
 | ID  | Action                                                                                                                                                                                                                                                                                               | Who   | Status               | Done when                                                                        |
 | --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----- | -------------------- | -------------------------------------------------------------------------------- |
-| B1  | Provide a dedicated test Gmail account and an agreed recipient for sending.                                                                                                                                                                                                                          | Owner | Open                 | Both are named in the owner's local configuration (never in Git).                |
 | B2  | Live acceptance on the hosted customer app of connecting Gmail, draft create, change and delete, and send, following the matrix in [gmail-connection.md](gmail-connection.md#acceptance-matrix): changed arguments, double confirmation, expiry, cancellation, unknown outcome, no automatic resend. | Build | Blocked: B1          | Every matrix row has live or synthetic evidence recorded in gmail-connection.md. |
 | B5  | Choose the Google path: restricted-scope verification plus a yearly security assessment (weeks to months), or an Internal app for one Workspace organization. Steps, costs and the readiness gap: [google-restricted-scope-verification.md](google-restricted-scope-verification.md).                | Owner | Open                 | The choice is recorded in gmail-connection.md.                                   |
 | B6  | Start Google verification if B5 chooses it: domain in Search Console, consent screen (homepage, privacy policy, logo), hosted redirect URL. Needs C3 and D13.                                                                                                                                        | Owner | Blocked: B5, C3, D13 | Google has accepted the submission.                                              |
@@ -149,3 +148,4 @@ Gate: the §14 acceptance suite with at least two workspaces and several users.
 | One allowlisted log line per finished job with queue delay, duration, outcome and error category; claims carry their queue time (closes A2)                                                                                                                                                     | 7 Oct  | PR #57          |
 | Controller test: two deployments during a worker upgrade move one at a time (closes N2); PRs #55–#57 released as platform v0.22.0                                                                                                                                                               | 7 Oct  | PR #57          |
 | Original shadcn select restored; re-selecting the chosen option no longer re-runs filters or resets choices; "Todos los espacios" is selectable again; customer B workspace renamed ACME                                                                                                        | 8 Oct  | PR #58          |
+| A Gmail account and send recipient for live acceptance: the owner's mailbox (real mail accepted by the owner) and an Avilabs recipient, named in `.env.bootstrap.local` (closes B1)                                                                                                             | 8 Oct  | Owner           |
