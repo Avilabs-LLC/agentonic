@@ -1,5 +1,10 @@
 export const VERSION_HISTORY = [
   {
+    "version": "0.27.0",
+    "date": "2026-10-08",
+    "summary": "Evaluation lessons: criteria as requests, rubric 5 on GPT-5.4 mini, per-model approval, runtime 0.5.0 answers about itself, GPT-4.1 mini retired"
+  },
+  {
     "version": "0.26.0",
     "date": "2026-10-08",
     "summary": "People choose their own name: on accepting an invitation and in Mi cuenta (N7)"

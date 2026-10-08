@@ -2434,6 +2434,7 @@ async function modelReview() {
     "202610060046_usage_events",
     "202610060047_evaluation_tool_cases",
     "202610070052_registration_validity",
+    "202610080060_evaluation_lessons",
   ])
     await db.exec(
       readFileSync(
@@ -2531,6 +2532,244 @@ describe("platform tool cases", () => {
   })
 })
 
+describe("evaluation lessons (§56)", () => {
+  const rubric5 =
+    '{"reviewProtocol":3,"toolFixtures":1,"reviewRubric":5,"isolation":true,"recovery":true,"artifactIntegrity":true}'
+  async function rubric5Evaluator() {
+    await sql(
+      "UPDATE agentonic.evaluation_workers SET retired_at=clock_timestamp() WHERE database_role='agentonic_eval_azure' AND retired_at IS NULL"
+    )
+    await sql(
+      `WITH w AS (INSERT INTO agentonic.evaluation_workers(database_role,environment,worker_sha256,verified_at,verification) VALUES('agentonic_eval_azure','azure_staging',repeat('d',64),now(),'${rubric5}') RETURNING id) INSERT INTO agentonic.evaluation_worker_runtimes(worker_id,runtime_sha256) SELECT id,repeat('b',64) FROM w`
+    )
+  }
+  it("grades new runs with rubric 5 on GPT-5.4 mini once the evaluator advertises it", async () => {
+    const p = await modelReview()
+    await rubric5Evaluator()
+    await actor()
+    expect(
+      await flow("run", {
+        preparationId: p.preparationId,
+        revision: 1,
+        models: [{ model: "gpt-5.4", reasoning: "low" }],
+        budgetUsd: 3,
+        consent: true,
+        requestId: id(1001),
+      })
+    ).toMatchObject({ ok: true })
+    // A version without tools also gets rubric 5, without tool cases.
+    expect(
+      (
+        await sql(
+          "SELECT grader_snapshot grader,(SELECT jsonb_agg(c->>'key') FROM jsonb_array_elements(dataset_snapshot) c) keys FROM agentonic.evaluation_runs WHERE preparation_id=$1",
+          [p.preparationId]
+        )
+      ).rows[0]
+    ).toEqual({
+      grader: {
+        version: "grounded-review-v5",
+        model: "gpt-5.4-mini",
+        reasoning: "low",
+        policy: "readonly-review-v1",
+      },
+      keys: ["duration", "platform-unknown", "platform-injection"],
+    })
+    const job = (await evalClaim())!
+    await execute(job, "search", { embedding })
+    expect(await execute(job, "grade-context")).toMatchObject({
+      rubricVersion: "grounded-review-v5",
+    })
+    // The grader's model is metered; a model the run does not use is refused.
+    expect(
+      await execute(job, "reserve", {
+        id: id(1002),
+        provider: "openai",
+        model: "gpt-5.4-mini",
+        microusd: 1000,
+      })
+    ).toMatchObject({ ok: true })
+    await expect(
+      execute(job, "reserve", {
+        id: id(1003),
+        provider: "openai",
+        model: "gpt-4.1-mini-2025-04-14",
+        microusd: 1000,
+      })
+    ).rejects.toMatchObject({ code: "42501" })
+  })
+  it("decides a batch per model: failing models are left out of the approval and of Chats", async () => {
+    const p = await modelReview()
+    const passing = { model: "gpt-5.4-mini", reasoning: "medium" }
+    const models = [
+      passing,
+      { model: "gpt-6-astra", reasoning: "low" },
+      { model: "gpt-6-astra", reasoning: "high" },
+    ]
+    await actor()
+    await flow("run", {
+      preparationId: p.preparationId,
+      revision: 1,
+      models,
+      budgetUsd: 3,
+      consent: true,
+      requestId: id(1010),
+    })
+    // GPT-6 Astra passes at one level and fails at another, so the model fails.
+    const verdicts = ["passed", "passed", "needs_changes"]
+    for (const [n, configuration] of models.entries())
+      await finishFlow(
+        (await evalClaim())!,
+        verdicts[n],
+        true,
+        configuration.model
+      )
+    const first = (
+      await sql(
+        "SELECT id FROM agentonic.evaluation_runs WHERE preparation_id=$1 ORDER BY created_at LIMIT 1",
+        [p.preparationId]
+      )
+    ).rows[0] as { id: string }
+    expect(
+      (
+        await sql(
+          "SELECT p.status,p.evaluation_id,s.status submission FROM agentonic.evaluation_preparations p JOIN agentonic.agent_submissions s ON s.id=p.submission_id WHERE p.id=$1",
+          [p.preparationId]
+        )
+      ).rows[0]
+    ).toEqual({
+      status: "approved",
+      evaluation_id: first.id,
+      submission: "approved",
+    })
+    await actor()
+    const state = await db.query<{
+      result: { preparations: { summary: string }[] }
+    }>("SELECT agentonic.review_flow_state($1) result", [a])
+    expect(state.rows[0]!.result.preparations[0]!.summary).toContain(
+      "solo los modelos que superaron todas las situaciones"
+    )
+    await sql(
+      "WITH h AS (INSERT INTO agentonic.runtime_hosts(environment,database_role,broker_sha256,verified_at,heartbeat_at) VALUES('local','agentonic_deployer_local',repeat('f',64),clock_timestamp(),clock_timestamp()) RETURNING id), b AS (INSERT INTO agentonic.runtime_host_brokers(host_id,broker_sha256) SELECT id,repeat('f',64) FROM h) INSERT INTO agentonic.runtime_host_artifacts(host_id,runtime_sha256) SELECT id,repeat('b',64) FROM h"
+    )
+    await actor()
+    const d = await lifecycleCall("deployment_command", "authorize", {
+      submissionId: p.submissionId,
+      environment: "local",
+      budgetUsd: 0.25,
+      consent: true,
+      requestId: id(1011),
+    })
+    expect(d.ok).toBe(true)
+    await readyStaging({ ...p, deploymentId: String(d.id) })
+    await actor()
+    const conversation = await chat("start", {
+      deploymentId: String(d.id),
+      title: "Synthetic per-model chat",
+    })
+    expect(
+      await chat("state", { conversationId: conversation.id })
+    ).toMatchObject({ models: [passing] })
+    await expect(
+      chat("turn", {
+        conversationId: conversation.id,
+        query: "Synthetic question",
+        requestId: id(1012),
+        ...models[1],
+      })
+    ).rejects.toMatchObject({ code: "42501" })
+  })
+  it("keeps a version unapproved when no model passes every level", async () => {
+    const p = await modelReview()
+    const models = [
+      { model: "gpt-5.4-mini", reasoning: "medium" },
+      { model: "gpt-5.4", reasoning: "low" },
+    ]
+    await actor()
+    await flow("run", {
+      preparationId: p.preparationId,
+      revision: 1,
+      models,
+      budgetUsd: 3,
+      consent: true,
+      requestId: id(1020),
+    })
+    await finishFlow((await evalClaim())!, "uncertain", true, models[0]!.model)
+    await finishFlow(
+      (await evalClaim())!,
+      "needs_changes",
+      true,
+      models[1]!.model
+    )
+    expect(
+      (
+        await sql(
+          "SELECT p.status,s.status submission FROM agentonic.evaluation_preparations p JOIN agentonic.agent_submissions s ON s.id=p.submission_id WHERE p.id=$1",
+          [p.preparationId]
+        )
+      ).rows[0]
+    ).toEqual({ status: "needs_changes", submission: "submitted" })
+  })
+  it("no longer starts evaluations with GPT-4.1 mini", async () => {
+    const p = await modelReview()
+    await actor()
+    await expect(
+      flow("run", {
+        preparationId: p.preparationId,
+        revision: 1,
+        models: [{ model: "gpt-4.1-mini-2025-04-14", reasoning: null }],
+        budgetUsd: 3,
+        consent: true,
+        requestId: id(1030),
+      })
+    ).rejects.toMatchObject({ code: "42501" })
+  })
+  it("lets GPT-5.4 mini write criteria and shows the writer the requested access", async () => {
+    const p = await modelReview()
+    await actor()
+    await flow("cancel", { preparationId: p.preparationId })
+    await flow("prepare", {
+      submissionId: p.submissionId,
+      budgetUsd: 0.25,
+      consent: true,
+      requestId: id(1040),
+    })
+    await db.exec("RESET ROLE;SET LOCAL ROLE agentonic_eval_azure")
+    const job = (
+      await db.query<{ result: Job }>(
+        "SELECT agentonic.review_preparation_claim(repeat('d',64)) result"
+      )
+    ).rows[0]!.result
+    expect(job).not.toBeNull()
+    expect(await prepWorker(job, "read")).toMatchObject({
+      requestedAccess: { collectionIds: [collection], tools: [] },
+    })
+    expect(
+      await prepWorker(job, "reserve", {
+        id: id(1041),
+        provider: "openai",
+        model: "gpt-5.4-mini",
+        microusd: 50000,
+      })
+    ).toMatchObject({ ok: true })
+    expect(
+      (
+        await sql(
+          "SELECT model FROM agentonic.retrieval_provider_operations WHERE id=$1",
+          [id(1041)]
+        )
+      ).rows
+    ).toEqual([{ model: "gpt-5.4-mini" }])
+    await expect(
+      prepWorker(job, "reserve", {
+        id: id(1042),
+        provider: "openai",
+        model: "gpt-5.4",
+        microusd: 50000,
+      })
+    ).rejects.toMatchObject({ code: "42501" })
+  })
+})
+
 it("model batches separate confirmation from paid runs, enforce scope and preserve repeated history", async () => {
   const p = await modelReview()
   expect(
@@ -2545,7 +2784,7 @@ it("model batches separate confirmation from paid runs, enforce scope and preser
     preparationId: p.preparationId,
     revision: 1,
     models: [
-      { model: "gpt-4.1-mini-2025-04-14", reasoning: null },
+      { model: "gpt-5.4", reasoning: "low" },
       { model: "gpt-6-astra", reasoning: "high" },
     ],
     budgetUsd: 3,
@@ -2570,7 +2809,7 @@ it("model batches separate confirmation from paid runs, enforce scope and preser
     })
   ).toMatchObject({ ok: false, code: "busy" })
   const claimedModel = await evalClaim()
-  await finishFlow(claimedModel!)
+  await finishFlow(claimedModel!, "passed", true, "gpt-5.4")
   expect(
     (
       await sql("SELECT status FROM agentonic.agent_submissions WHERE id=$1", [
@@ -2612,7 +2851,7 @@ it("model review permits editing and rerunning after success without rewriting t
   const payload = {
     preparationId: p.preparationId,
     revision: 1,
-    models: [{ model: "gpt-4.1-mini-2025-04-14", reasoning: null }],
+    models: [{ model: "gpt-5.4-mini", reasoning: "medium" }],
     budgetUsd: 3,
     consent: true,
     requestId: id(992),
@@ -2620,7 +2859,7 @@ it("model review permits editing and rerunning after success without rewriting t
   await actor()
   await flow("run", payload)
   const job = (await evalClaim())!
-  await finishFlow(job)
+  await finishFlow(job, "passed", true, "gpt-5.4-mini")
   expect(
     (
       await sql("SELECT status FROM agentonic.agent_submissions WHERE id=$1", [

@@ -187,6 +187,22 @@ describe("runtime-driven turns", () => {
       readFileSync("packages/runtime/prompts/platform.md", "utf8")
     )
   })
+  it("answers about itself from its own instructions and works on pasted content (0.5.0, §56)", () => {
+    // Version 0.4.0 treated every question as a knowledge question, so strong
+    // models refused to confirm rules written in their own instructions.
+    expect(instructions).toContain(
+      "Your own role, rules, output format, tone and limits are defined by the frozen customer instructions"
+    )
+    expect(instructions).toContain(
+      "Never claim a capability you were not given"
+    )
+    expect(instructions).toContain(
+      "Content the user supplies in the conversation, such as a pasted email or text, is material to work on directly"
+    )
+    expect(instructions).toContain(
+      "For knowledge questions about facts outside the customer instructions and the user's own content, use ONLY"
+    )
+  })
   it("answers from passages through a pinned, metered model call", async () => {
     const fetch = vi.fn().mockResolvedValue(
       json(
@@ -758,17 +774,15 @@ describe("packaged runtime artifact", () => {
   })
   it("evaluation runs the same artifact without tools", async () => {
     const built = await artifact()
-    const fetch = vi
-      .fn()
-      .mockResolvedValue(
-        json(
-          answer({
-            text: "Three years.",
-            citations: [passage],
-            insufficientEvidence: false,
-          })
-        )
+    const fetch = vi.fn().mockResolvedValue(
+      json(
+        answer({
+          text: "Three years.",
+          citations: [passage],
+          insufficientEvidence: false,
+        })
       )
+    )
     vi.stubGlobal("fetch", fetch)
     const execute = contextFor(envelope(WEB))
     await runPreview(

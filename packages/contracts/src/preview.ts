@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { reasoningLevel } from "./models"
+import { isSelectableModel, reasoningLevel } from "./models"
 import { retrievalResult } from "./rag"
 import { previewModel, DEFAULT_PREVIEW_MODEL } from "./preview-models"
 const identity = { agentId: z.uuid(), previewId: z.uuid() }
@@ -29,7 +29,9 @@ export const previewCommand = z.discriminatedUnion("operation", [
           ...identity,
           query: z.string().trim().min(1).max(1000),
           requestKey: z.uuid(),
-          model: previewModel.optional(),
+          model: previewModel
+            .refine(isSelectableModel, "Este modelo ya no está disponible.")
+            .optional(),
           reasoning: reasoningLevel.nullable().optional(),
         })
         .strict(),

@@ -11,15 +11,20 @@
 
 ## Next up
 
-1. **C13** — the owner's live password reset and Admin authenticator sign-in; the invitation passed on 8 October.
-2. **B8** — tell the agent which Gmail actions were confirmed since its last turn (found in B2).
-3. **C2** — the 250-agent load test, deferred by the owner until other items are sorted.
+1. **N8** — roll out the evaluation lessons (§56) so the next evaluations use them.
+2. **N9** — scheduled jobs for agents (owner request, 8 October), after N8.
+3. **C13** — the owner's live password reset and Admin authenticator sign-in; the invitation passed on 8 October.
+4. **B8** — tell the agent which Gmail actions were confirmed since its last turn (found in B2).
+5. **C2** — the 250-agent load test, deferred by the owner until other items are sorted.
 
 ## Follow-ups from recent work
 
-| ID  | Action                                                                                                                                                                                                         | Who   | Status           | Done when                                                                |
-| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----- | ---------------- | ------------------------------------------------------------------------ |
-| N6  | The local deployment host has been expired since 26 Sep on purpose. Before local staging chats are needed again, reinstall it with `install-staging --local --start`, which now also starts the local gateway. | Build | Deferred (5 Oct) | Local re-verification shows _verified_ and a local staging chat answers. |
+| ID  | Action                                                                                                                                                                                                                                                                                               | Who           | Status                 | Done when                                                                                         |
+| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- | ---------------------- | ------------------------------------------------------------------------------------------------- |
+| N8  | Roll out the evaluation lessons (§56): apply migration 60; `pnpm setup:preview` and `pnpm runtime:install --azure` for runtime 0.5.0; redeploy and register the evaluator with `reviewRubric: 5` and every runtime in use; `pnpm platform:install` for 0.27.0.                                       | Build         | Open                   | A new evaluation run carries `grounded-review-v5`, and a newly frozen version uses runtime 0.5.0. |
+| N9  | Scheduled jobs for agents: a Programaciones tab on the agent page with a form, and schedules proposed from chat and confirmed by the customer (owner request, 8 Oct). Starts after N8 merges; design agreed with the owner first.                                                                    | Owner → Build | Open                   | A confirmed schedule runs an approved agent unattended and its results appear to its owner.       |
+| N10 | A writing-style guide from a customer's own sent mail, for their agent's knowledge (owner request, 8 Oct, for one mail agent). Reading a mailbox outside the agent's chat needs the account holder's explicit consent and a platform path; staff must not decrypt connection credentials on the Mac. | Owner         | Open: consent and path | The customer has consented and the guide is in the agent's collection.                            |
+| N6  | The local deployment host has been expired since 26 Sep on purpose. Before local staging chats are needed again, reinstall it with `install-staging --local --start`, which now also starts the local gateway.                                                                                       | Build         | Deferred (5 Oct)       | Local re-verification shows _verified_ and a local staging chat answers.                          |
 
 ## A · Stabilize (P0)
 

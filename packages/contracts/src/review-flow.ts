@@ -41,7 +41,7 @@ export const reviewFlowCommand = z.discriminatedUnion("operation", [
       payload: z
         .object({
           submissionId: z.uuid(),
-          budgetUsd: z.number().min(0.05).max(1),
+          budgetUsd: z.number().min(0.1).max(1),
           consent: z.literal(true),
           requestId: z.uuid(),
         })

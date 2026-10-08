@@ -112,3 +112,125 @@ it("settles known usage even when structured generation is incomplete", async ()
   ).rejects.toThrow("provider_unavailable")
   expect(execute.mock.calls.map((c) => c[0])).toEqual(["reserve", "settle"])
 })
+it("grades rubric 5 with GPT-5.4 mini at low reasoning and meters its rates", async () => {
+  const execute = vi.fn<Execute>(async () => ({ ok: true }))
+  const fetch = vi.fn(
+    async () =>
+      new Response(
+        JSON.stringify({
+          status: "completed",
+          usage: { input_tokens: 100, output_tokens: 50 },
+          output: [
+            {
+              content: [
+                { type: "output_text", text: JSON.stringify(assessment) },
+              ],
+            },
+          ],
+        })
+      )
+  )
+  vi.stubGlobal("fetch", fetch)
+  await gradeAnswer(
+    { context: { rubricVersion: "grounded-review-v5" } },
+    job,
+    execute,
+    "synthetic-key",
+    new AbortController().signal
+  )
+  const body = JSON.parse(
+    (fetch.mock.calls[0] as unknown as [string, RequestInit])[1].body as string
+  )
+  expect(body).toMatchObject({
+    model: "gpt-5.4-mini",
+    reasoning: { effort: "low" },
+    max_output_tokens: 4096,
+  })
+  expect(body.temperature).toBeUndefined()
+  // The configuration is the authority; one answer is all that can be observed.
+  expect(body.instructions).toContain(
+    "compara la respuesta con la configuración"
+  )
+  expect(body.instructions).toContain("no exijas registros operativos")
+  expect(execute.mock.calls[0]![2]).toMatchObject({ model: "gpt-5.4-mini" })
+  expect(execute.mock.calls[1]![2]).toMatchObject({ microusd: 300 })
+})
+it("keeps earlier rubric versions on the model their runs were created with", async () => {
+  const fetch = vi.fn(
+    async () =>
+      new Response(
+        JSON.stringify({
+          status: "completed",
+          usage: { input_tokens: 1, output_tokens: 1 },
+          output: [
+            {
+              content: [
+                { type: "output_text", text: JSON.stringify(assessment) },
+              ],
+            },
+          ],
+        })
+      )
+  )
+  vi.stubGlobal("fetch", fetch)
+  await gradeAnswer(
+    { context: { rubricVersion: "grounded-review-v4" } },
+    job,
+    vi.fn<Execute>(async () => ({ ok: true })),
+    "synthetic-key",
+    new AbortController().signal
+  )
+  const body = JSON.parse(
+    (fetch.mock.calls[0] as unknown as [string, RequestInit])[1].body as string
+  )
+  expect(body).toMatchObject({
+    model: "gpt-4.1-mini-2025-04-14",
+    temperature: 0,
+    max_output_tokens: 1200,
+  })
+  expect(body.reasoning).toBeUndefined()
+})
+it("writes criteria with GPT-5.4 mini as requests to the agent, never questions about it", async () => {
+  const execute = vi.fn<Execute>(async () => ({ ok: true }))
+  const fetch = vi.fn(
+    async () =>
+      new Response(
+        JSON.stringify({
+          status: "completed",
+          usage: { input_tokens: 1000, output_tokens: 2000 },
+          output: [
+            {
+              content: [
+                {
+                  type: "output_text",
+                  text: JSON.stringify({ risk: "routine", criteria: [] }),
+                },
+              ],
+            },
+          ],
+        })
+      )
+  )
+  vi.stubGlobal("fetch", fetch)
+  await prepareCriteria(
+    {},
+    job,
+    execute,
+    "synthetic-key",
+    new AbortController().signal
+  ).catch(() => null)
+  const body = JSON.parse(
+    (fetch.mock.calls[0] as unknown as [string, RequestInit])[1].body as string
+  )
+  expect(body).toMatchObject({
+    model: "gpt-5.4-mini",
+    reasoning: { effort: "low" },
+    max_output_tokens: 8192,
+  })
+  expect(body.instructions).toContain(
+    "Nunca escribas preguntas sobre el agente"
+  )
+  expect(body.instructions).toContain("@example.invalid")
+  expect(execute.mock.calls[0]![2]).toMatchObject({ model: "gpt-5.4-mini" })
+  expect(execute.mock.calls[1]![2]).toMatchObject({ microusd: 9750 })
+})

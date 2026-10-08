@@ -19,27 +19,20 @@ export type DraftEditorStatus = {
   editingSkill: boolean
 }
 export type Requirement = { label: string; met: boolean }
-// Agent detail returns candidates newest first. Keep the agent's last used
-// available engine across reloads and draft saves instead of resetting to the catalog.
-// An explicit preferred capability family affects only the next preparation;
-// previously frozen versions and previews retain their original engine.
+// The next version uses the newest available engine (codes come newest first),
+// so runtime fixes reach existing agents (§56). Customers no longer choose an
+// engine, so keeping the last one used left agents on old runtimes. An explicit
+// preferred capability family narrows the choice; previously frozen versions
+// and previews retain their original engine.
 export function defaultFreezeCode(
-  candidates: AgentView["candidates"],
+  _candidates: AgentView["candidates"],
   availableCodeIds: string[],
   preferredCodeIds: string[] = []
 ) {
   const preferred = preferredCodeIds.filter((id) =>
     availableCodeIds.includes(id)
   )
-  const eligible = preferred.length ? preferred : availableCodeIds
-  return (
-    candidates.find(
-      (candidate) =>
-        candidate.codeReleaseId && eligible.includes(candidate.codeReleaseId)
-    )?.codeReleaseId ??
-    eligible[0] ??
-    ""
-  )
+  return (preferred.length ? preferred : availableCodeIds)[0] ?? ""
 }
 export const preparationInput = z
   .object({
@@ -74,7 +67,10 @@ export const submissionForm = z.object({
   note: z.string().max(2000, "La nota no puede superar los 2000 caracteres."),
   budgetUsd: z
     .number()
-    .min(0.05, "El mínimo es US$0,05.")
+    // Criteria are written by GPT-5.4 mini (§56). Its reservation for a typical
+    // configuration and knowledge sample is US$0.03–0.08; very long
+    // configurations need a higher limit.
+    .min(0.1, "El mínimo es US$0,10.")
     .max(1, "El máximo es US$1,00."),
   consent: z.boolean().refine(Boolean, "Autoriza la revisión para continuar."),
 })

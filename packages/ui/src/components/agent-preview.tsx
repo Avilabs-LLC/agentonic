@@ -1,6 +1,7 @@
 "use client"
 import {
   DEFAULT_MODEL_CONFIGURATION,
+  isSelectableModel,
   modelCatalog,
   type ModelConfiguration,
 } from "@agentonic/contracts/models"
@@ -45,11 +46,15 @@ export function AgentPreview({
     initialState?.id ?? null
   )
   const [state, setState] = useState<PreviewState | null>(initialState)
+  // A model that is no longer offered falls back to the default.
+  const lastOffered = initialState?.turns
+    .filter((turn) => isSelectableModel(turn.model))
+    .at(-1)
   const [model, setModel] = useState<PreviewModel>(
-    initialState?.turns.at(-1)?.model ?? DEFAULT_MODEL_CONFIGURATION.model
+    lastOffered?.model ?? DEFAULT_MODEL_CONFIGURATION.model
   )
   const [reasoning, setReasoning] = useState<ModelConfiguration["reasoning"]>(
-    initialState?.turns.at(-1)?.reasoning ??
+    lastOffered?.reasoning ??
       modelCatalog.find((m) => m.id === model)!.defaultLevel
   )
   const [budgetUsd, setBudgetUsd] = useState<0.25 | 3>(0.25)

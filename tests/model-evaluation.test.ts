@@ -77,3 +77,26 @@ it("counts a model as fully passing only when every selected level completed and
   batch.models[1]!.passed = 6
   expect(batchPassed(batch)).toBe(2)
 })
+it("no longer offers GPT-4.1 mini for new evaluations or test chats, but still names it (§56)", async () => {
+  const { selectableModels, modelConfigurationLabel } =
+    await import("../packages/contracts/src/models")
+  const { previewCommand } = await import("../packages/contracts/src/preview")
+  const retired = { model: "gpt-4.1-mini-2025-04-14", reasoning: null }
+  expect(selectableModels.map((m) => m.id)).not.toContain(retired.model)
+  expect(modelConfiguration.safeParse(retired).success).toBe(true)
+  expect(evaluationModels.safeParse([retired]).success).toBe(false)
+  expect(modelConfigurationLabel(retired)).toBe("GPT-4.1 mini")
+  const turn = (model: string) =>
+    previewCommand.safeParse({
+      operation: "turn",
+      payload: {
+        agentId: id(1),
+        previewId: id(2),
+        query: "Hola",
+        requestKey: id(3),
+        model,
+      },
+    }).success
+  expect(turn(retired.model)).toBe(false)
+  expect(turn("gpt-5.4-mini")).toBe(true)
+})

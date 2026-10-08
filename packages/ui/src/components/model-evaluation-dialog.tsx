@@ -10,7 +10,7 @@ import {
 } from "@agentonic/contracts/review-flow"
 import {
   evaluationModels,
-  modelCatalog,
+  selectableModels,
   modelConfigurationKey,
   modelConfigurationLabel,
   reasoningLabels,
@@ -290,7 +290,7 @@ export function RunModelEvaluationDialog({
         })
         return value.success ? [value.data] : []
       }) ??
-      modelCatalog.map((m) => ({ model: m.id, reasoning: m.defaultLevel }))
+      selectableModels.map((m) => ({ model: m.id, reasoning: m.defaultLevel }))
   )
   const [budget, setBudget] = useState("3")
   const [consent, setConsent] = useState(false)
@@ -364,7 +364,7 @@ export function RunModelEvaluationDialog({
         {/* Compact: levels in three columns of short rows (owner direction,
             2026-10-08), so each model takes one or two rows. */}
         <div className="space-y-3">
-          {modelCatalog.map((m) => (
+          {selectableModels.map((m) => (
             <fieldset key={m.id} disabled={pending} className="border-b pb-3">
               <legend className="mb-1 text-sm font-medium">{m.name}</legend>
               <div className="grid grid-cols-2 gap-x-4 sm:grid-cols-3">
