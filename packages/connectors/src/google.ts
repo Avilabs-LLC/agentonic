@@ -250,8 +250,12 @@ export async function gmail(
     throw new GoogleError(write ? "uncertain" : "unavailable")
   }
   if (operation === "gmail.read") return message(data)
-  if (operation === "gmail.drafts.read")
-    return message(z.object({ message: z.unknown() }).parse(data).message)
+  // Drafts name both IDs so the model edits by draftId, never the message's.
+  if (operation === "gmail.drafts.read") {
+    const draft = z.object({ id: z.string(), message: z.unknown() }).parse(data)
+    const { id: messageId, ...rest } = message(draft.message)
+    return { draftId: draft.id, messageId, ...rest }
+  }
   // IDs and bounded metadata only; reads require their own permission recheck.
   if (operation === "gmail.search")
     return z
@@ -263,8 +267,8 @@ export async function gmail(
         nextPageToken: z.string().optional(),
       })
       .parse(data)
-  if (operation === "gmail.drafts.list")
-    return z
+  if (operation === "gmail.drafts.list") {
+    const list = z
       .object({
         drafts: z
           .array(
@@ -277,6 +281,14 @@ export async function gmail(
           .optional(),
       })
       .parse(data)
+    return {
+      drafts: list.drafts?.map((draft) => ({
+        draftId: draft.id,
+        messageId: draft.message.id,
+        threadId: draft.message.threadId,
+      })),
+    }
+  }
   return z
     .object({
       id: z.string(),

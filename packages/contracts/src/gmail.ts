@@ -39,6 +39,12 @@ export const gmailGrant = z
   .strict()
   .refine((v) => new Set(v.operations).size === v.operations.length)
 const id = z.string().regex(/^[a-zA-Z0-9_-]{1,128}$/)
+// A draft has its own ID and wraps a message with another; the model was seen
+// editing a draft by its message ID, which Gmail rejects (B2, 8 October).
+const messageId = id.describe("Gmail message ID: an id from gmail_search.")
+const draftId = id.describe(
+  "Gmail draft ID: a draftId from gmail_drafts_list or gmail_drafts_read. Never a messageId."
+)
 const address = z
   .email()
   .max(254)
@@ -64,14 +70,16 @@ export const gmailArguments = {
       limit: z.number().int().min(1).max(10),
     })
     .strict(),
-  "gmail.read": z.object({ id }).strict(),
+  "gmail.read": z.object({ id: messageId }).strict(),
   "gmail.drafts.list": z
     .object({ limit: z.number().int().min(1).max(10) })
     .strict(),
-  "gmail.drafts.read": z.object({ id }).strict(),
+  "gmail.drafts.read": z.object({ id: draftId }).strict(),
   "gmail.drafts.create": gmailMessage,
-  "gmail.drafts.update": z.object({ id, message: gmailMessage }).strict(),
-  "gmail.drafts.delete": z.object({ id }).strict(),
+  "gmail.drafts.update": z
+    .object({ id: draftId, message: gmailMessage })
+    .strict(),
+  "gmail.drafts.delete": z.object({ id: draftId }).strict(),
   "gmail.send": gmailMessage,
 } as const
 export function parseGmailCall(operation: string, args: unknown) {

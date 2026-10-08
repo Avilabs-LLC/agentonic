@@ -8,17 +8,17 @@
 - To let any Google account connect, Agentonic needs **restricted-scope verification**: brand verification, a scope review with a demo video, and an independent **security assessment (CASA)** by a Google-approved lab, **repeated every 12 months**.
 - **Time:** several weeks at best, often two to three months the first time, mostly waiting on reviews and fixing assessment findings.
 - **Money:** the security assessment is paid each year. Google's preferred lab (TAC Security) quotes US$540 to US$1,800 per app per year at Google's negotiated rate; other labs quote roughly US$1,800 to US$6,300. Engineering time for the homepage, privacy policy, video and any fixes comes on top.
-- **Until then**, the app stays in *Testing*: at most 100 named test users, and every Gmail connection expires 7 days after the user consents, so people must reconnect weekly.
+- **Until then**, the app stays in _Testing_: at most 100 named test users, and every Gmail connection expires 7 days after the user consents, so people must reconnect weekly.
 
 ## Why it matters for Agentonic
 
-| | Testing (today) | Verified (production) | Internal app |
-|---|---|---|---|
-| Who can connect | Up to 100 test users we list by hand | Any Google account | Only accounts in one Google Workspace organization we own |
-| Connection lifetime | Expires 7 days after consent | Lasts until revoked (or six months unused) | Lasts until revoked |
-| Consent screen | "Google hasn't verified this app" warning | Normal screen | Normal screen |
-| Security assessment | No | Yes, yearly | No |
-| Fits Agentonic's customers | Pilot only | Yes | No: customers use their own Google accounts or organizations |
+|                            | Testing (today)                           | Verified (production)                      | Internal app                                                 |
+| -------------------------- | ----------------------------------------- | ------------------------------------------ | ------------------------------------------------------------ |
+| Who can connect            | Up to 100 test users we list by hand      | Any Google account                         | Only accounts in one Google Workspace organization we own    |
+| Connection lifetime        | Expires 7 days after consent              | Lasts until revoked (or six months unused) | Lasts until revoked                                          |
+| Consent screen             | "Google hasn't verified this app" warning | Normal screen                              | Normal screen                                                |
+| Security assessment        | No                                        | Yes, yearly                                | No                                                           |
+| Fits Agentonic's customers | Pilot only                                | Yes                                        | No: customers use their own Google accounts or organizations |
 
 The Internal option only works if every user belongs to one Workspace organization, such as Avilabs' own staff. Customers would connect their own mailboxes, so it does not fit the product; it would only fit internal use.
 
@@ -49,16 +49,16 @@ The privacy policy sits on the same domain as the homepage and must say, plainly
 
 ### 4. Verify the domain (Owner)
 
-In [Google Search Console](https://search.google.com/search-console), verify `avilabs.tech` (a DNS TXT record) with a Google account that is also an Owner or Editor of the Google Cloud project. Add it under *Authorized domains* in the OAuth configuration.
+In [Google Search Console](https://search.google.com/search-console), verify `avilabs.tech` (a DNS TXT record) with a Google account that is also an Owner or Editor of the Google Cloud project. Add it under _Authorized domains_ in the OAuth configuration.
 
 ### 5. Brand verification (Owner)
 
-In Google Cloud console → *Google Auth Platform* → *Branding*: app name "Agentonic", a 120×120 logo, support email, developer contact, homepage, privacy policy and terms links, authorized domains. Click **Verify branding**; the automated review usually takes minutes, and its result stays valid for 7 days, so **Publish branding** promptly after it passes.
+In Google Cloud console → _Google Auth Platform_ → _Branding_: app name "Agentonic", a 120×120 logo, support email, developer contact, homepage, privacy policy and terms links, authorized domains. Click **Verify branding**; the automated review usually takes minutes, and its result stays valid for 7 days, so **Publish branding** promptly after it passes.
 
 ### 6. Move to production and request data access (Owner, with Build's text)
 
 - Set the publishing status to **In production**. With unverified restricted scopes the 100-user cap still applies until approval.
-- In the *Verification Center*, declare both scopes and paste the justifications. Draft:
+- In the _Verification Center_, declare both scopes and paste the justifications. Draft:
   - `gmail.readonly`: "Agentonic lets a user give their own AI agent read access to their mailbox, so the agent can find and summarize the user's messages when the user asks in a chat. Reads happen only during the user's own conversation, for the connected account, and are not stored or imported into other features."
   - `gmail.compose`: "The user's agent drafts replies and new messages that the user reviews. Creating, changing or deleting a draft and sending any message each require the user's explicit confirmation in Agentonic; nothing is sent automatically."
 - Link up to three pages of documentation (the homepage's Gmail section and a help page).
@@ -92,30 +92,30 @@ Google approves the scopes; the warning disappears and the 100-user cap and 7-da
 
 ## What Agentonic already has, and what is missing
 
-| Requirement | Status |
-|---|---|
-| Domain and hosted names (`*.agentonic.avilabs.tech`) | Done (C3) |
-| Hosted OAuth callback registered | Done (C12) |
-| Narrow scopes, explicit confirmation for every write, no automatic resend | Built ([gmail-connection.md](gmail-connection.md)) |
-| Tokens encrypted at rest, staff and automated evaluations never reach a real mailbox | Built |
-| No model training on customer data | Platform decision (v1 defers any model training) |
-| Live acceptance of the Gmail tools | Open: B1, B2 |
-| Scheduled cleanup of expired Gmail data | Open: B3 |
-| Public homepage with a Gmail section and the Limited Use statement | Missing |
-| Privacy policy, terms, list of outside services | Missing: D13 |
-| Logo, support email, Search Console verification | Missing (owner) |
-| Demo video | Missing; needs B1 and a hosted test agent |
-| Security assessment readiness (scans, data deletion on request, security headers, dependency audit) | Not started; expect findings to fix |
+| Requirement                                                                                         | Status                                                               |
+| --------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| Domain and hosted names (`*.agentonic.avilabs.tech`)                                                | Done (C3)                                                            |
+| Hosted OAuth callback registered                                                                    | Done (C12)                                                           |
+| Narrow scopes, explicit confirmation for every write, no automatic resend                           | Built ([gmail-connection.md](gmail-connection.md))                   |
+| Tokens encrypted at rest, staff and automated evaluations never reach a real mailbox                | Built                                                                |
+| No model training on customer data                                                                  | Platform decision (v1 defers any model training)                     |
+| Live acceptance of the Gmail tools                                                                  | Done on 8 October (B2)                                               |
+| Scheduled cleanup of expired Gmail data                                                             | Open: B3                                                             |
+| Public homepage with a Gmail section and the Limited Use statement                                  | Missing                                                              |
+| Privacy policy, terms, list of outside services                                                     | Missing: D13                                                         |
+| Logo, support email, Search Console verification                                                    | Missing (owner)                                                      |
+| Demo video                                                                                          | Missing; the test mailbox and a hosted test agent now exist (B1, B2) |
+| Security assessment readiness (scans, data deletion on request, security headers, dependency audit) | Not started; expect findings to fix                                  |
 
 ## Limited Use, mapped to Agentonic
 
-| Google's rule | How Agentonic meets it |
-|---|---|
-| Use the data only for prominent user-facing features | Only the user's own agent, in the user's own conversations, uses the mailbox |
+| Google's rule                                                         | How Agentonic meets it                                                           |
+| --------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| Use the data only for prominent user-facing features                  | Only the user's own agent, in the user's own conversations, uses the mailbox     |
 | Transfer data only to provide those features, with the user's consent | Mail content goes only to the AI provider generating the answer, for that answer |
-| No human reads the data without the user's agreement | Staff and automated evaluations never access a real mailbox |
-| No selling, advertising or data brokers | None |
-| No training of generalized AI or ML models | No training by us; providers used under terms that exclude training on API data |
+| No human reads the data without the user's agreement                  | Staff and automated evaluations never access a real mailbox                      |
+| No selling, advertising or data brokers                               | None                                                                             |
+| No training of generalized AI or ML models                            | No training by us; providers used under terms that exclude training on API data  |
 
 ## Decision for the owner (B5)
 

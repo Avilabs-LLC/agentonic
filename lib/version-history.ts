@@ -1,5 +1,10 @@
 export const VERSION_HISTORY = [
   {
+    "version": "0.24.0",
+    "date": "2026-10-08",
+    "summary": "Gmail live acceptance (B2); draft tools name draftId and messageId apart; stale confirmation dialogs close and explain refusals"
+  },
+  {
     "version": "0.23.0",
     "date": "2026-10-08",
     "summary": "Selector original de shadcn: volver a elegir la opción ya seleccionada no recarga ni reinicia nada, «Todos los espacios» vuelve a poder elegirse, y el espacio de prueba B se llama ACME."

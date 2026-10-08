@@ -66,6 +66,36 @@ function Details({ item }: { item: GmailInvocation }) {
     </dl>
   )
 }
+async function listInvocations(
+  workspaceId: string,
+  conversationId: string,
+  context: "staging" | "preview"
+) {
+  const result = await gmailCommand(workspaceId, "list", {
+    conversationId,
+    context,
+  })
+  return gmailInvocation.array().parse(result.items)
+}
+// A pending action past its deadline shows as expired before the server's next
+// cleanup records it; the server already refuses to confirm it.
+const statusAt = (item: GmailInvocation, at: number) =>
+  item.status === "pending" && Date.parse(item.expiresAt) <= at
+    ? "expired"
+    : item.status
+// A dialog left open, for example in another tab, closes once its action is no
+// longer pending; its card then shows what happened.
+const stillPending = (
+  current: GmailInvocation | null,
+  next: GmailInvocation[],
+  at: number
+) =>
+  current &&
+  next.some(
+    (item) => item.id === current.id && statusAt(item, at) === "pending"
+  )
+    ? current
+    : null
 export function GmailApprovals({
   workspaceId,
   conversationId,
@@ -79,7 +109,8 @@ export function GmailApprovals({
     [selected, setSelected] = useState<GmailInvocation | null>(null),
     [consent, setConsent] = useState(false),
     [busy, setBusy] = useState(false),
-    [error, setError] = useState("")
+    [error, setError] = useState(""),
+    [now, setNow] = useState(() => Date.now())
   useEffect(() => {
     let active = true,
       inFlight = false
@@ -87,13 +118,12 @@ export function GmailApprovals({
       if (inFlight) return
       inFlight = true
       try {
-        const result = await gmailCommand(workspaceId, "list", {
-          conversationId,
-          context,
-        })
+        const next = await listInvocations(workspaceId, conversationId, context)
         if (active) {
-          setItems(gmailInvocation.array().parse(result.items))
-          setError("")
+          const at = Date.now()
+          setNow(at)
+          setItems(next)
+          setSelected((current) => stillPending(current, next, at))
         }
       } catch {
         if (active) {
@@ -120,16 +150,27 @@ export function GmailApprovals({
         hash: item.hash,
       })
       setSelected(null)
-      const result = await gmailCommand(workspaceId, "list", {
-        conversationId,
-        context,
-      })
-      setItems(gmailInvocation.array().parse(result.items))
+      setItems(await listInvocations(workspaceId, conversationId, context))
     } catch (e) {
+      const next = await listInvocations(
+        workspaceId,
+        conversationId,
+        context
+      ).catch(() => null)
+      const at = Date.now(),
+        latest = next?.find((entry) => entry.id === item.id),
+        status = latest && statusAt(latest, at)
+      if (next) {
+        setNow(at)
+        setItems(next)
+        setSelected((current) => stillPending(current, next, at))
+      }
       setError(
-        e instanceof Error
-          ? e.message
-          : "Revisa el resultado antes de volver a intentarlo."
+        status && status !== "pending"
+          ? `Esta acción ya no está pendiente (${labels[status]}). ${status === "cancelled" || status === "expired" ? "No se ejecutó." : "No se volvió a ejecutar."}`
+          : e instanceof Error
+            ? e.message
+            : "Revisa el resultado antes de volver a intentarlo."
       )
     } finally {
       setBusy(false)
@@ -146,7 +187,7 @@ export function GmailApprovals({
           <div>
             <p className="text-sm font-medium">{gmailLabels[item.operation]}</p>
             <p className="text-xs text-muted-foreground">
-              {labels[item.status]} · {item.account}
+              {labels[statusAt(item, now)]} · {item.account}
             </p>
             {item.status === "uncertain" && (
               <p className="mt-2 text-sm text-muted-foreground">
@@ -155,12 +196,13 @@ export function GmailApprovals({
               </p>
             )}
           </div>
-          {item.status === "pending" && (
+          {statusAt(item, now) === "pending" && (
             <Button
               variant="outline"
               onClick={() => {
                 setSelected(item)
                 setConsent(false)
+                setError("")
               }}
             >
               Revisar acción
@@ -168,7 +210,7 @@ export function GmailApprovals({
           )}
         </div>
       ))}
-      {error && (
+      {error && !selected && (
         <p role="alert" className="text-sm text-destructive">
           {error}
         </p>
@@ -200,6 +242,11 @@ export function GmailApprovals({
               >
                 Autorizo esta acción en mi cuenta de Gmail.
               </ConsentCheckbox>
+              {error && (
+                <p role="alert" className="text-sm text-destructive">
+                  {error}
+                </p>
+              )}
               <div className="flex justify-end gap-3">
                 <Button
                   variant="outline"
