@@ -209,6 +209,8 @@ In Brave, the Picker then asked "Debes iniciar sesión" and, after "Iniciar sesi
 
 Still on 0.34.2, Chrome showed "La clave de desarrollador de la API no es válida". The key's website restrictions need the browser to report the app's site, and `Referrer-Policy: same-origin` reported nothing. With `strict-origin-when-cross-origin` set in the owner's Chrome for one page load, the Picker listed the account's files in the page, and "Cancelar" returned to the app. Platform 0.34.3 sends that policy from the customer app. Brave's popup path still needs a retest, since its frame may have failed the same key check.
 
+`platform-0.34.3-1e7276f89821` (PR #84) was installed the same day, with every service healthy and `hosted:check` passing. In the owner's Chrome, with nothing added to the page, the Picker listed the account's files and "Cancelar" closed it. Picking a file and the rest of the acceptance matrix are next.
+
 ## Acceptance matrix
 
 | Boundary           | Required evidence                                                                                                                                                | Synthetic evidence (this PR)                                                                                                                  |
