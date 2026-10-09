@@ -177,6 +177,23 @@ Every step needs the owner's OK.
 5. Install the evaluator with `driveFixtures`, then run `pnpm staging:reverify`.
 6. Do the live acceptance below with the owner clicking consent and confirmations.
 
+### Rollout checkpoint — 9 October 2026
+
+All six steps ran in this order:
+
+| Step           | Result                                                                                                                                                     |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Migration      | `202610090065_google_drive` applied; the Drive functions carry the intended grants and no application role reads the Drive tables.                         |
+| Evaluator      | `7fb7104a` registered with `driveFixtures: 1` and rubric 6 for runtimes 0.3.0, 0.4.0, 0.5.0 and 0.6.0, replacing `7dee5f53` (no evaluation was running).   |
+| Staging broker | `ec30c590` with its gateway; the one running deployment's copy moved to it without stopping.                                                               |
+| Platform       | `platform-0.34.0-4b9f84b0e427`: knowledge worker, customer app and Admin each passed their health gate. The customer configuration carries the Picker key. |
+| Runtime        | 0.6.0 published as `0.6.0-preview-4b9f84b0` (artifact `d972b626…`, commit `4b9f84b`) with the four `drive-v1` tools, installed on the host.                |
+| Checks         | `staging:reverify --verify` and `pnpm hosted:check` passed; the hosted CSP shows `frame-src https://docs.google.com https://drive.google.com`.             |
+
+The configured `GOOGLE_CLOUD_PROJECT_NUMBER` held the project ID, so the server takes the number from the OAuth client ID, which begins with it.
+
+No Drive account has been connected, and no file read or written. The live acceptance below is next.
+
 ## Acceptance matrix
 
 | Boundary           | Required evidence                                                                                                                                                | Synthetic evidence (this PR)                                                                                                                  |
