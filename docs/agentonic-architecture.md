@@ -2313,4 +2313,4 @@ Owner report on the hosted Admin. Three paths misled:
 
 **Tests.** `tests/back-target.test.ts`: no API, nothing behind, entries of the same page skipped, counting after going back. The agent page's review cell in `tests/admin-operations-render.test.ts`.
 
-Platform v0.37.1; not yet installed.
+**Rollout, 9 October 2026.** No migration. `platform-0.37.1-b32c66da4d5a` installed with `pnpm platform:install --azure` after 0.37.0, replacing `platform-0.37.0-1bfecda33711`. Admin, the customer app and the knowledge worker each passed their health gate, and `hosted:check` passed. The owner has not yet retried the three paths in a browser.
