@@ -63,7 +63,16 @@ try {
     for (const [name, value] of [
       ["x-frame-options", "DENY"],
       ["x-content-type-options", "nosniff"],
-      ["referrer-policy", "same-origin"],
+      // The customer app tells Google its origin and keeps the Picker's popup
+      // linked (architecture §62); Admin does neither.
+      [
+        "referrer-policy",
+        app === "customer" ? "strict-origin-when-cross-origin" : "same-origin",
+      ],
+      [
+        "cross-origin-opener-policy",
+        app === "customer" ? "same-origin-allow-popups" : "same-origin",
+      ],
       ["cache-control", "private, no-store"],
       ["strict-transport-security", "max-age=63072000; includeSubDomains"],
     ])
