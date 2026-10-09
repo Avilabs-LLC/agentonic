@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs"
 import { describe, expect, it, vi } from "vitest"
 
 // Google Drive in Configuración and Conocimiento (architecture §62), rendered
@@ -204,5 +205,19 @@ describe("Conocimiento › Google Drive", () => {
     )
     expect(out).toContain("Elegir archivos")
     expect(out).toContain("el cambio espera a que lo apliques")
+  })
+})
+
+describe("Google's Picker", () => {
+  // Google places the Picker from the window's scroll position, which put it
+  // above the screen on a long page scrolled down to Conexiones.
+  it("stays centred in the viewport, with its backdrop over the screen", () => {
+    const css = readFileSync("packages/ui/src/styles/globals.css", "utf8")
+    const rule = (selector: string) =>
+      new RegExp(`\\${selector} \\{([^}]*)\\}`).exec(css)?.[1] ?? ""
+    expect(rule(".picker-dialog")).toContain("position: fixed !important")
+    expect(rule(".picker-dialog")).toContain("top: 50% !important")
+    expect(rule(".picker-dialog-bg")).toContain("position: fixed !important")
+    expect(rule(".picker-dialog-bg")).toContain("height: 100vh !important")
   })
 })

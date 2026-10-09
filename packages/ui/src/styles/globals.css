@@ -151,3 +151,20 @@
     font-size: 1rem;
   }
 }
+/* Google's Picker (Google Drive, architecture §62) places its dialog from the
+   window's scroll position; on a long page scrolled down to Conexiones that
+   put it far above the screen, leaving only its backdrop. Keep the dialog
+   centred in the viewport and the backdrop over it. */
+.picker-dialog {
+  position: fixed !important;
+  top: 50% !important;
+  left: 50% !important;
+  transform: translate(-50%, -50%);
+}
+.picker-dialog-bg {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+}

@@ -90,6 +90,8 @@ The callback URI stays the same. As with Gmail in Testing mode, consent lapses a
 - The browser needs a short-lived access token for Google's Picker. The server mints one from the stored refresh token, only for the connection's own member, and refuses unless Google granted it `drive.file` and nothing broader.
 - This is the one exception to "no tokens in the browser". It is bounded to `drive.file`, about an hour, that member's session and `no-store` responses.
 - Picked file IDs are checked with Drive through the connection before they are kept. Names and types come from Drive, never from the browser.
+- Google requires the person to be signed in to Google in that browser while the Picker is open. Without a Google session, the Picker shows Google's own "Debes iniciar sesión" page instead of the files. The Drive shown should be the connected account's, since only that account's token can read the picked files.
+- Google positions the Picker from the window's scroll position. The shared stylesheet keeps `.picker-dialog` fixed and centred in the viewport, and the window fits the screen within Google's size limits.
 
 **Connections, grants and files**
 
@@ -193,6 +195,8 @@ All six steps ran in this order:
 The configured `GOOGLE_CLOUD_PROJECT_NUMBER` held the project ID, so the server takes the number from the OAuth client ID, which begins with it.
 
 No Drive account has been connected, and no file read or written. The live acceptance below is next.
+
+**First live attempt, 9 October.** The owner connected a Drive account on an agent's Conexiones. "Elegir archivos" then only blurred the page: Google had placed the Picker 1,337 px above the visible screen of the scrolled page, leaving only its backdrop. Release 0.34.1 keeps the Picker in view.
 
 ## Acceptance matrix
 
