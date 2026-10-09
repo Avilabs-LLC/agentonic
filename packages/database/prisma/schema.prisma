@@ -1656,3 +1656,32 @@ model UsageEvent {
  @@map("usage_events")
  @@schema("agentonic")
 }
+// Agentonic's team in Admin (migration 68): staff invitations by email link
+// and an append-only record of team changes. Functions only.
+model StaffInvitation {
+ id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+ emailNormalized String @map("email_normalized")
+ role String
+ tokenHash String @unique @map("token_hash")
+ invitedByStaffId String @map("invited_by_staff_id") @db.Uuid
+ expiresAt DateTime @map("expires_at") @db.Timestamptz
+ acceptedAt DateTime? @map("accepted_at") @db.Timestamptz
+ revokedAt DateTime? @map("revoked_at") @db.Timestamptz
+ createdAt DateTime @default(dbgenerated("clock_timestamp()")) @map("created_at") @db.Timestamptz
+ @@index([emailNormalized],map:"staff_invitations_live")
+ @@map("staff_invitations")
+ @@schema("agentonic")
+}
+model StaffEvent {
+ id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+ actorUserId String @map("actor_user_id") @db.Uuid
+ action String
+ staffId String? @map("staff_id") @db.Uuid
+ invitationId String? @map("invitation_id") @db.Uuid
+ details Json @default("{}")
+ requestId String @map("request_id") @db.Uuid
+ createdAt DateTime @default(dbgenerated("clock_timestamp()")) @map("created_at") @db.Timestamptz
+ @@index([createdAt],map:"staff_events_created")
+ @@map("staff_events")
+ @@schema("agentonic")
+}

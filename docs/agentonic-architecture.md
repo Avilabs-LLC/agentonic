@@ -1483,7 +1483,7 @@ The Admin app only handled reviews: "Agentes" and "Actividad" were disabled, and
 | **Despliegues** | What each host and evaluator runs: worker release, runtimes by version and commit, last report, whether the evaluator tests tools. Every deployment with its authorization, spend against budget and state | The release lines of `pnpm staging:reverify` (§46) |
 | **Actividad** | Turns completed, failed and in progress, writes awaiting confirmation, and the last 200 changes in the audit log, in Spanish, with who acted and the outcome. Reads are counted, not listed | Audit queries |
 | **Costos** | Each provider's cap, committed and settled spend, and unknown outcomes; known spend per day and workspace in its time zone (§50); the agents with the most spend | Ledger queries |
-| **Espacios de trabajo** | Workspaces with active members, agents and pending invitations; Agentonic's staff and their roles | `setup:accounts` checks |
+| **Espacios de trabajo** | Workspaces with active members, agents and pending invitations. Agentonic's staff moved to **Equipo** on 9 October (§64) | `setup:accounts` checks |
 | **Runtime** | The runtime catalog: version, source commit, artifact, where each release is installed, how many workspaces may use it | Catalog queries |
 
 - **Metadata only:** each screen reads a function (`operations_agents` and the others) that only active staff in the Admin app may call; customers, services and disabled staff are refused. The functions return names, states, counts, times and amounts, never prompts, documents, conversation text, email addresses or secrets. A test plants prompt and document text and checks that no screen returns it. Staff access to a customer's content stays scoped to a review, as before.
@@ -1674,7 +1674,7 @@ Customers stay on password only, and the policy can become mandatory later witho
   - abandoned enrolments are removed.
 - **Sign-in:** enrolled staff are sent to `/mfa`, the `/mfa` page itself only needs the password session, and customers are never asked.
 
-**Not covered yet:** making the second factor mandatory, recovery codes for a lost authenticator (the owner can remove a factor in the Supabase dashboard), changing email addresses, and invitations to staff. The invitation email doesn't name the workspace: an invitee isn't a member until they accept, so the link page doesn't either.
+**Not covered yet:** making the second factor mandatory, recovery codes for a lost authenticator (the owner can remove a factor in the Supabase dashboard), and changing email addresses. Invitations to staff came on 9 October (§64). The invitation email doesn't name the workspace: an invitee isn't a member until they accept, so the link page doesn't either.
 
 ## 55. What is in use and what comes next; the Admin agent page — 6 October 2026
 
@@ -2215,3 +2215,72 @@ Admin shows a **Reemplazadas** tab in Revisiones when it has reviews, and the "R
 
 1. Migration 67 applied. Read-only checks afterwards found five older reviews of one agent closed as `superseded`, each with its policy decision, none with an open access grant, no open review left behind an approval, one newer review still in Enviada, and the trigger enabled.
 2. `platform-0.36.0-7f8f7b270395` installed at 19:50 UTC, replacing `platform-0.35.3-e06be8c1b375` (installed at 19:44 UTC from another session), every service healthy, and `hosted:check` passed.
+
+## 64. Agentonic's team in Admin: invitations, roles and deactivation — 9 October 2026
+
+Owner request. Migration 68, platform v0.37.0.
+
+Espacios de trabajo ended with a read-only "Equipo de Agentonic" card, and staff accounts could only be created from the Mac, with the sign-up hook turned off (§54). Admin now has an **Equipo** page in Plataforma, and the card is gone.
+
+**Owner decisions:**
+
+- **Roles offered:** Administración, Operación and Soporte. `billing` is still allowed by the table, but nothing uses it, so it is never offered. Administración can do everything and is the only role that manages the team. Operación approves versions and activates deployments. Soporte sees the Admin screens and approves nothing.
+- **What administrators do:** invite by email link, withdraw a pending invitation, change someone's role, and deactivate or reactivate them. Nobody changes or deactivates themselves.
+- **Who sees what:** every active staff member sees the team: names, roles, start dates and states. Only administrators see emails, the invitations and the actions.
+
+**The database (migration 68).** `staff_command(operation, payload, trace_id)` is the page's only entry point and is callable only by the Admin app's role. Its operations are `team.list`, `invite.issue`, `invite.revoke`, `invite.accept` and `staff.update`.
+
+- **Authority after a lock:** each call takes one transaction-level advisory lock and only then reads the caller's live staff row and role. Two administrators can't demote or deactivate each other at the same moment. Because nobody can change themselves, the acting administrator always remains one.
+- **`staff_invitations`:**
+  - the role is one of the three offered;
+  - the token is stored only as its SHA-256 hash;
+  - an invitation lasts at most 7 days;
+  - none is issued for the email an active staff member last signed in with (`users.email`, migration 57).
+
+  Accepting needs:
+  - a live invitation;
+  - the invited email to equal the session's verified email;
+  - an inviter who is still an active administrator;
+  - a person not already on the active team.
+
+  A first-time person gets a `users` row, and their chosen name is set in the same transaction, as with workspace invitations (N7). Someone deactivated earlier comes back with the invited role.
+- **Changes:** a change sets either a role or the active state, never both, and never a no-op. Deactivating someone, or moving them away from Administración, withdraws the invitations they issued that are still pending. Deactivation ends Admin access at the next request, because every staff check reads `disabled_at`.
+- **`staff_events`:** every change is recorded here, and so is every attempt that staff made and the database refused. A trigger keeps this history append-only, and it never holds an email, a token or a name. `audit_events` belongs to a workspace, so platform changes can't be recorded there.
+- **The sign-up hook** (§54) also accepts an email with a live staff invitation. The public wrapper only calls the migration's function, so nothing has to be reinstalled.
+- **`operations_workspaces`** still returns the team, which only 0.36.0 reads. The installer needs migrations applied before a release, and a rollback never reverses them, so the running Admin keeps working between the migration and the install, and after a rollback. 0.37.0 ignores it; a later migration may drop it.
+
+Neither table grants anything to an application role.
+
+**The apps.**
+
+- **Equipo (`/team`):**
+  - the header counts active staff and, for administrators, has "Invitar al equipo", whose dialog explains each role;
+  - the Equipo card is a table: Nombre, Correo (administrators only), Rol, Desde, and Estado as the row's one badge;
+  - an administrator's row actions are "Cambiar a …" for each other role, then Desactivar or Reactivar, each confirmed; their own row has no menu;
+  - the Invitaciones card, for administrators only, reuses the Miembros invitations table with staff role labels.
+- **Admin `/invitation?token=…`:** the email link signs the person in through `/auth/confirm` (§54) and lands here. The page asks for their name and accepts, then offers a password, as the customer `/invitation` does.
+- **Same email template for both:** invitations go through Supabase's Magic Link or Confirm signup email, so the template now reads "Te invitaron a Agentonic" for both kinds. The owner pastes it into Supabase again.
+
+**Tests.**
+
+- `tests/staff-team.test.ts`, against the replayed migrations:
+  - who sees emails and invitations;
+  - other roles refused;
+  - administrator-only changes;
+  - role and expiry limits;
+  - every acceptance rule;
+  - no self-change;
+  - deactivation ending access and withdrawing invitations;
+  - the event record carrying no email, token or name.
+- `tests/account-flows.test.ts`: the hook and staff invitations.
+- `tests/account-service.test.ts`:
+  - the invitation is sent with Admin's mailer to Admin's `/invitation`;
+  - a failed send withdraws it;
+  - `billing` is refused.
+- `tests/staff-team-render.test.ts`: the table for administrators and for others, staff invitations and the dialog.
+
+**Not covered:**
+
+- showing `staff_events` in Actividad;
+- requiring the authenticator for administrators;
+- moving the Mac's bootstrap script off direct inserts.

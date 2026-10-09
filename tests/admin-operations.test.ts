@@ -102,13 +102,9 @@ it("gives staff every operations read, as metadata only", async () => {
     ["A", 1, 1],
     ["B", 1, 0],
   ])
-  expect(workspaces.staff).toEqual([
-    expect.objectContaining({
-      name: "Staff",
-      role: "administrator",
-      status: "active",
-    }),
-  ])
+  // The team moved to Equipo (migration 68, team.list). The function still
+  // returns it for the previous release; this release's contract drops it.
+  expect(workspaces).not.toHaveProperty("staff")
   const activity = await read("operations_activity")
   expect(activity.events.map((e) => e.action)).toContain("draft.save")
   expect(

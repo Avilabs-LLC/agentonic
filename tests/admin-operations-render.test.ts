@@ -321,7 +321,7 @@ describe("Admin operations screens", () => {
     expect(days).toContain(">America/Caracas<")
     expect(days).toContain("19 operaciones")
   })
-  it("names what each server runs, and renders workspaces, staff and releases", () => {
+  it("names what each server runs, and renders workspaces and releases", () => {
     const servers = html(ui.OperationsInstallationsCard, {
       hosts: [
         {
@@ -437,18 +437,6 @@ describe("Admin operations screens", () => {
     for (const text of ["Suspendido", ">Organización<", ">UTC<"])
       expect(workspaces).toContain(text)
     badgesStandAlone(workspaces)
-    expect(
-      html(ui.OperationsStaffCard, {
-        staff: [
-          {
-            name: "Personal",
-            role: "operator",
-            status: "disabled",
-            since: now,
-          },
-        ],
-      })
-    ).toContain("Operación · Desde el 6/10/2026")
     const releases = html(ui.OperationsReleasesTable, {
       releases: [
         {
@@ -498,7 +486,7 @@ describe("Admin operations screens", () => {
     badgesStandAlone(deployments)
   })
   it("gives each screen a loading state", () => {
-    expect(Object.keys(skeletons)).toHaveLength(7)
+    expect(Object.keys(skeletons)).toHaveLength(8)
     for (const skeleton of Object.values(skeletons))
       expect(html(skeleton)).toContain('role="status"')
   })

@@ -63,6 +63,41 @@ Table agentonic.platform_staff {
   Note: '''SCOPE: LAUNCH. Agentonic staff are distinct from customer workspace roles. Staff status alone grants no customer-content access.'''
 }
 
+Table agentonic.staff_invitations {
+  id uuid [pk, not null, default: `gen_random_uuid()`]
+  email_normalized text [not null]
+  role text [not null, check: `role IN ('administrator', 'operator', 'support')`]
+  token_hash text [not null, unique]
+  invited_by_staff_id uuid [not null]
+  expires_at timestamptz [not null]
+  accepted_at timestamptz
+  revoked_at timestamptz
+  created_at timestamptz [not null, default: `clock_timestamp()`]
+
+  indexes {
+    email_normalized [name: 'staff_invitations_live', note: 'WHERE accepted_at IS NULL AND revoked_at IS NULL']
+  }
+
+  Note: '''SCOPE: LAUNCH (migration 68). Invitations to Agentonic's team, issued by an active administrator in Admin's Equipo page. The token is stored only as its SHA-256 hash; valid up to 7 days; accepted only by the invited, verified email while the inviter is still an active administrator. "billing" is never offered. Functions only.'''
+}
+
+Table agentonic.staff_events {
+  id uuid [pk, not null, default: `gen_random_uuid()`]
+  actor_user_id uuid [not null]
+  action text [not null, check: `action IN ('invite.issue', 'invite.revoke', 'invite.accept', 'staff.role', 'staff.disable', 'staff.enable', 'denied')`]
+  staff_id uuid
+  invitation_id uuid
+  details jsonb [not null, default: '{}']
+  request_id uuid [not null]
+  created_at timestamptz [not null, default: `clock_timestamp()`]
+
+  indexes {
+    created_at [name: 'staff_events_created']
+  }
+
+  Note: '''SCOPE: LAUNCH (migration 68). Append-only record of team changes and refused attempts by staff. Never an email, a token or a name. Functions only.'''
+}
+
 Table agentonic.workspaces {
   id uuid [pk, not null, default: `gen_random_uuid()`]
   kind text [not null, check: `kind IN ('personal', 'organization')`]
@@ -1864,6 +1899,10 @@ Table agentonic.agent_previews {
 }
 
 Ref: agentonic.platform_staff.user_id > agentonic.users.id [delete: restrict, update: restrict]
+Ref: agentonic.staff_invitations.invited_by_staff_id > agentonic.platform_staff.id [delete: restrict, update: restrict]
+Ref: agentonic.staff_events.actor_user_id > agentonic.users.id [delete: restrict, update: restrict]
+Ref: agentonic.staff_events.staff_id > agentonic.platform_staff.id [delete: restrict, update: restrict]
+Ref: agentonic.staff_events.invitation_id > agentonic.staff_invitations.id [delete: restrict, update: restrict]
 Ref: agentonic.workspaces.personal_owner_user_id > agentonic.users.id [delete: restrict, update: restrict]
 Ref: agentonic.workspace_members.workspace_id > agentonic.workspaces.id [delete: restrict, update: restrict]
 Ref: agentonic.workspace_members.user_id > agentonic.users.id [delete: restrict, update: restrict]
@@ -2106,6 +2145,8 @@ Ref: agentonic.agent_runs.(workspace_id, agent_id, environment, code_release_id,
 TableGroup identity {
   agentonic.users
   agentonic.platform_staff
+  agentonic.staff_invitations
+  agentonic.staff_events
   agentonic.workspaces
   agentonic.workspace_members
   agentonic.workspace_invitations

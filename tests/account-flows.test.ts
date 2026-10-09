@@ -3,6 +3,7 @@ import {
   createRagFixture,
   id,
   member,
+  staff,
   w,
 } from "../scripts/rag-benchmark/fixture"
 
@@ -89,6 +90,31 @@ it("refuses expired, accepted and revoked invitations, and invitations to an ina
     "aceptada@example.test",
     "retirada@example.test",
     "suspendida@example.test",
+  ])
+    expect(await hook(email)).toEqual(refused)
+})
+
+it("also creates an account for a live invitation to Agentonic's team (migration 68)", async () => {
+  const staffInvite = (email: string, n: number, extra = "") =>
+    f.sql(
+      `INSERT INTO agentonic.staff_invitations(email_normalized,role,token_hash,invited_by_staff_id,created_at,expires_at${extra ? ",accepted_at,revoked_at" : ""})
+       VALUES($1,'support',$2,$3,clock_timestamp()-interval '2 days',clock_timestamp()+interval '1 day'${extra})`,
+      [email, String(n).repeat(64).slice(0, 64), staff]
+    )
+  expect(await hook("equipo@example.test")).toEqual(refused)
+  await staffInvite("equipo@example.test", 6)
+  expect(await hook(" Equipo@Example.test")).toEqual({})
+  await staffInvite("aceptada@example.test", 7, ",clock_timestamp(),NULL")
+  await staffInvite("retirada@example.test", 8, ",NULL,clock_timestamp()")
+  await f.sql(
+    `INSERT INTO agentonic.staff_invitations(email_normalized,role,token_hash,invited_by_staff_id,created_at,expires_at)
+     VALUES('vencida@example.test','support',repeat('9',64),$1,clock_timestamp()-interval '9 days',clock_timestamp()-interval '1 minute')`,
+    [staff]
+  )
+  for (const email of [
+    "aceptada@example.test",
+    "retirada@example.test",
+    "vencida@example.test",
   ])
     expect(await hook(email)).toEqual(refused)
 })

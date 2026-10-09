@@ -1,8 +1,9 @@
 <!-- Supabase Auth templates "Confirm signup" and "Magic Link" (architecture §54).
-     Subject: Tu invitación a Agentonic -->
+     Subject: Tu invitación a Agentonic
+     Worded for both kinds of invitation: to a workspace and to Agentonic's team (§63). -->
 <div style="font-family: Arial, sans-serif; font-size: 15px; line-height: 1.5; color: #1f2933; max-width: 520px">
   <h2 style="font-size: 20px; margin: 0 0 16px">Tu invitación a Agentonic</h2>
-  <p>Te invitaron a un espacio de trabajo en Agentonic. Usa este enlace para entrar y aceptar la invitación:</p>
+  <p>Te invitaron a Agentonic. Usa este enlace para entrar y aceptar la invitación:</p>
   <p style="margin: 24px 0">
     <a href="{{ .RedirectTo }}&token_hash={{ .TokenHash }}&type=email"
        style="background: #0f5b8c; color: #ffffff; padding: 10px 18px; border-radius: 8px; text-decoration: none; display: inline-block">

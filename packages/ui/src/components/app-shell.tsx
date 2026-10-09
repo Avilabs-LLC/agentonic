@@ -16,6 +16,7 @@ import {
   ServerIcon,
   CoinsIcon,
   PackageIcon,
+  UsersIcon,
   ChevronsUpDownIcon,
   UserIcon,
   LogOutIcon,
@@ -75,6 +76,7 @@ const icons = {
   deployments: ServerIcon,
   costs: CoinsIcon,
   releases: PackageIcon,
+  team: UsersIcon,
 }
 export function AppShell({
   app,
