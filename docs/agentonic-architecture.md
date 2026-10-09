@@ -2053,6 +2053,9 @@ This closes outstanding actions **D5** (operating terms, owner decisions of 8 Oc
   - A stopped, revoked or expired authorization no longer counts.
   - To change the budget, the customer stops the authorization and authorizes again.
 - **The duplicate.** At the owner's instruction, the migration deletes the US$5 duplicate (never activated, nothing spent, nothing referencing it). Deployment history is otherwise retained, so the guard is lifted for that row only, inside one rolled-back-as-a-whole statement. Its `deployment.authorize` audit event is kept.
+- **Rollout, 9 October.**
+  - Migration 66 was applied. Read-only checks afterwards: the US$5 row is gone, the US$20 authorization remains (by then running), its audit event remains, the deployment guard is enabled again, and no live duplicates remain.
+  - `platform-0.35.0-ee0f65b4f024` (with 0.34.4's Picker and button changes) was installed with every service healthy, and `hosted:check` passed.
 
 ## 60. Faster CI and releases that follow a green main — 9 October 2026
 
