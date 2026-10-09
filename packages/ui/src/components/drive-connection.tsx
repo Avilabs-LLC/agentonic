@@ -165,6 +165,11 @@ export async function pickDriveFiles(session: PickerSession, title: string) {
     builder.setAppId!(session.appId)
     builder.setLocale!("es")
     builder.setTitle!(title)
+    // Google's limits are 566×350 to 1051×650; fit the window within them.
+    builder.setSize!(
+      Math.max(566, Math.min(1051, window.innerWidth - 32)),
+      Math.max(350, Math.min(650, window.innerHeight - 32))
+    )
     builder.setCallback!((data: PickerData) => {
       if (data.action === picker.Action.PICKED)
         resolve((data.docs ?? []).map((d) => d.id))

@@ -1,5 +1,10 @@
 export const VERSION_HISTORY = [
   {
+    "version": "0.34.1",
+    "date": "2026-10-09",
+    "summary": "Google's Picker opens in view on long pages instead of above the screen."
+  },
+  {
     "version": "0.34.0",
     "date": "2026-10-09",
     "summary": "Google Drive: agents read the files their owner picks and propose Google Docs confirmed once; curators import picked files into Conocimiento, synced hourly; runtime 0.6.0"
