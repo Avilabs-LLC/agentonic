@@ -2209,3 +2209,8 @@ Admin shows a **Reemplazadas** tab in Revisiones when it has reviews, and the "R
 **Capabilities.** The agent page's "Capacidades de la última versión" shows Gmail's and Drive's marks and a coloured globe for web access, each named for screen readers. `operations_agent` now reports Drive. The knowledge count moved to the tile's detail line.
 
 **Tests.** `tests/superseded-reviews-database.test.ts` (closing, policy decisions, revoked grants, refused forgeries, idempotence, the queue's `canDecide`, Drive in `operations_agent`, the member card); `tests/review-actions.test.ts` (which changes each review offers); the server-card and capability rendering in `tests/admin-operations-render.test.ts`; status and proposal tests for the new state.
+
+**Rollout, 9 October 2026.**
+
+1. Migration 67 applied. Read-only checks afterwards found five older reviews of one agent closed as `superseded`, each with its policy decision, none with an open access grant, no open review left behind an approval, one newer review still in Enviada, and the trigger enabled.
+2. `platform-0.36.0-7f8f7b270395` installed (with 0.35.1–0.35.3: the name prompt, the connect buttons' plus and picking Drive files on Google's page), every service healthy, and `hosted:check` passed.
