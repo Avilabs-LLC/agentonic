@@ -1,5 +1,10 @@
 export const VERSION_HISTORY = [
   {
+    "version": "0.34.4",
+    "date": "2026-10-09",
+    "summary": "Anyone still named Miembro chooses a name before using the customer app"
+  },
+  {
     "version": "0.34.3",
     "date": "2026-10-09",
     "summary": "Google's Picker accepts its key: the customer app tells other sites its origin, never a path."

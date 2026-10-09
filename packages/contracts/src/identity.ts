@@ -76,9 +76,17 @@ export const displayNameSchema = z.object({
           (c) => c.charCodeAt(0) < 32 || c.charCodeAt(0) === 127
         ),
       "Usa solo letras, números y signos habituales."
+    )
+    // The placeholder is not a choice: it would keep the name prompt showing.
+    .refine(
+      (value) => value.toLowerCase() !== PLACEHOLDER_NAME.toLowerCase(),
+      "Escribe tu nombre."
     ),
 })
 export type DisplayNameInput = z.infer<typeof displayNameSchema>
+/** Whether this person still has to choose a name before using the customer app. */
+export const nameRequired = (user: { displayName: string } | null | undefined) =>
+  user?.displayName === PLACEHOLDER_NAME
 /** Only a path on this app; anything else falls back. */
 export function safeNext(next: unknown, fallback = "/") {
   if (
