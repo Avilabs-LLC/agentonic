@@ -1,5 +1,10 @@
 export const VERSION_HISTORY = [
   {
+    "version": "0.35.2",
+    "date": "2026-10-09",
+    "summary": "The Gmail and Google Drive connect buttons show a plus before each service's mark."
+  },
+  {
     "version": "0.35.1",
     "date": "2026-10-09",
     "summary": "Anyone still named Miembro chooses a name before using the customer app"

@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation"
 import {
   ExternalLinkIcon,
   FilePlusIcon,
+  PlusIcon,
   RefreshCwIcon,
   SquareCheckIcon,
   Trash2Icon,
@@ -258,6 +259,7 @@ export function DriveImport({
             onClick={() => setConnecting(true)}
             aria-label="Conectar Google Drive"
           >
+            <PlusIcon aria-hidden="true" />
             <DriveIcon className="size-4 shrink-0" />
             Google Drive
           </Button>

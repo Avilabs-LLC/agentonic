@@ -132,14 +132,17 @@ describe("Configuración › Google Drive", () => {
         picker: true,
       },
     })
-    // Each connect button shows the service's own mark and name; its
-    // accessible name still says what it does.
-    expect(out).toMatch(
-      /aria-label="Conectar Gmail"[^>]*>(<svg[\s\S]*?<\/svg>)Gmail<\/button>/
-    )
-    expect(out).toMatch(
-      /aria-label="Conectar Google Drive"[^>]*>(<svg[\s\S]*?<\/svg>)Google Drive<\/button>/
-    )
+    // Each connect button shows a plus, the service's own mark and its name;
+    // its accessible name still says what it does.
+    for (const [label, name] of [
+      ["Conectar Gmail", "Gmail"],
+      ["Conectar Google Drive", "Google Drive"],
+    ])
+      expect(out).toMatch(
+        new RegExp(
+          `aria-label="${label}"[^>]*><svg[^>]*lucide-plus[\\s\\S]*?</svg><svg[\\s\\S]*?</svg>${name}</button>`
+        )
+      )
     expect(out).not.toContain(">Conectar Gmail<")
     expect(out).toContain("drive@example.invalid")
     expect(out).toContain("Herramientas de Google Drive")
