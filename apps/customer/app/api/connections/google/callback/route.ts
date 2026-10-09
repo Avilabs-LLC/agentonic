@@ -1,17 +1,27 @@
 import { finishGmail } from "@agentonic/server/gmail"
+import { finishDrive, isDriveCallback } from "@agentonic/server/drive"
+// One registered callback serves Gmail and Drive: the browser's sealed cookie
+// says which connection this state belongs to.
 export async function GET(request: Request) {
+  const url = new URL(request.url)
+  const drive = await isDriveCallback(url).catch(() => false)
   try {
     return new Response(null, {
       status: 303,
       headers: {
-        Location: (await finishGmail(new URL(request.url))).toString(),
+        Location: (drive
+          ? await finishDrive(url)
+          : await finishGmail(url)
+        ).toString(),
         "Cache-Control": "no-store",
         "Referrer-Policy": "no-referrer",
       },
     })
   } catch {
     return new Response(
-      "No se pudo conectar Gmail. Regresa al agente para volver a intentarlo; revisa que tu cuenta esté autorizada como usuario de prueba en Google.",
+      drive
+        ? "No se pudo conectar Google Drive. Regresa a Agentonic para volver a intentarlo; revisa que tu cuenta esté autorizada como usuario de prueba en Google."
+        : "No se pudo conectar Gmail. Regresa al agente para volver a intentarlo; revisa que tu cuenta esté autorizada como usuario de prueba en Google.",
       {
         status: 400,
         headers: {

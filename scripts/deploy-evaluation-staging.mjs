@@ -237,6 +237,8 @@ systemctl is-active agentonic-evaluator-staging.service
       reviewProtocol: 3,
       // Answers platform tool cases' Gmail and web calls from fixtures (architecture §51).
       toolFixtures: 1,
+      // Answers Drive calls from fixtures too (§62); Drive cases need it.
+      driveFixtures: 1,
       // Grades with rubric 6 on GPT-5.4 mini at medium reasoning (§61); writes
       // criteria as requests (§56).
       reviewRubric: 6,

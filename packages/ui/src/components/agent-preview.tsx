@@ -25,6 +25,7 @@ import {
   SelectValue,
 } from "@workspace/ui/components/select"
 import { GmailApprovals } from "@workspace/ui/components/gmail-approvals"
+import { DriveApprovals } from "@workspace/ui/components/drive-approvals"
 import {
   previewModelName,
   type PreviewModel,
@@ -262,6 +263,14 @@ export function AgentPreview({
       {previewId && state?.gmailEnabled && (
         <GmailApprovals
           key={previewId}
+          workspaceId={workspaceId}
+          conversationId={previewId}
+          context="preview"
+        />
+      )}
+      {previewId && state?.toolsEnabled && (
+        <DriveApprovals
+          key={`drive:${previewId}`}
           workspaceId={workspaceId}
           conversationId={previewId}
           context="preview"

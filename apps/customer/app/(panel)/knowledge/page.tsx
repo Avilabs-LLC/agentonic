@@ -11,6 +11,8 @@ import {
   KnowledgeRefresh,
 } from "@workspace/ui/components/knowledge-search"
 import { processDocument } from "./actions"
+import { loadDriveKnowledge } from "@agentonic/server/drive"
+import { DriveImport } from "@workspace/ui/components/drive-import"
 import { customerWorkspace } from "@/lib/workspace"
 import {
   createCollection,
@@ -23,7 +25,11 @@ export default async function Page({
   searchParams: Promise<{ workspace?: string }>
 }) {
   const { identity, selected } = await customerWorkspace(searchParams)
-  const data = await loadWorkspace(selected.id)
+  const [data, drive] = await Promise.all([
+    loadWorkspace(selected.id),
+    // Google Drive imports (§62); the page still opens if they cannot be read.
+    loadDriveKnowledge(selected.id).catch(() => undefined),
+  ])
   if (!data) notFound()
   const writable = data.collections.filter((c) => c.canCurate)
   return (
@@ -33,7 +39,8 @@ export default async function Page({
           data.pendingDeletions > 0 ||
           data.documents.some((d) =>
             ["queued", "running"].includes(d.processingStatus)
-          )
+          ) ||
+          !!drive?.files.some((f) => ["queued", "syncing"].includes(f.status))
         }
       />
       <PageHeader
@@ -64,6 +71,17 @@ export default async function Page({
           collections={writable}
         />
       </AgentSettingsCard>
+      {drive && (
+        <DriveImport
+          key={`drive:${selected.id}`}
+          workspaceId={selected.id}
+          state={drive}
+          collections={writable.map((c) => ({ id: c.id, name: c.name }))}
+          collectionNames={Object.fromEntries(
+            data.collections.map((c) => [c.id, c.name])
+          )}
+        />
+      )}
       <AgentSettingsCard
         title="Documentos"
         description="Consulta los archivos de tus colecciones, descárgalos o retíralos cuando lo necesites."

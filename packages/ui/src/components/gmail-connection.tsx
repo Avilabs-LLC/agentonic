@@ -1,5 +1,6 @@
 "use client"
-import { gmailGrants, hasWeb } from "@agentonic/contracts/tools"
+import { driveGrants, gmailGrants, hasWeb } from "@agentonic/contracts/tools"
+import type { DriveOperation, DriveState } from "@agentonic/contracts/drive"
 import { WEB_GRANT } from "@agentonic/contracts/web"
 import { useState } from "react"
 import { useRouter } from "next/navigation"
@@ -37,6 +38,15 @@ import {
 import { notify } from "@workspace/ui/lib/toast"
 import { GmailIcon } from "@workspace/ui/components/gmail-icon"
 import { StyleLearning } from "@workspace/ui/components/style-learning"
+import {
+  DriveAccount,
+  DriveConnectDialog,
+  DriveDisconnectDialog,
+  DriveFiles,
+  DriveTools,
+  driveCommand,
+  startDriveConnection,
+} from "@workspace/ui/components/drive-connection"
 import { iconTones } from "@workspace/ui/components/status-badge"
 import { cn } from "cn"
 export async function gmailCommand(
@@ -199,6 +209,7 @@ export function GmailTools({
 }
 export function GmailConnection({
   state,
+  drive,
   workspaceId,
   agentId,
   tools,
@@ -208,6 +219,8 @@ export function GmailConnection({
   agentCollectionIds = [],
 }: {
   state: GmailState
+  /** The member's Google Drive accounts for this agent (§62), when loaded. */
+  drive?: DriveState
   workspaceId: string
   agentId: string
   tools: AgentView["draft"]["requestedAccess"]["tools"]
@@ -220,11 +233,51 @@ export function GmailConnection({
   const router = useRouter(),
     [busy, setBusy] = useState(false),
     [connecting, setConnecting] = useState(false),
-    [remove, setRemove] = useState<string | null>(null)
+    [connectingDrive, setConnectingDrive] = useState(false),
+    [remove, setRemove] = useState<string | null>(null),
+    [removeDrive, setRemoveDrive] = useState<string | null>(null)
   const selected = gmailGrants(tools)[0]
+  const driveSelected = driveGrants(tools)[0]
   const webEnabled = hasWeb(tools)
+  // Each control replaces only its own grant and keeps the others.
   const onGmailTools = (value: typeof tools) =>
-    onTools([...tools.filter((g) => "capability" in g), ...value])
+    onTools([...tools.filter((g) => !("connectionId" in g)), ...value])
+  const onDriveTools = (value: typeof tools) =>
+    onTools([...tools.filter((g) => !("driveConnectionId" in g)), ...value])
+  const withoutWeb = tools.filter((g) => !("capability" in g))
+  async function drivePermission(
+    connectionId: string,
+    op: DriveOperation,
+    checked: boolean
+  ) {
+    // One Drive account per agent, as with Gmail.
+    const own =
+      driveSelected?.driveConnectionId === connectionId
+        ? driveSelected
+        : undefined
+    const operations = checked
+      ? [...(own?.operations ?? []), op]
+      : (own?.operations ?? []).filter((o) => o !== op)
+    setBusy(true)
+    try {
+      await driveCommand(workspaceId, "permissions", {
+        agentId,
+        connectionId,
+        operations,
+      })
+      onDriveTools(
+        operations.length
+          ? [{ driveConnectionId: connectionId, operations }]
+          : []
+      )
+    } catch (e) {
+      notify.destructive(
+        e instanceof Error ? e.message : "No se pudo guardar el permiso."
+      )
+    } finally {
+      setBusy(false)
+    }
+  }
   async function permission(
     connectionId: string,
     op: (typeof gmailOperation.options)[number],
@@ -257,55 +310,106 @@ export function GmailConnection({
         title="Conexiones"
         icon={<PlugIcon />}
         description="Conecta una cuenta y elige qué puede hacer este agente."
-        footer="La cuenta es privada y solo tú puedes autorizar acciones. Conectarla no importa correos a Conocimiento; Aprender mi estilo solo agrega la guía que revises. Puedes habilitar sus herramientas al iniciar Probar agente; después de la activación también se usan desde Chats."
+        footer="Las cuentas son privadas y solo tú puedes autorizar acciones. Conectarlas no importa nada a Conocimiento: Aprender mi estilo solo agrega la guía que revises, y Google Drive solo comparte con el agente los archivos que elijas aquí. Puedes habilitar sus herramientas al iniciar Probar agente; después de la activación también se usan desde Chats."
       >
         <div className="space-y-4">
-          {state.connections.length ? (
-            state.connections.map((c) => (
-              <div key={c.id} className="space-y-4 rounded-lg border p-4">
-                <div className="flex flex-wrap items-center justify-between gap-4">
-                  <GmailAccount account={c.account} status={c.status} />
+          {state.connections.length
+            ? state.connections.map((c) => (
+                <div key={c.id} className="space-y-4 rounded-lg border p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-4">
+                    <GmailAccount account={c.account} status={c.status} />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={disabled || busy}
+                      onClick={() => setRemove(c.id)}
+                    >
+                      Desconectar
+                    </Button>
+                  </div>
+                  {c.status === "connected" && (
+                    <StyleLearning
+                      workspaceId={workspaceId}
+                      agentId={agentId}
+                      connection={c}
+                      initial={state.styleGuides.find(
+                        (g) => g.connectionId === c.id
+                      )}
+                      collections={collections}
+                      agentCollectionIds={agentCollectionIds}
+                      disabled={disabled || busy}
+                      onAccepted={() => router.refresh()}
+                    />
+                  )}
+                </div>
+              ))
+            : null}
+          {drive?.connections.map((c) => (
+            <div key={c.id} className="space-y-4 rounded-lg border p-4">
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <DriveAccount account={c.account} status={c.status} />
+                <div className="flex flex-wrap gap-2">
+                  {c.status !== "connected" && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={disabled || busy}
+                      onClick={() => setConnectingDrive(true)}
+                    >
+                      Volver a conectar
+                    </Button>
+                  )}
                   <Button
                     type="button"
                     variant="outline"
                     disabled={disabled || busy}
-                    onClick={() => setRemove(c.id)}
+                    onClick={() => setRemoveDrive(c.id)}
                   >
                     Desconectar
                   </Button>
                 </div>
-                {c.status === "connected" && (
-                  <StyleLearning
-                    workspaceId={workspaceId}
-                    agentId={agentId}
-                    connection={c}
-                    initial={state.styleGuides.find(
-                      (g) => g.connectionId === c.id
-                    )}
-                    collections={collections}
-                    agentCollectionIds={agentCollectionIds}
-                    disabled={disabled || busy}
-                    onAccepted={() => router.refresh()}
-                  />
-                )}
               </div>
-            ))
-          ) : (
+              {c.status === "connected" && (
+                <DriveFiles
+                  workspaceId={workspaceId}
+                  agentId={agentId}
+                  connectionId={c.id}
+                  files={c.files}
+                  disabled={disabled || busy}
+                  picker={drive.picker !== false}
+                />
+              )}
+            </div>
+          ))}
+          {!state.connections.length && !drive?.connections.length && (
             <CardEmptyState title="Sin cuentas conectadas">
-              Conecta Gmail para leer correos y preparar acciones que tú
-              confirmarás.
+              Conecta Gmail para leer correos, o Google Drive para leer los
+              archivos que elijas, y preparar acciones que tú confirmarás.
             </CardEmptyState>
           )}
-          <Button
-            type="button"
-            variant="outline"
-            disabled={disabled || busy || state.available === false}
-            onClick={() => setConnecting(true)}
-          >
-            <PlusIcon aria-hidden="true" />
-            Conectar Gmail
-          </Button>
-          {state.available === false && (
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={disabled || busy || state.available === false}
+              onClick={() => setConnecting(true)}
+            >
+              <PlusIcon aria-hidden="true" />
+              Conectar Gmail
+            </Button>
+            {drive && (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={disabled || busy || drive.available === false}
+                onClick={() => setConnectingDrive(true)}
+              >
+                <PlusIcon aria-hidden="true" />
+                Conectar Google Drive
+              </Button>
+            )}
+          </div>
+          {(state.available === false || drive?.available === false) && (
             <p className="text-sm text-muted-foreground">
               La conexión necesita completar su configuración en Agentonic.
             </p>
@@ -316,18 +420,14 @@ export function GmailConnection({
         title="Herramientas"
         icon={<WrenchIcon />}
         description="Elige qué puede hacer el agente en la próxima versión."
-        footer="Guarda el borrador y prepara una nueva versión para revisar cambios de acceso. Puedes probarlas en Probar agente antes de enviar la versión a revisión. Crear, editar o eliminar borradores y enviar correos siempre requiere tu confirmación."
+        footer="Guarda el borrador y prepara una nueva versión para revisar cambios de acceso. Puedes probarlas en Probar agente antes de enviar la versión a revisión. Crear, editar o eliminar borradores, enviar correos y crear o editar documentos siempre requiere tu confirmación."
       >
         <label className="flex cursor-pointer items-start gap-3 rounded-lg border p-4">
           <Checkbox.Root
             checked={webEnabled}
             disabled={disabled || busy}
             onCheckedChange={(checked) =>
-              onTools(
-                checked
-                  ? [...gmailGrants(tools), WEB_GRANT]
-                  : gmailGrants(tools)
-              )
+              onTools(checked ? [...withoutWeb, WEB_GRANT] : withoutWeb)
             }
             className="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded border data-checked:bg-primary data-checked:text-primary-foreground"
           >
@@ -358,7 +458,37 @@ export function GmailConnection({
             void permission(connectionId, op, checked)
           }
         />
+        {drive && (
+          <DriveTools
+            connections={drive.connections.filter(
+              (c) => c.status === "connected"
+            )}
+            grant={driveSelected}
+            disabled={disabled || busy}
+            onPermission={(connectionId, op, checked) =>
+              void drivePermission(connectionId, op, checked)
+            }
+          />
+        )}
       </AgentSettingsCard>
+      <DriveConnectDialog
+        open={connectingDrive}
+        onOpenChange={setConnectingDrive}
+        purpose="tools"
+        onContinue={() => startDriveConnection(workspaceId, "tools", agentId)}
+      />
+      <DriveDisconnectDialog
+        workspaceId={workspaceId}
+        connectionId={removeDrive}
+        purpose="tools"
+        files={0}
+        onClose={() => setRemoveDrive(null)}
+        onDisconnected={() => {
+          if (driveSelected?.driveConnectionId === removeDrive) onDriveTools([])
+          setRemoveDrive(null)
+          router.refresh()
+        }}
+      />
       <Dialog open={connecting} onOpenChange={setConnecting}>
         <DialogContent>
           <DialogHeader>

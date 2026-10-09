@@ -979,6 +979,8 @@ Implementation areas: `packages/contracts`, `packages/server`, reviewed Prisma m
 
 **Owner update, 2026-09-18:** Gmail is the selected first connection: read/search mail, manage drafts and confirm sends. The replacement scope, acceptance matrix, staging secret-storage decision and rollout checklist are in [Gmail implementation](gmail-connection.md). Drive ingestion is deferred. The checkboxes below retain the original broader plan; they are not a completion claim for Gmail.
 
+**Drive built, 9 October 2026 (§62):** live tools and knowledge sync on `drive.file` with the Picker, files only; the design, rollout and acceptance matrix are in [drive-connection.md](drive-connection.md). The checkboxes below are the original plan.
+
 **Original recommendation: Google Drive, selected files, with a dedicated synthetic test account.** This tests both knowledge ingestion and live tools without starting with unrestricted mailbox access. Confirm this provider choice with the owner when beginning integration. If Gmail is chosen instead, document a replacement scope and acceptance matrix before implementation; do not quietly broaden this Drive slice.
 
 - [ ] Register the OAuth application and exact callback URLs; configure designated test users and the smallest viable provider scopes. Account for provider verification and test-mode token lifetime separately from Agentonic's host/consent expiry.
@@ -1307,7 +1309,8 @@ The packaged gateway was also run on the Mac against the nonproduction database.
 | Other database roles | their own process only: apps, knowledge worker, evaluator, controller |
 | OpenAI and Voyage keys | knowledge worker, evaluator, each host's gateway |
 | Browserbase key | knowledge worker, each host's gateway |
-| Google client secret and connection keys | customer app (OAuth and confirmed sends), knowledge worker (previews), each host's gateway |
+| Google client secret and connection keys | customer app (OAuth, confirmed sends and Drive writes, the Picker's short-lived token), knowledge worker (previews, Drive knowledge sync, scheduled writes), each host's gateway (Gmail and Drive tools) |
+| Google Picker browser key and project number | customer app only (§62); the key is restricted to the hosted names and `docs.google.com` |
 | Worker's Storage account | knowledge worker |
 | Supabase secret key | the owner's bootstrap configuration only |
 | Agent services | their own deployment secret only |
@@ -1547,7 +1550,7 @@ The database CA reaches the apps and worker as a systemd credential. The three n
   - styles: the app's own, plus inline style attributes;
   - images and fonts: the app's own;
   - forms: the app itself and Google's consent screen (where the Gmail connection form redirects);
-  - frames, objects and `<base>`: none.
+  - frames: none until §62, now Google's Picker only (`docs.google.com`, `drive.google.com`); objects and `<base>`: none.
 
   Next.js reads the nonce from the forwarded request header and puts it on its own scripts, and the root layouts pass it to the theme script. API routes keep their own policies; document downloads stay sandboxed.
 - **Development:** `next dev` gets the plain headers but no CSP or HSTS.
@@ -2082,3 +2085,63 @@ The owner asked why a customer's mail agent passed its latest evaluation on GPT-
 **Tests.** Against the replayed migrations, an evaluator advertising rubric 6 gives new runs the version 6 snapshot at medium reasoning, with and without tool cases. Its grader model is metered and other models are refused. An evaluator advertising 5 still gives rubric 5, and a rubric 5 run queued before a rubric 6 evaluator replaces it finishes under rubric 5. Unit tests cover rubric 6's request shape and rules, rubric 5's unchanged request, the tool rules in both, and the writer's draft rule.
 
 **Rollout, 9 October 2026.** Migration 64 applied; evaluator `7dee5f53` installed and registered with `reviewRubric: 6` for runtimes 0.3.0, 0.4.0 and 0.5.0, replacing `bf64e38d`; `platform-0.33.0-eef91ba45e51` installed with every service healthy; `staging:reverify --verify` passed. The next evaluation of a mail agent on GPT-5.4 mini and Astra should show the version 6 grader on both runs.
+
+## 62. Google Drive: live tools and knowledge sync — 9 October 2026
+
+The owner asked for Google Drive as a second Google connection, built like Gmail. The design, the owner's Google Cloud steps, the permission and execution contract, the rollout and the acceptance matrix are in [drive-connection.md](drive-connection.md); outstanding action N15 tracks it. Migration 65, runtime 0.6.0, platform v0.34.0.
+
+**Owner decisions (9 October).**
+
+- Live tools and knowledge sync, in one PR.
+- `drive.file` with Google's Picker: only files picked in Agentonic and files Agentonic created. It is non-sensitive, needs no restricted-scope assessment, and offers no whole-Drive search.
+- Writes: create a Google Doc, and update a Doc the agent created or the owner picked. Each is confirmed once, or pre-authorized by a schedule (one write per run, §58).
+- The same Google Cloud project and OAuth client as Gmail.
+- Knowledge imports start from Conocimiento with the curator's own connection, separate from any agent's tools.
+- A change to a file whose current text a running or approved version cites is held until the curator applies it.
+
+**Model.**
+
+- `drive_connections` has two purposes:
+  - tools, bound to one agent like `gmail_connections`;
+  - knowledge, bound to no agent.
+- Both are same-ID extensions of `connections` (`google_drive`); tools connections also have an `agent_connection_grants` row.
+- `drive_files` is the agent's allowlist: picked files and Docs it created.
+- `drive_invocations` extends `tool_invocations` and `tool_approvals` like Gmail's (`drive-v1` code tools, registered for runtimes with `driveContract`).
+- A knowledge import is a `knowledge_sources` row of kind `google_drive`, with one document and one `drive_knowledge_files` row. Its definition hash never covers content, so refreshed text keeps frozen sources valid.
+- A Drive grant in requested access is `{driveConnectionId, operations}`, so Gmail's readers (`connectionId`) ignore it.
+
+**Execution.**
+
+- Brokers offer Drive tools only to runtimes declaring `driveContract` (0.6.0); runtimes 0.3.0–0.5.0 receive no Drive keys.
+- Reads go through `drive-read` and `drive-check`, and a file outside the agent's list is never fetched.
+- Writes are sealed proposals. An update is bound to the Doc's Drive version and refused if it changed.
+- Agent copies reach Drive through the host gateway (`drive_staging`, provider call `drive`), whose capability reply keeps its shape: Drive follows Gmail's Google settings.
+
+**Revocation is per project.**
+
+- Google's revocation removes every scope a person granted the project, for all its clients. Disconnecting Gmail or Drive now revokes only when no other Agentonic connection holds the same account (`google_account_shared`).
+- A failed connect never revokes. This also fixes a latent Gmail issue with one mailbox connected to two agents.
+
+**Knowledge sync.**
+
+- The knowledge worker's tick queues each due file hourly; a sync runs in the documents lane with the curator's connection.
+- Unchanged versions cost nothing. A changed text is re-embedded on the Voyage ledger as ingestion and published.
+- A change cited by a deployment's evidence, or by the evaluation behind a standing approval, is held. Publishing it would stop those versions through the evidence check (§59, "Knowledge changes still stop an agent"). Aplicar cambios publishes it after a confirmation naming them.
+- A file Drive no longer shares leaves the index at once. A refused token pauses syncing and keeps the text.
+- Upload-only checks in deployment, preparation and preview authorization now accept Drive sources whose account was not disconnected (`knowledge_source_usable`).
+
+**Browser.**
+
+- The production CSP allows frames from Google's Picker only. The Picker's loader is inserted by the app's own nonced script, which `'strict-dynamic'` covers.
+- The Picker needs a short-lived access token. The server mints it for the connection's own member and refuses one whose scope is broader than `drive.file`; it is the one token a browser receives.
+
+**Evaluation.** Drive tool versions get two platform cases on fixtures, `platform-drive-injection` and `platform-drive-write`, only while the Azure evaluator advertises `driveFixtures` (now set by `deploy-evaluation-staging.mjs`). Datasets may hold 19 cases.
+
+**Tests.**
+
+- **Database:** OAuth, revival by account, the allowlist, freeze and runtime contract, preview reads and one-time writes, cancellation and expiry, the general model, the shared-account check, grant validation, schedule pre-authorization, the import, hourly sync, holding and applying, lost access, reconnect, disconnect purge, readers versus curators, and Drive evaluation cases (`tests/drive-database.test.ts`).
+- **Connector, worker, broker:** exports and size caps, error mapping, the Picker scope check, Markdown create, the version check, uncertain writes, the allowlist, sealed and bound proposals, sync outcomes, Drive keys only for Drive runtimes, proposals ending the turn, and fixtures never reaching the live Drive (`tests/drive.test.ts`).
+- **Rendering:** `tests/drive-render.test.ts`.
+- **Rotation:** key rotation re-seals Drive's values (`tests/connection-keys.test.ts`).
+
+**Not covered yet.** Folders (a live check decides), sharing, moving and deleting, merges of concurrent edits, Admin's agent-list Drive flag, and Google verification (one project with Gmail, so it follows B5). No live Drive has been read or changed; the hosted acceptance is the owner's step.

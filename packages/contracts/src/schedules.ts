@@ -1,5 +1,6 @@
 import { z } from "zod"
 import { gmailLabels } from "./gmail"
+import { driveLabels } from "./drive"
 import { isSelectableModel, modelConfiguration } from "./models"
 // Scheduled jobs (architecture §58).
 const uuid = z.uuid()
@@ -21,16 +22,19 @@ export const weekdayLabels: Record<number, string> = {
   6: "Sábado",
   7: "Domingo",
 }
-/** Writes a schedule may pre-authorize, one per run (owner direction, 8 Oct). */
+/** Writes a schedule may pre-authorize, one per run (owner direction, 8 Oct; Drive 9 Oct). */
 export const scheduleWrites = [
   "gmail.send",
   "gmail.drafts.create",
   "gmail.drafts.update",
   "gmail.drafts.delete",
+  "drive.docs.create",
+  "drive.docs.update",
 ] as const
 export const scheduleWrite = z.enum(scheduleWrites)
+const writeLabels: Record<string, string> = { ...gmailLabels, ...driveLabels }
 export const autonomyLabels: Record<string, string> = Object.fromEntries(
-  scheduleWrites.map((op) => [op, gmailLabels[op]!])
+  scheduleWrites.map((op) => [op, writeLabels[op]!])
 )
 export const scheduleForm = z
   .object({

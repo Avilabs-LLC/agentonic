@@ -1,5 +1,6 @@
 import { ServerIcon } from "lucide-react"
 import { loadGmail } from "@agentonic/server/gmail"
+import { loadDrive } from "@agentonic/server/drive"
 import { loadSchedules } from "@agentonic/server/schedules"
 import { AgentSchedules } from "@workspace/ui/components/agent-schedules"
 import { loadLifecycle } from "@agentonic/server/lifecycle"
@@ -41,6 +42,7 @@ export default async function Page({
     evaluations,
     reviewFlow,
     gmail,
+    drive,
     schedules,
   ] = await Promise.all([
     loadLifecycle("customer", selected.id, id),
@@ -49,6 +51,8 @@ export default async function Page({
     loadEvaluations("customer", selected.id, id),
     loadReviewFlow("customer", selected.id, id),
     loadGmail(selected.id, id),
+    // Google Drive (§62); the page still opens if it cannot be read.
+    loadDrive(selected.id, id).catch(() => undefined),
     // Only members who may use the agent see its schedules.
     loadSchedules(selected.id, id).catch(() => null),
   ])
@@ -93,6 +97,7 @@ export default async function Page({
         configuration={
           <AgentWorkflow
             gmail={gmail}
+            drive={drive}
             workspaceId={selected.id}
             key={data.draft.revision}
             data={data}

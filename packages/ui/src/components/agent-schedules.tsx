@@ -2,9 +2,9 @@
 // Scheduled jobs (architecture §58): the agent page's Programaciones tab. A
 // schedule sends its instruction to the agent's running version at each due
 // time. Owner direction (8 Oct 2026): until a channel such as Slack can ask for
-// confirmation, a schedule may pre-authorize one Gmail write per run; the
-// person consents to exactly those writes when saving it.
-import { useCallback, useEffect, useState } from "react"
+// confirmation, a schedule may pre-authorize one Gmail or Google Drive write
+// per run (§62); the person consents to exactly those writes when saving it.
+import { Fragment, useCallback, useEffect, useState } from "react"
 import type { ColumnDef } from "@tanstack/react-table"
 import { Controller, useForm, useWatch } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -370,9 +370,7 @@ function ScheduleDialog({
   const options = configurationOptions(state)
   const fallback =
     options.find(
-      (o) =>
-        configKey(o) ===
-        configKey(DEFAULT_MODEL_CONFIGURATION)
+      (o) => configKey(o) === configKey(DEFAULT_MODEL_CONFIGURATION)
     ) ?? options[0]!
   const form = useForm<ScheduleForm>({
     resolver: zodResolver(scheduleForm),
@@ -573,13 +571,8 @@ function ScheduleDialog({
                 }))}
                 value={configKey({ model, reasoning })}
                 onValueChange={(value) => {
-                  const chosen = options.find(
-                    (o) => configKey(o) === value
-                  )
-                  if (
-                    !chosen ||
-                    value === configKey({ model, reasoning })
-                  )
+                  const chosen = options.find((o) => configKey(o) === value)
+                  if (!chosen || value === configKey({ model, reasoning }))
                     return
                   setValue("model", chosen.model, { shouldValidate: true })
                   setValue("reasoning", chosen.reasoning, {
@@ -592,10 +585,7 @@ function ScheduleDialog({
                 </SelectTrigger>
                 <SelectContent className="w-auto max-w-(--available-width) min-w-(--anchor-width)">
                   {options.map((o) => (
-                    <SelectItem
-                      key={configKey(o)}
-                      value={configKey(o)}
-                    >
+                    <SelectItem key={configKey(o)} value={configKey(o)}>
                       {modelConfigurationLabel(o)}
                     </SelectItem>
                   ))}
@@ -615,53 +605,62 @@ function ScheduleDialog({
             </legend>
             <p className="text-sm text-muted-foreground">
               Elige qué puede hacer el agente sin pedirte confirmación, una
-              acción por ejecución y a cualquier destinatario que el agente
-              elija. Lo demás queda pendiente en la conversación hasta que lo
-              confirmes. Puedes cancelar una acción automática desde la
-              conversación mientras no haya empezado.
+              acción por ejecución: en Gmail, a cualquier destinatario que el
+              agente elija; en Google Drive, entre los archivos del agente. Lo
+              demás queda pendiente en la conversación hasta que lo confirmes.
+              Puedes cancelar una acción automática desde la conversación
+              mientras no haya empezado.
             </p>
             <Controller
               control={control}
               name="autonomy"
               render={({ field }) => (
                 <div className="grid gap-2 sm:grid-cols-2">
-                  {scheduleWrites.map((op) => {
+                  {scheduleWrites.map((op, index) => {
                     const granted = writes.includes(op)
                     const checked = field.value.includes(op)
+                    const heading =
+                      index === 0 ||
+                      scheduleWrites[index - 1]!.split(".")[0] !==
+                        op.split(".")[0]
                     return (
-                      <label
-                        key={op}
-                        className="flex items-start gap-3 rounded-lg border p-3 text-sm has-[[data-disabled]]:opacity-60"
-                      >
-                        <Checkbox.Root
-                          checked={checked}
-                          disabled={!granted && !checked}
-                          onCheckedChange={(value) => {
-                            field.onChange(
-                              value
-                                ? [...field.value, op]
-                                : field.value.filter((o) => o !== op)
-                            )
-                            setValue("consent", false, {
-                              shouldValidate: true,
-                            })
-                          }}
-                          className="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded border data-checked:bg-primary data-checked:text-primary-foreground"
-                        >
-                          <Checkbox.Indicator>
-                            <CheckIcon className="size-3" />
-                          </Checkbox.Indicator>
-                        </Checkbox.Root>
-                        <span>
-                          {autonomyLabels[op]}
-                          {!granted && (
-                            <span className="block text-xs text-muted-foreground">
-                              La versión en funcionamiento no tiene este
-                              permiso.
-                            </span>
-                          )}
-                        </span>
-                      </label>
+                      <Fragment key={op}>
+                        {heading && (
+                          <p className="text-xs font-medium text-muted-foreground sm:col-span-2">
+                            {op.startsWith("drive.") ? "Google Drive" : "Gmail"}
+                          </p>
+                        )}
+                        <label className="flex items-start gap-3 rounded-lg border p-3 text-sm has-[[data-disabled]]:opacity-60">
+                          <Checkbox.Root
+                            checked={checked}
+                            disabled={!granted && !checked}
+                            onCheckedChange={(value) => {
+                              field.onChange(
+                                value
+                                  ? [...field.value, op]
+                                  : field.value.filter((o) => o !== op)
+                              )
+                              setValue("consent", false, {
+                                shouldValidate: true,
+                              })
+                            }}
+                            className="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded border data-checked:bg-primary data-checked:text-primary-foreground"
+                          >
+                            <Checkbox.Indicator>
+                              <CheckIcon className="size-3" />
+                            </Checkbox.Indicator>
+                          </Checkbox.Root>
+                          <span>
+                            {autonomyLabels[op]}
+                            {!granted && (
+                              <span className="block text-xs text-muted-foreground">
+                                La versión en funcionamiento no tiene este
+                                permiso.
+                              </span>
+                            )}
+                          </span>
+                        </label>
+                      </Fragment>
                     )
                   })}
                 </div>

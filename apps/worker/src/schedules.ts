@@ -49,6 +49,19 @@ export async function tickRenewals(query: Query, log = console.log) {
     return undefined
   }
 }
+/** Queues Drive knowledge files due for their hourly check (§62); logs counts only. */
+export async function tickDriveSync(query: Query, log = console.log) {
+  try {
+    const result = (await query("SELECT agentonic.drive_sync_tick() result"))
+      .rows[0]?.result as { queued: number } | undefined
+    if (result?.queued)
+      log(JSON.stringify({ event: "drive_sync_ticked", ...result }))
+    return result
+  } catch {
+    log(JSON.stringify({ event: "drive_sync_tick_failed" }))
+    return undefined
+  }
+}
 /** Ticks now and then on an interval until `stop` aborts. */
 export function scheduleTicks(
   query: Query,
@@ -58,6 +71,7 @@ export function scheduleTicks(
   const tick = async () => {
     await tickRenewals(query)
     await tickSchedules(query)
+    await tickDriveSync(query)
   }
   void tick()
   const timer = setInterval(() => void tick(), interval)

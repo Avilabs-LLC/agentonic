@@ -1,6 +1,6 @@
 // One graded evaluation case (review protocol 2). A platform tool case carries
-// synthetic fixtures (architecture §51): it runs with the frozen version's Gmail
-// or web tools answered from those fixtures, and the grader sees every tool call.
+// synthetic fixtures (architecture §51): it runs with the frozen version's Gmail,
+// Drive or web tools answered from those fixtures, and the grader sees every tool call.
 // Other cases run without tools, as before.
 import { z } from "zod"
 import {
@@ -41,7 +41,11 @@ export async function runReviewCase(
       return { ok: true }
     }
     // The frozen version's own grants, answered from fixtures: nothing live is consulted.
-    if (fixtures && operation === "gmail-tools") return { tools }
+    if (
+      fixtures &&
+      (operation === "gmail-tools" || operation === "drive-tools")
+    )
+      return { tools }
     if (fixtures && operation === "web-tools")
       return { enabled: !!fixtures.web }
     const result = await execute(operation, lease, payload)

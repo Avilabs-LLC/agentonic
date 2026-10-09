@@ -5,7 +5,13 @@ import {
   WEB_RESEARCH_MS,
 } from "./web-policy"
 import { webArguments, type WebOperation } from "@agentonic/contracts/web"
-import { toolGrants, gmailGrants, hasWeb } from "@agentonic/contracts/tools"
+import {
+  toolGrants,
+  gmailGrants,
+  driveGrants,
+  hasWeb,
+} from "@agentonic/contracts/tools"
+import type { DriveGrant } from "@agentonic/contracts/drive"
 import { readFileSync } from "node:fs"
 import { createHash } from "node:crypto"
 import { fork } from "node:child_process"
@@ -45,6 +51,8 @@ const runtimeSchema = z
       .object({
         previewContract: z.literal("1"),
         gmailContract: z.literal("1").optional(),
+        // Runtime 0.6.0 and later run Drive tools (§62).
+        driveContract: z.literal("1").optional(),
         webContract: z.literal("1").optional(),
         webResearch: z.literal("1").optional(),
         brokerProtocol: z.literal(BROKER_PROTOCOL).optional(),
@@ -120,6 +128,7 @@ export function verifyRuntime(value: unknown, root: string) {
   if (
     installed.gitCommit !== runtime.gitCommit ||
     installed.gmailContract !== runtime.manifest.gmailContract ||
+    installed.driveContract !== runtime.manifest.driveContract ||
     installed.webContract !== runtime.manifest.webContract ||
     installed.webResearch !== runtime.manifest.webResearch ||
     installed.brokerProtocol !== runtime.manifest.brokerProtocol ||
@@ -441,6 +450,16 @@ export async function runPreview(
     const authorized = await execute("gmail-tools", job)
     grant = gmailGrants(toolGrants.parse(authorized.tools))[0]
   }
+  let drive: DriveGrant | undefined
+  if (
+    allowTools &&
+    manifest.driveContract === "1" &&
+    driveGrants(toolGrants.parse(access.tools ?? [])).length &&
+    providers.drive
+  ) {
+    const authorized = await execute("drive-tools", job)
+    drive = driveGrants(toolGrants.parse(authorized.tools))[0]
+  }
   let web = false
   if (
     allowTools &&
@@ -463,14 +482,23 @@ export async function runPreview(
         : (reasoningLevel as string | null)
     const configuration = modelConfiguration.parse({ model, reasoning })
     const toolCalls = web ? (manifest.webResearch === "1" ? 8 : 3) : 3
+    // Drive keys go only to runtimes that declare Drive: earlier runtimes'
+    // strict turn schemas refuse them.
+    const driveRuntime = manifest.driveContract === "1"
     const turn = turnSpec.parse({
       model,
       reasoning: configuration.reasoning,
       tools: {
         gmail: grant?.operations ?? [],
         web,
+        ...(driveRuntime ? { drive: drive?.operations ?? [] } : {}),
       },
-      limits: { modelCalls: toolCalls + 1, toolCalls, gmailCalls: 3 },
+      limits: {
+        modelCalls: toolCalls + 1,
+        toolCalls,
+        gmailCalls: 3,
+        ...(driveRuntime ? { driveCalls: 3 } : {}),
+      },
     })
     const broker = new TurnBroker({
       job,
@@ -479,6 +507,7 @@ export async function runPreview(
       signal,
       turn,
       gmail: grant,
+      drive,
       web,
       passageIds: z
         .array(z.object({ id: z.uuid() }))
@@ -491,7 +520,7 @@ export async function runPreview(
       { envelope: context, turn },
       broker,
       signal,
-      grant || web ? 110000 : 60000
+      grant || drive || web ? 110000 : 60000
     )
     return
   }

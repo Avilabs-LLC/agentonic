@@ -1,5 +1,10 @@
 export const VERSION_HISTORY = [
   {
+    "version": "0.34.0",
+    "date": "2026-10-09",
+    "summary": "Google Drive: agents read the files their owner picks and propose Google Docs confirmed once; curators import picked files into Conocimiento, synced hourly; runtime 0.6.0"
+  },
+  {
     "version": "0.33.2",
     "date": "2026-10-09",
     "summary": "Aprender mi estilo paces its Gmail reads, waits out Gmail's rate limit and, if Gmail still refuses, writes the guide from the mail already read"

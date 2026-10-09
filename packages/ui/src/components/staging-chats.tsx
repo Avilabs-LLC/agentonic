@@ -8,6 +8,7 @@ import { ModelPicker } from "@workspace/ui/components/model-picker"
 import { ChatComposer } from "@workspace/ui/components/chat-composer"
 import { AgentAnswer } from "@workspace/ui/components/agent-answer"
 import { GmailApprovals } from "@workspace/ui/components/gmail-approvals"
+import { DriveApprovals } from "@workspace/ui/components/drive-approvals"
 import { formatUtcMinute } from "@agentonic/contracts/format"
 import {
   customerEnvironmentLabels,
@@ -347,6 +348,11 @@ export function StagingChats({
             <>
               <GmailApprovals
                 key={selected}
+                workspaceId={workspaceId}
+                conversationId={selected}
+              />
+              <DriveApprovals
+                key={`drive:${selected}`}
                 workspaceId={workspaceId}
                 conversationId={selected}
               />

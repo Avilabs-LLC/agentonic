@@ -245,92 +245,106 @@ export function KnowledgeSkeleton() {
     <div className="mx-auto w-full max-w-4xl space-y-6">
       <PageHeaderSkeleton />
       <Skeleton className="h-8 w-48" />
-      {["collections", "upload", "documents", "search"].map((section) => (
-        <Card
-          key={section}
-          className="gap-5 py-6 [--card-spacing:--spacing(6)]"
-        >
-          <CardHeader className="gap-2">
-            <Skeleton className="h-7 w-48" />
-            <Skeleton className="h-5 w-4/5" />
-          </CardHeader>
-          <CardContent>
-            {section === "upload" || section === "search" ? (
-              <div className="grid gap-5 sm:grid-cols-2">
-                {[0, 1].map((field) => (
-                  <div key={field} className="space-y-2">
-                    <Skeleton className="h-4 w-24" />
-                    <Skeleton className="h-9 w-full" />
-                    {field === 1 && <Skeleton className="h-4 w-4/5" />}
+      {["collections", "upload", "drive", "documents", "search"].map(
+        (section) => (
+          <Card
+            key={section}
+            className="gap-5 py-6 [--card-spacing:--spacing(6)]"
+          >
+            <CardHeader className="gap-2">
+              <Skeleton className="h-7 w-48" />
+              <Skeleton className="h-5 w-4/5" />
+            </CardHeader>
+            <CardContent>
+              {section === "drive" ? (
+                // Google Drive: the account frame and its import controls.
+                <div className="space-y-5">
+                  <div className="flex items-center gap-3 rounded-lg border p-4">
+                    <Skeleton className="size-6" />
+                    <div className="space-y-2">
+                      <Skeleton className="h-4 w-28" />
+                      <Skeleton className="h-4 w-48" />
+                    </div>
                   </div>
-                ))}
-              </div>
-            ) : (
-              <div className="space-y-4">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <Skeleton className="h-9 w-full max-w-sm" />
-                  {/* Documents: the collections filter. */}
-                  {section === "documents" && (
-                    <Skeleton className="h-9 w-full sm:w-56" />
-                  )}
+                  <Skeleton className="h-8 w-48" />
                 </div>
-                <div className="divide-y border-t">
-                  <div className="flex justify-between gap-4 py-3">
-                    {Array.from(
-                      // Documents: Documento (with type and size under the
-                      // name), Colección, Estado, Detalle and actions;
-                      // collections: four.
-                      { length: section === "documents" ? 5 : 4 },
-                      (_, column) => (
-                        <Skeleton key={column} className="h-4 w-20" />
-                      )
-                    )}
-                  </div>
-                  {[0, 1, 2].map((row) => (
-                    <div key={row} className="flex items-center gap-4 py-4">
-                      <Skeleton className="size-5 shrink-0" />
-                      <div className="flex-1 space-y-2">
-                        <Skeleton className="h-5 w-4/5" />
-                        {section === "documents" && (
-                          <Skeleton className="h-4 w-20" />
-                        )}
-                      </div>
-                      <Skeleton className="h-5 w-20" />
-                      <Skeleton className="h-5 w-20" />
-                      {section === "collections" && (
-                        <Skeleton className="size-8" />
-                      )}
-                      {section === "documents" && (
-                        <div className="flex gap-1">
-                          <Skeleton className="size-8" />
-                          <Skeleton className="size-8" />
-                          <Skeleton className="size-8" />
-                        </div>
-                      )}
+              ) : section === "upload" || section === "search" ? (
+                <div className="grid gap-5 sm:grid-cols-2">
+                  {[0, 1].map((field) => (
+                    <div key={field} className="space-y-2">
+                      <Skeleton className="h-4 w-24" />
+                      <Skeleton className="h-9 w-full" />
+                      {field === 1 && <Skeleton className="h-4 w-4/5" />}
                     </div>
                   ))}
                 </div>
-                <div className="flex flex-wrap justify-between gap-3">
-                  <Skeleton className="h-5 w-20" />
-                  <Skeleton className="h-8 w-64 max-w-full" />
+              ) : (
+                <div className="space-y-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <Skeleton className="h-9 w-full max-w-sm" />
+                    {/* Documents: the collections filter. */}
+                    {section === "documents" && (
+                      <Skeleton className="h-9 w-full sm:w-56" />
+                    )}
+                  </div>
+                  <div className="divide-y border-t">
+                    <div className="flex justify-between gap-4 py-3">
+                      {Array.from(
+                        // Documents: Documento (with type and size under the
+                        // name), Colección, Estado, Detalle and actions;
+                        // collections: four.
+                        { length: section === "documents" ? 5 : 4 },
+                        (_, column) => (
+                          <Skeleton key={column} className="h-4 w-20" />
+                        )
+                      )}
+                    </div>
+                    {[0, 1, 2].map((row) => (
+                      <div key={row} className="flex items-center gap-4 py-4">
+                        <Skeleton className="size-5 shrink-0" />
+                        <div className="flex-1 space-y-2">
+                          <Skeleton className="h-5 w-4/5" />
+                          {section === "documents" && (
+                            <Skeleton className="h-4 w-20" />
+                          )}
+                        </div>
+                        <Skeleton className="h-5 w-20" />
+                        <Skeleton className="h-5 w-20" />
+                        {section === "collections" && (
+                          <Skeleton className="size-8" />
+                        )}
+                        {section === "documents" && (
+                          <div className="flex gap-1">
+                            <Skeleton className="size-8" />
+                            <Skeleton className="size-8" />
+                            <Skeleton className="size-8" />
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex flex-wrap justify-between gap-3">
+                    <Skeleton className="h-5 w-20" />
+                    <Skeleton className="h-8 w-64 max-w-full" />
+                  </div>
                 </div>
-              </div>
-            )}
-            {section === "search" && (
-              <div className="mt-4 flex flex-wrap items-center justify-between gap-4">
-                <Skeleton className="h-5 w-56" />
-                <Skeleton className="h-9 w-40" />
-              </div>
-            )}
-          </CardContent>
-          <div className="-mb-6 flex flex-wrap items-center justify-between gap-3 border-t bg-muted/30 px-6 py-4">
-            <Skeleton className="h-5 w-1/2" />
-            {section !== "documents" && section !== "search" && (
-              <Skeleton className="h-9 w-36" />
-            )}
-          </div>
-        </Card>
-      ))}
+              )}
+              {section === "search" && (
+                <div className="mt-4 flex flex-wrap items-center justify-between gap-4">
+                  <Skeleton className="h-5 w-56" />
+                  <Skeleton className="h-9 w-40" />
+                </div>
+              )}
+            </CardContent>
+            <div className="-mb-6 flex flex-wrap items-center justify-between gap-3 border-t bg-muted/30 px-6 py-4">
+              <Skeleton className="h-5 w-1/2" />
+              {section !== "documents" && section !== "search" && (
+                <Skeleton className="h-9 w-36" />
+              )}
+            </div>
+          </Card>
+        )
+      )}
     </div>
   )
 }

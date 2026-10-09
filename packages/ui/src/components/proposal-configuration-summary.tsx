@@ -6,7 +6,8 @@ import {
 } from "lucide-react"
 import type { ConfigurationSnapshot } from "@agentonic/contracts/authoring"
 import { gmailLabels } from "@agentonic/contracts/gmail"
-import { gmailGrants, hasWeb } from "@agentonic/contracts/tools"
+import { driveLabels } from "@agentonic/contracts/drive"
+import { driveGrants, gmailGrants, hasWeb } from "@agentonic/contracts/tools"
 import { MarkdownView } from "@workspace/ui/components/markdown"
 
 export function ProposalConfigurationSummary({
@@ -23,8 +24,10 @@ export function ProposalConfigurationSummary({
 
   const { content, requestedAccess } = snapshot
   const connections = gmailGrants(requestedAccess.tools)
-  const connectionCount = new Set(connections.map((item) => item.connectionId))
-    .size
+  const drives = driveGrants(requestedAccess.tools)
+  const connectionCount =
+    new Set(connections.map((item) => item.connectionId)).size +
+    new Set(drives.map((item) => item.driveConnectionId)).size
   return (
     <div className="space-y-5 text-sm">
       <dl className="grid grid-cols-2 gap-4 border-y py-4 sm:grid-cols-4">
@@ -80,6 +83,14 @@ export function ProposalConfigurationSummary({
               Gmail ·{" "}
               {connection.operations
                 .map((operation) => gmailLabels[operation])
+                .join(" · ")}
+            </p>
+          ))}
+          {drives.map((drive) => (
+            <p key={drive.driveConnectionId}>
+              Google Drive ·{" "}
+              {drive.operations
+                .map((operation) => driveLabels[operation])
                 .join(" · ")}
             </p>
           ))}

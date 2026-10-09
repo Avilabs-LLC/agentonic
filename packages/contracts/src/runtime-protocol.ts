@@ -1,5 +1,6 @@
 import { z } from "zod"
 import { gmailOperation } from "./gmail"
+import { driveOperation } from "./drive"
 import { modelId, reasoningLevel } from "./models"
 
 // Broker protocol 2. The frozen runtime artifact runs the agent loop: it
@@ -16,6 +17,7 @@ export const turnCeilings = {
   modelCalls: 12,
   toolCalls: 8,
   gmailCalls: 3,
+  driveCalls: 3,
   requestBytes: 750_000,
   modelTimeoutMs: 45_000,
   toolTimeoutMs: 20_000,
@@ -26,14 +28,26 @@ export const turnSpec = z
   .object({
     model: modelId,
     reasoning: reasoningLevel.nullable(),
+    // `drive` and `driveCalls` go only to runtimes with driveContract 1
+    // (runtime 0.6.0): earlier runtimes' strict copies of this schema refuse them.
     tools: z
-      .object({ gmail: z.array(gmailOperation).max(8), web: z.boolean() })
+      .object({
+        gmail: z.array(gmailOperation).max(8),
+        web: z.boolean(),
+        drive: z.array(driveOperation).max(4).optional(),
+      })
       .strict(),
     limits: z
       .object({
         modelCalls: z.number().int().min(1).max(turnCeilings.modelCalls),
         toolCalls: z.number().int().min(0).max(turnCeilings.toolCalls),
         gmailCalls: z.number().int().min(0).max(turnCeilings.gmailCalls),
+        driveCalls: z
+          .number()
+          .int()
+          .min(0)
+          .max(turnCeilings.driveCalls)
+          .optional(),
       })
       .strict(),
   })

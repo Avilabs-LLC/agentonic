@@ -43,10 +43,12 @@ const token = z.object({
   scope: z.string().optional(),
   expires_in: z.number().positive(),
 })
+/** The authorization code's tokens; `scopes` are the ones the connection needs (Gmail's by default). */
 export async function exchange(
   config: GoogleConfig,
   code: string,
-  verifier: string
+  verifier: string,
+  scopes: readonly string[] = GOOGLE_SCOPES
 ) {
   const response = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
@@ -64,12 +66,16 @@ export async function exchange(
   const result = token.parse(await json(response))
   if (
     !result.refresh_token ||
-    !GOOGLE_SCOPES.every((s) => result.scope?.split(" ").includes(s))
+    !scopes.every((s) => result.scope?.split(" ").includes(s))
   )
     throw new GoogleError("reconnect")
   return result
 }
 export async function refresh(config: GoogleConfig, refreshToken: string) {
+  return (await refreshGrant(config, refreshToken)).access
+}
+/** A fresh access token with the scopes Google granted it and its lifetime in seconds. */
+export async function refreshGrant(config: GoogleConfig, refreshToken: string) {
   const response = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
     body: new URLSearchParams({
@@ -82,7 +88,12 @@ export async function refresh(config: GoogleConfig, refreshToken: string) {
   })
   if (!response.ok)
     throw new GoogleError(response.status === 400 ? "reconnect" : "unavailable")
-  return token.parse(await json(response)).access_token
+  const result = token.parse(await json(response))
+  return {
+    access: result.access_token,
+    scopes: result.scope?.split(" ").filter(Boolean) ?? [],
+    expiresIn: result.expires_in,
+  }
 }
 export async function profile(access: string) {
   const response = await fetch(

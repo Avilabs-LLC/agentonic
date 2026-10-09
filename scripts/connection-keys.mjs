@@ -68,7 +68,7 @@ export function retireKeys(env) {
   return rest
 }
 
-/** Stored Gmail secrets and the record binding each ciphertext is sealed to. */
+/** Stored Gmail and Drive secrets and the record binding each ciphertext is sealed to. */
 const STORED = [
   {
     kind: "connection",
@@ -87,6 +87,28 @@ const STORED = [
   {
     kind: "oauth",
     table: "agentonic.gmail_oauth_states",
+    id: "state_hash",
+    column: "verifier_ciphertext",
+    binding: (id) => `oauth:${id}`,
+  },
+  // Google Drive (migration 65), sealed the same way.
+  {
+    kind: "drive_connection",
+    table: "agentonic.drive_connections",
+    id: "id",
+    column: "credential_ciphertext",
+    binding: (id) => `drive:${id}`,
+  },
+  {
+    kind: "drive_invocation",
+    table: "agentonic.drive_invocations",
+    id: "id",
+    column: "arguments_ciphertext",
+    binding: (id) => `invocation:${id}`,
+  },
+  {
+    kind: "drive_oauth",
+    table: "agentonic.drive_oauth_states",
     id: "state_hash",
     column: "verifier_ciphertext",
     binding: (id) => `oauth:${id}`,
