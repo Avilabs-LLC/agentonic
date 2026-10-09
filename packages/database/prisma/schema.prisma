@@ -1342,6 +1342,97 @@ model GmailInvocation {
   @@map("gmail_invocations")
   @@schema("agentonic")
 }
+// Google Drive scalar projection (migration 65, architecture §62). Tenant
+// boundaries, encryption and state transitions are enforced by its RPCs.
+model DriveConnection {
+  id String @id @db.Uuid
+  workspaceId String @map("workspace_id") @db.Uuid
+  purpose String
+  agentId String? @map("agent_id") @db.Uuid
+  ownerMemberId String @map("owner_member_id") @db.Uuid
+  account String
+  status String @default("connected")
+  credentialCiphertext String? @map("credential_ciphertext")
+  operations Json @default("[]")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  @@unique([workspaceId,id])
+  @@map("drive_connections")
+  @@schema("agentonic")
+}
+model DriveOauthState {
+  stateHash String @id @map("state_hash")
+  workspaceId String @map("workspace_id") @db.Uuid
+  purpose String
+  agentId String? @map("agent_id") @db.Uuid
+  ownerMemberId String @map("owner_member_id") @db.Uuid
+  connectionId String @unique @map("connection_id") @db.Uuid
+  verifierCiphertext String @map("verifier_ciphertext")
+  expiresAt DateTime @default(dbgenerated("(now() + '00:10:00'::interval)")) @map("expires_at") @db.Timestamptz
+  consumedAt DateTime? @map("consumed_at") @db.Timestamptz
+  finishedAt DateTime? @map("finished_at") @db.Timestamptz
+  @@map("drive_oauth_states")
+  @@schema("agentonic")
+}
+model DriveFile {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId String @map("workspace_id") @db.Uuid
+  connectionId String @map("connection_id") @db.Uuid
+  fileId String @map("file_id")
+  name String
+  mimeType String @map("mime_type")
+  origin String
+  addedByMemberId String @map("added_by_member_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  @@unique([connectionId,fileId])
+  @@map("drive_files")
+  @@schema("agentonic")
+}
+model DriveInvocation {
+  id String @id @db.Uuid
+  workspaceId String @map("workspace_id") @db.Uuid
+  agentId String @map("agent_id") @db.Uuid
+  connectionId String @map("connection_id") @db.Uuid
+  ownerMemberId String @map("owner_member_id") @db.Uuid
+  turnId String @map("turn_id") @db.Uuid
+  conversationId String @map("conversation_id") @db.Uuid
+  operation String
+  fileId String? @map("file_id")
+  executionContext String @default("staging") @map("execution_context")
+  argumentsCiphertext String? @map("arguments_ciphertext")
+  argumentsSha256 String @map("arguments_sha256")
+  status String @default("pending")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  expiresAt DateTime @default(dbgenerated("(now() + '00:10:00'::interval)")) @map("expires_at") @db.Timestamptz
+  approvedAt DateTime? @map("approved_at") @db.Timestamptz
+  finishedAt DateTime? @map("finished_at") @db.Timestamptz
+  result Json?
+  approvedByScheduleId String? @map("approved_by_schedule_id") @db.Uuid
+  @@index([conversationId,createdAt],map:"drive_invocations_conversation")
+  @@map("drive_invocations")
+  @@schema("agentonic")
+}
+model DriveKnowledgeFile {
+  sourceId String @id @map("source_id") @db.Uuid
+  workspaceId String @map("workspace_id") @db.Uuid
+  connectionId String @map("connection_id") @db.Uuid
+  collectionId String @map("collection_id") @db.Uuid
+  documentId String @unique @map("document_id") @db.Uuid
+  fileId String @map("file_id")
+  name String
+  mimeType String @map("mime_type")
+  status String @default("pending")
+  driveVersion String? @map("drive_version")
+  heldVersion String? @map("held_version")
+  errorCode String? @map("error_code")
+  checkedAt DateTime? @map("checked_at") @db.Timestamptz
+  syncedAt DateTime? @map("synced_at") @db.Timestamptz
+  nextCheckAt DateTime @default(now()) @map("next_check_at") @db.Timestamptz
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  @@unique([connectionId,collectionId,fileId])
+  @@index([nextCheckAt],map:"drive_knowledge_files_due")
+  @@map("drive_knowledge_files")
+  @@schema("agentonic")
+}
 // The general conversation model (migration 44, architecture §48).
 model ChannelEndpoint {
  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
