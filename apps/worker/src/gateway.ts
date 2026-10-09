@@ -1,6 +1,6 @@
 // The host gateway: one process per staging host holds the database
 // connections and the provider keys for every agent copy on it. Copies hold
-// neither. They send one of four fixed database calls, or a provider call,
+// neither. They send one of five fixed database calls, or a provider call,
 // over a local socket, each with their own deployment secret. The database
 // checks every call exactly as it did when copies connected directly, and the
 // gateway makes provider calls with that copy's credentials (providers.ts).
@@ -19,6 +19,7 @@ export const DATABASE_CALLS = {
   staging_worker: 6,
   web_staging: 6,
   gmail_staging: 6,
+  drive_staging: 6,
 } as const
 /** Every call a copy can make: the database calls and provider calls (operation, deployment, secret, job, token, payload). */
 export const GATEWAY_CALLS = { ...DATABASE_CALLS, provider: 6 } as const
@@ -37,7 +38,9 @@ export const jobCall = (operation: string): DatabaseCall =>
     ? "web_staging"
     : operation.startsWith("gmail-")
       ? "gmail_staging"
-      : "staging_worker"
+      : operation.startsWith("drive-")
+        ? "drive_staging"
+        : "staging_worker"
 
 /** A request line longer than this closes the connection. */
 export const MAX_LINE = 4 * 1024 * 1024

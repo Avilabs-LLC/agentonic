@@ -5,7 +5,7 @@ import { z } from "zod"
 import { workerFailure } from "./failure"
 import { KNOWLEDGE_LANES, LANES, serveLanes, type LaneJob } from "./lanes"
 import { logJob } from "./job-log"
-import { processJob, type Execute } from "./pipeline"
+import { parsePdf, processJob, type Execute } from "./pipeline"
 import { scheduleRetention } from "./retention"
 import { directProviders, providerKeys } from "./providers"
 import { storageSession } from "./storage-session"
@@ -21,6 +21,12 @@ import {
   scheduleTicks,
   type ScheduledAction,
 } from "./schedules"
+import {
+  runScheduledDriveAction,
+  scheduledDriveAction,
+  syncDriveFile,
+  type ScheduledDriveAction,
+} from "./drive"
 const env = {
   ...(existsSync(new URL("../.env.local", import.meta.url))
     ? parse(readFileSync(new URL("../.env.local", import.meta.url)))
@@ -77,11 +83,22 @@ const execute: Execute = async (operation, job, payload = {}) => {
       ? "SELECT agentonic.web_preview_worker($1,$2::uuid,$3::uuid,$4::jsonb) result"
       : operation.startsWith("gmail-")
         ? "SELECT agentonic.gmail_preview_worker($1,$2::uuid,$3::uuid,$4::jsonb) result"
-        : "SELECT agentonic.rag_worker($1,$2::uuid,$3::uuid,$4::jsonb) result",
+        : operation.startsWith("drive-")
+          ? "SELECT agentonic.drive_preview_worker($1,$2::uuid,$3::uuid,$4::jsonb) result"
+          : "SELECT agentonic.rag_worker($1,$2::uuid,$3::uuid,$4::jsonb) result",
     [operation, job.id, job.token, JSON.stringify(payload)]
   )
   return result.rows[0].result
 }
+// A Drive knowledge sync has its own steps; its spend goes through the
+// ordinary job ledger (migration 65).
+const driveExecute: Execute = async (operation, job, payload = {}) =>
+  (
+    await pool.query(
+      "SELECT agentonic.drive_sync_worker($1,$2::uuid,$3::uuid,$4::jsonb) result",
+      [operation, job.id, job.token, JSON.stringify(payload)]
+    )
+  ).rows[0].result
 // Aprender mi estilo has its own functions, lease and budget (migration 61).
 const styleExecute: Execute = async (operation, job, payload = {}) =>
   (
@@ -116,7 +133,7 @@ const claimed = z
   .object({
     id: z.uuid(),
     token: z.uuid(),
-    kind: z.enum(["ingest", "purge", "retrieve"]),
+    kind: z.enum(["ingest", "purge", "retrieve", "drive_sync"]),
     lane: z.enum(LANES),
     queuedAt: z.string().nullable().optional(),
   })
@@ -166,19 +183,32 @@ async function runStyle(job: StyleJob & LaneJob, stopping: AbortSignal) {
     clearInterval(heartbeat)
   }
 }
-async function runAction(job: ScheduledAction & LaneJob) {
+async function runAction(
+  job: (ScheduledAction | ScheduledDriveAction) & LaneJob
+) {
   const startedAt = Date.now()
   let failed: string | undefined
-  await runScheduledAction(
-    job,
-    async (outcome, detail) => {
+  const complete =
+    (fn: string) =>
+    async (outcome: string, detail: Record<string, unknown>) => {
       if (outcome !== "succeeded") failed = String(detail.code ?? outcome)
-      await pool.query(
-        "SELECT agentonic.schedule_action_complete($1::uuid,$2,$3::jsonb) result",
-        [job.id, outcome, JSON.stringify(detail)]
+      await pool.query(`SELECT agentonic.${fn}($1::uuid,$2,$3::jsonb) result`, [
+        job.id,
+        outcome,
+        JSON.stringify(detail),
+      ])
+    }
+  await ("provider" in job && job.provider === "drive"
+    ? runScheduledDriveAction(
+        job as ScheduledDriveAction,
+        complete("drive_action_complete"),
+        keys.google!
       )
-    },
-    keys.google!
+    : runScheduledAction(
+        job as ScheduledAction,
+        complete("schedule_action_complete"),
+        keys.google!
+      )
   ).catch(() => {
     failed = "lease_lost"
   })
@@ -192,19 +222,30 @@ async function runAction(job: ScheduledAction & LaneJob) {
 }
 async function run(job: LaneJob, stopping: AbortSignal) {
   if (job.lane === "style") return runStyle(job as StyleJob & LaneJob, stopping)
-  if (job.lane === "action") return runAction(job as ScheduledAction & LaneJob)
+  if (job.lane === "action")
+    return runAction(job as (ScheduledAction | ScheduledDriveAction) & LaneJob)
+  const steps = job.kind === "drive_sync" ? driveExecute : execute
   const lost = new AbortController()
   const signal = AbortSignal.any([stopping, lost.signal])
   const heartbeat = setInterval(() => {
-    void execute("heartbeat", job).catch(() => lost.abort())
+    void steps("heartbeat", job).catch(() => lost.abort())
   }, 20000)
   const startedAt = Date.now()
   try {
-    await processJob(job, execute, config, signal)
+    if (job.kind === "drive_sync")
+      await syncDriveFile(
+        job,
+        driveExecute,
+        keys.google,
+        config.providers.embed,
+        parsePdf,
+        signal
+      )
+    else await processJob(job, execute, config, signal)
     logJob({ service: "knowledge", job, startedAt, finishedAt: Date.now() })
   } catch (error) {
     const { code, diagnostic } = workerFailure(error)
-    await execute("fail", job, { code }).catch(() => {})
+    await steps("fail", job, { code }).catch(() => {})
     logJob({
       service: "knowledge",
       job,
@@ -256,6 +297,10 @@ async function main() {
             await pool.query("SELECT agentonic.schedule_action_claim() result")
           ).rows[0].result
           if (action) return scheduledAction.parse(action)
+          const drive = (
+            await pool.query("SELECT agentonic.drive_action_claim() result")
+          ).rows[0].result
+          if (drive) return scheduledDriveAction.parse(drive)
         }
         if (!free.includes("style")) return null
         return styleClaimed.parse(

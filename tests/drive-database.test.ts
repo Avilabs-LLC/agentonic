@@ -743,7 +743,7 @@ describe("Drive knowledge", () => {
   })
 
   it("only syncs with the curator's connected account", async () => {
-    const source = await imported()
+    await imported()
     await f.actor()
     await command("reconnect", { connectionId: knowledge })
     // The queued sync can no longer be claimed; the claim drops it.

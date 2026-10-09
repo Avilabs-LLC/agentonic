@@ -40,15 +40,23 @@ it("survives a failed sweep without logging its error text", async () => {
   expect(JSON.stringify(log.mock.calls)).not.toContain("secret")
 })
 
-it("sweeps at start and every interval until stopped", async () => {
+it("sweeps Gmail and Drive at start and every interval until stopped", async () => {
   vi.useFakeTimers()
-  const query = vi.fn(async () => ({ rows: [{ result: {} }] }))
+  const query = vi.fn<(sql: string) => Promise<{ rows: { result: unknown }[] }>>(
+    async () => ({ rows: [{ result: {} }] })
+  )
   const stop = new AbortController()
   scheduleRetention(query, stop.signal, 1000)
-  expect(query).toHaveBeenCalledTimes(1)
+  await vi.advanceTimersByTimeAsync(0)
+  expect(query).toHaveBeenCalledTimes(2)
   await vi.advanceTimersByTimeAsync(2500)
-  expect(query).toHaveBeenCalledTimes(3)
+  expect(query.mock.calls.map(([sql]) => sql)).toEqual(
+    Array.from({ length: 3 }, () => [
+      "SELECT agentonic.gmail_retention_sweep() result",
+      "SELECT agentonic.drive_retention_sweep() result",
+    ]).flat()
+  )
   stop.abort()
   await vi.advanceTimersByTimeAsync(5000)
-  expect(query).toHaveBeenCalledTimes(3)
+  expect(query).toHaveBeenCalledTimes(6)
 })

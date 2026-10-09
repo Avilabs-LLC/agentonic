@@ -2,6 +2,12 @@ import { fork } from "node:child_process"
 import { z } from "zod"
 import { gmailArguments, gmailReads } from "@agentonic/contracts/gmail"
 import type { gmailGrant } from "@agentonic/contracts/gmail"
+import {
+  driveArguments,
+  driveReads,
+  type DriveGrant,
+  type DriveOperation,
+} from "@agentonic/contracts/drive"
 import { webArguments, type WebOperation } from "@agentonic/contracts/web"
 import type { PreviewModel } from "@agentonic/contracts/preview-models"
 import {
@@ -30,10 +36,21 @@ export const PROPOSAL_ANSWER =
 /** A write the run's schedule pre-authorized (§58): the platform executes it. */
 export const SCHEDULED_ACTION_ANSWER =
   "He preparado una acción de Gmail que esta programación autorizó. Se ejecutará automáticamente; su resultado aparecerá en la tarjeta de la acción."
-export const proposalAnswer = (result: unknown) =>
+export const DRIVE_PROPOSAL_ANSWER =
+  "He preparado un cambio en Google Drive. Revisa la cuenta, el documento y el contenido en la tarjeta de confirmación. Todavía no se ha realizado ningún cambio."
+export const DRIVE_SCHEDULED_ANSWER =
+  "He preparado un cambio en Google Drive que esta programación autorizó. Se ejecutará automáticamente; su resultado aparecerá en la tarjeta de la acción."
+export const proposalAnswer = (
+  result: unknown,
+  provider: "gmail" | "drive" = "gmail"
+) =>
   (result as { automatic?: unknown } | null)?.automatic === true
-    ? SCHEDULED_ACTION_ANSWER
-    : PROPOSAL_ANSWER
+    ? provider === "drive"
+      ? DRIVE_SCHEDULED_ANSWER
+      : SCHEDULED_ACTION_ANSWER
+    : provider === "drive"
+      ? DRIVE_PROPOSAL_ANSWER
+      : PROPOSAL_ANSWER
 
 type Options = {
   job: Lease
@@ -44,12 +61,15 @@ type Options = {
   turn: TurnSpec
   /** The live Gmail grant offered this turn, if any. */
   gmail?: z.infer<typeof gmailGrant>
+  /** The live Drive grant offered this turn, if any (runtimes with driveContract). */
+  drive?: DriveGrant
   /** Public web tools are offered this turn. */
   web: boolean
   passageIds: string[]
 }
 export type Operation =
   | { kind: "gmail"; operation: keyof typeof gmailArguments }
+  | { kind: "drive"; operation: DriveOperation }
   | { kind: "web"; operation: WebOperation }
 type StoredItem = { item: Record<string, unknown>; view: ProviderItem }
 
@@ -59,7 +79,9 @@ export const toolParameters = (op: Operation) =>
   z.toJSONSchema(
     op.kind === "gmail"
       ? gmailArguments[op.operation]
-      : webArguments[op.operation]
+      : op.kind === "drive"
+        ? driveArguments[op.operation]
+        : webArguments[op.operation]
   )
 
 /**
@@ -79,6 +101,7 @@ export class TurnBroker {
   private modelCalls = 0
   private toolCalls = 0
   private gmailCalls = 0
+  private driveCalls = 0
   private unknownOutcome: "research" | "final" | undefined
   private usedToolEvidence = false
   private webSources = new Set<string>()
@@ -112,6 +135,9 @@ export class TurnBroker {
     const gmail = this.o.turn.tools.gmail.find((op) => toolName(op) === name)
     if (gmail && this.o.gmail?.operations.includes(gmail))
       return { kind: "gmail", operation: gmail }
+    const drive = this.o.turn.tools.drive?.find((op) => toolName(op) === name)
+    if (drive && this.o.drive?.operations.includes(drive))
+      return { kind: "drive", operation: drive }
     const web = this.o.turn.tools.web
       ? (Object.keys(webArguments) as WebOperation[]).find(
           (op) => toolName(op) === name
@@ -280,6 +306,33 @@ export class TurnBroker {
       if (typeof result.url === "string" && typeof result.text === "string")
         this.webSources.add(result.url)
       if (result.ok !== false) this.usedToolEvidence = true
+      return { type: "tool", id: request.id, output: result }
+    }
+    if (op.kind === "drive") {
+      if (++this.driveCalls > (turn.limits.driveCalls ?? 0)) throw mismatch()
+      const result = await this.o.providers.driveTool(
+        op.operation,
+        args,
+        this.o.drive!,
+        job,
+        execute,
+        signal
+      )
+      // A proposal ends the turn; a refused write (an unknown file) goes back
+      // to the model like a read.
+      if (
+        !driveReads.some((read) => read === op.operation) &&
+        (result as { pendingApproval?: unknown } | null)?.pendingApproval ===
+          true
+      ) {
+        await this.finish({
+          text: proposalAnswer(result, "drive"),
+          citations: [],
+          insufficientEvidence: true,
+        })
+        return undefined
+      }
+      this.usedToolEvidence = true
       return { type: "tool", id: request.id, output: result }
     }
     if (++this.gmailCalls > turn.limits.gmailCalls) throw mismatch()

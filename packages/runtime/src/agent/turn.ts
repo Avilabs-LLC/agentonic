@@ -22,6 +22,7 @@ import { toolOffers } from "../tools/registry"
 export const RESEARCH_CALLS = 8
 export const RESEARCH_MS = 65_000
 export const MAILBOX_CALLS = 3
+export const DRIVE_CALLS = 3
 const DEFAULT_TOOL_CALLS = 3
 
 export type Broker = {
@@ -56,7 +57,7 @@ function answerFormat(passageIds: string[]) {
         citations: {
           type: "array",
           description:
-            "Only IDs of supplied knowledge-base passages. Gmail IDs and website URLs are never KB citations. Use an empty array for tool-only answers.",
+            "Only IDs of supplied knowledge-base passages. Gmail IDs, Drive file IDs and website URLs are never KB citations. Use an empty array for tool-only answers.",
           items: passageIds.length
             ? { type: "string", enum: passageIds }
             : { type: "string" },
@@ -68,7 +69,7 @@ function answerFormat(passageIds: string[]) {
               type: "boolean",
               enum: [true],
               description:
-                "No knowledge-base passages are available. This flag measures knowledge-base evidence only, not web or Gmail access.",
+                "No knowledge-base passages are available. This flag measures knowledge-base evidence only, not web, Gmail or Drive access.",
             },
       },
     },
@@ -149,14 +150,18 @@ export async function runAgentTurn(
   )
   const researchDeadline = Date.now() + RESEARCH_MS
   const mailboxLimit = Math.min(MAILBOX_CALLS, turn.limits.gmailCalls)
+  const driveLimit = Math.min(DRIVE_CALLS, turn.limits.driveCalls ?? 0)
   const failedRequests = new Set<string>()
   let stopTools = false,
     mailboxCalls = 0,
+    driveCalls = 0,
     usedToolEvidence = false
 
   for (let step = 0; step <= maxCalls; step++) {
     const offered = offers.filter(
-      (o) => !o.name.startsWith("gmail_") || mailboxCalls < mailboxLimit
+      (o) =>
+        (!o.name.startsWith("gmail_") || mailboxCalls < mailboxLimit) &&
+        (!o.name.startsWith("drive_") || driveCalls < driveLimit)
     )
     const finalOnly =
       stopTools ||
@@ -228,6 +233,10 @@ export async function runAgentTurn(
       } else if (name.startsWith("gmail_")) {
         if (++mailboxCalls > mailboxLimit)
           throw new RuntimeError("runtime_failed")
+        output = (await broker.tool({ callId })).output
+        usedToolEvidence = true
+      } else if (name.startsWith("drive_")) {
+        if (++driveCalls > driveLimit) throw new RuntimeError("runtime_failed")
         output = (await broker.tool({ callId })).output
         usedToolEvidence = true
       } else throw new RuntimeError("runtime_failed")

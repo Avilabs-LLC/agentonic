@@ -1,5 +1,5 @@
 // Provider access without provider keys. Every paid or credentialed call an
-// agent makes (OpenAI, Voyage, Browserbase, Gmail) goes through a Providers
+// agent makes (OpenAI, Voyage, Browserbase, Gmail, Drive) goes through a Providers
 // object. The knowledge worker and the evaluator hold the keys and call
 // providers directly. An agent copy holds none: its Providers forward each
 // call to the host's gateway, which holds the keys and runs the same direct
@@ -9,6 +9,7 @@
 import { randomUUID } from "node:crypto"
 import { z } from "zod"
 import { gmailGrant } from "@agentonic/contracts/gmail"
+import { driveGrant } from "@agentonic/contracts/drive"
 import { webArguments, type WebOperation } from "@agentonic/contracts/web"
 import { modelConfiguration } from "@agentonic/contracts/models"
 import {
@@ -19,10 +20,11 @@ import {
 import { turnCeilings } from "@agentonic/contracts/runtime-protocol"
 import { GoogleError, type GoogleConfig } from "@agentonic/connectors/google"
 import { connectionKeys } from "@agentonic/connectors/secrets"
-import { embed, type Execute, type Lease } from "./pipeline"
+import { embed, parsePdf, type Execute, type Lease } from "./pipeline"
 import { rerank, type Passage } from "./reranking"
 import { executeWeb } from "./web"
 import { executeGmail } from "./gmail"
+import { executeDrive } from "./drive"
 import { PreviewFailure } from "./failure"
 import {
   INVALID,
@@ -65,7 +67,12 @@ export type Capabilities = {
   web: boolean
   gmail: boolean
 }
+/**
+ * Drive needs the same Google settings as Gmail, so its availability follows
+ * Gmail's and the gateway's capability reply keeps its original shape.
+ */
 export type Providers = Capabilities & {
+  drive: boolean
   respond(
     call: ModelCall,
     job: Lease,
@@ -100,6 +107,14 @@ export type Providers = Capabilities & {
     grant: z.infer<typeof gmailGrant>,
     job: Lease,
     execute: Execute
+  ): Promise<unknown>
+  driveTool(
+    operation: string,
+    args: unknown,
+    grant: z.infer<typeof driveGrant>,
+    job: Lease,
+    execute: Execute,
+    signal: AbortSignal
   ): Promise<unknown>
 }
 
@@ -235,6 +250,7 @@ export function directProviders(keys: {
     embeddings: Boolean(keys.voyageKey),
     web: Boolean(keys.browserbaseKey),
     gmail: Boolean(keys.google),
+    drive: Boolean(keys.google),
     respond: (call, job, execute, signal) =>
       respond(call, job, execute, keys.openaiKey ?? "", signal),
     embed: (texts, type, job, execute, signal) =>
@@ -257,6 +273,19 @@ export function directProviders(keys: {
       if (!keys.google) throw new Error("configuration_required")
       return executeGmail(operation, args, grant, job, execute, keys.google)
     },
+    driveTool: async (operation, args, grant, job, execute, signal) => {
+      if (!keys.google) throw new Error("configuration_required")
+      return executeDrive(
+        operation,
+        args,
+        grant,
+        job,
+        execute,
+        keys.google,
+        parsePdf,
+        signal
+      )
+    },
   }
 }
 
@@ -270,6 +299,7 @@ export const PROVIDER_OPERATIONS = [
   "rerank",
   "web",
   "gmail",
+  "drive",
 ] as const
 export type ProviderOperation = (typeof PROVIDER_OPERATIONS)[number]
 
@@ -311,6 +341,9 @@ const payloads = {
   gmail: z
     .object({ operation: z.string(), args: z.unknown(), grant: gmailGrant })
     .strict(),
+  drive: z
+    .object({ operation: z.string(), args: z.unknown(), grant: driveGrant })
+    .strict(),
 }
 
 /** Failures that cross the wire as names; anything else becomes runtime_mismatch. */
@@ -321,6 +354,7 @@ const FAILURES = new Set([
   "lease_lost",
   "runtime_mismatch",
   "gmail_denied",
+  "drive_denied",
 ])
 const PREVIEW_FAILURES = new Set([
   "answer_json_invalid",
@@ -424,6 +458,16 @@ export async function serveProvider(
         job,
         execute
       )
+    } else if (operation === "drive") {
+      const call = payloads.drive.parse(payload)
+      value = await providers.driveTool(
+        call.operation,
+        call.args,
+        call.grant,
+        job,
+        execute,
+        signal
+      )
     } else throw new Error("runtime_mismatch")
     return { ok: true, value }
   } catch (error) {
@@ -476,6 +520,7 @@ export function gatewayProviders(
   }
   return {
     ...available,
+    drive: available.gmail,
     respond: async (request, job, _execute, signal) => {
       needs(available.models)
       const outcome = z
@@ -513,6 +558,10 @@ export function gatewayProviders(
     gmailTool: async (operation, args, grant, job) => {
       needs(available.gmail)
       return call("gmail", job, { operation, args, grant })
+    },
+    driveTool: async (operation, args, grant, job, _execute, signal) => {
+      needs(available.gmail)
+      return call("drive", job, { operation, args, grant }, signal)
     },
   }
 }
