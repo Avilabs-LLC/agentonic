@@ -2247,7 +2247,7 @@ Espacios de trabajo ended with a read-only "Equipo de Agentonic" card, and staff
 - **Changes:** a change sets either a role or the active state, never both, and never a no-op. Deactivating someone, or moving them away from Administración, withdraws the invitations they issued that are still pending. Deactivation ends Admin access at the next request, because every staff check reads `disabled_at`.
 - **`staff_events`:** every change is recorded here, and so is every attempt that staff made and the database refused. A trigger keeps this history append-only, and it never holds an email, a token or a name. `audit_events` belongs to a workspace, so platform changes can't be recorded there.
 - **The sign-up hook** (§54) also accepts an email with a live staff invitation. The public wrapper only calls the migration's function, so nothing has to be reinstalled.
-- **`operations_workspaces`** no longer returns the team.
+- **`operations_workspaces`** still returns the team, which only 0.36.0 reads. The installer needs migrations applied before a release, and a rollback never reverses them, so the running Admin keeps working between the migration and the install, and after a rollback. 0.37.0 ignores it; a later migration may drop it.
 
 Neither table grants anything to an application role.
 

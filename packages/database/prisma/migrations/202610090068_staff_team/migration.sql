@@ -196,15 +196,7 @@ BEGIN
   'message','Agentonic solo crea cuentas por invitación. Pide a tu equipo que te invite.'));
 END $$;
 
--- Espacios de trabajo no longer lists the team; Equipo does (team.list).
-CREATE OR REPLACE FUNCTION agentonic.operations_workspaces() RETURNS jsonb LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path='' AS $$
-BEGIN
- PERFORM agentonic.operations_staff();
- RETURN jsonb_build_object(
-  'workspaces',coalesce((SELECT jsonb_agg(jsonb_build_object('id',w.id,'name',w.name,'kind',w.kind,'status',w.status,'timezone',w.timezone,'createdAt',w.created_at,
-   'members',(SELECT count(*) FROM agentonic.workspace_members m WHERE m.workspace_id=w.id AND m.status='active' AND m.removed_at IS NULL),
-   'agents',(SELECT count(*) FROM agentonic.agents a WHERE a.workspace_id=w.id AND a.status<>'archived'),
-   'pendingInvitations',(SELECT count(*) FROM agentonic.workspace_invitations i WHERE i.workspace_id=w.id AND i.accepted_at IS NULL AND i.revoked_at IS NULL AND i.expires_at>clock_timestamp()))
-   ORDER BY w.name) FROM agentonic.workspaces w WHERE w.deleted_at IS NULL),'[]'::jsonb));
-END $$;
+-- operations_workspaces keeps returning the team: platform 0.36.0 reads it, and
+-- it runs until 0.37.0 is installed (and again after a rollback). 0.37.0 ignores
+-- it and reads team.list; a later migration may drop it.
 COMMIT;
