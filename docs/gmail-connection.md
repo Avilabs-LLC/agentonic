@@ -4,7 +4,7 @@ Owner selected Gmail on 18 September 2026, replacing the Drive-first recommendat
 
 ## Scope and experience
 
-Agents → Configuración → Conexiones → Conectar Gmail opens a Base UI consent explanation, then Google account selection/consent, returning to the same agent. Herramientas offers search/read mail, list/read/create/update/delete drafts, and send a plain-text email. Save the selected operations in the draft and prepare a new immutable version. A tool-capable code artifact is required; an existing no-tool deployment cannot acquire Gmail permissions dynamically.
+Agents → Configuración → Conexiones → the Gmail button (Gmail's mark; accessible name "Conectar Gmail") opens a Base UI consent explanation, then Google account selection/consent, returning to the same agent. Herramientas offers search/read mail, list/read/create/update/delete drafts, and send a plain-text email. Save the selected operations in the draft and prepare a new immutable version. A tool-capable code artifact is required; an existing no-tool deployment cannot acquire Gmail permissions dynamically.
 
 Every mailbox change, including draft changes, creates a private pending action in chat. The customer opens Revisar acción, sees the account and exact arguments, checks explicit consent and confirms. Approval lasts ten minutes and is atomically consumed once. A write result survives browser refresh. Uncertain writes are never automatically retried. Check Gmail before requesting another action after an uncertain result. Sending uses the exact confirmed content, not a mutable draft reference. Reading a draft then asking to send its content creates a new explicit send proposal; it does not silently send/delete the source draft.
 
