@@ -137,12 +137,20 @@ it("allows only the app's own nonce'd scripts and Google's consent screen as a f
   )
   expect(nonceOf(policy)).toBe(value)
   expect(nonceOf(null)).toBeUndefined()
-  expect(new Map(securityHeaders(false)).has("Strict-Transport-Security")).toBe(
-    false
-  )
-  expect(new Map(securityHeaders(true)).get("Strict-Transport-Security")).toBe(
-    "max-age=63072000; includeSubDomains"
-  )
+  expect(
+    new Map(securityHeaders(false, "customer")).has("Strict-Transport-Security")
+  ).toBe(false)
+  expect(
+    new Map(securityHeaders(true, "admin")).get("Strict-Transport-Security")
+  ).toBe("max-age=63072000; includeSubDomains")
+  // Google's Picker popup keeps its link to the Picker's frame in the customer
+  // app only; Admin never opens one.
+  expect(
+    new Map(securityHeaders(true, "customer")).get("Cross-Origin-Opener-Policy")
+  ).toBe("same-origin-allow-popups")
+  expect(
+    new Map(securityHeaders(true, "admin")).get("Cross-Origin-Opener-Policy")
+  ).toBe("same-origin")
 })
 
 it("gives production pages a nonce policy, keeps refreshed sessions, and leaves API policies to the route", async () => {

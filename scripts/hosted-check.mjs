@@ -57,6 +57,10 @@ export async function hostedProblems(hostnames, { full = false } = {}) {
         ["x-frame-options", "DENY"],
         ["x-content-type-options", "nosniff"],
         ["referrer-policy", "same-origin"],
+        [
+          "cross-origin-opener-policy",
+          app === "customer" ? "same-origin-allow-popups" : "same-origin",
+        ],
         ["cache-control", "private, no-store"],
       ])
         if (login.headers.get(header) !== value)

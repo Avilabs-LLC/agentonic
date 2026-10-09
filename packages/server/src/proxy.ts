@@ -34,7 +34,7 @@ export async function refreshSession(request: NextRequest, app: AppKind) {
   const response = NextResponse.next({ request: { headers } })
   refreshed.forEach((cookie) => response.cookies.set(...cookie))
   if (policy) response.headers.set("Content-Security-Policy", policy)
-  for (const [name, value] of securityHeaders(production))
+  for (const [name, value] of securityHeaders(production, app))
     response.headers.set(name, value)
   response.headers.set("Cache-Control", "private, no-store")
   return response
