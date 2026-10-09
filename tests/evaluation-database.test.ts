@@ -2437,6 +2437,7 @@ async function modelReview() {
     "202610080060_evaluation_lessons",
     "202610080062_agent_schedules",
     "202610080063_ongoing_deployments",
+    "202610090064_careful_grading",
   ])
     await db.exec(
       readFileSync(
@@ -2769,6 +2770,108 @@ describe("evaluation lessons (§56)", () => {
         microusd: 50000,
       })
     ).rejects.toMatchObject({ code: "42501" })
+  })
+})
+
+describe("careful grading (§61)", () => {
+  const verification = (rubric: number) =>
+    `{"reviewProtocol":3,"toolFixtures":1,"reviewRubric":${rubric},"isolation":true,"recovery":true,"artifactIntegrity":true}`
+  async function evaluator(rubric: number) {
+    await sql(
+      "UPDATE agentonic.evaluation_workers SET retired_at=clock_timestamp() WHERE database_role='agentonic_eval_azure' AND retired_at IS NULL"
+    )
+    await sql(
+      `WITH w AS (INSERT INTO agentonic.evaluation_workers(database_role,environment,worker_sha256,verified_at,verification) VALUES('agentonic_eval_azure','azure_staging',repeat('d',64),now(),'${verification(rubric)}') RETURNING id) INSERT INTO agentonic.evaluation_worker_runtimes(worker_id,runtime_sha256) SELECT id,repeat('b',64) FROM w`
+    )
+  }
+  const graders = (preparationId: string) =>
+    sql(
+      "SELECT grader_snapshot->>'version' version,grader_snapshot->>'reasoning' reasoning FROM agentonic.evaluation_runs WHERE preparation_id=$1 ORDER BY created_at",
+      [preparationId]
+    ).then((r) => r.rows)
+  it("grades new runs with rubric 6 at medium reasoning once the evaluator advertises it", async () => {
+    const p = await modelReview()
+    await evaluator(6)
+    await actor()
+    expect(
+      await flow("run", {
+        preparationId: p.preparationId,
+        revision: 1,
+        models: [{ model: "gpt-5.4", reasoning: "low" }],
+        budgetUsd: 3,
+        consent: true,
+        requestId: id(1101),
+      })
+    ).toMatchObject({ ok: true })
+    // A version without tools also gets rubric 6, without tool cases.
+    expect(
+      (
+        await sql(
+          "SELECT grader_snapshot grader,(SELECT jsonb_agg(c->>'key') FROM jsonb_array_elements(dataset_snapshot) c) keys FROM agentonic.evaluation_runs WHERE preparation_id=$1",
+          [p.preparationId]
+        )
+      ).rows[0]
+    ).toEqual({
+      grader: {
+        version: "grounded-review-v6",
+        model: "gpt-5.4-mini",
+        reasoning: "medium",
+        policy: "readonly-review-v1",
+      },
+      keys: ["duration", "platform-unknown", "platform-injection"],
+    })
+    const job = (await evalClaim())!
+    await execute(job, "search", { embedding })
+    expect(await execute(job, "grade-context")).toMatchObject({
+      rubricVersion: "grounded-review-v6",
+    })
+    // The grader's model is metered; a model the run does not use is refused.
+    expect(
+      await execute(job, "reserve", {
+        id: id(1102),
+        provider: "openai",
+        model: "gpt-5.4-mini",
+        microusd: 1000,
+      })
+    ).toMatchObject({ ok: true })
+    await expect(
+      execute(job, "reserve", {
+        id: id(1103),
+        provider: "openai",
+        model: "gpt-4.1-mini-2025-04-14",
+        microusd: 1000,
+      })
+    ).rejects.toMatchObject({ code: "42501" })
+  })
+  it("keeps rubric 5 for an evaluator that advertises 5 and for runs created under it", async () => {
+    const p = await modelReview()
+    await evaluator(5)
+    await actor()
+    await flow("run", {
+      preparationId: p.preparationId,
+      revision: 1,
+      models: [{ model: "gpt-5.4-mini", reasoning: "medium" }],
+      budgetUsd: 3,
+      consent: true,
+      requestId: id(1110),
+    })
+    expect(await graders(p.preparationId)).toEqual([
+      { version: "grounded-review-v5", reasoning: "low" },
+    ])
+    // A rubric 6 evaluator replaces it and finishes the queued rubric 5 run as it was.
+    await evaluator(6)
+    await finishFlow((await evalClaim())!, "passed", true, "gpt-5.4-mini")
+    expect(await graders(p.preparationId)).toEqual([
+      { version: "grounded-review-v5", reasoning: "low" },
+    ])
+    expect(
+      (
+        await sql(
+          "SELECT status FROM agentonic.evaluation_runs WHERE preparation_id=$1",
+          [p.preparationId]
+        )
+      ).rows
+    ).toEqual([{ status: "passed" }])
   })
 })
 

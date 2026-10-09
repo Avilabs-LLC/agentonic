@@ -155,6 +155,55 @@ it("grades rubric 5 with GPT-5.4 mini at low reasoning and meters its rates", as
   expect(execute.mock.calls[0]![2]).toMatchObject({ model: "gpt-5.4-mini" })
   expect(execute.mock.calls[1]![2]).toMatchObject({ microusd: 300 })
 })
+it("grades rubric 6 with GPT-5.4 mini at medium reasoning and rubric 5 at low", async () => {
+  const fetch = vi.fn(
+    async () =>
+      new Response(
+        JSON.stringify({
+          status: "completed",
+          usage: { input_tokens: 100, output_tokens: 50 },
+          output: [
+            {
+              content: [
+                { type: "output_text", text: JSON.stringify(assessment) },
+              ],
+            },
+          ],
+        })
+      )
+  )
+  vi.stubGlobal("fetch", fetch)
+  const request = async (rubricVersion: string) => {
+    await gradeAnswer(
+      { context: { rubricVersion } },
+      job,
+      vi.fn<Execute>(async () => ({ ok: true })),
+      "synthetic-key",
+      new AbortController().signal
+    )
+    return JSON.parse(
+      (fetch.mock.calls.at(-1) as unknown as [string, RequestInit])[1]
+        .body as string
+    )
+  }
+  const v6 = await request("grounded-review-v6")
+  expect(v6).toMatchObject({
+    model: "gpt-5.4-mini",
+    reasoning: { effort: "medium" },
+    max_output_tokens: 4096,
+  })
+  // Alternatives, drafts and failures that name what is missing (§61).
+  expect(v6.instructions).toContain("cumplir cualquiera de ellas la cumple")
+  expect(v6.instructions).toContain("cumple «queda como borrador»")
+  expect(v6.instructions).toContain(
+    "Si suggestion pediría algo que la respuesta ya contiene"
+  )
+  // Rubric 5 runs keep their instructions and low reasoning.
+  const v5 = await request("grounded-review-v5")
+  expect(v5).toMatchObject({ reasoning: { effort: "low" } })
+  expect(v5.instructions).toContain("compara la respuesta con la configuración")
+  expect(v5.instructions).not.toContain("queda como borrador")
+})
 it("keeps earlier rubric versions on the model their runs were created with", async () => {
   const fetch = vi.fn(
     async () =>
@@ -231,6 +280,11 @@ it("writes criteria with GPT-5.4 mini as requests to the agent, never questions 
     "Nunca escribas preguntas sobre el agente"
   )
   expect(body.instructions).toContain("@example.invalid")
+  // A draft-only request expects a draft, not a notice about sending (§61).
+  expect(body.instructions).toContain("Si la tarea solo pide redactar")
+  expect(body.instructions).toContain(
+    "no exijas que anuncie que no hará algo que nadie pidió"
+  )
   expect(execute.mock.calls[0]![2]).toMatchObject({ model: "gpt-5.4-mini" })
   expect(execute.mock.calls[1]![2]).toMatchObject({ microusd: 9750 })
 })

@@ -11,17 +11,19 @@
 
 ## Next up
 
-1. **N11** — scheduled jobs: installed 8 October (0.29.0, broker `76c3155d`); run one live.
-2. **D6** — ongoing authorization (§59): installed 9 October (0.30.0); watch one live renewal and a conversation carry across a new version.
-3. **N12** — "Aprender mi estilo": installed 8 October with 0.28.0; run it live with a consenting account.
-4. **C13** — the owner's live password reset and Admin authenticator sign-in; the invitation passed on 8 October.
-5. **B8** — tell the agent which Gmail actions were confirmed since its last turn (found in B2).
-6. **C2** — the 250-agent load test, deferred by the owner until other items are sorted.
+1. **N14** — careful grading (§61): apply migration 64, redeploy the evaluator with rubric 6, install 0.33.0, then evaluate a mail agent once.
+2. **N11** — scheduled jobs: installed 8 October (0.29.0, broker `76c3155d`); run one live.
+3. **D6** — ongoing authorization (§59): installed 9 October (0.30.0); watch one live renewal and a conversation carry across a new version.
+4. **N12** — "Aprender mi estilo": installed 8 October with 0.28.0; run it live with a consenting account.
+5. **C13** — the owner's live password reset and Admin authenticator sign-in; the invitation passed on 8 October.
+6. **B8** — tell the agent which Gmail actions were confirmed since its last turn (found in B2).
+7. **C2** — the 250-agent load test, deferred by the owner until other items are sorted.
 
 ## Follow-ups from recent work
 
 | ID  | Action                                                                                                                                                                                                                                                                                                                                                                                                                                                              | Who           | Status                            | Done when                                                                                       |
 | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- | --------------------------------- | ----------------------------------------------------------------------------------------------- |
+| N14 | Careful grading (§61, owner request 9 Oct): the criteria writer expects requested drafts to be presented as drafts, and rubric 6 grades with GPT-5.4 mini at medium reasoning, honours alternatives and names what is missing. Merged in platform 0.33.0 with migration 64.                                                                                                                                                                                         | Build → Owner | Open: merged, rollout pending     | A new evaluation of a mail agent shows the version 6 grader on every run.                       |
 | N11 | Scheduled jobs (§58, owner request 8 Oct): Programaciones tab, runs on the running version, one pre-authorized Gmail write per run to any recipient (owner direction until Slack can ask). Installed 8 Oct: migration 62, platform 0.29.0, staging broker `76c3155d`.                                                                                                                                                                                               | Build → Owner | Open: installed, live run pending | A schedule runs on the hosted app and its pre-authorized send completes once.                   |
 | N12 | "Aprender mi estilo" (owner request, 8 Oct): from a Gmail account's frame in Configuración, the person who connected it consents and the knowledge worker reads only mail they sent in the last 90 days (at most 200), never stores it, and drafts a writing-style guide they review before it is added to Conocimiento. Reading a mailbox outside this flow, or decrypting connection credentials by hand, stays off limits. Installed 8 Oct with platform 0.28.0. | Build         | Open: installed, live run pending | The guide is generated, reviewed and added to a collection on the hosted app.                   |
 | N13 | Schedules proposed from a chat (a runtime tool the person confirms, with an evaluation case), and confirmations for scheduled actions through Slack once that channel exists, replacing pre-authorization (§58).                                                                                                                                                                                                                                                    | Owner → Build | Open                              | A chat-proposed schedule runs after one confirmation; a Slack prompt confirms a scheduled send. |
