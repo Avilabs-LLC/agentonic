@@ -4,17 +4,53 @@ import {
   CriterionStatus,
   DomainStatus,
 } from "@workspace/ui/components/status-badge"
+import { cn } from "@workspace/ui/lib/utils"
+
+// One colour per kind of text, matching the fields of the criteria review dialog.
+const tones = {
+  question: { dot: "bg-primary", frame: "border-primary/30 bg-primary/5" },
+  expected: {
+    dot: "bg-emerald-600 dark:bg-emerald-400",
+    frame:
+      "border-emerald-200 bg-emerald-50/60 dark:border-emerald-400/25 dark:bg-emerald-400/5",
+  },
+  answer: {
+    dot: "bg-sky-500 dark:bg-sky-400",
+    frame:
+      "border-sky-200 bg-sky-50/60 dark:border-sky-400/25 dark:bg-sky-400/5",
+  },
+  review: {
+    dot: "bg-violet-500 dark:bg-violet-400",
+    frame:
+      "border-violet-200 bg-violet-50/60 dark:border-violet-400/25 dark:bg-violet-400/5",
+  },
+}
 
 export function ReceiptTextFrame({
   title,
   text,
+  tone,
 }: {
   title: string
   text: string
+  tone?: keyof typeof tones
 }) {
   return (
-    <div className="space-y-2 rounded-lg border bg-muted/20 p-4">
-      <h3 className="text-sm font-medium">{title}</h3>
+    <div
+      className={cn(
+        "space-y-2 rounded-lg border p-4",
+        tone ? tones[tone].frame : "bg-muted/20"
+      )}
+    >
+      <h3 className="flex items-center gap-2 text-sm font-medium">
+        {tone && (
+          <span
+            className={cn("size-2 shrink-0 rounded-full", tones[tone].dot)}
+            aria-hidden="true"
+          />
+        )}
+        {title}
+      </h3>
       <p className="text-sm leading-relaxed break-words whitespace-pre-wrap">
         {text}
       </p>
@@ -43,9 +79,14 @@ export function ReceiptCriteria({
             />
           </summary>
           <div className="mt-4 space-y-4">
-            <ReceiptTextFrame title="Mensaje al agente" text={c.question} />
+            <ReceiptTextFrame
+              title="Mensaje al agente"
+              text={c.question}
+              tone="question"
+            />
             <ReceiptTextFrame
               title="Respuesta o comportamiento esperado"
+              tone="expected"
               text={c.expectedAnswer || "Sin respuesta esperada."}
             />
             {c.notes && (
@@ -99,17 +140,20 @@ export function ReceiptResults({
           <div className="mt-4 space-y-4">
             <ReceiptTextFrame
               title="Respuesta esperada"
+              tone="expected"
               text={
                 result.expectedAnswer || "Sin respuesta esperada registrada."
               }
             />
             <ReceiptTextFrame
               title="Respuesta del agente"
+              tone="answer"
               text={result.answer || "Sin respuesta registrada."}
             />
             {result.explanation && (
               <ReceiptTextFrame
                 title="Resultado de la revisión"
+                tone="review"
                 text={result.explanation}
               />
             )}
