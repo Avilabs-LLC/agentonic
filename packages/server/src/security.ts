@@ -31,6 +31,16 @@ export const openerPolicy = {
   customer: "same-origin-allow-popups",
   admin: "same-origin",
 } as const satisfies Record<AppKind, string>
+/**
+ * Other sites learn nothing of Admin's addresses. The customer app tells them
+ * its origin only, never a path or query: Google checks the Picker's API key
+ * against the site that loads it, and with no referrer it reports the key as
+ * invalid (architecture §62).
+ */
+export const referrerPolicy = {
+  customer: "strict-origin-when-cross-origin",
+  admin: "same-origin",
+} as const satisfies Record<AppKind, string>
 export function securityHeaders(
   production: boolean,
   app: AppKind
@@ -38,7 +48,7 @@ export function securityHeaders(
   return [
     ["X-Content-Type-Options", "nosniff"],
     ["X-Frame-Options", "DENY"],
-    ["Referrer-Policy", "same-origin"],
+    ["Referrer-Policy", referrerPolicy[app]],
     ["Cross-Origin-Opener-Policy", openerPolicy[app]],
     [
       "Permissions-Policy",

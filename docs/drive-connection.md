@@ -26,6 +26,7 @@ The Drive API and the Picker API are enabled (owner, 9 October). Before the live
 1. **Add the scope.** In Google Auth Platform → Data Access, add `https://www.googleapis.com/auth/drive.file`. In Testing mode it needs no review.
 2. **Create the Picker's API key.** In Credentials → Create API key, name it "Agentonic Picker".
    - Website restrictions: `https://app.agentonic.avilabs.tech/*`, `http://localhost:3101/*` and `https://docs.google.com/*`. Google rejects a key without the last one.
+     These restrictions match the site the browser reports. The customer app therefore sends `Referrer-Policy: strict-origin-when-cross-origin`, which gives other sites its origin only. Under `same-origin`, Google reported the key as invalid.
    - API restrictions: Google Picker API only. Agentonic calls Drive from its servers with OAuth, never with the key.
 3. **Store the settings.** Put the key and the project number (Cloud console → Project info) in `.env.staging.local` as `GOOGLE_PICKER_API_KEY` and `GOOGLE_CLOUD_PROJECT_NUMBER`. The number is optional: when it is missing or not numeric (a project ID, for example), the server takes it from the OAuth client ID, which begins with it. Then run `node scripts/setup-gmail.mjs`, which copies them to the customer app; `pnpm platform:install` carries them to the VM's `customer.env`. Never put them in chat or in `NEXT_PUBLIC_*` values. The key is restricted, but it is still configuration.
 4. **Prepare a test account.** Keep the account under Test users. In its Drive, create synthetic files named "Prueba Agentonic Drive …": a Doc, a Sheet, a Slides deck, a PDF and a `.md` file.
@@ -205,6 +206,8 @@ In Brave, the Picker then asked "Debes iniciar sesión" and, after "Iniciar sesi
 - With an account that has files, the popup listed them. Before 0.34.2, choosing files, "Seleccionar" and "Cancelar" did nothing, and the frame stayed on "Iniciar sesión": these are the symptoms of the missing link.
 - `platform-0.34.2-53b1360fad4e` (PR #82) was installed the same day, with every service healthy and `hosted:check` passing.
 - The connected account must be the one whose files are picked, since each picked file is checked through that connection.
+
+Still on 0.34.2, Chrome showed "La clave de desarrollador de la API no es válida". The key's website restrictions need the browser to report the app's site, and `Referrer-Policy: same-origin` reported nothing. With `strict-origin-when-cross-origin` set in the owner's Chrome for one page load, the Picker listed the account's files in the page, and "Cancelar" returned to the app. Platform 0.34.3 sends that policy from the customer app. Brave's popup path still needs a retest, since its frame may have failed the same key check.
 
 ## Acceptance matrix
 

@@ -148,6 +148,14 @@ it("allows only the app's own nonce'd scripts and Google's consent screen as a f
   expect(
     new Map(securityHeaders(true, "customer")).get("Cross-Origin-Opener-Policy")
   ).toBe("same-origin-allow-popups")
+  // Google checks the Picker's key against the site that loads it, so the
+  // customer app sends its origin, never a path; Admin sends nothing.
+  expect(
+    new Map(securityHeaders(true, "customer")).get("Referrer-Policy")
+  ).toBe("strict-origin-when-cross-origin")
+  expect(new Map(securityHeaders(true, "admin")).get("Referrer-Policy")).toBe(
+    "same-origin"
+  )
   expect(
     new Map(securityHeaders(true, "admin")).get("Cross-Origin-Opener-Policy")
   ).toBe("same-origin")

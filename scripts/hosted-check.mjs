@@ -56,7 +56,12 @@ export async function hostedProblems(hostnames, { full = false } = {}) {
       for (const [header, value] of [
         ["x-frame-options", "DENY"],
         ["x-content-type-options", "nosniff"],
-        ["referrer-policy", "same-origin"],
+        [
+          "referrer-policy",
+          app === "customer"
+            ? "strict-origin-when-cross-origin"
+            : "same-origin",
+        ],
         [
           "cross-origin-opener-policy",
           app === "customer" ? "same-origin-allow-popups" : "same-origin",
