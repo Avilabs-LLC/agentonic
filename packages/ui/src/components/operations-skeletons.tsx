@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader } from "@workspace/ui/components/card"
 import {
   BackRowSkeleton,
   PageHeaderSkeleton,
+  PlaceGroupsCardSkeleton,
   RecordHeaderSkeleton,
   TableSkeleton,
 } from "@workspace/ui/components/foundation-skeletons"
@@ -27,38 +28,6 @@ function ListCardSkeleton({ items }: { items: number }) {
               <Skeleton className="h-4 w-80 max-w-full" />
             </div>
             <Skeleton className="h-5 w-20 rounded-full" />
-          </div>
-        ))}
-      </CardContent>
-    </Card>
-  )
-}
-/** A card of servers grouped by place: two groups of two rows, side by side. */
-function PlaceGroupsCardSkeleton() {
-  return (
-    <Card>
-      <CardHeader className="space-y-2">
-        <Skeleton className="h-5 w-48" />
-        <Skeleton className="h-4 w-full max-w-2xl" />
-      </CardHeader>
-      <CardContent className="grid gap-6 md:grid-cols-2">
-        {[1, 2].map((group) => (
-          <div key={group} className="space-y-1">
-            <Skeleton className="h-3 w-32" />
-            <div className="divide-y">
-              {[1, 2].map((i) => (
-                <div
-                  key={i}
-                  className="flex items-center justify-between gap-4 py-4"
-                >
-                  <div className="space-y-1.5">
-                    <Skeleton className="h-4 w-28" />
-                    <Skeleton className="h-4 w-64 max-w-full" />
-                  </div>
-                  <Skeleton className="h-5 w-20 rounded-full" />
-                </div>
-              ))}
-            </div>
           </div>
         ))}
       </CardContent>
@@ -149,11 +118,11 @@ export function OperationsWorkspacesSkeleton() {
     </Loading>
   )
 }
-/** Despliegues: the installations card (four registrations) and the eleven-column table. */
+/** Despliegues: the installations card (three or four facts per cell) and the eleven-column table. */
 export function OperationsDeploymentsSkeleton() {
   return (
     <Loading label="Cargando despliegues">
-      <PlaceGroupsCardSkeleton />
+      <PlaceGroupsCardSkeleton lines={3} />
       <TableSkeleton columns={11} />
     </Loading>
   )

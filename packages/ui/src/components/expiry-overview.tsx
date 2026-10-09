@@ -43,17 +43,25 @@ export function RegistrationsCard({
   registrations: RuntimeRegistrations
   now: string
 }) {
-  const describe = (r: Registration) =>
-    ["revoked", "retired"].includes(r.state)
-      ? `Verificada el ${utc(r.verifiedAt)}`
-      : `${past(r.expiresAt, now) ? "Venció" : "Vence"} el ${utc(r.expiresAt)} · Verificada el ${utc(r.verifiedAt)}`
+  // One fact per line: the deadline, then the last verification.
+  const lines = (r: Registration) => [
+    ...(["revoked", "retired"].includes(r.state)
+      ? []
+      : [
+          `${past(r.expiresAt, now) ? "Venció" : "Vence"} el ${utc(r.expiresAt)}`,
+        ]),
+    `Verificada el ${utc(r.verifiedAt)}`,
+  ]
   const items: PlaceItem[] = [
-    ...registrations.hosts.map((r) => ({ name: "Agentes", r })),
-    ...registrations.evaluators.map((r) => ({ name: "Evaluaciones", r })),
-  ].map(({ name, r }) => ({
+    ...registrations.hosts.map((r) => ({ kind: "agents" as const, r })),
+    ...registrations.evaluators.map((r) => ({
+      kind: "evaluations" as const,
+      r,
+    })),
+  ].map(({ kind, r }) => ({
     environment: r.environment,
-    name,
-    description: describe(r),
+    kind,
+    lines: lines(r),
     action: (
       <StatusIndicator
         appearance="badge"

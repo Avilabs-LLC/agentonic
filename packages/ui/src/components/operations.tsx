@@ -116,18 +116,6 @@ function Stat({ label, value }: { label: string; value: number }) {
 }
 
 // Agentes -------------------------------------------------------------------------
-export function capabilities(tools: OperationsAgent["tools"]) {
-  const parts = [
-    ...(tools.collections
-      ? [
-          `Conocimiento (${formatCount(tools.collections)} ${tools.collections === 1 ? "colección" : "colecciones"})`,
-        ]
-      : []),
-    ...(tools.gmail ? ["Gmail"] : []),
-    ...(tools.web ? ["Web"] : []),
-  ]
-  return parts.length ? parts.join(" · ") : "Sin herramientas ni conocimiento"
-}
 export function OperationsAgentsTable({
   agents,
 }: {
@@ -394,16 +382,70 @@ export function OperationsStaffCard({
 
 // Despliegues ---------------------------------------------------------------------
 type Runtime = { version: string; commit: string | null }
-const runtimesText = (runtimes: Runtime[]) =>
-  runtimes.length
-    ? runtimes
-        .map((r) =>
-          r.commit && !r.version.includes(r.commit)
-            ? `${r.version} (${r.commit})`
-            : r.version
-        )
-        .join(", ")
-    : "ninguno"
+const runtimeLabel = (r: Runtime) =>
+  r.commit && !r.version.includes(r.commit)
+    ? `${r.version} (${r.commit})`
+    : r.version
+// "0.6.0-preview-4b9f84b0" → "0.6.0"; an unknown artifact keeps its hash.
+// The database orders versions as text, which puts 0.10 before 0.3, so the
+// newest is picked here.
+const numbered = (version: string) => /^\d+(?:\.\d+)*/.exec(version)?.[0]
+const versionParts = (version: string) =>
+  numbered(version)?.split(".").map(Number) ?? []
+function newestFirst(runtimes: Runtime[]) {
+  return [...runtimes].sort((a, b) => {
+    const x = versionParts(a.version),
+      y = versionParts(b.version)
+    for (let i = 0; i < Math.max(x.length, y.length); i++)
+      if ((x[i] ?? 0) !== (y[i] ?? 0)) return (y[i] ?? 0) - (x[i] ?? 0)
+    return b.version.localeCompare(a.version)
+  })
+}
+// The newest runtime by its number; the rest behind "y N más", which lists
+// every runtime installed there with its full version.
+function RuntimesLine({
+  runtimes,
+  place,
+}: {
+  runtimes: Runtime[]
+  place: string
+}) {
+  if (runtimes.length === 0) return <>Sin runtimes</>
+  const [newest, ...rest] = newestFirst(runtimes)
+  return (
+    <>
+      <span title={runtimeLabel(newest!)}>
+        Runtime {numbered(newest!.version) ?? newest!.version}
+      </span>
+      {rest.length > 0 && (
+        <>
+          {" "}
+          <Dialog>
+            <DialogTrigger render={<CellButton className="tabular-nums" />}>
+              y {formatCount(rest.length)} más
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Runtimes en {place}</DialogTitle>
+                <DialogDescription>
+                  Instalados según la última verificación, del más reciente al
+                  más antiguo.
+                </DialogDescription>
+              </DialogHeader>
+              <ul className="space-y-1 text-sm">
+                {[newest!, ...rest].map((runtime) => (
+                  <li key={runtime.version} className="font-mono break-all">
+                    {runtimeLabel(runtime)}
+                  </li>
+                ))}
+              </ul>
+            </DialogContent>
+          </Dialog>
+        </>
+      )}
+    </>
+  )
+}
 export function OperationsInstallationsCard({
   hosts,
   evaluators,
@@ -424,28 +466,47 @@ export function OperationsInstallationsCard({
     runtimes: Runtime[]
   }[]
 }) {
+  const badge = (state: string) => (
+    <StatusIndicator
+      appearance="badge"
+      state={statusDescriptor("registration", state)}
+    />
+  )
   const items: PlaceItem[] = [
     ...hosts.map((h) => ({
       environment: h.environment,
-      name: "Agentes",
-      description: `Trabajador ${h.current}${h.workers.length > 1 ? ` (en servicio: ${h.workers.join(", ")})` : ""} · Runtimes ${runtimesText(h.runtimes)} · ${h.heartbeatAt ? `Último reporte el ${utc(h.heartbeatAt)}` : "Sin reportes"}`,
-      action: (
-        <StatusIndicator
-          appearance="badge"
-          state={statusDescriptor("registration", h.state)}
-        />
-      ),
+      kind: "agents" as const,
+      lines: [
+        `Trabajador ${h.current}`,
+        ...(h.workers.length > 1
+          ? [`En servicio: ${h.workers.join(", ")}`]
+          : []),
+        <RuntimesLine
+          key="runtimes"
+          runtimes={h.runtimes}
+          place={`Agentes · ${environmentLabels[h.environment]}`}
+        />,
+        h.heartbeatAt
+          ? `Último reporte el ${utc(h.heartbeatAt)}`
+          : "Sin reportes",
+      ],
+      action: badge(h.state),
     })),
     ...evaluators.map((e) => ({
       environment: e.environment,
-      name: "Evaluaciones",
-      description: `Evaluador ${e.current} · Runtimes ${runtimesText(e.runtimes)} · ${e.toolFixtures ? "Prueba herramientas con datos sintéticos" : "Sin pruebas de herramientas"}`,
-      action: (
-        <StatusIndicator
-          appearance="badge"
-          state={statusDescriptor("registration", e.state)}
-        />
-      ),
+      kind: "evaluations" as const,
+      lines: [
+        `Evaluador ${e.current}`,
+        <RuntimesLine
+          key="runtimes"
+          runtimes={e.runtimes}
+          place={`Evaluaciones · ${environmentLabels[e.environment]}`}
+        />,
+        e.toolFixtures
+          ? "Prueba herramientas con datos sintéticos"
+          : "Sin pruebas de herramientas",
+      ],
+      action: badge(e.state),
     })),
   ]
   return (

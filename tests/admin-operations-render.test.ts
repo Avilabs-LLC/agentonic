@@ -18,6 +18,9 @@ const skeletons = await load(
 const agentPage = (await load(
   "../packages/ui/src/components/operations-agent"
 )) as Record<string, (props: Record<string, unknown>) => unknown>
+const expiryOverview = (await load(
+  "../packages/ui/src/components/expiry-overview"
+)) as Record<string, (props: Record<string, unknown>) => unknown>
 const createElement = react.createElement as (
   component: unknown,
   props: Record<string, unknown>
@@ -156,7 +159,7 @@ describe("Admin operations screens", () => {
         ownerName: "Ana",
         createdAt: now,
         latestVersion: 2,
-        tools: { gmail: false, web: true, collections: 0 },
+        tools: { gmail: false, drive: true, web: true, collections: 2 },
         summary: {
           archived: false,
           live: [],
@@ -221,7 +224,10 @@ describe("Admin operations screens", () => {
       "Pendiente de activación",
       "Versión 2 · vm-agents-01",
       "Versión 1 · vm-agents-01",
-      "Web",
+      // Capabilities as named marks; knowledge in the tile's detail.
+      '<span class="sr-only">Google Drive</span>',
+      '<span class="sr-only">Acceso web</span>',
+      "Versión 2 · 2 colecciones",
       "Propuestas",
       ">Revisión<",
       "Ver comprobante de la revisión",
@@ -233,6 +239,7 @@ describe("Admin operations screens", () => {
       "Abrir en Revisiones",
     ])
       expect(out).toContain(text)
+    expect(out).not.toContain('<span class="sr-only">Gmail</span>')
     badgesStandAlone(out)
   })
   it("shows activity with Spanish actions and an unknown action by its code", () => {
@@ -323,7 +330,19 @@ describe("Admin operations screens", () => {
           heartbeatAt: now,
           current: "f7deae1f",
           workers: ["f7deae1f"],
-          runtimes: [{ version: "0.4.0-preview-0eb33696", commit: "0eb3369" }],
+          runtimes: [
+            { version: "0.4.0-preview-0eb33696", commit: "0eb3369" },
+            { version: "0.10.0-preview-649676c5", commit: "649676c" },
+            { version: "0.6.0-preview-4b9f84b0", commit: "4b9f84b" },
+          ],
+        },
+        {
+          environment: "local",
+          state: "valid",
+          heartbeatAt: null,
+          current: "76c3155d",
+          workers: ["76c3155d", "ec30c590"],
+          runtimes: [{ version: "0.6.0-preview-4b9f84b0", commit: null }],
         },
       ],
       evaluators: [
@@ -336,13 +355,70 @@ describe("Admin operations screens", () => {
         },
       ],
     })
+    // One row per kind, named once, with a column per place.
+    for (const [text, times] of [
+      [">Agentes</h3>", 1],
+      [">Evaluaciones</h3>", 1],
+      ["lucide-bot", 1],
+      ["lucide-flask-conical", 1],
+      [">vm-agents-01<", 3],
+      [">Local (desarrollo)<", 3],
+    ] as const)
+      expect(servers.split(text).length - 1, text).toBe(times)
     for (const text of [
-      "Trabajador f7deae1f",
-      "Runtimes 0.4.0-preview-0eb33696",
+      ">Trabajador f7deae1f<",
+      ">En servicio: 76c3155d, ec30c590<",
+      // The newest runtime by number, not as text; the rest collapsed.
+      ">Runtime 0.10.0</span>",
+      'title="0.10.0-preview-649676c5"',
+      "y 2 más",
+      ">Runtime 0.6.0</span>",
+      ">Sin reportes<",
+      ">Evaluador c0fdd72d<",
+      ">Sin runtimes<",
+      ">Sin pruebas de herramientas<",
+      ">Sin registrar<",
       "Vence pronto",
-      "Sin pruebas de herramientas",
     ])
       expect(servers).toContain(text)
+    expect(servers).not.toContain("·")
+    // Vencimientos: the deadline and the verification on their own lines.
+    const registrations = html(expiryOverview.RegistrationsCard, {
+      now,
+      registrations: {
+        hosts: [
+          {
+            environment: "azure_staging",
+            state: "valid",
+            expiresAt: "2026-11-01T00:00:00.000Z",
+            verifiedAt: "2026-10-02T00:00:00.000Z",
+          },
+          {
+            environment: "local",
+            state: "retired",
+            expiresAt: "2026-10-01T00:00:00.000Z",
+            verifiedAt: "2026-09-01T00:00:00.000Z",
+          },
+        ],
+        evaluators: [
+          {
+            environment: "azure_staging",
+            state: "expired",
+            expiresAt: "2026-10-05T00:00:00.000Z",
+            verifiedAt: "2026-09-05T00:00:00.000Z",
+          },
+        ],
+      },
+    })
+    for (const text of [
+      ">Vence el 1/11/2026, 12:00 a. m. UTC<",
+      ">Verificada el 2/10/2026, 12:00 a. m. UTC<",
+      ">Venció el 5/10/2026, 12:00 a. m. UTC<",
+      ">Verificada el 1/9/2026, 12:00 a. m. UTC<",
+    ])
+      expect(registrations).toContain(text)
+    expect(registrations).not.toContain("Vence el 1/10/2026")
+    expect(registrations).not.toContain("·")
     const workspaces = html(ui.OperationsWorkspacesTable, {
       workspaces: [
         {
