@@ -2144,4 +2144,14 @@ The owner asked for Google Drive as a second Google connection, built like Gmail
 - **Rendering:** `tests/drive-render.test.ts`.
 - **Rotation:** key rotation re-seals Drive's values (`tests/connection-keys.test.ts`).
 
+**Rollout, 9 October 2026.** In this order:
+
+1. Migration 65 applied.
+2. Evaluator `7fb7104a` installed and registered with `driveFixtures: 1` and rubric 6 for runtimes 0.3.0–0.6.0, replacing `7dee5f53`.
+3. Staging broker `ec30c590` installed with its gateway; the running deployment's copy moved to it.
+4. `platform-0.34.0-4b9f84b0e427` installed, every service healthy.
+5. Runtime 0.6.0 published as `0.6.0-preview-4b9f84b0` (artifact `d972b626`) and installed on the host.
+
+`staging:reverify --verify` and `hosted:check` passed, and the hosted CSP allows only the Picker's frames. The configured project number was the project ID, so the server now takes the number from the OAuth client ID.
+
 **Not covered yet.** Folders (a live check decides), sharing, moving and deleting, merges of concurrent edits, Admin's agent-list Drive flag, and Google verification (one project with Gmail, so it follows B5). No live Drive has been read or changed; the hosted acceptance is the owner's step.
