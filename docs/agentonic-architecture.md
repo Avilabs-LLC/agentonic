@@ -2079,9 +2079,4 @@ The owner asked why a customer's mail agent passed its latest evaluation on GPT-
 
 **Tests.** Against the replayed migrations, an evaluator advertising rubric 6 gives new runs the version 6 snapshot at medium reasoning, with and without tool cases. Its grader model is metered and other models are refused. An evaluator advertising 5 still gives rubric 5, and a rubric 5 run queued before a rubric 6 evaluator replaces it finishes under rubric 5. Unit tests cover rubric 6's request shape and rules, rubric 5's unchanged request, the tool rules in both, and the writer's draft rule.
 
-**Rollout (pending at merge).** In this order:
-
-1. Apply migration 64.
-2. Redeploy and register the evaluator with `reviewRubric: 6`, and register every runtime in use with it.
-3. `pnpm platform:install` installs 0.33.0.
-4. A new evaluation of a mail agent on GPT-5.4 mini and Astra shows the version 6 grader on both runs.
+**Rollout, 9 October 2026.** Migration 64 applied; evaluator `7dee5f53` installed and registered with `reviewRubric: 6` for runtimes 0.3.0, 0.4.0 and 0.5.0, replacing `bf64e38d`; `platform-0.33.0-eef91ba45e51` installed with every service healthy; `staging:reverify --verify` passed. The next evaluation of a mail agent on GPT-5.4 mini and Astra should show the version 6 grader on both runs.
