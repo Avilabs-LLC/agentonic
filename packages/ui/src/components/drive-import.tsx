@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation"
 import {
   ExternalLinkIcon,
   FilePlusIcon,
+  PlusIcon,
   RefreshCwIcon,
   SquareCheckIcon,
   Trash2Icon,
@@ -22,9 +23,11 @@ import {
   DriveBrowserNote,
   DriveConnectDialog,
   DriveDisconnectDialog,
+  DriveReturnNotice,
   chooseDriveFiles,
   driveCommand,
   notifyPicked,
+  pickOnGooglePage,
   startDriveConnection,
 } from "@workspace/ui/components/drive-connection"
 import { DriveIcon } from "@workspace/ui/components/drive-icon"
@@ -106,6 +109,11 @@ export function DriveImport({
   async function choose() {
     if (!account || !collectionId) return
     setBusy(true)
+    if (pickOnGooglePage())
+      return startDriveConnection(workspaceId, "knowledge", undefined, {
+        connectionId: account.id,
+        collectionId,
+      })
     try {
       const ids = await chooseDriveFiles(
         workspaceId,
@@ -147,6 +155,7 @@ export function DriveImport({
       footer="Agentonic solo ve los archivos que elijas aquí. Los documentos de Google se importan como Markdown, las hojas de cálculo como CSV (su primera hoja) y las presentaciones como texto; también PDF, texto y Markdown de hasta 10 MB. Esta cuenta es distinta de las herramientas de Drive de cada agente."
     >
       <div className="space-y-5">
+        <DriveReturnNotice />
         {state.connections.map((c) => (
           <div
             key={c.id}
@@ -258,6 +267,7 @@ export function DriveImport({
             onClick={() => setConnecting(true)}
             aria-label="Conectar Google Drive"
           >
+            <PlusIcon aria-hidden="true" />
             <DriveIcon className="size-4 shrink-0" />
             Google Drive
           </Button>

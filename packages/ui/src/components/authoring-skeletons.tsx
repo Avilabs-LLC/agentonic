@@ -125,8 +125,8 @@ export function AgentEditorSkeleton() {
                         <div className="space-y-4">
                           <EmptyFrameSkeleton />
                           <div className="flex flex-wrap gap-2">
-                            <Skeleton className="h-9 w-24" />
-                            <Skeleton className="h-9 w-36" />
+                            <Skeleton className="h-9 w-26" />
+                            <Skeleton className="h-9 w-37" />
                           </div>
                         </div>
                       ) : (

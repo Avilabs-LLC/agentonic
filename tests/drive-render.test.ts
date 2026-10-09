@@ -3,7 +3,11 @@ import { describe, expect, it, vi } from "vitest"
 
 // Google Drive in Configuración and Conocimiento (architecture §62), rendered
 // on the server with synthetic accounts and files.
-vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh() {} }) }))
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ refresh() {}, replace() {} }),
+  usePathname: () => "/",
+  useSearchParams: () => new URLSearchParams(),
+}))
 const load = (path: string) =>
   import(/* @vite-ignore */ path) as Promise<Record<string, unknown>>
 type Component = (props: Record<string, unknown>) => unknown
@@ -11,7 +15,7 @@ const react = await load("../packages/ui/node_modules/react/index.js")
 const server = await load(
   "../packages/ui/node_modules/react-dom/server.node.js"
 )
-const { DriveTools, DriveFiles, DriveAccount } = (await load(
+const { DriveTools, DriveFiles, DriveAccount, pickOnGooglePage } = (await load(
   "../packages/ui/src/components/drive-connection"
 )) as Record<string, Component>
 const { GmailConnection } = (await load(
@@ -132,14 +136,17 @@ describe("Configuración › Google Drive", () => {
         picker: true,
       },
     })
-    // Each connect button shows the service's own mark and name; its
-    // accessible name still says what it does.
-    expect(out).toMatch(
-      /aria-label="Conectar Gmail"[^>]*>(<svg[\s\S]*?<\/svg>)Gmail<\/button>/
-    )
-    expect(out).toMatch(
-      /aria-label="Conectar Google Drive"[^>]*>(<svg[\s\S]*?<\/svg>)Google Drive<\/button>/
-    )
+    // Each connect button shows a plus, the service's own mark and its name;
+    // its accessible name still says what it does.
+    for (const [label, name] of [
+      ["Conectar Gmail", "Gmail"],
+      ["Conectar Google Drive", "Google Drive"],
+    ])
+      expect(out).toMatch(
+        new RegExp(
+          `aria-label="${label}"[^>]*><svg[^>]*lucide-plus[\\s\\S]*?</svg><svg[\\s\\S]*?</svg>${name}</button>`
+        )
+      )
     expect(out).not.toContain(">Conectar Gmail<")
     expect(out).toContain("drive@example.invalid")
     expect(out).toContain("Herramientas de Google Drive")
@@ -229,5 +236,38 @@ describe("Google's Picker", () => {
     expect(rule(".picker-dialog")).toContain("top: 50% !important")
     expect(rule(".picker-dialog-bg")).toContain("position: fixed !important")
     expect(rule(".picker-dialog-bg")).toContain("height: 100vh !important")
+  })
+})
+
+describe("Where files are picked", () => {
+  it("uses Google's page in Brave, Safari and on iPhone, and the in-page Picker elsewhere", () => {
+    const on = (userAgent: string, brave = false) => {
+      vi.stubGlobal(
+        "navigator",
+        brave ? { userAgent, brave: {} } : { userAgent }
+      )
+      return (pickOnGooglePage as unknown as () => boolean)()
+    }
+    const chrome =
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"
+    expect(on(chrome)).toBe(false)
+    expect(on(chrome, true)).toBe(true)
+    expect(
+      on(
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/19.0 Safari/605.1.15"
+      )
+    ).toBe(true)
+    expect(on(`${chrome} Edg/154.0.0.0`)).toBe(false)
+    expect(
+      on(
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:140.0) Gecko/20100101 Firefox/140.0"
+      )
+    ).toBe(false)
+    expect(
+      on(
+        "Mozilla/5.0 (iPhone; CPU iPhone OS 19_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/154.0 Mobile/15E148 Safari/604.1"
+      )
+    ).toBe(true)
+    vi.unstubAllGlobals()
   })
 })

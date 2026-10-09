@@ -9,6 +9,7 @@ import {
   WrenchIcon,
   CheckIcon,
   CircleCheckIcon,
+  PlusIcon,
   TriangleAlertIcon,
 } from "lucide-react"
 import {
@@ -42,6 +43,7 @@ import {
   DriveConnectDialog,
   DriveDisconnectDialog,
   DriveFiles,
+  DriveReturnNotice,
   DriveTools,
   driveCommand,
   startDriveConnection,
@@ -306,6 +308,7 @@ export function GmailConnection({
   }
   return (
     <>
+      {drive && <DriveReturnNotice />}
       <AgentSettingsCard
         title="Conexiones"
         icon={<PlugIcon />}
@@ -395,6 +398,7 @@ export function GmailConnection({
               onClick={() => setConnecting(true)}
               aria-label="Conectar Gmail"
             >
+              <PlusIcon aria-hidden="true" />
               <GmailIcon className="size-4 shrink-0" />
               Gmail
             </Button>
@@ -406,6 +410,7 @@ export function GmailConnection({
                 onClick={() => setConnectingDrive(true)}
                 aria-label="Conectar Google Drive"
               >
+                <PlusIcon aria-hidden="true" />
                 <DriveIcon className="size-4 shrink-0" />
                 Google Drive
               </Button>

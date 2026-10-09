@@ -5,6 +5,16 @@ export const VERSION_HISTORY = [
     "summary": "Approving a version closes older open reviews as Reemplazada; Revisiones' Ver usuario and Cambiar estado work; server cards by kind and place; capability marks on the agent page"
   },
   {
+    "version": "0.35.3",
+    "date": "2026-10-09",
+    "summary": "In Brave, Safari and on iPhone, Elegir archivos picks Drive files on Google's own page and returns."
+  },
+  {
+    "version": "0.35.2",
+    "date": "2026-10-09",
+    "summary": "The Gmail and Google Drive connect buttons show a plus before each service's mark."
+  },
+  {
     "version": "0.35.1",
     "date": "2026-10-09",
     "summary": "Anyone still named Miembro chooses a name before using the customer app"

@@ -8,14 +8,23 @@ export async function POST(request: Request) {
     const url = new URL(request.url)
     const workspace = url.searchParams.get("workspace") ?? ""
     const agent = url.searchParams.get("agent") ?? ""
-    // Drive connects for an agent's tools or for the member's knowledge imports.
+    // Drive connects for an agent's tools or for the member's knowledge imports;
+    // with pick, Google's own consent page also chooses files for a connection.
     const purpose = url.searchParams.get("purpose")
+    const connection = url.searchParams.get("connection")
+    const collection = url.searchParams.get("collection")
     const target =
       url.searchParams.get("provider") === "drive"
         ? await startDrive(
             workspace,
             purpose === "knowledge" ? "knowledge" : "tools",
-            agent || undefined
+            agent || undefined,
+            url.searchParams.get("pick") === "1" && connection
+              ? {
+                  connectionId: connection,
+                  ...(collection ? { collectionId: collection } : {}),
+                }
+              : undefined
           )
         : await startGmail(workspace, agent)
     return Response.redirect(target, 303)
