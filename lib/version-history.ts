@@ -1,5 +1,10 @@
 export const VERSION_HISTORY = [
   {
+    "version": "0.33.0",
+    "date": "2026-10-09",
+    "summary": "Careful grading: draft-only criteria and rubric 6 on GPT-5.4 mini at medium reasoning"
+  },
+  {
     "version": "0.32.0",
     "date": "2026-10-09",
     "summary": "Evaluation results and criteria receipts colour each kind of text, like the criteria review: expected answer emerald, the agent's answer sky, the review violet"

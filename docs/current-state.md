@@ -1,6 +1,6 @@
 # Agentonic: current state
 
-**As of 9 October 2026 · platform v0.32.0 · nonproduction only.** A short summary of what runs where, what works and what doesn't exist yet. [The architecture record](agentonic-architecture.md) keeps the full, dated history. If the two disagree about the present, fix this page. Update it whenever a change alters what runs where.
+**As of 9 October 2026 · platform v0.33.0 · nonproduction only.** A short summary of what runs where, what works and what doesn't exist yet. [The architecture record](agentonic-architecture.md) keeps the full, dated history. If the two disagree about the present, fix this page. Update it whenever a change alters what runs where.
 
 ## What runs where
 
@@ -33,7 +33,7 @@ On 6 October the whole flow ran on the hosted names with no Agentonic process on
 
 Existing agents move to runtime 0.5.0 with their next version.
 
-**Careful grading (architecture §61), merged in platform v0.32.0, not yet installed.** Once migration 64 is applied and the evaluator advertises rubric 6, the criteria writer expects a requested draft to be presented as a draft, without a notice that nothing was sent. Rubric 6 grades with GPT-5.4 mini at medium reasoning, accepts any of an expectation's alternatives, and fails an answer only by naming what is missing from it. Until then, new evaluations use rubric 5 (outstanding action N14).
+**Careful grading (architecture §61), merged in platform v0.33.0, not yet installed.** Once migration 64 is applied and the evaluator advertises rubric 6, the criteria writer expects a requested draft to be presented as a draft, without a notice that nothing was sent. Rubric 6 grades with GPT-5.4 mini at medium reasoning, accepts any of an expectation's alternatives, and fails an answer only by naming what is missing from it. Until then, new evaluations use rubric 5 (outstanding action N14).
 
 **Aprender mi estilo (architecture §57), installed 8 October with platform v0.28.0.** In each Gmail account's frame in Configuración, the person who connected it can have the knowledge worker read the mail they sent in the last 90 days (at most 200 messages, never stored) and draft a writing-style guide. They review and edit it before it is added to a collection they curate.
 

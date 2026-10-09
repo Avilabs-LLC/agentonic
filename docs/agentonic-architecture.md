@@ -2065,7 +2065,7 @@ The owner asked why a customer's mail agent passed its latest evaluation on GPT-
 - **The case tested wording, not behavior.** Situations run without tools (§56), so nothing can be sent. The writer turned the configured "never send without confirmation" rule into a required notice about a send nobody asked for. Its instructions covered requests to send, delete or commit, not requests to draft.
 - **One judgement decided the model.** Each model answers each case once. With per-model approval, the version passed with Astra only, so approving it would offer Chats only Astra, which cost about six times as much in this evaluation. The batch awaits staff review because the agent can send mail; nothing was approved automatically.
 
-**What changed.** Platform 0.32.0 and migration 64:
+**What changed.** Platform 0.33.0 and migration 64:
 
 - **The criteria writer.** When a request only asks for something to be drafted, the expectation is that the answer gives the text presented as a draft and does not claim it was sent or saved. The writer never asks the agent to announce that it won't do something nobody requested, and describes what can be seen in the answer rather than notices or set phrases.
 - **Rubric 6 (`grounded-review-v6`)** keeps version 5's rules and adds:
@@ -2083,5 +2083,5 @@ The owner asked why a customer's mail agent passed its latest evaluation on GPT-
 
 1. Apply migration 64.
 2. Redeploy and register the evaluator with `reviewRubric: 6`, and register every runtime in use with it.
-3. `pnpm platform:install` installs 0.32.0.
+3. `pnpm platform:install` installs 0.33.0.
 4. A new evaluation of a mail agent on GPT-5.4 mini and Astra shows the version 6 grader on both runs.
