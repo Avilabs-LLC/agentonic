@@ -6,6 +6,8 @@ import {
   invitationAcceptance,
   invitationRequest,
   customerAgentCreation,
+  staffInvitationAcceptance,
+  staffInvitationInput,
 } from "@agentonic/contracts/access"
 import { uuid, type AppKind } from "@agentonic/contracts/identity"
 import { withIdentity } from "@agentonic/database/client"
@@ -136,5 +138,73 @@ export async function setOwnDisplayName(app: AppKind, displayName: string) {
     )
   } catch {
     return false
+  }
+}
+
+// Agentonic's team (architecture §63). staff_command reads the actor's live
+// staff role itself; the Admin app only passes requests.
+type StaffOperation =
+  | "team.list"
+  | "invite.issue"
+  | "invite.revoke"
+  | "staff.update"
+export async function runStaffCommand(
+  operation: StaffOperation,
+  payload: Record<string, unknown>
+) {
+  const actor = await requireVerifiedUser("admin")
+  try {
+    return await withIdentity(
+      actor.authId,
+      null,
+      async (tx) => {
+        const rows = await tx.$queryRaw<{ result: unknown }[]>`
+        SELECT agentonic.staff_command(${operation}::text, ${JSON.stringify(payload)}::jsonb, ${randomUUID()}::uuid) AS result`
+        return accessResult.parse(rows[0]?.result)
+      },
+      actor.email
+    )
+  } catch {
+    return { ok: false as const }
+  }
+}
+export async function issueStaffInvitation(input: unknown) {
+  const parsed = staffInvitationInput.safeParse(input)
+  if (!parsed.success) return { ok: false as const }
+  const token = randomBytes(32).toString("hex")
+  const tokenHash = createHash("sha256").update(token).digest("hex")
+  const result = await runStaffCommand("invite.issue", {
+    email: parsed.data.email,
+    role: parsed.data.role,
+    tokenHash,
+    expiresAt: new Date(Date.now() + 7 * 86400_000).toISOString(),
+  })
+  // Delivered once, by email; never persisted or logged.
+  return result.ok ? { ...result, token } : result
+}
+export async function acceptStaffInvitation(input: unknown) {
+  const parsed = staffInvitationAcceptance.safeParse(input)
+  if (!parsed.success) return { ok: false as const }
+  const actor = await requireVerifiedUser("admin")
+  const tokenHash = createHash("sha256").update(parsed.data.token).digest("hex")
+  try {
+    // Joining and naming happen together, as with workspace invitations (N7).
+    return await withIdentity(
+      actor.authId,
+      null,
+      async (tx) => {
+        const rows = await tx.$queryRaw<{ result: unknown }[]>`
+        SELECT agentonic.staff_command('invite.accept', ${JSON.stringify({ tokenHash })}::jsonb, ${randomUUID()}::uuid) AS result`
+        const result = accessResult.parse(rows[0]?.result)
+        if (!result.ok) return result
+        const named = await tx.$queryRaw<{ ok: boolean }[]>`
+        SELECT agentonic.set_display_name(${parsed.data.displayName}) AS ok`
+        if (!named[0]?.ok) throw new Error("Name not saved")
+        return result
+      },
+      actor.email
+    )
+  } catch {
+    return { ok: false as const }
   }
 }

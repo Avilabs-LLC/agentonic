@@ -60,10 +60,19 @@ export const navigation = [
   {
     href: "/workspaces",
     title: "Espacios de trabajo",
-    description: "Clientes, sus miembros y el equipo de Agentonic.",
+    description: "Clientes y sus miembros.",
     group: "Plataforma",
     enabled: true,
     icon: "workspaces",
+  },
+  {
+    href: "/team",
+    title: "Equipo",
+    description:
+      "Personas de Agentonic con acceso a este panel, sus roles e invitaciones.",
+    group: "Plataforma",
+    enabled: true,
+    icon: "team",
   },
   {
     href: "/runtimes",
@@ -85,6 +94,7 @@ export const navigation = [
 const at = (href: string) => navigation.find((item) => item.href === href)!
 export const home = navigation[0]!
 export const expirations = at("/expirations")
+export const team = at("/team")
 export const operations = {
   agents: at("/agents"),
   activity: at("/activity"),

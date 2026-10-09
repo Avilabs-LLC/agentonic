@@ -16,7 +16,6 @@ import {
   auditActorLabels,
   auditResourceLabels,
   providerLabels,
-  staffRoleLabels,
   workspaceKindLabels,
   type OperationsAgent,
   type OperationsCostDay,
@@ -327,59 +326,6 @@ export function OperationsWorkspacesTable({
     />
   )
 }
-export function OperationsStaffCard({
-  staff,
-}: {
-  staff: {
-    name: string
-    role: string
-    status: "active" | "disabled"
-    since: string
-  }[]
-}) {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Equipo de Agentonic</CardTitle>
-        <CardDescription>
-          Personas con acceso a este panel. Su acceso al contenido de un cliente
-          requiere el permiso de ese cliente para cada revisión.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        {staff.length === 0 ? (
-          <CardEmptyState title="Sin personal registrado">
-            Registra al personal con los scripts de configuración.
-          </CardEmptyState>
-        ) : (
-          <ItemGroup>
-            {staff.map((person, index) => (
-              <div key={`${person.name}-${index}`}>
-                {index > 0 && <ItemSeparator className="my-0" />}
-                <Item size="sm" className="px-0">
-                  <ItemContent>
-                    <ItemTitle>{person.name}</ItemTitle>
-                    <ItemDescription>
-                      {staffRoleLabels[person.role] ?? person.role} · Desde el{" "}
-                      {formatUtcParts(person.since).date}
-                    </ItemDescription>
-                  </ItemContent>
-                  <ItemActions>
-                    <StatusIndicator
-                      appearance="badge"
-                      state={statusDescriptor("staff", person.status)}
-                    />
-                  </ItemActions>
-                </Item>
-              </div>
-            ))}
-          </ItemGroup>
-        )}
-      </CardContent>
-    </Card>
-  )
-}
-
 // Despliegues ---------------------------------------------------------------------
 type Runtime = { version: string; commit: string | null }
 const runtimeLabel = (r: Runtime) =>

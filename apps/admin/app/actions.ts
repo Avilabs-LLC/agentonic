@@ -8,6 +8,7 @@ import type {
   SignInInput,
 } from "@agentonic/contracts/identity"
 import {
+  acceptStaff,
   changePassword,
   confirmAuthenticator,
   disableAuthenticator,
@@ -42,4 +43,7 @@ export async function disableMfa() {
 }
 export async function saveDisplayName(input: DisplayNameInput) {
   return updateDisplayName("admin", input)
+}
+export async function acceptTeam(token: string, input: DisplayNameInput) {
+  return acceptStaff({ token, displayName: input.displayName })
 }

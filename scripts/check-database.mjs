@@ -74,6 +74,8 @@ try {
         "ingestion_jobs",
         "retrieval_provider_budgets",
         "retrieval_provider_operations",
+        "staff_invitations",
+        "staff_events",
       ]) {
         await assert.rejects(pool.query(`SELECT * FROM agentonic.${table}`), {
           code: "42501",

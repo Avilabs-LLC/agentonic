@@ -95,9 +95,12 @@ export function MembersTable({ members }: { members: WorkspaceMember[] }) {
 export function InvitationsTable({
   invitations,
   revoke,
+  roleLabels = memberRoleLabels,
 }: {
   invitations: WorkspaceInvitation[]
   revoke: (invitationId: string) => Promise<ActionResult>
+  /** Admin's Equipo page passes the staff roles. */
+  roleLabels?: Record<string, string>
 }) {
   const router = useRouter()
   const columns: ColumnDef<WorkspaceInvitation>[] = [
@@ -130,7 +133,7 @@ export function InvitationsTable({
     { accessorKey: "email", header: header("Correo", "Correo electrónico") },
     {
       id: "role",
-      accessorFn: (row) => role(row.role),
+      accessorFn: (row) => roleLabels[row.role] ?? row.role,
       header: header("Rol"),
     },
     {

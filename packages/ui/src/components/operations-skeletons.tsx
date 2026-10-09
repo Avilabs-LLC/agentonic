@@ -109,13 +109,34 @@ export function OperationsActivitySkeleton() {
     </Loading>
   )
 }
-/** Espacios de trabajo: the eight-column workspaces table and the staff card. */
+/** Espacios de trabajo: the eight-column workspaces table. */
 export function OperationsWorkspacesSkeleton() {
   return (
     <Loading label="Cargando espacios de trabajo">
       <TableSkeleton columns={8} />
-      <ListCardSkeleton items={2} />
     </Loading>
+  )
+}
+/** Equipo: the header with its invite button, the team and the invitations. */
+export function OperationsTeamSkeleton() {
+  return (
+    <div aria-label="Cargando equipo" role="status" className="space-y-6">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <PageHeaderSkeleton />
+        <Skeleton className="h-8 w-40" />
+      </div>
+      {[6, 5].map((columns) => (
+        <Card key={columns}>
+          <CardHeader className="space-y-2">
+            <Skeleton className="h-5 w-40" />
+            <Skeleton className="h-4 w-full max-w-2xl" />
+          </CardHeader>
+          <CardContent>
+            <TableSkeleton columns={columns} />
+          </CardContent>
+        </Card>
+      ))}
+    </div>
   )
 }
 /** Despliegues: the installations card (three or four facts per cell) and the eleven-column table. */

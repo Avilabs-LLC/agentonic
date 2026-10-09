@@ -202,3 +202,52 @@ export const workspaceInvitations = z.array(workspaceInvitation)
 export const invitationRevocation = z
   .object({ workspaceId: uuid, invitationId: uuid })
   .strict()
+
+// Agentonic's team, as Admin's Equipo page shows it (architecture §63). Only
+// these three roles are offered; "billing" exists in the table but grants nothing.
+export const staffRoles = ["administrator", "operator", "support"] as const
+export type StaffRole = (typeof staffRoles)[number]
+/** What each offered role may do, for the invitation and role-change dialogs. */
+export const staffRoleDescriptions: Record<StaffRole, string> = {
+  administrator:
+    "Lo mismo que Operación, y además invita al equipo, cambia roles y desactiva personas.",
+  operator:
+    "Aprueba versiones y activa despliegues de pruebas, además de consultar todas las pantallas.",
+  support:
+    "Consulta las pantallas de Administración. No aprueba versiones ni activa despliegues.",
+}
+export const staffInvitationInput = z
+  .object({
+    email: z.email("Introduce un correo válido.").max(320),
+    role: z.enum(staffRoles),
+  })
+  .strict()
+export type StaffInvitationInput = z.infer<typeof staffInvitationInput>
+export const staffUpdateInput = z.union([
+  z.object({ staffId: uuid, role: z.enum(staffRoles) }).strict(),
+  z.object({ staffId: uuid, active: z.boolean() }).strict(),
+])
+export type StaffUpdateInput = z.infer<typeof staffUpdateInput>
+export const staffInvitationAcceptance = z
+  .object({
+    token: z.string().regex(/^[a-f0-9]{64}$/),
+    displayName: displayNameSchema.shape.displayName,
+  })
+  .strict()
+export const staffMember = z.object({
+  id: uuid,
+  name: z.string(),
+  // Administrators only; null for everyone else, and until the person signs in.
+  email: z.string().nullable(),
+  role: z.string(),
+  status: z.enum(["active", "disabled"]),
+  since: z.string(),
+})
+export type StaffMember = z.infer<typeof staffMember>
+export const staffTeam = z.object({
+  viewer: z.object({ staffId: uuid, role: z.string() }),
+  staff: z.array(staffMember),
+  // Administrators only.
+  invitations: z.array(workspaceInvitation).nullable(),
+})
+export type StaffTeam = z.infer<typeof staffTeam>

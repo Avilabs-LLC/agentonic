@@ -161,14 +161,6 @@ export const operationsWorkspaces = z.object({
       pendingInvitations: count,
     })
   ),
-  staff: z.array(
-    z.object({
-      name: z.string(),
-      role: z.string(),
-      status: z.enum(["active", "disabled"]),
-      since: time,
-    })
-  ),
 })
 export type OperationsWorkspace = z.infer<
   typeof operationsWorkspaces

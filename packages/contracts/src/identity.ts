@@ -26,6 +26,7 @@ export type NavigationItem = {
     | "deployments"
     | "costs"
     | "releases"
+    | "team"
 }
 export const retentionPolicy = z
   .object({

@@ -399,11 +399,17 @@ export function InvitationAcceptance({
   accept,
   email,
   name = "",
+  joinedText = "Ya formas parte del espacio de trabajo.",
+  homeLabel = "Ir a mis espacios",
 }: {
   accept: (input: DisplayNameInput) => Promise<ActionResult>
   email: string
   /** The person's current name, when they already chose one. */
   name?: string
+  /** What accepting made the person part of; Admin names the team. */
+  joinedText?: string
+  /** The button back to the app's home. */
+  homeLabel?: string
 }) {
   const router = useRouter()
   const [busy, setBusy] = useState(false)
@@ -441,7 +447,7 @@ export function InvitationAcceptance({
       <div className="space-y-4">
         <p className="inline-flex items-center gap-2 text-sm">
           <CheckIcon aria-hidden="true" className="size-4" />
-          Ya formas parte del espacio de trabajo.
+          {joinedText}
         </p>
         <p className="text-sm text-muted-foreground">
           Si es tu primera vez en Agentonic, elige una contraseña para entrar la
@@ -456,7 +462,7 @@ export function InvitationAcceptance({
             variant="outline"
             onClick={() => router.replace("/")}
           >
-            Ir a mis espacios
+            {homeLabel}
           </Button>
         </div>
       </div>

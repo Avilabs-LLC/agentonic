@@ -7,12 +7,16 @@ import {
   mfaEnrollmentCode,
   newPasswordSchema,
   safeNext,
+  uuid,
   type ActionResult,
   type AppKind,
 } from "@agentonic/contracts/identity"
 import {
   invitationRevocation,
   memberInvitationInput,
+  staffInvitationInput,
+  staffTeam,
+  staffUpdateInput,
   workspaceInvitations,
   workspaceMembers,
 } from "@agentonic/contracts/access"
@@ -24,9 +28,12 @@ import {
 } from "./auth"
 import { publicUrl } from "./env"
 import {
+  acceptStaffInvitation,
   acceptWorkspaceInvitation,
+  issueStaffInvitation,
   issueWorkspaceInvitation,
   runAccessCommand,
+  runStaffCommand,
   setOwnDisplayName,
 } from "./access"
 
@@ -232,6 +239,93 @@ export async function acceptInvitation(input: unknown): Promise<ActionResult> {
         ok: false,
         message:
           "No se pudo aceptar. La invitación venció, se retiró, ya se usó o es para otro correo.",
+      }
+}
+
+// Agentonic's team (admin app, architecture §63) ------------------------------------
+/** The team as the signed-in staff member may see it, or null if the read failed. */
+export async function loadTeam() {
+  const result = await runStaffCommand("team.list", {})
+  if (!result.ok) return null
+  const parsed = staffTeam.safeParse(result.data)
+  return parsed.success ? parsed.data : null
+}
+
+/**
+ * Records the invitation, then has Supabase email a sign-in link to the address.
+ * The link returns to Admin's /invitation with the one-time token. A new address
+ * gets an account only because this invitation is live (the database hook checks).
+ */
+export async function inviteStaff(input: unknown): Promise<ActionResult> {
+  const parsed = staffInvitationInput.safeParse(input)
+  if (!parsed.success)
+    return { ok: false, message: "Revisa el correo y el rol." }
+  const issued = await issueStaffInvitation(parsed.data)
+  if (!issued.ok || !("token" in issued) || !issued.id)
+    return {
+      ok: false,
+      message:
+        "No se pudo crear la invitación. Solo un administrador invita, y no a quien ya está en el equipo.",
+    }
+  let status: number | undefined
+  try {
+    const { error } = await mailer("admin").auth.signInWithOtp({
+      email: parsed.data.email,
+      options: {
+        shouldCreateUser: true,
+        emailRedirectTo: confirmLink("admin", `/invitation?token=${issued.token}`),
+      },
+    })
+    if (!error) return { ok: true }
+    status = error.status
+  } catch {
+    status = undefined
+  }
+  // No email went out: withdraw the invitation rather than leave it unreachable.
+  await runStaffCommand("invite.revoke", { invitationId: issued.id })
+  return {
+    ok: false,
+    message: tooMany(status)
+      ? "Se enviaron demasiados correos seguidos. Espera unos minutos e inténtalo de nuevo."
+      : "No se pudo enviar el correo, así que la invitación se retiró. Inténtalo de nuevo.",
+  }
+}
+
+export async function revokeStaffInvitation(
+  invitationId: unknown
+): Promise<ActionResult> {
+  const parsed = uuid.safeParse(invitationId)
+  if (!parsed.success) return { ok: false, message: "Invitación no válida." }
+  const result = await runStaffCommand("invite.revoke", {
+    invitationId: parsed.data,
+  })
+  return result.ok
+    ? { ok: true }
+    : { ok: false, message: "No se pudo retirar la invitación." }
+}
+
+/** A new role for someone else, or deactivating or reactivating them. */
+export async function updateStaff(input: unknown): Promise<ActionResult> {
+  const parsed = staffUpdateInput.safeParse(input)
+  if (!parsed.success) return { ok: false, message: "Cambio no válido." }
+  const result = await runStaffCommand("staff.update", parsed.data)
+  return result.ok
+    ? { ok: true }
+    : {
+        ok: false,
+        message:
+          "No se pudo guardar el cambio. Solo un administrador cambia el equipo, y nunca su propio acceso.",
+      }
+}
+
+export async function acceptStaff(input: unknown): Promise<ActionResult> {
+  const result = await acceptStaffInvitation(input)
+  return result.ok
+    ? { ok: true }
+    : {
+        ok: false,
+        message:
+          "No se pudo aceptar. La invitación venció, se retiró, ya se usó, es para otro correo o ya formas parte del equipo.",
       }
 }
 

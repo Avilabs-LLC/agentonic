@@ -21,12 +21,18 @@ const mocks = vi.hoisted(() => ({
   unenroll: vi.fn(),
   challengeAndVerify: vi.fn(),
   aal: vi.fn(),
+  mailApp: vi.fn(),
+  issueStaff: vi.fn(),
+  staffCommand: vi.fn(),
 }))
 vi.mock("server-only", () => ({}))
 vi.mock("../packages/server/src/auth", () => ({
-  mailClient: () => ({
-    auth: { resetPasswordForEmail: mocks.reset, signInWithOtp: mocks.otp },
-  }),
+  mailClient: (app: string) => {
+    mocks.mailApp(app)
+    return {
+      auth: { resetPasswordForEmail: mocks.reset, signInWithOtp: mocks.otp },
+    }
+  },
   authClient: async () => ({
     auth: {
       verifyOtp: mocks.verifyOtp,
@@ -51,11 +57,14 @@ vi.mock("../packages/server/src/access", () => ({
   runAccessCommand: mocks.command,
   acceptWorkspaceInvitation: mocks.accept,
   setOwnDisplayName: mocks.setName,
+  issueStaffInvitation: mocks.issueStaff,
+  runStaffCommand: mocks.staffCommand,
 }))
 import {
   changePassword,
   confirmEmailLink,
   inviteMember,
+  inviteStaff,
   requestPasswordReset,
   startAuthenticator,
   updateDisplayName,
@@ -208,6 +217,47 @@ it("emails an invitation link that carries the one-time token, and withdraws the
   expect(await inviteMember({ ...input, role: "owner" })).toMatchObject({
     ok: false,
   })
+})
+
+it("emails a team invitation from Admin's mailer to Admin's /invitation, and withdraws it when no email goes out", async () => {
+  mocks.issueStaff.mockResolvedValue({
+    ok: true,
+    id: invitation,
+    data: null,
+    token,
+  })
+  mocks.otp.mockResolvedValue({ data: {}, error: null })
+  const input = { email: "equipo@example.test", role: "operator" }
+  expect(await inviteStaff(input)).toEqual({ ok: true })
+  expect(mocks.mailApp).toHaveBeenCalledWith("admin")
+  expect(mocks.otp).toHaveBeenCalledWith({
+    email: "equipo@example.test",
+    options: {
+      shouldCreateUser: true,
+      emailRedirectTo: `https://app.example.test/auth/confirm?next=${encodeURIComponent(`/invitation?token=${token}`)}`,
+    },
+  })
+  expect(mocks.staffCommand).not.toHaveBeenCalled()
+
+  mocks.otp.mockResolvedValue({ data: {}, error: { status: 500 } })
+  expect(await inviteStaff(input)).toMatchObject({
+    ok: false,
+    message: expect.stringContaining("la invitación se retiró"),
+  })
+  expect(mocks.staffCommand).toHaveBeenCalledWith("invite.revoke", {
+    invitationId: invitation,
+  })
+
+  // Without authority nothing is issued and no email is sent; billing is never offered.
+  mocks.otp.mockClear()
+  mocks.issueStaff.mockResolvedValue({ ok: false })
+  expect(await inviteStaff(input)).toMatchObject({ ok: false })
+  expect(mocks.otp).not.toHaveBeenCalled()
+  mocks.issueStaff.mockClear()
+  expect(await inviteStaff({ ...input, role: "billing" })).toMatchObject({
+    ok: false,
+  })
+  expect(mocks.issueStaff).not.toHaveBeenCalled()
 })
 
 it("explains password changes Supabase refuses", async () => {
