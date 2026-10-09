@@ -2154,4 +2154,6 @@ The owner asked for Google Drive as a second Google connection, built like Gmail
 
 `staging:reverify --verify` and `hosted:check` passed, and the hosted CSP allows only the Picker's frames. The configured project number was the project ID, so the server now takes the number from the OAuth client ID.
 
+On the first live try, Google placed the Picker from the window's scroll position, above the screen of the scrolled agent page. `platform-0.34.1-ca88840bfe2a` (PR #80), installed the same day with every service healthy, keeps it centred in the viewport. The Picker also needs a Google sign-in in the browser, as Google documents.
+
 **Not covered yet.** Folders (a live check decides), sharing, moving and deleting, merges of concurrent edits, Admin's agent-list Drive flag, and Google verification (one project with Gmail, so it follows B5). No live Drive has been read or changed; the hosted acceptance is the owner's step.

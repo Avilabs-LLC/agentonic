@@ -196,7 +196,7 @@ The configured `GOOGLE_CLOUD_PROJECT_NUMBER` held the project ID, so the server 
 
 No Drive account has been connected, and no file read or written. The live acceptance below is next.
 
-**First live attempt, 9 October.** The owner connected a Drive account on an agent's Conexiones. "Elegir archivos" then only blurred the page: Google had placed the Picker 1,337 px above the visible screen of the scrolled page, leaving only its backdrop. Release 0.34.1 keeps the Picker in view.
+**First live attempt, 9 October.** The owner connected a Drive account on an agent's Conexiones. "Elegir archivos" then only blurred the page: Google had placed the Picker 1,337 px above the visible screen of the scrolled page, leaving only its backdrop. `platform-0.34.1-ca88840bfe2a` (PR #80), installed the same day with every service healthy and the hosted check passing, keeps the Picker in view.
 
 ## Acceptance matrix
 
