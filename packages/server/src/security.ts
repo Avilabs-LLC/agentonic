@@ -4,6 +4,7 @@
 // redirect, and Google's Picker, which the app's own script loads on demand
 // (allowed by 'strict-dynamic') and which renders in a frame from Google
 // (architecture §62).
+import type { AppKind } from "@agentonic/contracts/identity"
 export function contentSecurityPolicy(nonce: string) {
   return [
     "default-src 'self'",
@@ -19,12 +20,26 @@ export function contentSecurityPolicy(nonce: string) {
     "frame-ancestors 'none'",
   ].join("; ")
 }
-export function securityHeaders(production: boolean): [string, string][] {
+/**
+ * Pages that open either app never keep a handle on it. The customer app lets
+ * its own popups keep theirs: when a browser withholds Google's cookies from
+ * the Picker's frame (Brave, Safari), Google reopens the Picker in a popup
+ * from that frame, and the popup hands the picked files back to it. Under
+ * `same-origin` a browser cuts that link (architecture §62).
+ */
+export const openerPolicy = {
+  customer: "same-origin-allow-popups",
+  admin: "same-origin",
+} as const satisfies Record<AppKind, string>
+export function securityHeaders(
+  production: boolean,
+  app: AppKind
+): [string, string][] {
   return [
     ["X-Content-Type-Options", "nosniff"],
     ["X-Frame-Options", "DENY"],
     ["Referrer-Policy", "same-origin"],
-    ["Cross-Origin-Opener-Policy", "same-origin"],
+    ["Cross-Origin-Opener-Policy", openerPolicy[app]],
     [
       "Permissions-Policy",
       "camera=(), microphone=(), geolocation=(), payment=(), usb=()",

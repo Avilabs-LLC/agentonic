@@ -1,5 +1,10 @@
 export const VERSION_HISTORY = [
   {
+    "version": "0.34.2",
+    "date": "2026-10-09",
+    "summary": "Google's Picker can return picked files from its popup in browsers that block Google's cookies in frames, such as Brave."
+  },
+  {
     "version": "0.34.1",
     "date": "2026-10-09",
     "summary": "Google's Picker opens in view on long pages instead of above the screen."

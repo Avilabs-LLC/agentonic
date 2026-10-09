@@ -1544,7 +1544,7 @@ The database CA reaches the apps and worker as a systemd credential. The three n
 
 **First production builds and security headers (C9).** These were the first Next.js production builds, made only in CI; the Mac never builds.
 
-- **Headers on every page:** the session proxy (`packages/server/src/proxy.ts`) sets `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy: same-origin`, `Cross-Origin-Opener-Policy: same-origin` and a Permissions-Policy denying camera, microphone, location, payment and USB. In production it also sets HSTS for two years.
+- **Headers on every page:** the session proxy (`packages/server/src/proxy.ts`) sets `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy: same-origin`, `Cross-Origin-Opener-Policy` (`same-origin` in Admin; `same-origin-allow-popups` in the customer app, so Google's Picker popup can return picked files, §62) and a Permissions-Policy denying camera, microphone, location, payment and USB. In production it also sets HSTS for two years.
 - **Content Security Policy:** in production, each page gets a fresh nonce in a policy that allows:
   - scripts: `'self'`, the nonce and `'strict-dynamic'`, with no inline or eval;
   - styles: the app's own, plus inline style attributes;
@@ -2155,5 +2155,7 @@ The owner asked for Google Drive as a second Google connection, built like Gmail
 `staging:reverify --verify` and `hosted:check` passed, and the hosted CSP allows only the Picker's frames. The configured project number was the project ID, so the server now takes the number from the OAuth client ID.
 
 On the first live try, Google placed the Picker from the window's scroll position, above the screen of the scrolled agent page. `platform-0.34.1-ca88840bfe2a` (PR #80), installed the same day with every service healthy, keeps it centred in the viewport. The Picker also needs a Google sign-in in the browser, as Google documents.
+
+In Brave, which withholds Google's cookies from the Picker's frame, Google asked for a sign-in and then reopened the Picker in a popup from that frame. The popup listed nothing. Under the customer app's `Cross-Origin-Opener-Policy: same-origin`, a popup opened by a cross-origin frame has no opener; a local check confirmed this in Chrome and Brave, and that `same-origin-allow-popups` keeps it. So the popup could never return the picked files. Platform 0.34.2 sets `same-origin-allow-popups` in the customer app only, and `hosted:check` checks both apps' values.
 
 **Not covered yet.** Folders (a live check decides), sharing, moving and deleting, merges of concurrent edits, Admin's agent-list Drive flag, and Google verification (one project with Gmail, so it follows B5). No live Drive has been read or changed; the hosted acceptance is the owner's step.
