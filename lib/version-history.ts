@@ -1,5 +1,10 @@
 export const VERSION_HISTORY = [
   {
+    "version": "0.33.2",
+    "date": "2026-10-09",
+    "summary": "Aprender mi estilo paces its Gmail reads, waits out Gmail's rate limit and, if Gmail still refuses, writes the guide from the mail already read"
+  },
+  {
     "version": "0.33.1",
     "date": "2026-10-09",
     "summary": "Aprender mi estilo retries a passing Gmail error and skips a message Gmail will not hand over, instead of ending the run"

@@ -314,29 +314,33 @@ export async function gmail(
 
 // Aprender mi estilo (architecture §57): the account's own sent mail, read once
 // in the worker's memory. Nothing here is stored. A run makes hundreds of reads
-// in a row, so a passing Gmail error (a 5xx, a rate limit, a dropped
-// connection) is retried with backoff instead of ending the run.
+// in a row, so a passing Gmail error (a 5xx, a dropped connection) is retried
+// with backoff instead of ending the run. A rate limit is not retried here: the
+// caller paces its reads and decides how long to wait (GmailRateLimited).
 const READ_RETRIES = 4
-const rateLimited =
-  /rateLimitExceeded|userRateLimitExceeded|RATE_LIMIT_EXCEEDED/
-/** A failure worth another try, with the wait Google asked for, if any. */
+/** A failure worth another try. */
 class Passing extends GoogleError {
+  constructor(reason: string) {
+    super("unavailable", reason)
+  }
+}
+/** Gmail asked the account to slow down; `waitMs` is the wait it named, if any. */
+export class GmailRateLimited extends GoogleError {
   constructor(
     reason: string,
-    public retryAfter: string | null = null
+    public waitMs: number | null
   ) {
     super("unavailable", reason)
   }
 }
-/** Retry-After in seconds or as a date, at most 30 s; otherwise exponential with jitter. */
-function backoff(attempt: number, retryAfter: string | null) {
-  if (retryAfter) {
-    const asked = /^\d+$/.test(retryAfter.trim())
-      ? Number(retryAfter) * 1000
-      : Date.parse(retryAfter) - Date.now()
-    if (Number.isFinite(asked)) return Math.min(30000, Math.max(0, asked))
-  }
-  return 500 * 2 ** attempt * (0.75 + Math.random() / 2)
+/** A Retry-After header (seconds or a date), or Gmail's "Retry after <time>" message. */
+function namedWait(header: string | null, body: string) {
+  const at = header?.trim()
+    ? /^\d+$/.test(header.trim())
+      ? Date.now() + Number(header) * 1000
+      : Date.parse(header)
+    : Date.parse(/Retry after (\S+?Z)/i.exec(body)?.[1] ?? "")
+  return Number.isFinite(at) ? Math.max(0, at - Date.now()) : null
 }
 function pause(ms: number, signal?: AbortSignal) {
   return new Promise<void>((resolve, reject) => {
@@ -375,11 +379,19 @@ async function readOnce(access: string, path: string, signal?: AbortSignal) {
   if (!response.ok) {
     const reason = `gmail_http_${response.status}`
     const body = JSON.stringify(await json(response).catch(() => null))
-    if (
-      [429, 500, 502, 503, 504].includes(response.status) ||
-      (response.status === 403 && rateLimited.test(body))
-    )
-      throw new Passing(reason, response.headers.get("retry-after"))
+    // Only the kind of limit reaches the logs, never Google's message.
+    const limit = /userRateLimitExceeded/.test(body)
+      ? "_user_rate_limit"
+      : /rateLimitExceeded|RATE_LIMIT_EXCEEDED/.test(body)
+        ? "_rate_limit"
+        : ""
+    if (response.status === 429 || (response.status === 403 && limit))
+      throw new GmailRateLimited(
+        reason + limit,
+        namedWait(response.headers.get("retry-after"), body)
+      )
+    if ([500, 502, 503, 504].includes(response.status))
+      throw new Passing(reason)
     throw new GoogleError("rejected", reason)
   }
   try {
@@ -402,7 +414,7 @@ async function read(access: string, path: string, signal?: AbortSignal) {
         signal?.aborted
       )
         throw error
-      await pause(backoff(attempt, error.retryAfter), signal)
+      await pause(500 * 2 ** attempt * (0.75 + Math.random() / 2), signal)
     }
   }
 }

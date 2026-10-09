@@ -6,6 +6,7 @@
 import { createHash } from "node:crypto"
 import { z } from "zod"
 import {
+  GmailRateLimited,
   GoogleError,
   readSentMessage,
   refresh,
@@ -29,6 +30,15 @@ export const MIN_MESSAGES = 5
  */
 export const MAX_SKIPPED = 20,
   MAX_FAILURES_IN_A_ROW = 3
+/**
+ * Gmail limits how fast one mailbox is read (9 October: a 403 after about 100
+ * reads in 26 s). Reads start at least READ_SPACING ms apart, and SLOW_SPACING
+ * once Gmail has asked to slow down. One read waits out a limit for at most
+ * RATE_LIMIT_WAIT ms; after that, reading stops and the guide uses what was read.
+ */
+export const READ_SPACING = 400,
+  SLOW_SPACING = 1500,
+  RATE_LIMIT_WAIT = 60000
 const BATCH_CHARS = 18000,
   BATCH_MESSAGES = 15,
   MESSAGE_CHARS = 2500
@@ -278,9 +288,34 @@ export async function runStyleGuide(
       throw new StyleStopped()
     }
   }
+  // Paces every Gmail call and waits out a rate limit, up to RATE_LIMIT_WAIT.
+  let spacing = READ_SPACING,
+    next = 0,
+    limited: GmailRateLimited | undefined
+  const paced = async <T>(call: () => Promise<T>) => {
+    let waited = 0
+    for (let attempt = 0; ; attempt++) {
+      await sleep(next - Date.now(), signal)
+      next = Date.now() + spacing
+      try {
+        return await call()
+      } catch (error) {
+        if (!(error instanceof GmailRateLimited)) throw error
+        limited = error
+        spacing = SLOW_SPACING
+        // Gmail's named wait, never less than a growing 5, 10, 20 s.
+        const wait = Math.max(error.waitMs ?? 0, 5000 * 2 ** attempt)
+        if (waited + wait > RATE_LIMIT_WAIT) throw error
+        waited += wait
+        await sleep(wait, signal)
+      }
+    }
+  }
   let ids: string[]
   try {
-    ids = await sentMessageIds(access, job.windowDays, job.maxMessages, signal)
+    ids = await paced(() =>
+      sentMessageIds(access, job.windowDays, job.maxMessages, signal)
+    )
   } catch (error) {
     await throwIfStopped(error)
     throw new StyleFailure("gmail_unavailable", reason(error))
@@ -292,18 +327,21 @@ export async function runStyleGuide(
   })
   const used: UsableMessage[] = []
   let skipped = 0,
-    inARow = 0
-  for (const [n, id] of ids.entries()) {
+    inARow = 0,
+    read = 0
+  for (const id of ids) {
     if (signal.aborted) throw new Error("lease_lost")
     let message: UsableMessage | null = null
     try {
       message = usableMessage(
-        await readSentMessage(access, id, signal),
+        await paced(() => readSentMessage(access, id, signal)),
         account
       )
       inARow = 0
     } catch (error) {
       await throwIfStopped(error)
+      // Gmail still says slow down: the guide uses the mail read so far.
+      if (error instanceof GmailRateLimited) break
       // One message Gmail will not hand over is skipped, not the whole run.
       skipped++
       inARow++
@@ -311,11 +349,14 @@ export async function runStyleGuide(
         throw new StyleFailure("gmail_unavailable", reason(error))
     }
     if (message) used.push(message)
-    if ((n + 1) % 10 === 0 || n + 1 === ids.length)
-      await execute("progress", job, {
-        status: "reading",
-        messagesRead: n + 1,
-      })
+    read++
+    if (read % 10 === 0 || read === ids.length)
+      await execute("progress", job, { status: "reading", messagesRead: read })
+  }
+  if (read < ids.length) {
+    await execute("progress", job, { status: "reading", messagesRead: read })
+    if (used.length < MIN_MESSAGES)
+      throw new StyleFailure("gmail_unavailable", reason(limited))
   }
   if (used.length < MIN_MESSAGES) throw new Error("not_enough_mail")
   const groups = batches(used)
@@ -375,7 +416,26 @@ export async function runStyleGuide(
   ).slice(0, 40000)
   if (!guide.startsWith("# ")) throw new Error("provider_unavailable")
   await execute("ready", job, { guide })
-  return { skipped }
+  return {
+    skipped,
+    // For the journal: the limit Gmail set, if any, and the wait it named.
+    limited: limited?.reason,
+    limitWaitMs: limited?.waitMs ?? undefined,
+  }
+}
+function sleep(ms: number, signal: AbortSignal) {
+  if (ms <= 0) return Promise.resolve()
+  return new Promise<void>((resolve, reject) => {
+    const stop = () => {
+      clearTimeout(timer)
+      reject(new Error("lease_lost"))
+    }
+    const timer = setTimeout(() => {
+      signal.removeEventListener("abort", stop)
+      resolve()
+    }, ms)
+    signal.addEventListener("abort", stop, { once: true })
+  })
 }
 /** The run already ended in the database (for example, the account needs reconnecting). */
 export class StyleStopped extends Error {

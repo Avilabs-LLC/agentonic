@@ -1,19 +1,26 @@
-import { afterEach, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, expect, it, vi } from "vitest"
 import { keyring, seal } from "../packages/connectors/src/secrets"
 import type { Execute } from "../apps/worker/src/pipeline"
 import {
   batches,
   ownText,
   phraseIndex,
+  RATE_LIMIT_WAIT,
+  READ_SPACING,
   runStyleGuide,
   scrubGuide,
+  SLOW_SPACING,
   StyleFailure,
   StyleStopped,
   usableMessage,
   type StyleJob,
 } from "../apps/worker/src/style-guide"
 // Aprender mi estilo (architecture §57): the worker side, with Gmail and the
-// model mocked. Mail text must never reach the database.
+// model mocked. Mail text must never reach the database. Reads are paced and
+// retries wait, so every run advances fake timers through settle().
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] })
+})
 afterEach(() => {
   vi.unstubAllGlobals()
   vi.useRealTimers()
@@ -227,15 +234,29 @@ function database() {
   return { execute, calls }
 }
 
-it("drafts a guide from the account's sent mail and sends the database counts only", async () => {
-  const texts = Array.from(
-    { length: 6 },
+async function settle<T>(run: Promise<T>) {
+  let done = false
+  run.then(
+    () => (done = true),
+    () => (done = true)
+  )
+  while (!done) await vi.advanceTimersByTimeAsync(250)
+  return run
+}
+const mail = (count: number) =>
+  Array.from(
+    { length: count },
     (_, i) =>
       `Laura, gracias por el avance número ${i}. Lo reviso esta tarde y te confirmo mañana temprano.`
   )
+const run = (execute: Execute, signal = new AbortController().signal) =>
+  settle(runStyleGuide(job, execute, config, signal))
+
+it("drafts a guide from the account's sent mail and sends the database counts only", async () => {
+  const texts = mail(6)
   const calls = providers(texts)
   const { execute, calls: stored } = database()
-  await runStyleGuide(job, execute, config, new AbortController().signal)
+  await expect(run(execute)).resolves.toEqual({ skipped: 0 })
   expect(
     new URL(
       calls.find((c) => c.url.includes("/messages?"))!.url
@@ -277,84 +298,125 @@ it("drafts a guide from the account's sent mail and sends the database counts on
 it("stops before the analysis when there is too little mail, and asks to reconnect when Google refuses", async () => {
   providers(["Laura, gracias por el avance. Lo reviso y te confirmo."])
   const { execute, calls } = database()
-  await expect(
-    runStyleGuide(job, execute, config, new AbortController().signal)
-  ).rejects.toThrow("not_enough_mail")
+  await expect(run(execute)).rejects.toThrow("not_enough_mail")
   expect(calls.map(([operation]) => operation)).not.toContain("reserve")
   vi.stubGlobal(
     "fetch",
     vi.fn(async () => new Response("{}", { status: 400 }))
   )
   const second = database()
-  await expect(
-    runStyleGuide(job, second.execute, config, new AbortController().signal)
-  ).rejects.toBeInstanceOf(StyleStopped)
+  await expect(run(second.execute)).rejects.toBeInstanceOf(StyleStopped)
   expect(second.calls.map(([operation]) => operation)).toEqual([
     "credential",
     "reconnect",
   ])
 })
 
-// Gmail fails now and then over hundreds of reads in a row (a 9 October run
-// stopped at 100 of 200 on one such error): retries wait on fake timers.
-const mail = (count: number) =>
-  Array.from(
-    { length: count },
-    (_, i) =>
-      `Laura, gracias por el avance número ${i}. Lo reviso esta tarde y te confirmo mañana temprano.`
-  )
+// Gmail fails now and then over hundreds of reads in a row, and limits how
+// fast one mailbox is read (9 October: runs stopped at 100 of 200).
 const status = (code: number, headers: Record<string, string> = {}) =>
   new Response('{"error":{"code":' + code + "}}", { status: code, headers })
-async function settle<T>(run: Promise<T>) {
-  let done = false
-  run.then(
-    () => (done = true),
-    () => (done = true)
+const userRateLimit = (retryAfter?: number) =>
+  Response.json(
+    {
+      error: {
+        code: 403,
+        message: `User-rate limit exceeded.${retryAfter ? `  Retry after ${new Date(Date.now() + retryAfter).toISOString()}` : ""}`,
+        errors: [{ domain: "usageLimits", reason: "userRateLimitExceeded" }],
+      },
+    },
+    { status: 403 }
   )
-  while (!done) await vi.advanceTimersByTimeAsync(250)
-  return run
-}
 const reads = (calls: { url: string; at: number }[], n: number) =>
   calls.filter((c) => c.url.includes(`/messages/m${n}?format=full`))
+/** Time between the first reads of consecutive messages. */
+const gaps = (calls: { url: string; at: number }[], count: number) =>
+  Array.from(
+    { length: count - 1 },
+    (_, n) => reads(calls, n + 1)[0]!.at - reads(calls, n)[0]!.at
+  )
 
-it("retries a passing Gmail error, waiting as long as Gmail asks", async () => {
-  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] })
+it("retries a passing Gmail error and paces its reads", async () => {
   const calls = providers(mail(6), (n, attempt) => {
     if (attempt > 1) return undefined
     if (n === 1) return status(503)
-    if (n === 2) return status(429, { "Retry-After": "2" })
-    if (n === 3)
-      return new Response(
-        '{"error":{"errors":[{"reason":"userRateLimitExceeded"}]}}',
-        { status: 403 }
-      )
-    if (n === 4) return new TypeError("fetch failed")
+    if (n === 2) return new TypeError("fetch failed")
   })
   const { execute, calls: stored } = database()
-  await expect(
-    settle(runStyleGuide(job, execute, config, new AbortController().signal))
-  ).resolves.toEqual({ skipped: 0 })
-  for (const n of [1, 2, 3, 4]) expect(reads(calls, n)).toHaveLength(2)
+  await expect(run(execute)).resolves.toEqual({ skipped: 0 })
+  for (const n of [1, 2]) expect(reads(calls, n)).toHaveLength(2)
   expect(reads(calls, 0)).toHaveLength(1)
-  const [first, second] = reads(calls, 2)
-  expect(second!.at - first!.at).toBe(2000)
+  expect(Math.min(...gaps(calls, 6))).toBeGreaterThanOrEqual(READ_SPACING)
   expect(stored.find(([, p]) => p.status === "analyzing")![1]).toMatchObject({
     messagesUsed: 6,
   })
   expect(stored.at(-1)![0]).toBe("ready")
 })
 
+it("waits out a rate limit as long as Gmail asks, then reads more slowly", async () => {
+  const calls = providers(mail(8), (n, attempt) => {
+    if (attempt > 1) return undefined
+    if (n === 2) return status(429, { "Retry-After": "30" })
+    if (n === 5) return userRateLimit(20000)
+  })
+  const { execute } = database()
+  await expect(run(execute)).resolves.toEqual({
+    skipped: 0,
+    limited: "gmail_http_403_user_rate_limit",
+    limitWaitMs: 20000,
+  })
+  const [first, second] = reads(calls, 2)
+  expect(second!.at - first!.at).toBe(30000)
+  const [limited, retried] = reads(calls, 5)
+  expect(retried!.at - limited!.at).toBe(20000)
+  // Every read after the first limit starts at least SLOW_SPACING apart.
+  expect(reads(calls, 3)[0]!.at - second!.at).toBeGreaterThanOrEqual(
+    SLOW_SPACING
+  )
+})
+
+it("stops reading when Gmail keeps limiting, and writes the guide from what was read", async () => {
+  const calls = providers(mail(10), (n) =>
+    n >= 6 ? userRateLimit() : undefined
+  )
+  const { execute, calls: stored } = database()
+  await expect(run(execute)).resolves.toMatchObject({
+    skipped: 0,
+    limited: "gmail_http_403_user_rate_limit",
+  })
+  // 5, 10 and 20 s waits; the next would pass RATE_LIMIT_WAIT.
+  const limited = reads(calls, 6)
+  expect(limited).toHaveLength(4)
+  expect(limited.at(-1)!.at - limited[0]!.at).toBeLessThanOrEqual(
+    RATE_LIMIT_WAIT
+  )
+  expect(reads(calls, 7)).toHaveLength(0)
+  expect(stored.find(([, p]) => p.status === "analyzing")![1]).toMatchObject({
+    messagesUsed: 6,
+  })
+  expect(stored.filter(([, p]) => p.status === "reading").at(-1)![1]).toEqual({
+    status: "reading",
+    messagesRead: 6,
+  })
+  expect(stored.at(-1)![0]).toBe("ready")
+  // Too little mail read before the limit: the run fails, naming the limit.
+  providers(mail(10), (n) => (n >= 3 ? userRateLimit() : undefined))
+  const early = database()
+  await expect(run(early.execute)).rejects.toMatchObject({
+    message: "gmail_unavailable",
+    diagnostic: "gmail_http_403_user_rate_limit",
+  })
+  expect(early.calls.map(([operation]) => operation)).not.toContain("reserve")
+})
+
 it("skips a message Gmail will not hand over and keeps the run going", async () => {
-  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] })
   const calls = providers(mail(9), (n) => {
     if (n === 1) return status(404)
     if (n === 3) return Response.json({ padding: "x".repeat(2_100_000) })
     if (n === 5) return status(503)
   })
   const { execute, calls: stored } = database()
-  await expect(
-    settle(runStyleGuide(job, execute, config, new AbortController().signal))
-  ).resolves.toEqual({ skipped: 3 })
+  await expect(run(execute)).resolves.toEqual({ skipped: 3 })
   // Gone or too large stays that way; only the passing error is retried.
   expect(reads(calls, 1)).toHaveLength(1)
   expect(reads(calls, 3)).toHaveLength(1)
@@ -367,12 +429,9 @@ it("skips a message Gmail will not hand over and keeps the run going", async () 
 })
 
 it("gives up when Gmail keeps failing, naming the error for the journal only", async () => {
-  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] })
   providers(mail(10), (n) => (n >= 2 && n <= 4 ? status(503) : undefined))
   const { execute, calls } = database()
-  const failed = await settle(
-    runStyleGuide(job, execute, config, new AbortController().signal)
-  ).catch((error: unknown) => error)
+  const failed = await run(execute).catch((error: unknown) => error)
   expect(failed).toBeInstanceOf(StyleFailure)
   expect(failed).toMatchObject({
     message: "gmail_unavailable",
@@ -382,16 +441,7 @@ it("gives up when Gmail keeps failing, naming the error for the journal only", a
   // More than 20 skipped in all also stops the run, even never three in a row.
   providers(mail(50), (n) => (n % 2 ? status(404) : undefined))
   const scattered = database()
-  await expect(
-    settle(
-      runStyleGuide(
-        job,
-        scattered.execute,
-        config,
-        new AbortController().signal
-      )
-    )
-  ).rejects.toMatchObject({
+  await expect(run(scattered.execute)).rejects.toMatchObject({
     message: "gmail_unavailable",
     diagnostic: "gmail_http_404",
   })
@@ -401,21 +451,28 @@ it("gives up when Gmail keeps failing, naming the error for the journal only", a
 })
 
 it("stops waiting for Gmail when the lease is lost, and asks to reconnect on a 401", async () => {
-  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] })
   const lease = new AbortController()
   providers(mail(6), (n) => {
     if (n !== 1) return undefined
     lease.abort()
     return status(503)
   })
-  await expect(
-    settle(runStyleGuide(job, database().execute, config, lease.signal))
-  ).rejects.toThrow("lease_lost")
+  await expect(run(database().execute, lease.signal)).rejects.toThrow(
+    "lease_lost"
+  )
+  // A lease lost while waiting out a rate limit ends the same way.
+  const limitedLease = new AbortController()
+  providers(mail(6), (n) => {
+    if (n !== 1) return undefined
+    setTimeout(() => limitedLease.abort(), 1000)
+    return userRateLimit()
+  })
+  await expect(run(database().execute, limitedLease.signal)).rejects.toThrow(
+    "lease_lost"
+  )
   providers(mail(6), (n) => (n === 2 ? status(401) : undefined))
   const { execute, calls } = database()
-  await expect(
-    settle(runStyleGuide(job, execute, config, new AbortController().signal))
-  ).rejects.toBeInstanceOf(StyleStopped)
+  await expect(run(execute)).rejects.toBeInstanceOf(StyleStopped)
   expect(calls.map(([operation]) => operation)).toEqual([
     "credential",
     "progress",
