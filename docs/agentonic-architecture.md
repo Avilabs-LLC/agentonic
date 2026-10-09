@@ -2181,6 +2181,7 @@ Google's frame script shows what Brave does. "Iniciar sesión" opens a Google si
 - **What Google is asked.** The usual Drive consent (drive.file only, PKCE, single-use state) plus `trigger_onepick`, `allow_multiple`, the supported `mimetypes` and the connected account as `login_hint`.
 - **On return.** The callback renews that account's sealed credential as on a reconnect. It then checks each of Google's `picked_file_ids` with Drive and keeps them exactly as Picker picks, for the agent or for the collection chosen before leaving. One notification reports the result.
 - **Unchanged.** Chrome keeps the in-page Picker. No migration.
+- **Install.** `platform-0.35.3-e06be8c1b375` (PRs #90 and #91, with #87's name gate) was installed on 9 October with every service healthy, and `hosted:check` passed. In the owner's Chrome, the agent page shows "+ Gmail" and "+ Google Drive" and no Google-page line. The pick in Brave is the owner's next check.
 
 **Not covered yet.** Folders (a live check decides), sharing, moving and deleting, merges of concurrent edits, Admin's agent-list Drive flag, and Google verification (one project with Gmail, so it follows B5). No live Drive has been read or changed; the hosted acceptance is the owner's step.
 
