@@ -4,7 +4,6 @@ import { useRouter } from "next/navigation"
 import {
   ExternalLinkIcon,
   FilePlusIcon,
-  PlusIcon,
   RefreshCwIcon,
   SquareCheckIcon,
   Trash2Icon,
@@ -20,6 +19,7 @@ import { CardEmptyState } from "@workspace/ui/components/card-empty-state"
 import { DataTableRowActions } from "@workspace/ui/components/data-table-row-actions"
 import {
   DriveAccount,
+  DriveBrowserNote,
   DriveConnectDialog,
   DriveDisconnectDialog,
   chooseDriveFiles,
@@ -256,11 +256,13 @@ export function DriveImport({
             variant="outline"
             disabled={busy || state.available === false || !collections.length}
             onClick={() => setConnecting(true)}
+            aria-label="Conectar Google Drive"
           >
-            <PlusIcon aria-hidden="true" />
-            Conectar Google Drive
+            <DriveIcon className="size-4 shrink-0" />
+            Google Drive
           </Button>
         )}
+        {account && state.picker !== false && <DriveBrowserNote />}
         {(state.available === false || (account && state.picker === false)) && (
           <p className="text-sm text-muted-foreground">
             Google Drive necesita completar su configuración en Agentonic.

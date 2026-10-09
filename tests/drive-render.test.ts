@@ -132,9 +132,19 @@ describe("Configuración › Google Drive", () => {
         picker: true,
       },
     })
-    expect(out).toContain("Conectar Google Drive")
+    // Each connect button shows the service's own mark and name; its
+    // accessible name still says what it does.
+    expect(out).toMatch(
+      /aria-label="Conectar Gmail"[^>]*>(<svg[\s\S]*?<\/svg>)Gmail<\/button>/
+    )
+    expect(out).toMatch(
+      /aria-label="Conectar Google Drive"[^>]*>(<svg[\s\S]*?<\/svg>)Google Drive<\/button>/
+    )
+    expect(out).not.toContain(">Conectar Gmail<")
     expect(out).toContain("drive@example.invalid")
     expect(out).toContain("Herramientas de Google Drive")
+    // Only Brave is told how to let Google's Picker work; the server never is.
+    expect(out).not.toContain("Shields")
   })
 })
 
