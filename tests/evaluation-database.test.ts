@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs"
-import { PGlite } from "@electric-sql/pglite"
+import type { PGlite } from "@electric-sql/pglite"
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest"
 const submissionMocks = vi.hoisted(() => ({
   identity: vi.fn(),
@@ -16,7 +16,7 @@ import { submitAgentForReview } from "../packages/server/src/submission"
 import { reviewReceipt } from "../packages/contracts/src/review-receipt"
 import { runtimeRegistrations } from "../packages/contracts/src/expiry"
 import { reviewQueue } from "../packages/contracts/src/authoring"
-import { vector } from "@electric-sql/pglite-pgvector"
+import { preparedDatabase } from "../scripts/prepared-database"
 import {
   Controller,
   metadata,
@@ -106,55 +106,54 @@ async function save(revision = 0) {
   })
 }
 beforeEach(async () => {
-  db = new PGlite({ extensions: { vector } })
-  await db.exec(`CREATE SCHEMA auth; CREATE TABLE auth.users(id uuid PRIMARY KEY);
+  db = await preparedDatabase([
+    `CREATE SCHEMA auth; CREATE TABLE auth.users(id uuid PRIMARY KEY);
  CREATE ROLE anon; CREATE ROLE authenticated; CREATE ROLE service_role; CREATE ROLE agentonic_migrator;
  CREATE ROLE agentonic_admin NOSUPERUSER NOBYPASSRLS; CREATE ROLE agentonic_customer NOSUPERUSER NOBYPASSRLS; CREATE ROLE agentonic_worker NOSUPERUSER NOBYPASSRLS; CREATE ROLE agentonic_deployer_local NOSUPERUSER NOBYPASSRLS; CREATE ROLE agentonic_deployer_azure NOSUPERUSER NOBYPASSRLS; CREATE ROLE agentonic_runtime_local NOSUPERUSER NOBYPASSRLS; CREATE ROLE agentonic_runtime_azure NOSUPERUSER NOBYPASSRLS; CREATE ROLE agentonic_eval_local NOSUPERUSER NOBYPASSRLS; CREATE ROLE agentonic_eval_azure NOSUPERUSER NOBYPASSRLS;
  CREATE SCHEMA agentonic_bootstrap;
  CREATE FUNCTION agentonic_bootstrap.link_auth_users() RETURNS void LANGUAGE sql SECURITY DEFINER SET search_path='' AS $f$ ALTER TABLE agentonic.users ADD CONSTRAINT users_auth_user_fk FOREIGN KEY(auth_user_id) REFERENCES auth.users(id) ON DELETE RESTRICT; $f$;
  CREATE SCHEMA storage; CREATE TABLE storage.buckets(id text PRIMARY KEY,public boolean,file_size_limit bigint); INSERT INTO storage.buckets VALUES('agentonic-documents',false,10485760);
- CREATE TABLE storage.objects(id uuid DEFAULT gen_random_uuid(),bucket_id text,name text,metadata jsonb); ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY; GRANT USAGE ON SCHEMA storage TO authenticated; GRANT SELECT,INSERT,UPDATE,DELETE ON storage.objects TO authenticated;`)
-  await db.exec(readFileSync("scripts/sql/storage-boundary.sql", "utf8"))
-  for (const migration of [
-    "202609130001_identity",
-    "202609130002_access",
-    "202609130003_authoring",
-    "202609130004_deferred_owner_checks",
-    "202609130005_page_reads",
-    "202609140006_agent_listing",
-    "202609140007_rag",
-    "202609140008_previews",
-    "202609140009_preview_followups",
-    "202609140010_collection_deletion",
-    "202609150011_preview_discovery",
-    "202609150012_review_queue",
-    "202609150013_evaluations",
-    "202609150014_evaluation_evidence_views",
-    "202609150015_evaluation_retention",
-    "202609150017_automatic_review",
-    "202609150018_review_outcomes",
-    "202609150019_criterion_decisions",
-    "202609150020_review_summary",
-    "202609150021_approved_receipts",
-    "202609160022_approval_renewal",
-    "202609160023_staging_deployments",
-    "202609160024_activation_authority",
-    "202609160025_staging_runtime_contract",
-    "202609160026_staging_content_cleanup",
-    "202609160027_staging_agent_listing",
-    "202609180028_reranking",
-    "202609180029_gmail",
-    "202609180030_gmail_preview",
-    "202609180031_web_access",
-    "202609180032_web_research",
-  ])
-    await db.exec(
+ CREATE TABLE storage.objects(id uuid DEFAULT gen_random_uuid(),bucket_id text,name text,metadata jsonb); ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY; GRANT USAGE ON SCHEMA storage TO authenticated; GRANT SELECT,INSERT,UPDATE,DELETE ON storage.objects TO authenticated;`,
+    readFileSync("scripts/sql/storage-boundary.sql", "utf8"),
+    ...[
+      "202609130001_identity",
+      "202609130002_access",
+      "202609130003_authoring",
+      "202609130004_deferred_owner_checks",
+      "202609130005_page_reads",
+      "202609140006_agent_listing",
+      "202609140007_rag",
+      "202609140008_previews",
+      "202609140009_preview_followups",
+      "202609140010_collection_deletion",
+      "202609150011_preview_discovery",
+      "202609150012_review_queue",
+      "202609150013_evaluations",
+      "202609150014_evaluation_evidence_views",
+      "202609150015_evaluation_retention",
+      "202609150017_automatic_review",
+      "202609150018_review_outcomes",
+      "202609150019_criterion_decisions",
+      "202609150020_review_summary",
+      "202609150021_approved_receipts",
+      "202609160022_approval_renewal",
+      "202609160023_staging_deployments",
+      "202609160024_activation_authority",
+      "202609160025_staging_runtime_contract",
+      "202609160026_staging_content_cleanup",
+      "202609160027_staging_agent_listing",
+      "202609180028_reranking",
+      "202609180029_gmail",
+      "202609180030_gmail_preview",
+      "202609180031_web_access",
+      "202609180032_web_research",
+    ].map((migration) =>
       readFileSync(
         `packages/database/prisma/migrations/${migration}/migration.sql`,
         "utf8"
       )
-    )
-  await db.exec(`INSERT INTO auth.users VALUES('${owner}'),('${other}'),('${staff}');
+    ),
+    `INSERT INTO auth.users VALUES('${owner}'),('${other}'),('${staff}');
  INSERT INTO agentonic.users(id,auth_user_id,display_name) VALUES('${owner}','${owner}','Owner'),('${other}','${other}','Other'),('${staff}','${staff}','Staff');
  BEGIN;
  INSERT INTO agentonic.workspaces(id,kind,name,slug,timezone,retention_policy) VALUES('${w}','organization','A','a','UTC','{"conversationsDays":7,"checkpointsDays":7,"memoryDays":7,"sourcesDays":7,"logsDays":7,"auditDays":30,"backupsDays":7}'),('${otherW}','organization','B','b','UTC','{"conversationsDays":7,"checkpointsDays":7,"memoryDays":7,"sourcesDays":7,"logsDays":7,"auditDays":30,"backupsDays":7}');
@@ -166,7 +165,8 @@ beforeEach(async () => {
  INSERT INTO agentonic.code_releases(id,version,template_version_id,git_commit_sha,artifact_sha256,registry_sha256,runtime_contract_version,code_repository_id,artifact_bucket,artifact_key,artifact_size_bytes,published_by_staff_id,execution_manifest) VALUES('${code}','0.1.0','${template}',repeat('a',40),repeat('b',64),repeat('c',64),'0.1','${id(60)}','synthetic','fixture',100,'${staff}','{"previewContract":"1","gmailContract":"1","webContract":"1","model":"gpt-4.1-mini-2025-04-14"}');
  INSERT INTO agentonic.workspace_code_release_grants(workspace_id,code_release_id,granted_by_staff_id) VALUES('${w}','${code}','${staff}');
  INSERT INTO agentonic.agents(id,workspace_id,name,slug,owner_member_id,template_version_id,created_by_member_id) VALUES('${a}','${w}','Synthetic agent','synthetic','${member}','${template}','${member}');
- INSERT INTO agentonic.knowledge_collections(id,workspace_id,name,slug,owner_member_id) VALUES('${collection}','${w}','Knowledge','knowledge','${member}');`)
+ INSERT INTO agentonic.knowledge_collections(id,workspace_id,name,slug,owner_member_id) VALUES('${collection}','${w}','Knowledge','knowledge','${member}');`,
+  ])
 })
 beforeEach(async () => {
   requested = { version: 1, collectionIds: [collection], tools: [] }

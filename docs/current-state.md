@@ -56,7 +56,7 @@ The Admin app has **Revisiones** (submissions, receipts, renewal and activation)
 - **Services.** The controller, agent services and evaluator wait and report instead of exiting. The controller runs as its own user, without root, and polkit lets it start, stop and reset agent services only (architecture §47). Each change of state is one categorized JSON line in the journal. Restarts are capped.
 - **Connections.** An agent with nothing to do rests: its service stops and uses no connection, and the controller wakes it when a message arrives. Awake agents reach the database through the host's single gateway, so with one instance of each app the platform needs 19 connections however many agents are activated (architecture §43).
 - **Knowledge worker.** It runs on the VM under systemd, with restarts capped (architecture §53). Each kind of work has its own lane: cleanup, documents, searches and preview turns. Each lane is shared fairly between workspaces, so a slow document no longer holds up previews (architecture §45).
-- **Upgrades.** The apps and the knowledge worker come from a platform release built in CI; `pnpm platform:install --azure --release=<tag>` checks every file on the VM, moves one service at a time through a health gate and restores the previous release if one fails, and `--rollback` goes back one release (architecture §53). New runtimes (`pnpm runtime:install`) and new agent worker releases (`install-staging`) install next to the running ones; running agents move over one at a time without stopping.
+- **Upgrades.** The apps and the knowledge worker come from a platform release that CI publishes by itself once a push to `main` passes its checks (architecture §60); `pnpm platform:install --azure --release=<tag>` checks every file on the VM, moves one service at a time through a health gate and restores the previous release if one fails, and `--rollback` goes back one release (architecture §53). New runtimes (`pnpm runtime:install`) and new agent worker releases (`install-staging`) install next to the running ones; running agents move over one at a time without stopping.
 - **Restarts.** The VM restarts on Sundays at 04:00 Canary time, only when installed updates require it (`pnpm staging:restart-window`).
 - **Secrets.** Each secret lives only in the processes that make the calls it is for (table in architecture §44).
   - Agent services hold no password or key and have no network: the host's gateway makes their provider and Gmail calls with their own credentials.
@@ -100,5 +100,6 @@ The ordered plan is architecture §37; the owner's audit brief tracks progress. 
 | Aprender mi estilo: a style guide from the member's own sent mail      | §57                  |
 | Scheduled jobs and pre-authorized writes                               | §58                  |
 | Ongoing authorization, renewal and conversations across versions       | §59                  |
+| CI timings, prepared test databases and automatic releases             | §60                  |
 
 Presentation rules are in the [UI contract](ui/ui-contract.md). The [target schema](schema.dbml) describes 83 tables; 66 exist in the 63 checked-in migrations.
