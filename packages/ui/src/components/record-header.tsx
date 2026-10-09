@@ -1,19 +1,4 @@
-import Link from "next/link"
-import { ArrowLeftIcon } from "lucide-react"
-import { Button } from "@workspace/ui/components/button"
-export function BackRow({ href }: { href: string }) {
-  return (
-    <Button
-      render={<Link href={href} />}
-      nativeButton={false}
-      variant="ghost"
-      className="-ml-2"
-    >
-      <ArrowLeftIcon />
-      Volver atrás
-    </Button>
-  )
-}
+export { BackRow } from "@workspace/ui/components/back-row"
 export function RecordHeader({
   title,
   description,

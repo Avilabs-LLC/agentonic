@@ -1,11 +1,13 @@
 import { notFound } from "next/navigation"
 import { requireIdentity } from "@agentonic/server/auth"
 import { loadOperationsAgent } from "@agentonic/server/operations"
+import { loadReviewQueue } from "@agentonic/server/authoring"
 import { formatUtcParts } from "@agentonic/contracts/format"
 import { uuid } from "@agentonic/contracts/identity"
 import { BackRow, RecordHeader } from "@workspace/ui/components/record-header"
 import { OperationsAgentOverview } from "@workspace/ui/components/operations-agent"
 import { WorkspaceName } from "@workspace/ui/components/workspace-name"
+import { beginReview } from "../../submissions/actions"
 export default async function Page({
   params,
 }: {
@@ -19,6 +21,16 @@ export default async function Page({
   if (!result) throw new Error("No se pudo cargar el agente.")
   const { agent } = result
   if (!agent) notFound()
+  // Revisiones' own check of which open reviews may be opened now; when it
+  // cannot be read, none open from here.
+  const queue = agent.proposals.some((p) =>
+    ["submitted", "in_review"].includes(p.status)
+  )
+    ? await loadReviewQueue(agent.workspaceId)
+    : null
+  const openable = (queue ?? [])
+    .filter((row) => row.canOpen)
+    .map((row) => row.id)
   return (
     <>
       <div className="space-y-3">
@@ -36,7 +48,12 @@ export default async function Page({
           }
         />
       </div>
-      <OperationsAgentOverview agent={agent} now={new Date().toISOString()} />
+      <OperationsAgentOverview
+        agent={agent}
+        now={new Date().toISOString()}
+        openReview={beginReview}
+        openable={openable}
+      />
     </>
   )
 }

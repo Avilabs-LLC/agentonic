@@ -1,4 +1,9 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
+
+// The agent page opens reviews through the router.
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push() {}, refresh() {} }),
+}))
 
 // Loaded at run time: the root typecheck does not cover the UI package's JSX,
 // which its own typecheck does.
@@ -149,75 +154,77 @@ describe("Admin operations screens", () => {
     expect(out).not.toContain("Capacidades")
   })
   it("shows one agent's versions, proposals, deployments and activity", () => {
-    const out = html(agentPage.OperationsAgentOverview, {
-      now,
-      agent: {
-        id: id(1),
-        name: "Asistente sintético",
-        workspaceId: id(2),
-        workspaceName: "Espacio A",
-        ownerName: "Ana",
-        createdAt: now,
-        latestVersion: 2,
-        tools: { gmail: false, drive: true, web: true, collections: 2 },
-        summary: {
-          archived: false,
-          live: [],
-          ended: {
+    const agent = {
+      id: id(1),
+      name: "Asistente sintético",
+      workspaceId: id(2),
+      workspaceName: "Espacio A",
+      ownerName: "Ana",
+      createdAt: now,
+      latestVersion: 2,
+      tools: { gmail: false, drive: true, web: true, collections: 2 },
+      summary: {
+        archived: false,
+        live: [],
+        ended: {
+          environment: "azure_staging",
+          status: "stopped",
+          versionNumber: 1,
+        },
+        next: {
+          submissionId: id(8),
+          number: 6,
+          versionNumber: 2,
+          status: "approved",
+          approvalReason: "valid",
+          approvalExpiresAt: now,
+          deployment: {
             environment: "azure_staging",
-            status: "stopped",
-            versionNumber: 1,
-          },
-          next: {
-            submissionId: id(8),
-            number: 6,
-            versionNumber: 2,
-            status: "approved",
-            approvalReason: "valid",
-            approvalExpiresAt: now,
-            deployment: {
-              environment: "azure_staging",
-              status: "awaiting_activation",
-            },
+            status: "awaiting_activation",
           },
         },
-        proposals: [
-          {
-            id: id(8),
-            number: 6,
-            versionNumber: 2,
-            status: "approved",
-            submittedAt: now,
-            approvalReason: "valid",
-            approvalExpiresAt: now,
-          },
-          {
-            id: id(10),
-            number: 7,
-            versionNumber: 3,
-            status: "in_review",
-            submittedAt: now,
-            approvalReason: null,
-            approvalExpiresAt: null,
-          },
-        ],
-        deployments: [
-          {
-            id: id(11),
-            submissionId: id(7),
-            environment: "azure_staging",
-            status: "stopped",
-            resting: false,
-            versionNumber: 1,
-            authorizedUntil: now,
-            budgetUsd: 0.25,
-            spentUsd: 0.01,
-            createdAt: now,
-            activatedAt: null,
-          },
-        ],
-        activity: { lastRunAt: null, runs7d: 0, failed7d: 0, knownUsd30d: 0 },
       },
+      proposals: [
+        {
+          id: id(8),
+          number: 6,
+          versionNumber: 2,
+          status: "approved",
+          submittedAt: now,
+          approvalReason: "valid",
+          approvalExpiresAt: now,
+        },
+        {
+          id: id(10),
+          number: 7,
+          versionNumber: 3,
+          status: "in_review",
+          submittedAt: now,
+          approvalReason: null,
+          approvalExpiresAt: null,
+        },
+      ],
+      deployments: [
+        {
+          id: id(11),
+          submissionId: id(7),
+          environment: "azure_staging",
+          status: "stopped",
+          resting: false,
+          versionNumber: 1,
+          authorizedUntil: now,
+          budgetUsd: 0.25,
+          spentUsd: 0.01,
+          createdAt: now,
+          activatedAt: null,
+        },
+      ],
+      activity: { lastRunAt: null, runs7d: 0, failed7d: 0, knownUsd30d: 0 },
+    }
+    const props = { now, agent, openReview: async () => ({ ok: true }) }
+    const out = html(agentPage.OperationsAgentOverview, {
+      ...props,
+      openable: [id(10)],
     })
     for (const text of [
       "Detenido",
@@ -235,10 +242,18 @@ describe("Admin operations screens", () => {
       "Vigente",
       "Plazo para activar",
       `/submissions/${id(8)}/receipt?workspace=${id(2)}`,
-      `/submissions?workspace=${id(2)}`,
-      "Abrir en Revisiones",
+      // An open review opens itself, not the Revisiones list.
+      'aria-label="Ver revisión 7 de Asistente sintético"',
     ])
       expect(out).toContain(text)
+    expect(out).not.toContain(`/submissions?workspace=`)
+    // Without a live authorization the number stays plain, as in Revisiones.
+    const closed = html(agentPage.OperationsAgentOverview, {
+      ...props,
+      openable: [],
+    })
+    expect(closed).toContain('title="Sin autorización vigente para abrirla"')
+    expect(closed).not.toContain("Ver revisión 7")
     expect(out).not.toContain('<span class="sr-only">Gmail</span>')
     badgesStandAlone(out)
   })
