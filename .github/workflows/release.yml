@@ -3,19 +3,17 @@ name: Release
 # standalone servers and the knowledge worker, with a manifest naming every
 # file. The installer checks that manifest on the VM before installing.
 # Pull requests that touch what ships build, pack and smoke-test it without
-# publishing. A manual run on main also runs the repository checks first and
-# publishes the files as a private GitHub release named after the commit.
+# publishing; other pull requests skip the build, which still counts as the
+# required `build` check, so documentation-only changes can merge. When Verify passes on a push to main, this workflow publishes that
+# commit as a private GitHub release named after it (architecture §60); it does
+# not repeat Verify's checks. A manual run on main republishes a commit only if
+# Verify passed for it, and an existing release is left as it is.
 on:
   pull_request:
-    paths:
-      - "apps/**"
-      - "packages/**"
-      - "pnpm-lock.yaml"
-      - "package.json"
-      - "scripts/package-platform.mjs"
-      - "scripts/platform-tree.mjs"
-      - "scripts/smoke-platform.mjs"
-      - ".github/workflows/release.yml"
+  workflow_run:
+    workflows: [Verify]
+    types: [completed]
+    branches: [main]
   workflow_dispatch:
 permissions:
   contents: read
@@ -23,16 +21,59 @@ concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
+  changes:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    outputs:
+      ship: ${{ steps.diff.outputs.ship }}
+    steps:
+      # Whether the pull request touches what ships. When the list can't be
+      # read, build anyway.
+      - id: diff
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          files=$(gh pr diff "${{ github.event.pull_request.number }}" --repo "$GITHUB_REPOSITORY" --name-only) || { echo ship=true >> "$GITHUB_OUTPUT"; exit 0; }
+          if printf '%s\n' "$files" | grep -qE '^(apps/|packages/|pnpm-lock\.yaml$|package\.json$|scripts/(package-platform|platform-tree|smoke-platform)\.mjs$|\.github/workflows/release\.yml$)'; then
+            echo ship=true >> "$GITHUB_OUTPUT"
+          else
+            echo ship=false >> "$GITHUB_OUTPUT"
+          fi
   build:
+    needs: changes
+    # Pull requests that touch what ships; manual runs; and, after Verify, only
+    # a successful run for a push to main.
+    if: >-
+      !cancelled() && (
+      (github.event_name == 'pull_request' &&
+      (needs.changes.result != 'success' || needs.changes.outputs.ship == 'true')) ||
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_run' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push'))
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     permissions:
       contents: write
+      actions: read
+    env:
+      SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
     steps:
-      - name: Publish only from main
+      - name: Publish only commits on main that passed Verify
         if: github.event_name == 'workflow_dispatch'
-        run: test "$GITHUB_REF" = refs/heads/main
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          test "$GITHUB_REF" = refs/heads/main
+          passed=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow verify.yml --commit "$SHA" --event push --status success --json databaseId --jq length)
+          test "$passed" -gt 0 || { echo "Verify has not passed for $SHA"; exit 1; }
+      # The commit Verify passed; empty for pull requests and manual runs, which
+      # check out their own event's commit.
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
       - uses: pnpm/action-setup@v4
         with:
           version: 11.21.0
@@ -43,15 +84,6 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm db:generate
-      - name: Repository checks
-        if: github.event_name == 'workflow_dispatch'
-        run: |
-          pnpm db:validate
-          pnpm version:check
-          pnpm typecheck
-          pnpm lint
-          pnpm test
-          pnpm skeletons:check
       - name: Build both apps
         env:
           NEXT_TELEMETRY_DISABLED: "1"
@@ -62,25 +94,29 @@ jobs:
       - run: node scripts/smoke-platform.mjs dist/platform/platform.tar.gz
       - uses: actions/upload-artifact@v4
         with:
-          name: platform-${{ github.sha }}
+          name: platform-${{ env.SHA }}
           path: |
             dist/platform/platform.tar.gz
             dist/platform/manifest.json
             dist/platform/release.json
           retention-days: ${{ github.event_name == 'pull_request' && 7 || 30 }}
       - name: Publish the release
-        if: github.event_name == 'workflow_dispatch'
+        if: github.event_name != 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           id=$(node -p 'require("./dist/platform/release.json").releaseId')
           version=$(node -p 'require("./package.json").version')
-          tag="platform-${version}-${GITHUB_SHA::12}"
+          tag="platform-${version}-${SHA::12}"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "$tag is already published"
+            exit 0
+          fi
           gh release create "$tag" \
             dist/platform/platform.tar.gz \
             dist/platform/manifest.json \
             dist/platform/release.json \
-            --target "$GITHUB_SHA" \
-            --title "Platform ${version} (${GITHUB_SHA::12})" \
-            --notes "Release ${id} built from ${GITHUB_SHA} by run ${GITHUB_RUN_ID}. Install with \`pnpm platform:install --azure --release ${tag}\`." \
+            --target "$SHA" \
+            --title "Platform ${version} (${SHA::12})" \
+            --notes "Release ${id} built from ${SHA} by run ${GITHUB_RUN_ID}. Install with \`pnpm platform:install --azure --release ${tag}\`." \
             --prerelease

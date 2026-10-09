@@ -1,8 +1,8 @@
 import { readFileSync } from "node:fs"
-import { PGlite } from "@electric-sql/pglite"
+import type { PGlite } from "@electric-sql/pglite"
 import assert from "node:assert/strict"
 import { readdirSync } from "node:fs"
-import { vector } from "@electric-sql/pglite-pgvector"
+import { preparedDatabase } from "../prepared-database"
 
 const id = (n: number) =>
   `10000000-0000-4000-8000-${String(n).padStart(12, "0")}`
@@ -25,7 +25,7 @@ const content = {
 const requested = { version: 1, collectionIds: [collection], tools: [] }
 const embedding = Array.from({ length: 1024 }, (_, i) => (i === 0 ? 1 : 0))
 export async function createRagFixture() {
-  const db = new PGlite({ extensions: { vector } })
+  let db!: PGlite
   async function actor(
     user = owner,
     workspace = w,
@@ -103,24 +103,25 @@ export async function createRagFixture() {
     })
   }
   async function initialize() {
-    await db.exec(`CREATE SCHEMA auth; CREATE TABLE auth.users(id uuid PRIMARY KEY);
+    db = await preparedDatabase([
+      `CREATE SCHEMA auth; CREATE TABLE auth.users(id uuid PRIMARY KEY);
  CREATE ROLE anon; CREATE ROLE authenticated; CREATE ROLE service_role; CREATE ROLE agentonic_migrator;
  CREATE ROLE agentonic_admin NOSUPERUSER NOBYPASSRLS; CREATE ROLE agentonic_customer NOSUPERUSER NOBYPASSRLS; CREATE ROLE agentonic_worker NOSUPERUSER NOBYPASSRLS; CREATE ROLE agentonic_eval_local; CREATE ROLE agentonic_eval_azure; CREATE ROLE agentonic_deployer_local; CREATE ROLE agentonic_deployer_azure; CREATE ROLE agentonic_runtime_local; CREATE ROLE agentonic_runtime_azure;
  CREATE SCHEMA agentonic_bootstrap;
  CREATE FUNCTION agentonic_bootstrap.link_auth_users() RETURNS void LANGUAGE sql SECURITY DEFINER SET search_path='' AS $f$ ALTER TABLE agentonic.users ADD CONSTRAINT users_auth_user_fk FOREIGN KEY(auth_user_id) REFERENCES auth.users(id) ON DELETE RESTRICT; $f$;
  CREATE SCHEMA storage; CREATE TABLE storage.buckets(id text PRIMARY KEY,public boolean,file_size_limit bigint); INSERT INTO storage.buckets VALUES('agentonic-documents',false,10485760);
- CREATE TABLE storage.objects(id uuid DEFAULT gen_random_uuid(),bucket_id text,name text,metadata jsonb); ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY; GRANT USAGE ON SCHEMA storage TO authenticated; GRANT SELECT,INSERT,UPDATE,DELETE ON storage.objects TO authenticated;`)
-    await db.exec(readFileSync("scripts/sql/storage-boundary.sql", "utf8"))
-    for (const migration of readdirSync("packages/database/prisma/migrations")
-      .filter((name) => /^\d/.test(name))
-      .sort())
-      await db.exec(
-        readFileSync(
-          `packages/database/prisma/migrations/${migration}/migration.sql`,
-          "utf8"
-        )
-      )
-    await db.exec(`INSERT INTO auth.users VALUES('${owner}'),('${other}'),('${staff}');
+ CREATE TABLE storage.objects(id uuid DEFAULT gen_random_uuid(),bucket_id text,name text,metadata jsonb); ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY; GRANT USAGE ON SCHEMA storage TO authenticated; GRANT SELECT,INSERT,UPDATE,DELETE ON storage.objects TO authenticated;`,
+      readFileSync("scripts/sql/storage-boundary.sql", "utf8"),
+      ...readdirSync("packages/database/prisma/migrations")
+        .filter((name) => /^\d/.test(name))
+        .sort()
+        .map((migration) =>
+          readFileSync(
+            `packages/database/prisma/migrations/${migration}/migration.sql`,
+            "utf8"
+          )
+        ),
+      `INSERT INTO auth.users VALUES('${owner}'),('${other}'),('${staff}');
  INSERT INTO agentonic.users(id,auth_user_id,display_name) VALUES('${owner}','${owner}','Owner'),('${other}','${other}','Other'),('${staff}','${staff}','Staff');
  BEGIN;
  INSERT INTO agentonic.workspaces(id,kind,name,slug,timezone,retention_policy) VALUES('${w}','organization','A','a','UTC','{"conversationsDays":7,"checkpointsDays":7,"memoryDays":7,"sourcesDays":7,"logsDays":7,"auditDays":30,"backupsDays":7}'),('${otherW}','organization','B','b','UTC','{"conversationsDays":7,"checkpointsDays":7,"memoryDays":7,"sourcesDays":7,"logsDays":7,"auditDays":30,"backupsDays":7}');
@@ -132,7 +133,8 @@ export async function createRagFixture() {
  INSERT INTO agentonic.code_releases(id,version,template_version_id,git_commit_sha,artifact_sha256,registry_sha256,runtime_contract_version,code_repository_id,artifact_bucket,artifact_key,artifact_size_bytes,published_by_staff_id) VALUES('${code}','0.1.0','${template}',repeat('a',40),repeat('b',64),repeat('c',64),'0.1','${id(60)}','synthetic','fixture',100,'${staff}');
  INSERT INTO agentonic.workspace_code_release_grants(workspace_id,code_release_id,granted_by_staff_id) VALUES('${w}','${code}','${staff}');
  INSERT INTO agentonic.agents(id,workspace_id,name,slug,owner_member_id,template_version_id,created_by_member_id) VALUES('${a}','${w}','Synthetic agent','synthetic','${member}','${template}','${member}');
- INSERT INTO agentonic.knowledge_collections(id,workspace_id,name,slug,owner_member_id) VALUES('${collection}','${w}','Knowledge','knowledge','${member}');`)
+ INSERT INTO agentonic.knowledge_collections(id,workspace_id,name,slug,owner_member_id) VALUES('${collection}','${w}','Knowledge','knowledge','${member}');`,
+    ])
     await db.exec("RESET ROLE;BEGIN")
     await actor()
   }

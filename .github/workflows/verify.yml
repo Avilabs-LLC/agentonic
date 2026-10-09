@@ -1,12 +1,20 @@
 name: Verify
+# Repository checks for every pull request and every push to main (architecture
+# §60). The static checks and three test groups run side by side; the
+# `foundation` job only gathers their results, because branch protection
+# requires a check of that name. A push to main that passes starts the Release
+# workflow.
 on:
   pull_request:
   push:
     branches: [main]
 permissions:
   contents: read
+concurrency:
+  group: verify-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
-  foundation:
+  checks:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -23,5 +31,32 @@ jobs:
       - run: pnpm version:check
       - run: pnpm typecheck
       - run: pnpm lint
-      - run: pnpm test
       - run: pnpm skeletons:check
+  tests:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        group: [1, 2, 3]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.21.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm db:generate
+      - run: pnpm test --shard=${{ matrix.group }}/3
+  foundation:
+    # Runs even when a group fails, so a failure can never read as a skipped,
+    # and therefore passing, required check.
+    if: always()
+    needs: [checks, tests]
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          test "${{ needs.checks.result }}" = success
+          test "${{ needs.tests.result }}" = success

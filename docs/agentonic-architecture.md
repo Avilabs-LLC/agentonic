@@ -2038,3 +2038,21 @@ This closes outstanding actions **D5** (operating terms, owner decisions of 8 Oc
 **Fix to §56.** Migration 60 ordered Chats' models by run creation time, which can tie, so the default model could change between reads. `deployment_models` now returns the passing models in the batch's own order, the same order as before §56 when every model passed.
 
 **Rollout.** Apply migration 63, then install platform 0.30.0.
+
+## 60. Faster CI and releases that follow a green main — 9 October 2026
+
+The owner asked why a change took over 20 minutes to reach the hosted apps. Measured over every successful run since 6 October: pull-request checks (Verify) averaged 9.0 minutes (6.2–11.3), the Release run on `main` 10.4 minutes (6.9–13.1), and installing about 3, so merge to live took about 25 minutes, more with the time to start the release by hand.
+
+**Where the time went.**
+
+- **The release repeated the checks.** About 10 of the release's 10.4 minutes re-ran typecheck, lint and the whole test suite, which had already passed on the pull request and again on the push to `main`.
+- **Every database test started from nothing.** About 250 tests each started a new PGlite (751 ms) and replayed all 63 migrations (337 ms). Database tests were 264 of the suite's 315 test-seconds, and the GitHub runner ran them one file at a time: `pnpm test` took 6.4 minutes there.
+
+**What changed.**
+
+- **Prepared databases.** `scripts/prepared-database.ts` runs a list of setup statements once per test file and saves the resulting data directory; each test loads its own copy (181 ms). Tests stay isolated: none shares a database with another. The shared RAG fixture and the evaluation and preview suites use it. Statements a test applies to its own data, such as `modelReview()`'s later migrations, still run in that test. Locally the suite went from 315 to 198 test-seconds and from about 95 to 45 seconds.
+- **Parallel checks.** Verify runs the static checks (Prisma, versions, typecheck, lint, skeletons) and three test groups (`vitest --shard`) as separate jobs at once. The `foundation` job only gathers their results, because branch protection requires a check of that name; it runs even when a group fails, so a failure can never read as a skipped, and therefore passing, check. A newer push to a pull request cancels its older run.
+- **Releases follow a green `main`.** The Release workflow starts when Verify succeeds for a push to `main`, checks out exactly that commit and publishes it without repeating the checks. A manual run still works, but publishes only a commit Verify passed, and a release that already exists is left alone. The installer's provenance checks (§53) are unchanged.
+- **Documentation-only pull requests can merge.** Release now runs on every pull request; a small job reads the changed files and the build is skipped when nothing that ships changed, which GitHub counts as a passed `build` check. If the list can't be read, it builds.
+
+**Expected:** pull-request checks in about 3–4 minutes and a release about 3 minutes after Verify passes on `main`, so merge to live in roughly 10 minutes including the install. The measured figures will be recorded after the first runs.
