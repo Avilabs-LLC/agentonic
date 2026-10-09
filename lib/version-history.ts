@@ -1,5 +1,10 @@
 export const VERSION_HISTORY = [
   {
+    "version": "0.35.3",
+    "date": "2026-10-09",
+    "summary": "In Brave, Safari and on iPhone, Elegir archivos picks Drive files on Google's own page and returns."
+  },
+  {
     "version": "0.35.2",
     "date": "2026-10-09",
     "summary": "The Gmail and Google Drive connect buttons show a plus before each service's mark."

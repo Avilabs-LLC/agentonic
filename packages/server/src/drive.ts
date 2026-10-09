@@ -11,6 +11,7 @@ import {
   driveKnowledgeFile,
   driveKnowledgeState,
   driveState,
+  driveTypes,
   parseDriveProposal,
   pickedFileIds,
   pickerSession,
@@ -118,12 +119,29 @@ export async function loadDriveKnowledge(workspace: string) {
 }
 
 // Connecting ---------------------------------------------------------------------
+/**
+ * Starts Google's consent for Drive. With `pick`, Google also shows its own
+ * file chooser on its consent page and returns the picked file IDs, for
+ * browsers that keep Google's cookies from the Picker's frame (Brave,
+ * Safari). The connected account is suggested; another account picked
+ * there connects as its own connection, as on any reconnect.
+ */
 export async function startDrive(
   workspace: string,
   purpose: "tools" | "knowledge",
-  agentId?: string
+  agentId?: string,
+  pick?: { connectionId: string; collectionId?: string }
 ) {
   const config = googleConfig()
+  let hint: string | undefined
+  if (pick) {
+    const c = await command(workspace, "credential", {
+      connectionId: uuid.parse(pick.connectionId),
+    })
+    if (c.purpose !== purpose) throw new Error("oauth_invalid")
+    hint = String(c.account)
+    if (pick.collectionId) uuid.parse(pick.collectionId)
+  }
   const state = randomBytes(32).toString("hex"),
     verifier = randomBytes(32).toString("base64url"),
     connectionId = crypto.randomUUID()
@@ -137,7 +155,17 @@ export async function startDrive(
   const jar = await cookies()
   jar.set(
     COOKIE,
-    seal({ state, workspace }, "drive-oauth-cookie", config.keys),
+    seal(
+      {
+        state,
+        workspace,
+        ...(pick
+          ? { pick: true, collectionId: pick.collectionId ?? null }
+          : {}),
+      },
+      "drive-oauth-cookie",
+      config.keys
+    ),
     {
       httpOnly: true,
       sameSite: "lax",
@@ -159,6 +187,14 @@ export async function startDrive(
     code_challenge_method: "S256",
     access_type: "offline",
     prompt: "consent select_account",
+    ...(pick
+      ? {
+          trigger_onepick: "true",
+          allow_multiple: "true",
+          mimetypes: Object.keys(driveTypes).join(","),
+          ...(hint ? { login_hint: hint } : {}),
+        }
+      : {}),
   }).toString()
   return url.toString()
 }
@@ -198,6 +234,8 @@ export async function finishDrive(url: URL) {
   const stored = unseal(cookie, "drive-oauth-cookie", config.keys) as {
     state: string
     workspace: string
+    pick?: boolean
+    collectionId?: string | null
   }
   const state = url.searchParams.get("state") ?? ""
   if (
@@ -250,6 +288,43 @@ export async function finishDrive(url: URL) {
     ),
   })
   destination.searchParams.set("drive", "connected")
+  // Files picked on Google's consent page are checked and kept exactly as
+  // files picked in the in-page Picker.
+  const picked = url.searchParams.get("picked_file_ids")
+  if (stored.pick && picked) {
+    try {
+      const ids = picked.split(",").filter(Boolean)
+      const result =
+        pending.purpose === "tools"
+          ? await addDriveFiles(
+              stored.workspace,
+              String(pending.agentId),
+              target,
+              ids
+            )
+          : await importDriveKnowledge(
+              stored.workspace,
+              target,
+              String(stored.collectionId),
+              ids
+            )
+      if (result.ok === false)
+        destination.searchParams.set(
+          "drive",
+          result.code === "too_many_files" ? "too_many" : "failed"
+        )
+      else {
+        destination.searchParams.set("drive", "picked")
+        destination.searchParams.set("added", String(result.added))
+        destination.searchParams.set(
+          "refused",
+          String(result.refused?.length ?? 0)
+        )
+      }
+    } catch {
+      destination.searchParams.set("drive", "failed")
+    }
+  }
   return destination
 }
 /**

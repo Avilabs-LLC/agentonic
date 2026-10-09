@@ -21,7 +21,7 @@ export async function GET(request: Request) {
     return new Response(
       drive
         ? "No se pudo conectar Google Drive. Regresa a Agentonic para volver a intentarlo; revisa que tu cuenta esté autorizada como usuario de prueba en Google."
-        : "No se pudo conectar Gmail. Regresa al agente para volver a intentarlo; revisa que tu cuenta esté autorizada como usuario de prueba en Google.",
+        : "No se pudo completar la conexión con Google. Regresa a Agentonic para volver a intentarlo; revisa que tu cuenta esté autorizada como usuario de prueba en Google.",
       {
         status: 400,
         headers: {

@@ -95,7 +95,14 @@ The callback URI stays the same. As with Gmail in Testing mode, consent lapses a
 - When the Picker's frame cannot see the Google session, Google's frame page decides what to show (read from its script, 9 October). Where the browser offers the Storage Access API and access is not yet granted, it asks for that access. Otherwise it shows "Iniciar sesión".
   - That button opens a Google sign-in window. The frame then checks its own cookies every second for Google's sign-in cookies; once it sees them, it closes the window and reloads itself.
   - Brave does not share Google's cookies with the frame, so the frame never sees the sign-in. If the person is already signed in, the window shows a standalone Picker whose "Seleccionar" and "Cancelar" reach nothing.
-  - In Brave, the way out is to allow cross-site cookies for the site in Shields, and the app says so in Brave only.
+  - Allowing cross-site cookies in Brave's Shields did not help in the owner's test.
+  - So in Brave, Safari and every iPhone or iPad browser, "Elegir archivos" picks on Google's own consent page instead; see the next item.
+- **Picking on Google's page.** Agentonic starts the usual Drive consent with Google's file chooser turned on: `trigger_onepick=true`, `allow_multiple=true`, `mimetypes` limited to the supported formats, and `login_hint` naming the connected account.
+  - Google documents this for desktop and mobile apps. A live check on 9 October showed it also works for this web client: Google said "For the files you're about to pick…" and offered the files.
+  - Google returns `picked_file_ids` to the usual callback. The callback renews the connection's sealed credential, as on any reconnect. It then checks each file with Drive and keeps it exactly as a Picker pick: for the agent, or in the collection chosen before leaving.
+  - Back in Agentonic, one notification reports how many files were added and refused.
+  - Choosing another account on Google's page connects that account as its own connection.
+  - There is no frame, no popup and no third-party cookie, so neither Brave's nor Safari's cookie rules matter.
   - The customer app sends `Cross-Origin-Opener-Policy: same-origin-allow-popups` so that Google's frame keeps a handle on the window it opened and can close it. Under `same-origin`, browsers open that window without an opener. Admin keeps `same-origin`.
 - Google positions the Picker from the window's scroll position. The shared stylesheet keeps `.picker-dialog` fixed and centred in the viewport, and the window fits the screen within Google's size limits.
 
@@ -217,7 +224,7 @@ Still on 0.34.2, Chrome showed "La clave de desarrollador de la API no es válid
 
 - The owner then picked three files in Chrome, and they appear under "Archivos del agente".
 - `platform-0.35.0-ee0f65b4f024` (0.34.4's changes plus migration 66), installed the same day, keeps the page still while the Picker is open, shows the "Gmail" and "Google Drive" buttons with their marks, and tells Brave users about Shields.
-- Brave with cross-site cookies allowed is still to be confirmed.
+- Brave with cross-site cookies allowed in Shields still failed. Picking on Google's page (above) replaces that advice in 0.35.3.
 
 ## Acceptance matrix
 
