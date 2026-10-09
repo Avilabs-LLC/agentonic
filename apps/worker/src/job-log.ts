@@ -6,7 +6,7 @@
 // readiness and authorization stay in service-state.ts's waiting lines.
 
 const ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-const CODE = /^[a-z][a-z_]{1,40}$/
+const CODE = /^[a-z][a-z0-9_]{1,40}$/
 
 export type FinishedJob = {
   /** Which worker ran it: knowledge, evaluation, preparation or staging_turn. */
@@ -17,6 +17,8 @@ export type FinishedJob = {
   finishedAt: number
   /** An error code such as `lease_lost`; anything else becomes "unexpected". */
   code?: string
+  /** Items the job passed over, such as mail Gmail would not hand over. */
+  skipped?: number
 }
 
 const iso = (ms: number) => new Date(ms).toISOString()
@@ -51,6 +53,8 @@ export function jobLine(entry: FinishedJob) {
   set("startedAt", iso(entry.startedAt))
   set("finishedAt", iso(entry.finishedAt))
   set("durationMs", Math.max(0, entry.finishedAt - entry.startedAt))
+  if (Number.isSafeInteger(entry.skipped) && entry.skipped! > 0)
+    set("skipped", entry.skipped)
   return line
 }
 

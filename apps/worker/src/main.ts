@@ -9,7 +9,12 @@ import { processJob, type Execute } from "./pipeline"
 import { scheduleRetention } from "./retention"
 import { directProviders, providerKeys } from "./providers"
 import { storageSession } from "./storage-session"
-import { runStyleGuide, StyleStopped, type StyleJob } from "./style-guide"
+import {
+  runStyleGuide,
+  StyleFailure,
+  StyleStopped,
+  type StyleJob,
+} from "./style-guide"
 import {
   runScheduledAction,
   scheduledAction,
@@ -124,13 +129,19 @@ async function runStyle(job: StyleJob & LaneJob, stopping: AbortSignal) {
   }, 20000)
   const startedAt = Date.now()
   try {
-    await runStyleGuide(
+    const { skipped } = await runStyleGuide(
       job,
       styleExecute,
       { google: keys.google, openaiKey: keys.openaiKey },
       signal
     )
-    logJob({ service: "knowledge", job, startedAt, finishedAt: Date.now() })
+    logJob({
+      service: "knowledge",
+      job,
+      startedAt,
+      finishedAt: Date.now(),
+      skipped,
+    })
   } catch (error) {
     // Codes only: a failure never carries message text.
     const code =
@@ -144,7 +155,12 @@ async function runStyle(job: StyleJob & LaneJob, stopping: AbortSignal) {
       job,
       startedAt,
       finishedAt: Date.now(),
-      code: error instanceof StyleStopped ? "reconnect" : code,
+      code:
+        error instanceof StyleStopped
+          ? "reconnect"
+          : error instanceof StyleFailure
+            ? error.diagnostic
+            : code,
     })
   } finally {
     clearInterval(heartbeat)

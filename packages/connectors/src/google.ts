@@ -13,7 +13,9 @@ export type GoogleConfig = {
 }
 export class GoogleError extends Error {
   constructor(
-    public code: "reconnect" | "unavailable" | "uncertain" | "rejected"
+    public code: "reconnect" | "unavailable" | "uncertain" | "rejected",
+    /** A short category for logs, such as `gmail_http_503`; never provider text. */
+    public reason?: string
   ) {
     super(code)
   }
@@ -29,7 +31,7 @@ async function json(response: Response) {
     size += value.length
     if (size > 2_000_000) {
       await reader.cancel()
-      throw new GoogleError("unavailable")
+      throw new GoogleError("unavailable", "gmail_too_large")
     }
     parts.push(value)
   }
@@ -300,33 +302,105 @@ export async function gmail(
 }
 
 // Aprender mi estilo (architecture §57): the account's own sent mail, read once
-// in the worker's memory. Nothing here is stored.
-async function read(access: string, path: string) {
+// in the worker's memory. Nothing here is stored. A run makes hundreds of reads
+// in a row, so a passing Gmail error (a 5xx, a rate limit, a dropped
+// connection) is retried with backoff instead of ending the run.
+const READ_RETRIES = 4
+const rateLimited =
+  /rateLimitExceeded|userRateLimitExceeded|RATE_LIMIT_EXCEEDED/
+/** A failure worth another try, with the wait Google asked for, if any. */
+class Passing extends GoogleError {
+  constructor(
+    reason: string,
+    public retryAfter: string | null = null
+  ) {
+    super("unavailable", reason)
+  }
+}
+/** Retry-After in seconds or as a date, at most 30 s; otherwise exponential with jitter. */
+function backoff(attempt: number, retryAfter: string | null) {
+  if (retryAfter) {
+    const asked = /^\d+$/.test(retryAfter.trim())
+      ? Number(retryAfter) * 1000
+      : Date.parse(retryAfter) - Date.now()
+    if (Number.isFinite(asked)) return Math.min(30000, Math.max(0, asked))
+  }
+  return 500 * 2 ** attempt * (0.75 + Math.random() / 2)
+}
+function pause(ms: number, signal?: AbortSignal) {
+  return new Promise<void>((resolve, reject) => {
+    const stop = () => {
+      clearTimeout(timer)
+      reject(new GoogleError("unavailable"))
+    }
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", stop)
+      resolve()
+    }, ms)
+    signal?.addEventListener("abort", stop, { once: true })
+  })
+}
+async function readOnce(access: string, path: string, signal?: AbortSignal) {
   let response: Response
   try {
     response = await fetch(
       `https://gmail.googleapis.com/gmail/v1/users/me/${path}`,
       {
         headers: { Authorization: `Bearer ${access}` },
-        signal: AbortSignal.timeout(15000),
+        signal: AbortSignal.any([
+          AbortSignal.timeout(15000),
+          ...(signal ? [signal] : []),
+        ]),
       }
     )
-  } catch {
-    throw new GoogleError("unavailable")
+  } catch (error) {
+    throw new Passing(
+      error instanceof Error && error.name === "TimeoutError"
+        ? "gmail_timeout"
+        : "gmail_network"
+    )
   }
-  if (!response.ok)
-    throw new GoogleError(response.status === 401 ? "reconnect" : "unavailable")
+  if (response.status === 401) throw new GoogleError("reconnect")
+  if (!response.ok) {
+    const reason = `gmail_http_${response.status}`
+    const body = JSON.stringify(await json(response).catch(() => null))
+    if (
+      [429, 500, 502, 503, 504].includes(response.status) ||
+      (response.status === 403 && rateLimited.test(body))
+    )
+      throw new Passing(reason, response.headers.get("retry-after"))
+    throw new GoogleError("rejected", reason)
+  }
   try {
     return await json(response)
-  } catch {
-    throw new GoogleError("unavailable")
+  } catch (error) {
+    // Too large stays too large; a dropped body is worth another try.
+    if (error instanceof GoogleError && error.reason === "gmail_too_large")
+      throw new GoogleError("rejected", error.reason)
+    throw new Passing("gmail_body")
+  }
+}
+async function read(access: string, path: string, signal?: AbortSignal) {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await readOnce(access, path, signal)
+    } catch (error) {
+      if (
+        !(error instanceof Passing) ||
+        attempt >= READ_RETRIES ||
+        signal?.aborted
+      )
+        throw error
+      await pause(backoff(attempt, error.retryAfter), signal)
+    }
   }
 }
 /** IDs of messages the account sent in the last `days` days, newest first. */
 export async function sentMessageIds(
   access: string,
   days: number,
-  max: number
+  max: number,
+  signal?: AbortSignal
 ) {
   const ids: string[] = []
   let pageToken: string | undefined
@@ -343,7 +417,8 @@ export async function sentMessageIds(
             q: `in:sent newer_than:${days}d -in:chats`,
             maxResults: String(Math.min(100, max - ids.length)),
             ...(pageToken ? { pageToken } : {}),
-          })}`
+          })}`,
+          signal
         )
       )
     ids.push(...(page.messages ?? []).map((m) => m.id))
@@ -352,9 +427,13 @@ export async function sentMessageIds(
   return ids.slice(0, max)
 }
 /** One sent message: the headers that tell who wrote it and how, and its text. */
-export async function readSentMessage(access: string, id: string) {
+export async function readSentMessage(
+  access: string,
+  id: string,
+  signal?: AbortSignal
+) {
   if (!/^[a-zA-Z0-9_-]{1,128}$/.test(id)) throw new GoogleError("rejected")
-  const m = message(await read(access, `messages/${id}?format=full`), [
+  const m = message(await read(access, `messages/${id}?format=full`, signal), [
     "from",
     "to",
     "cc",
