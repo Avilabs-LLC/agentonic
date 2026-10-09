@@ -1,6 +1,6 @@
 "use client"
-import { useState, useSyncExternalStore } from "react"
-import { useRouter } from "next/navigation"
+import { useEffect, useState, useSyncExternalStore } from "react"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import {
   CheckIcon,
   CircleCheckIcon,
@@ -224,24 +224,68 @@ function holdScroll() {
 }
 const unsubscribed = () => () => {}
 /**
- * Brave keeps Google's cookies from the Picker's frame, so Google asks for a
- * sign-in the frame never sees, and the window it opens cannot return the
- * picked files (architecture §62). Brave alone gets the way out.
+ * Brave and Safari keep Google's cookies from the Picker's frame, so the
+ * in-page Picker never sees the Google session (architecture §62). Every
+ * browser on an iPhone or iPad uses Safari's engine and its rules. There,
+ * files are picked on Google's own consent page, which returns their IDs.
  */
-export function DriveBrowserNote() {
-  const brave = useSyncExternalStore(
-    unsubscribed,
-    () => "brave" in navigator,
-    () => false
+export function pickOnGooglePage() {
+  const agent = navigator.userAgent
+  return (
+    "brave" in navigator ||
+    /iPhone|iPad|iPod/.test(agent) ||
+    (/Safari\//.test(agent) && !/Chrome|Chromium|Edg|Android/.test(agent))
   )
-  if (!brave) return null
+}
+export function useGooglePagePicker() {
+  return useSyncExternalStore(unsubscribed, pickOnGooglePage, () => false)
+}
+/** Says, where it applies, that files are picked on Google's page. */
+export function DriveBrowserNote() {
+  if (!useGooglePagePicker()) return null
   return (
     <p className="text-sm text-muted-foreground">
-      En Brave, Google Drive necesita sus cookies dentro de esta página: en
-      Shields (el ícono del león), permite las cookies entre sitios para este
-      sitio.
+      En este navegador, elegirás los archivos en una página de Google y
+      volverás aquí.
     </p>
   )
+}
+const returnMessages: Record<string, string> = {
+  too_many: "Se alcanzó el límite de archivos de esta cuenta.",
+  failed: "No se pudieron agregar los archivos.",
+}
+/**
+ * Reports the files picked on Google's page once, after Google sends the
+ * person back, then drops the result from the address.
+ */
+export function DriveReturnNotice() {
+  const params = useSearchParams(),
+    pathname = usePathname(),
+    router = useRouter()
+  const result = params.get("drive")
+  useEffect(() => {
+    if (!result || !["picked", "too_many", "failed"].includes(result)) return
+    if (result === "picked") {
+      const added = Number(params.get("added") ?? 0),
+        refused = Number(params.get("refused") ?? 0)
+      if (added)
+        notify.success(
+          added === 1
+            ? "Se agregó 1 archivo."
+            : `Se agregaron ${added} archivos.`
+        )
+      if (refused)
+        notify.warning(
+          refused === 1
+            ? "1 archivo no se agregó: formato no compatible o sin acceso en Drive."
+            : `${refused} archivos no se agregaron: formato no compatible o sin acceso en Drive.`
+        )
+    } else notify.destructive(returnMessages[result]!)
+    const next = new URLSearchParams(params.toString())
+    for (const key of ["drive", "added", "refused"]) next.delete(key)
+    router.replace(`${pathname}?${next.toString()}`, { scroll: false })
+  }, [result, params, pathname, router])
+  return null
 }
 /** Asks the server for a Picker session, opens it, and returns what was picked. */
 export async function chooseDriveFiles(
@@ -277,11 +321,13 @@ export function notifyPicked(result: Record<string, unknown>) {
 export const startDriveConnection = (
   workspaceId: string,
   purpose: "tools" | "knowledge",
-  agentId?: string
+  agentId?: string,
+  /** Picks files for a connection on Google's own page (Brave, Safari). */
+  pick?: { connectionId: string; collectionId?: string }
 ) => {
   const form = document.createElement("form")
   form.method = "POST"
-  form.action = `/api/connections/google/start?provider=drive&purpose=${purpose}&workspace=${workspaceId}${agentId ? `&agent=${agentId}` : ""}`
+  form.action = `/api/connections/google/start?provider=drive&purpose=${purpose}&workspace=${workspaceId}${agentId ? `&agent=${agentId}` : ""}${pick ? `&pick=1&connection=${pick.connectionId}${pick.collectionId ? `&collection=${pick.collectionId}` : ""}` : ""}`
   document.body.appendChild(form)
   form.submit()
 }
@@ -308,6 +354,10 @@ export function DriveFiles({
     [busy, setBusy] = useState(false)
   async function choose() {
     setBusy(true)
+    if (pickOnGooglePage())
+      return startDriveConnection(workspaceId, "tools", agentId, {
+        connectionId,
+      })
     try {
       const ids = await chooseDriveFiles(
         workspaceId,

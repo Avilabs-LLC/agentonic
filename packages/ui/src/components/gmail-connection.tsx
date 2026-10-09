@@ -43,6 +43,7 @@ import {
   DriveConnectDialog,
   DriveDisconnectDialog,
   DriveFiles,
+  DriveReturnNotice,
   DriveTools,
   driveCommand,
   startDriveConnection,
@@ -307,6 +308,7 @@ export function GmailConnection({
   }
   return (
     <>
+      {drive && <DriveReturnNotice />}
       <AgentSettingsCard
         title="Conexiones"
         icon={<PlugIcon />}
