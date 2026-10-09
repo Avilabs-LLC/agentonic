@@ -1,5 +1,9 @@
 import { beforeEach, expect, it, vi } from "vitest"
-import { safeNext } from "../packages/contracts/src/identity"
+import {
+  nameRequired,
+  PLACEHOLDER_NAME,
+  safeNext,
+} from "../packages/contracts/src/identity"
 
 // Account flows (architecture §54): email links, password reset, invitation
 // emails and the staff authenticator, with Supabase replaced by fakes.
@@ -275,4 +279,17 @@ it("saves a person's own name only when it is a usable name (N7)", async () => {
   expect((await updateDisplayName("customer", { displayName: "Ana" })).ok).toBe(
     false
   )
+})
+it("asks for a name until the person chooses one other than the placeholder", async () => {
+  expect(nameRequired({ displayName: PLACEHOLDER_NAME })).toBe(true)
+  for (const user of [{ displayName: "Ana" }, { displayName: "Miembros" }, null])
+    expect(nameRequired(user)).toBe(false)
+  // Saving the placeholder would keep the prompt showing, so it is refused.
+  mocks.setName.mockResolvedValue(true)
+  for (const displayName of ["Miembro", " miembro ", "MIEMBRO"])
+    expect(await updateDisplayName("customer", { displayName })).toEqual({
+      ok: false,
+      message: "Escribe tu nombre.",
+    })
+  expect(mocks.setName).not.toHaveBeenCalled()
 })

@@ -1629,6 +1629,7 @@ Until now accounts existed only because the owner created them from the Mac with
 - Then Supabase emails a sign-in link (`signInWithOtp`, creating the account if needed, which the hook allows). Its destination is `/invitation` with the one-time token. If the email can't be sent, the invitation is withdrawn at once, so none is left unreachable.
 - The link passes through `/auth/confirm`, which verifies Supabase's token hash with `verifyOtp` and signs the invitee in. `/invitation` then accepts through `invite.accept`, which still requires the verified email to be the invited one. After accepting, a first-time invitee is offered a password.
 - Withdrawing an invitation is a row action with confirmation; reissuing means withdrawing first.
+- **Names (N7, 8–9 October).** Accepting an invitation also sets the person's own name (`set_display_name`, migration 59), in the same transaction. **Mi cuenta** changes it in both apps. Anyone still on the "Miembro" placeholder, such as people who joined before 8 October, is sent from every customer panel page to `/name` until they choose one; the placeholder itself is refused as a name. This is a prompt, not an authorization check, so it lives in the panel layout.
 
 **Email links.** Supabase's templates build links from `{{ .RedirectTo }}` and `{{ .TokenHash }}`, not its own confirmation URL, so a link works in any browser. PKCE would tie it to the browser that asked. `/auth/confirm` exists in both apps:
 

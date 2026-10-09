@@ -1,6 +1,6 @@
 # Agentonic: current state
 
-**As of 9 October 2026 · platform v0.35.0 · nonproduction only.** A short summary of what runs where, what works and what doesn't exist yet. [The architecture record](agentonic-architecture.md) keeps the full, dated history. If the two disagree about the present, fix this page. Update it whenever a change alters what runs where.
+**As of 9 October 2026 · platform v0.35.1 · nonproduction only.** A short summary of what runs where, what works and what doesn't exist yet. [The architecture record](agentonic-architecture.md) keeps the full, dated history. If the two disagree about the present, fix this page. Update it whenever a change alters what runs where.
 
 ## What runs where
 
@@ -41,6 +41,8 @@ Existing agents move to runtime 0.5.0 with their next version.
 - **Knowledge:** a curator imports picked files into a collection from Conocimiento, and they are synced hourly. A change cited by a running or approved version waits for "Aplicar cambios".
 
 Only `drive.file` is requested, in the same Google project as Gmail. The live acceptance is in [drive-connection.md](drive-connection.md) (outstanding action N15).
+
+**Names (architecture §54), in platform v0.35.1; not yet installed.** Anyone still on the "Miembro" placeholder chooses a name before using the customer app. Invitees already name themselves when accepting. The three ACME members who joined before that were named by a one-off backfill on 9 October.
 
 **Aprender mi estilo (architecture §57), installed 8 October with platform v0.28.0.** In each Gmail account's frame in Configuración, the person who connected it can have the knowledge worker read the mail they sent in the last 90 days (at most 200 messages, never stored) and draft a writing-style guide. They review and edit it before it is added to a collection they curate. Since platform v0.33.1 (installed 9 October) a passing Gmail error is retried, and a message Gmail won't hand over is skipped instead of ending the run. Since platform v0.33.2 (installed 9 October) reads are paced and Gmail's rate limit is waited out; if Gmail still refuses, the guide is written from the mail already read. A 200-message run passed live on 9 October and its guide was accepted.
 

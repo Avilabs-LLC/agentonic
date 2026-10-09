@@ -1,5 +1,10 @@
 export const VERSION_HISTORY = [
   {
+    "version": "0.35.1",
+    "date": "2026-10-09",
+    "summary": "Anyone still named Miembro chooses a name before using the customer app"
+  },
+  {
     "version": "0.35.0",
     "date": "2026-10-09",
     "summary": "A version can be authorized only once per host while that authorization is in place; Nico's duplicate is removed."

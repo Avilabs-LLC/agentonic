@@ -488,6 +488,61 @@ export function InvitationAcceptance({
   )
 }
 
+/** The name prompt for anyone still on the placeholder; the panel waits for it. */
+export function ChooseNameForm({
+  save,
+}: {
+  save: (input: DisplayNameInput) => Promise<ActionResult>
+}) {
+  const router = useRouter()
+  const [busy, setBusy] = useState(false)
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isValid },
+  } = useForm<DisplayNameInput>({
+    resolver: zodResolver(displayNameSchema),
+    mode: "onChange",
+    defaultValues: { displayName: "" },
+  })
+  async function submit(input: DisplayNameInput) {
+    setBusy(true)
+    try {
+      const result = await save(input)
+      if (!result.ok) {
+        notify.destructive(result.message)
+        setBusy(false)
+        return
+      }
+      notify.success("Nombre guardado.")
+      router.replace("/")
+    } catch {
+      notify.destructive("No se pudo guardar tu nombre. Inténtalo de nuevo.")
+      setBusy(false)
+    }
+  }
+  return (
+    <form onSubmit={handleSubmit(submit)} noValidate className="space-y-4">
+      <Field data-invalid={Boolean(errors.displayName)}>
+        <FieldLabel htmlFor="choose-name">Tu nombre</FieldLabel>
+        <Input
+          id="choose-name"
+          autoComplete="name"
+          maxLength={120}
+          autoFocus
+          aria-invalid={Boolean(errors.displayName)}
+          {...register("displayName")}
+        />
+        <FieldDescription>Puedes cambiarlo después en Mi cuenta.</FieldDescription>
+        <FieldError errors={[errors.displayName]} />
+      </Field>
+      <Button type="submit" disabled={busy || !isValid}>
+        {busy ? "Guardando…" : "Continuar"}
+      </Button>
+    </form>
+  )
+}
+
 /** The Nombre row of Mi cuenta in both apps: shown, then edited in place (N7). */
 export function DisplayNameEditor({
   name,
