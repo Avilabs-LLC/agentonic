@@ -2438,6 +2438,7 @@ async function modelReview() {
     "202610080062_agent_schedules",
     "202610080063_ongoing_deployments",
     "202610090064_careful_grading",
+    "202610090066_single_authorization",
   ])
     await db.exec(
       readFileSync(
@@ -3386,6 +3387,63 @@ describe("ongoing deployments (§59)", () => {
     ).rows[0]!.r
     return state.deployments.find((d) => d.id === deploymentId)!
   }
+
+  it("authorizes a version once per host until that authorization ends", async () => {
+    const p = await running()
+    const canAuthorize = async () => {
+      await actor()
+      return (
+        await db.query<{
+          r: { submissions: { id: string; canAuthorize: boolean }[] }
+        }>("SELECT agentonic.lifecycle_state($1) r", [a])
+      ).rows[0]!.r.submissions.find((s) => s.id === p.submissionId)!
+        .canAuthorize
+    }
+    const authorize = async (request: number, budgetUsd: number) => {
+      await actor()
+      return lifecycleCall("deployment_command", "authorize", {
+        submissionId: p.submissionId,
+        environment: "local",
+        budgetUsd,
+        consent: true,
+        requestId: id(request),
+      })
+    }
+    const count = async () =>
+      (
+        await sql(
+          "SELECT count(*)::int n FROM agentonic.deployments WHERE submission_id=$1",
+          [p.submissionId]
+        )
+      ).rows[0]
+    // Running: no second authorization, even with another budget; retrying
+    // the original request still answers with the same deployment.
+    expect(await canAuthorize()).toBe(false)
+    expect(await authorize(1210, 20)).toEqual({
+      ok: false,
+      code: "already_authorized",
+    })
+    expect(await authorize(1202, 5)).toEqual({ ok: true, id: p.deploymentId })
+    expect(await count()).toEqual({ n: 1 })
+    // Stopped: the version can be authorized again, once.
+    await actor()
+    expect(
+      (
+        await lifecycleCall("deployment_command", "stop", {
+          deploymentId: p.deploymentId,
+        })
+      ).ok
+    ).toBe(true)
+    expect(await canAuthorize()).toBe(true)
+    expect((await authorize(1211, 5)).ok).toBe(true)
+    // Pending activation counts as well.
+    expect(await canAuthorize()).toBe(false)
+    expect(await authorize(1212, 20)).toEqual({
+      ok: false,
+      code: "already_authorized",
+    })
+    expect(await count()).toEqual({ n: 2 })
+  })
 
   it("authorizes 30 days with a period budget and renews automatically while nothing changed", async () => {
     const p = await running()

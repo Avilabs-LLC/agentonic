@@ -265,6 +265,8 @@ export const lifecycleErrors: Record<string, string> = {
     "La aprobación no está vigente. Renueva la revisión antes de activar.",
   host_unavailable:
     "No se puede activar en este momento por un problema de nuestro lado. Inténtalo más tarde.",
+  already_authorized:
+    "Esta versión ya tiene una autorización vigente en este servidor. Para cambiar su presupuesto, detenla y vuelve a autorizar.",
   still_valid: "Esta aprobación todavía está vigente.",
   unavailable: "La conversación no está disponible con la autorización actual.",
   offline:
