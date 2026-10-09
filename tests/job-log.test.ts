@@ -117,4 +117,22 @@ it("counts what a style run skipped and names Gmail's status class only", () => 
   expect(jobLine({ ...style, code: "gmail_http_503" })).toMatchObject({
     error: "gmail_http_503",
   })
+  // A rate limit names its kind and the wait Gmail asked for, never its message.
+  expect(
+    jobLine({
+      ...style,
+      limited: "gmail_http_403_user_rate_limit",
+      limitWaitMs: 20000,
+    })
+  ).toMatchObject({
+    limited: "gmail_http_403_user_rate_limit",
+    limitWaitMs: 20000,
+  })
+  const careless = jobLine({
+    ...style,
+    limited: "User-rate limit exceeded. Retry after 2026-10-09T11:45:00Z",
+    limitWaitMs: Number.NaN,
+  })
+  expect(careless).not.toHaveProperty("limited")
+  expect(careless).not.toHaveProperty("limitWaitMs")
 })

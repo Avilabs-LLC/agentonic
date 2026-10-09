@@ -129,7 +129,7 @@ async function runStyle(job: StyleJob & LaneJob, stopping: AbortSignal) {
   }, 20000)
   const startedAt = Date.now()
   try {
-    const { skipped } = await runStyleGuide(
+    const reading = await runStyleGuide(
       job,
       styleExecute,
       { google: keys.google, openaiKey: keys.openaiKey },
@@ -140,7 +140,7 @@ async function runStyle(job: StyleJob & LaneJob, stopping: AbortSignal) {
       job,
       startedAt,
       finishedAt: Date.now(),
-      skipped,
+      ...reading,
     })
   } catch (error) {
     // Codes only: a failure never carries message text.
