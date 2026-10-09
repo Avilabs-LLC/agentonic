@@ -1,6 +1,6 @@
 # Agentonic: current state
 
-**As of 9 October 2026 · platform v0.37.0 · nonproduction only.** A short summary of what runs where, what works and what doesn't exist yet. [The architecture record](agentonic-architecture.md) keeps the full, dated history. If the two disagree about the present, fix this page. Update it whenever a change alters what runs where.
+**As of 9 October 2026 · platform v0.37.1 · nonproduction only.** A short summary of what runs where, what works and what doesn't exist yet. [The architecture record](agentonic-architecture.md) keeps the full, dated history. If the two disagree about the present, fix this page. Update it whenever a change alters what runs where.
 
 ## What runs where
 
@@ -67,6 +67,8 @@ The Admin app has **Revisiones** (submissions, receipts, renewal and activation)
 
 Staff accounts no longer need the Mac's bootstrap script. The invitation email now reads the same for both kinds of invitation, and the owner pastes it into Supabase again (outstanding C13).
 
+**Volver atrás (architecture §65), in platform v0.37.1; not yet installed.** Volver atrás returns to the page you came from in the app, with its filters and tab; the breadcrumb still goes up. On the agent page, the number of an open review opens that review.
+
 ## Operations
 
 - **Verification.** Hosts and evaluators stay trusted for 30 days (migration 52; it was 7 until 7 October). A launchd job on the Mac runs `pnpm staging:reverify --renew --publish` at 09:00 and 21:00. It checks the installed files and services over SSH, renews only what passes, and renews anything a week old or more, so the VM keeps working for 23 to 30 days with the Mac off. The GitHub alert for a silent Mac only fires once an expiry is within 5 days. Run `pnpm staging:reverify` (read-only) for live expiry dates and what each environment runs: its worker release and each runtime's version and source commit. The local deployment host has been expired since 26 September on purpose; run `install-staging --local` before using local staging chats.
@@ -131,5 +133,6 @@ The ordered plan is architecture §37; the owner's audit brief tracks progress. 
 | Google Drive: live tools and knowledge sync                            | §62                  |
 | Superseded reviews, Revisiones actions, server cards by kind           | §63                  |
 | Agentonic's team in Admin: invitations, roles and deactivation         | §64                  |
+| Volver atrás, breadcrumbs and opening reviews from the agent page      | §65                  |
 
 Presentation rules are in the [UI contract](ui/ui-contract.md). The [target schema](schema.dbml) describes 90 tables; 73 exist in the 68 checked-in migrations.

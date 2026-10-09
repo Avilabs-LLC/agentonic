@@ -12,11 +12,11 @@ import {
 export default async function Page({
   searchParams,
 }: {
-  searchParams: Promise<{ workspace?: string; state?: string }>
+  searchParams: Promise<{ workspace?: string }>
 }) {
   const identity = await requireIdentity("admin")
   if (!identity.hasAccess) notFound()
-  const { workspace, state } = await searchParams
+  const { workspace } = await searchParams
   const listing = await loadReviewListing(workspace)
   if (!listing) throw new Error("No se pudo cargar la cola de revisión.")
   return (
@@ -30,7 +30,6 @@ export default async function Page({
         reviews={listing.reviews}
         workspaces={listing.workspaces}
         selectedWorkspace={workspace ?? "all"}
-        selectedState={state}
         now={new Date().toISOString()}
         openReview={beginReview}
         changeState={changeReviewState}

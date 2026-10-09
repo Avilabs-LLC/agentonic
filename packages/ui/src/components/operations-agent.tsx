@@ -15,11 +15,13 @@ import {
   environmentLabels,
 } from "@agentonic/contracts/lifecycle"
 import type { OperationsAgentDetail } from "@agentonic/contracts/operations"
+import type { FormResult } from "@agentonic/contracts/authoring"
 import { agentVersionsView } from "@workspace/ui/lib/agent-versions"
 import { statusDescriptor } from "@workspace/ui/lib/badge-status"
 import { deploymentColumns } from "@workspace/ui/components/deployment-columns"
 import {
   Absent,
+  CellButton,
   CellLink,
   Count,
   Deadline,
@@ -37,6 +39,7 @@ import { GmailIcon } from "@workspace/ui/components/gmail-icon"
 import { DriveIcon } from "@workspace/ui/components/drive-icon"
 import { WebIcon } from "@workspace/ui/components/web-icon"
 import { DataTable } from "@workspace/ui/components/data-table"
+import { useOpenReview } from "@workspace/ui/hooks/use-open-review"
 import {
   Card,
   CardContent,
@@ -146,12 +149,23 @@ function TabLabel({ title, count }: { title: string; count?: number }) {
   )
 }
 
+type OpenReview = (
+  workspaceId: string,
+  submissionId: string
+) => Promise<FormResult>
+
 export function OperationsAgentOverview({
   agent,
   now,
+  openReview,
+  openable,
 }: {
   agent: OperationsAgentDetail
   now: string
+  /** Records the review access and returns the review page (Revisiones' action). */
+  openReview: OpenReview
+  /** Open reviews this staff member may open now: Revisiones' canOpen. */
+  openable: string[]
 }) {
   const view = agentVersionsView(agent.summary)
   return (
@@ -208,7 +222,10 @@ export function OperationsAgentOverview({
           <ProposalsTable
             proposals={agent.proposals}
             workspaceId={agent.workspaceId}
+            agentName={agent.name}
             now={now}
+            openReview={openReview}
+            openable={openable}
           />
         </TabsContent>
         <TabsContent value="despliegues">
@@ -246,12 +263,19 @@ export function OperationsAgentOverview({
 function ProposalsTable({
   proposals,
   workspaceId,
+  agentName,
   now,
+  openReview,
+  openable,
 }: {
   proposals: OperationsAgentDetail["proposals"]
   workspaceId: string
+  agentName: string
   now: string
+  openReview: OpenReview
+  openable: string[]
 }) {
+  const { open, pending, openingId, error } = useOpenReview(openReview)
   const rows: Proposal[] = proposals.map((p) => ({
     ...p,
     label: `Versión ${p.versionNumber} · Revisión ${p.number}`,
@@ -267,7 +291,7 @@ function ProposalsTable({
       accessorKey: "number",
       header: header("Revisión"),
       // As in Revisiones, the review number opens the review: its receipt
-      // once approved, otherwise Revisiones, which records the access.
+      // once approved, otherwise the review itself, recording the access.
       cell: ({ row }) => {
         const p = row.original
         if (p.approvalReason !== null)
@@ -280,17 +304,30 @@ function ProposalsTable({
               {p.number}
             </CellLink>
           )
-        if (["submitted", "in_review"].includes(p.status))
+        if (!["submitted", "in_review"].includes(p.status))
+          return <Count value={p.number} />
+        if (!openable.includes(p.id))
           return (
-            <CellLink
-              href={`/submissions?workspace=${workspaceId}`}
+            <span
               className="tabular-nums"
+              title="Sin autorización vigente para abrirla"
             >
-              <span className="sr-only">Abrir en Revisiones la revisión </span>
               {p.number}
-            </CellLink>
+            </span>
           )
-        return <Count value={p.number} />
+        return (
+          <CellButton
+            className="tabular-nums"
+            disabled={pending}
+            aria-label={`Ver revisión ${p.number} de ${agentName}`}
+            onClick={() => open(workspaceId, p.id)}
+          >
+            {p.number}
+            {pending && openingId === p.id && (
+              <span className="sr-only"> · Abriendo…</span>
+            )}
+          </CellButton>
+        )
       },
     },
     {
@@ -339,14 +376,21 @@ function ProposalsTable({
     },
   ]
   return (
-    <DataTable
-      data={rows}
-      columns={columns}
-      searchKeys={["label", "statusLabel"]}
-      searchLabel="Buscar propuestas por versión o estado"
-      emptyDescription="Este agente todavía no ha enviado propuestas."
-      getRowId={(row) => row.id}
-    />
+    <div className="space-y-4">
+      {error && (
+        <p role="alert" className="text-sm text-destructive">
+          {error}
+        </p>
+      )}
+      <DataTable
+        data={rows}
+        columns={columns}
+        searchKeys={["label", "statusLabel"]}
+        searchLabel="Buscar propuestas por versión o estado"
+        emptyDescription="Este agente todavía no ha enviado propuestas."
+        getRowId={(row) => row.id}
+      />
+    </div>
   )
 }
 

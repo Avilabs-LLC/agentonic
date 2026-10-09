@@ -1698,7 +1698,7 @@ Version numbers count an agent's prepared versions in order, as elsewhere (`agen
 
 - **The page:** under the header (workspace, owner, creation date), three tiles show the version in use, the next version and the latest version's capabilities.
 - **Tabs:**
-  - **Propuestas:** every proposal with its review state, approval validity and activation deadline. Approved proposals link to their receipt; open ones link to Revisiones, which records the access when a review is opened.
+  - **Propuestas:** every proposal with its review state, approval validity and activation deadline. Approved proposals link to their receipt; an open one opens its review, recording the access as Revisiones does (since §65).
   - **Despliegues:** environment, state, version, authorization, and spend against budget.
   - **Actividad:** last turn, turns and failures in seven days, and known spend in thirty.
 - **Content:** a proposal's instructions and documents stay behind its review and receipt, as before.
@@ -2284,3 +2284,20 @@ Neither table grants anything to an application role.
 - showing `staff_events` in Actividad;
 - requiring the authenticator for administrators;
 - moving the Mac's bootstrap script off direct inserts.
+
+## 65. Volver atrás returns where you came from — 9 October 2026
+
+Owner report on the hosted Admin. Three paths misled:
+
+- On the agent page, the number of an open review opened the whole Revisiones list instead of that review.
+- A receipt opened from Vencimientos returned to Revisiones' Aprobadas, and an agent opened from Revisiones returned to Agentes. Volver atrás linked one route level up, which the breadcrumb already does, so it never went back.
+
+**Two controls, two questions (owner decision).** The breadcrumb still says where a page lives and goes up. Volver atrás now returns to the page the person came from in the app, with its filters and tab. That is the nearest earlier history entry on another path, read through the browser's Navigation API, which lists only this site's entries next to the current one. A page opened directly, in a new tab, after a Google sign-in, or in a browser without the API keeps the old link one level up, which also serves middle-clicks. The owner chose this over a breadcrumb that follows the path taken: that needs a `from` parameter on every cross-link and shows the same page with different breadcrumbs.
+
+**Revisiones keeps its tab.** The state tab is now `?state=` in the URL, replaced in place as the customer agent page's tabs are. Returning from a review or an agent lands on the same tab, and changing the workspace keeps it.
+
+**Open reviews from the agent page.** The number of an open review opens it, recording the review access exactly as Revisiones' Ver revisión does (`review.open`, which issues the grant). Which reviews may be opened comes from Revisiones' own queue (`canOpen`: the client's authorization has not expired and the submitter can still author). Others show the plain number with Revisiones' tooltip. No migration.
+
+**Tests.** `tests/back-target.test.ts`: no API, nothing behind, entries of the same page skipped, counting after going back. The agent page's review cell in `tests/admin-operations-render.test.ts`.
+
+Platform v0.37.1; not yet installed.

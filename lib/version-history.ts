@@ -1,5 +1,10 @@
 export const VERSION_HISTORY = [
   {
+    "version": "0.37.1",
+    "date": "2026-10-09",
+    "summary": "Volver atrás returns to the page you came from; the agent page opens an open review directly; Revisiones keeps its tab"
+  },
+  {
     "version": "0.37.0",
     "date": "2026-10-09",
     "summary": "Admin has an Equipo page: administrators invite staff by email link as Administración, Operación or Soporte, change roles and deactivate people; Espacios de trabajo no longer lists the team"

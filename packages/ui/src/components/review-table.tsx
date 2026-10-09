@@ -11,8 +11,8 @@ import {
   sortableHeader,
   timeKey,
 } from "@workspace/ui/components/table-cells"
-import { useId, useState, useTransition } from "react"
-import { useRouter } from "next/navigation"
+import { useId, useState } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import type { ColumnDef } from "@tanstack/react-table"
 import type { FormResult, ReviewListing } from "@agentonic/contracts/authoring"
 import type { OperationsUser } from "@agentonic/contracts/operations"
@@ -47,7 +47,7 @@ import {
   DropdownMenuSeparator,
 } from "@workspace/ui/components/dropdown-menu"
 import { actionsMenuClassName } from "@workspace/ui/lib/menus"
-import { notify } from "@workspace/ui/lib/toast"
+import { useOpenReview } from "@workspace/ui/hooks/use-open-review"
 import {
   ChangeReviewStateDialog,
   reviewStateTargets,
@@ -75,7 +75,6 @@ export function ReviewTable({
   reviews,
   workspaces,
   selectedWorkspace,
-  selectedState = "submitted",
   openReview,
   changeState,
   loadMember,
@@ -86,7 +85,6 @@ export function ReviewTable({
   reviews: ReviewListing
   workspaces: { id: string; name: string }[]
   selectedWorkspace: string
-  selectedState?: string
   openReview: (workspaceId: string, submissionId: string) => Promise<FormResult>
   changeState: (
     workspaceId: string,
@@ -103,6 +101,7 @@ export function ReviewTable({
   ) => Promise<FormResult>
 }) {
   const router = useRouter()
+  const params = useSearchParams()
   const filterId = useId()
   const [tableReset, setTableReset] = useState(0)
   const workspaceOptions = [
@@ -112,9 +111,21 @@ export function ReviewTable({
       label: workspace.name,
     })),
   ]
-  const [pending, startTransition] = useTransition()
-  const [openingId, setOpeningId] = useState<string | null>(null)
-  const [error, setError] = useState("")
+  const {
+    open: openWithAccess,
+    pending,
+    openingId,
+    error,
+    setError,
+    startTransition,
+  } = useOpenReview(openReview)
+  // The state tab lives in the URL, replaced rather than pushed, so
+  // "Volver atrás" from a review or an agent returns to the same tab.
+  const selectedState = reviewStates.some(
+    (s) => s.value === params.get("state")
+  )
+    ? params.get("state")!
+    : "submitted"
   const [changing, setChanging] = useState<{
     review: Review
     targets: ReviewStateTarget[]
@@ -123,14 +134,21 @@ export function ReviewTable({
 
   function selectWorkspace(value: string) {
     setError("")
+    const query = new URLSearchParams()
+    if (value !== "all") query.set("workspace", value)
+    if (selectedState !== "submitted") query.set("state", selectedState)
     startTransition(() => {
-      router.push(
-        value === "all"
-          ? "/submissions"
-          : `/submissions?workspace=${encodeURIComponent(value)}`,
-        { scroll: false }
-      )
+      router.push(query.size ? `/submissions?${query}` : "/submissions", {
+        scroll: false,
+      })
     })
+  }
+
+  function selectState(value: string) {
+    const url = new URL(window.location.href)
+    if (value === "submitted") url.searchParams.delete("state")
+    else url.searchParams.set("state", value)
+    window.history.replaceState(null, "", url)
   }
 
   function open(review: Review) {
@@ -141,27 +159,7 @@ export function ReviewTable({
       )
       return
     }
-    if (!review.canOpen) return
-    setOpeningId(review.id)
-    setError("")
-    startTransition(async () => {
-      try {
-        const result = await openReview(review.workspaceId, review.id)
-        if (!result.ok || !result.href) {
-          setError(result.message)
-          notify.destructive(result.message)
-          return
-        }
-        notify.success(result.message)
-        router.push(result.href)
-      } catch {
-        const message = "No se pudo abrir la revisión. Inténtalo de nuevo."
-        setError(message)
-        notify.destructive(message)
-      } finally {
-        setOpeningId(null)
-      }
-    })
+    if (review.canOpen) openWithAccess(review.workspaceId, review.id)
   }
 
   const columns: ColumnDef<Review>[] = [
@@ -387,11 +385,8 @@ export function ReviewTable({
         />
       )}
       <Tabs
-        defaultValue={
-          reviewStates.some((s) => s.value === selectedState)
-            ? selectedState
-            : "submitted"
-        }
+        value={selectedState}
+        onValueChange={(value) => selectState(String(value))}
         className="gap-4"
       >
         <div className="overflow-x-auto">
