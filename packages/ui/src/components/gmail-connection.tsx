@@ -29,12 +29,11 @@ import {
   DialogDescription,
 } from "@workspace/ui/components/dialog"
 import {
-  Select,
-  SelectTrigger,
-  SelectValue,
-  SelectContent,
-  SelectItem,
-} from "@workspace/ui/components/select"
+  Tabs,
+  TabsList,
+  TabsTrigger,
+  TabsContent,
+} from "@workspace/ui/components/tabs"
 import { notify } from "@workspace/ui/lib/toast"
 import { GmailIcon } from "@workspace/ui/components/gmail-icon"
 import { StyleLearning } from "@workspace/ui/components/style-learning"
@@ -90,6 +89,120 @@ export function GmailAccount({
     </div>
   )
 }
+type Grant = { connectionId: string; operations: string[] }
+/**
+ * Herramientas › Gmail: one tab per connected account, titled with the
+ * address and how many of its tools are on. Tabs scroll sideways, so many
+ * accounts fit. An agent uses Gmail through one account at a time.
+ */
+export function GmailTools({
+  connections,
+  grant,
+  disabled,
+  onPermission,
+}: {
+  connections: { id: string; account: string }[]
+  grant: Grant | undefined
+  disabled: boolean
+  onPermission: (
+    connectionId: string,
+    op: (typeof gmailOperation.options)[number],
+    checked: boolean
+  ) => void
+}) {
+  const [tab, setTab] = useState(
+    grant?.connectionId ?? connections[0]?.id ?? ""
+  )
+  const shown = connections.find((c) => c.id === tab) ?? connections[0]
+  const total = gmailOperation.options.length
+  const holder = connections.find((c) => c.id === grant?.connectionId)
+  return (
+    <div className="mt-5 space-y-4 border-t pt-5">
+      <h3 className="flex items-center gap-2 text-sm font-medium">
+        <GmailIcon className="size-4 shrink-0" />
+        Gmail
+        <span className="text-xs font-normal text-muted-foreground tabular-nums">
+          {connections.length}
+          <span className="sr-only">
+            {connections.length === 1
+              ? " cuenta conectada"
+              : " cuentas conectadas"}
+          </span>
+        </span>
+      </h3>
+      {!shown ? (
+        <CardEmptyState title="Conecta una cuenta primero">
+          Conecta Gmail para habilitar herramientas de correo. El acceso web
+          funciona de forma independiente.
+        </CardEmptyState>
+      ) : (
+        <Tabs
+          value={shown.id}
+          onValueChange={(value) => setTab(String(value))}
+          className="gap-4"
+        >
+          <div className="overflow-x-auto">
+            <TabsList
+              variant="line"
+              aria-label="Cuentas de Gmail"
+              className="w-max min-w-full justify-start border-b"
+            >
+              {connections.map((c) => (
+                <TabsTrigger key={c.id} value={c.id} className="flex-none px-3">
+                  {c.account}
+                  <span className="text-xs text-muted-foreground tabular-nums">
+                    {grant?.connectionId === c.id ? grant.operations.length : 0}
+                    /{total}
+                  </span>
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </div>
+          {connections.map((c) => (
+            <TabsContent key={c.id} value={c.id}>
+              {holder && holder.id !== c.id && (
+                <p className="mb-3 text-sm text-muted-foreground">
+                  El agente usa Gmail con una sola cuenta. Elegir una
+                  herramienta aquí quitará las de {holder.account}.
+                </p>
+              )}
+              <fieldset
+                disabled={disabled}
+                className="grid gap-3 sm:grid-cols-2"
+              >
+                <legend className="sr-only">
+                  Herramientas de Gmail para {c.account}
+                </legend>
+                {gmailOperation.options.map((op) => (
+                  <label
+                    key={op}
+                    className="flex cursor-pointer items-start gap-3 rounded-lg border p-3 text-sm"
+                  >
+                    <Checkbox.Root
+                      checked={
+                        grant?.connectionId === c.id &&
+                        grant.operations.includes(op)
+                      }
+                      onCheckedChange={(checked) =>
+                        onPermission(c.id, op, checked)
+                      }
+                      className="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded border data-checked:bg-primary data-checked:text-primary-foreground"
+                    >
+                      <Checkbox.Indicator>
+                        <CheckIcon className="size-3" />
+                      </Checkbox.Indicator>
+                    </Checkbox.Root>
+                    <span>{gmailLabels[op]}</span>
+                  </label>
+                ))}
+              </fieldset>
+            </TabsContent>
+          ))}
+        </Tabs>
+      )}
+    </div>
+  )
+}
 export function GmailConnection({
   state,
   workspaceId,
@@ -118,37 +231,24 @@ export function GmailConnection({
   const webEnabled = hasWeb(tools)
   const onGmailTools = (value: typeof tools) =>
     onTools([...tools.filter((g) => "capability" in g), ...value])
-  const [chosenAccount, setChosenAccount] = useState(
-    selected?.connectionId ??
-      state.connections.find((c) => c.status === "connected")?.id ??
-      ""
-  )
-  const connection = state.connections.find(
-    (c) => c.id === chosenAccount && c.status === "connected"
-  )
   async function permission(
+    connectionId: string,
     op: (typeof gmailOperation.options)[number],
     checked: boolean
   ) {
-    if (!connection) return
+    // One account per agent: ticking another account's tool moves the grant.
+    const own = selected?.connectionId === connectionId ? selected : undefined
     const operations = checked
-      ? [
-          ...(selected?.connectionId === connection.id
-            ? selected.operations
-            : []),
-          op,
-        ]
-      : (selected?.operations ?? []).filter((o) => o !== op)
+      ? [...(own?.operations ?? []), op]
+      : (own?.operations ?? []).filter((o) => o !== op)
     setBusy(true)
     try {
       await gmailCommand(workspaceId, "permissions", {
         agentId,
-        connectionId: connection.id,
+        connectionId,
         operations,
       })
-      onGmailTools(
-        operations.length ? [{ connectionId: connection.id, operations }] : []
-      )
+      onGmailTools(operations.length ? [{ connectionId, operations }] : [])
     } catch (e) {
       notify.destructive(
         e instanceof Error ? e.message : "No se pudo guardar el permiso."
@@ -242,86 +342,28 @@ export function GmailConnection({
             </Checkbox.Indicator>
           </Checkbox.Root>
           <span className="space-y-1">
-            <span className="block text-sm font-medium">Acceso web</span>
+            <span className="flex flex-wrap items-baseline gap-x-2">
+              <span className="text-sm font-medium">Acceso web</span>
+              <span className="text-xs text-muted-foreground">
+                Solo lectura
+              </span>
+            </span>
             <span className="block text-sm text-muted-foreground">
               Buscar información y leer páginas públicas con enlaces a las
               fuentes. No requiere conectar una cuenta.
             </span>
-            <span className="block text-xs text-muted-foreground">
-              No inicia sesión ni completa formularios. Su uso está sujeto al
-              presupuesto de la prueba. Desactivarlo y guardar retira el acceso
-              de las versiones existentes.
-            </span>
           </span>
         </label>
-        <div className="mt-5 space-y-4 border-t pt-5">
-          <h3 className="text-sm font-medium">Gmail</h3>
-          {state.connections.some((c) => c.status === "connected") && (
-            <div className="mb-4">
-              <Select
-                items={state.connections
-                  .filter((c) => c.status === "connected")
-                  .map((c) => ({ value: c.id, label: c.account }))}
-                value={connection?.id ?? ""}
-                disabled={disabled || busy}
-                onValueChange={(value) => {
-                  // Pressing the account already chosen keeps its tools.
-                  if ((value ?? "") === (connection?.id ?? "")) return
-                  setChosenAccount(value ?? "")
-                  onGmailTools([])
-                }}
-              >
-                <SelectTrigger aria-label="Cuenta de Gmail para las herramientas">
-                  <SelectValue placeholder="Selecciona una cuenta" />
-                </SelectTrigger>
-                <SelectContent>
-                  {state.connections
-                    .filter((c) => c.status === "connected")
-                    .map((c) => (
-                      <SelectItem key={c.id} value={c.id}>
-                        {c.account}
-                      </SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
-            </div>
+        <GmailTools
+          connections={state.connections.filter(
+            (c) => c.status === "connected"
           )}
-          {!connection ? (
-            <CardEmptyState title="Conecta una cuenta primero">
-              Conecta Gmail para habilitar herramientas de correo. El acceso web
-              funciona de forma independiente.
-            </CardEmptyState>
-          ) : (
-            <fieldset
-              disabled={disabled || busy}
-              className="grid gap-3 sm:grid-cols-2"
-            >
-              <legend className="mb-4 text-sm text-muted-foreground">
-                Cuenta: {connection.account}
-              </legend>
-              {gmailOperation.options.map((op) => (
-                <label
-                  key={op}
-                  className="flex cursor-pointer items-start gap-3 rounded-lg border p-3 text-sm"
-                >
-                  <Checkbox.Root
-                    checked={
-                      selected?.connectionId === connection.id &&
-                      selected.operations.includes(op)
-                    }
-                    onCheckedChange={(checked) => void permission(op, checked)}
-                    className="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded border data-checked:bg-primary data-checked:text-primary-foreground"
-                  >
-                    <Checkbox.Indicator>
-                      <CheckIcon className="size-3" />
-                    </Checkbox.Indicator>
-                  </Checkbox.Root>
-                  <span>{gmailLabels[op]}</span>
-                </label>
-              ))}
-            </fieldset>
-          )}
-        </div>
+          grant={selected}
+          disabled={disabled || busy}
+          onPermission={(connectionId, op, checked) =>
+            void permission(connectionId, op, checked)
+          }
+        />
       </AgentSettingsCard>
       <Dialog open={connecting} onOpenChange={setConnecting}>
         <DialogContent>
