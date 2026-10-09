@@ -23,6 +23,12 @@ export type StyleJob = Lease & {
 }
 /** Fewer usable messages than this cannot describe a style. */
 export const MIN_MESSAGES = 5
+/**
+ * Messages Gmail would not hand over, even after retries, are skipped. This
+ * many in a row, or more than MAX_SKIPPED in all, means Gmail itself is down.
+ */
+export const MAX_SKIPPED = 20,
+  MAX_FAILURES_IN_A_ROW = 3
 const BATCH_CHARS = 18000,
   BATCH_MESSAGES = 15,
   MESSAGE_CHARS = 2500
@@ -258,34 +264,52 @@ export async function runStyleGuide(
       await execute("reconnect", job)
       throw new StyleStopped()
     }
-    throw new Error("gmail_unavailable")
+    throw new StyleFailure("gmail_unavailable", "google_token")
   }
-  const gmail = async <T>(call: () => Promise<T>) => {
-    try {
-      return await call()
-    } catch (error) {
-      if (error instanceof GoogleError && error.code === "reconnect") {
-        await execute("reconnect", job)
-        throw new StyleStopped()
-      }
-      throw new Error("gmail_unavailable")
+  // Why Gmail failed, for the journal only: a status class, never its text.
+  const reason = (error: unknown) =>
+    error instanceof GoogleError
+      ? (error.reason ?? "gmail_unavailable")
+      : "gmail_unreadable"
+  const throwIfStopped = async (error: unknown) => {
+    if (signal.aborted) throw new Error("lease_lost")
+    if (error instanceof GoogleError && error.code === "reconnect") {
+      await execute("reconnect", job)
+      throw new StyleStopped()
     }
   }
-  const ids = await gmail(() =>
-    sentMessageIds(access, job.windowDays, job.maxMessages)
-  )
+  let ids: string[]
+  try {
+    ids = await sentMessageIds(access, job.windowDays, job.maxMessages, signal)
+  } catch (error) {
+    await throwIfStopped(error)
+    throw new StyleFailure("gmail_unavailable", reason(error))
+  }
   await execute("progress", job, {
     status: "reading",
     messagesRead: 0,
     messagesTotal: ids.length,
   })
   const used: UsableMessage[] = []
+  let skipped = 0,
+    inARow = 0
   for (const [n, id] of ids.entries()) {
     if (signal.aborted) throw new Error("lease_lost")
-    const message = usableMessage(
-      await gmail(() => readSentMessage(access, id)),
-      account
-    )
+    let message: UsableMessage | null = null
+    try {
+      message = usableMessage(
+        await readSentMessage(access, id, signal),
+        account
+      )
+      inARow = 0
+    } catch (error) {
+      await throwIfStopped(error)
+      // One message Gmail will not hand over is skipped, not the whole run.
+      skipped++
+      inARow++
+      if (inARow >= MAX_FAILURES_IN_A_ROW || skipped > MAX_SKIPPED)
+        throw new StyleFailure("gmail_unavailable", reason(error))
+    }
     if (message) used.push(message)
     if ((n + 1) % 10 === 0 || n + 1 === ids.length)
       await execute("progress", job, {
@@ -351,10 +375,20 @@ export async function runStyleGuide(
   ).slice(0, 40000)
   if (!guide.startsWith("# ")) throw new Error("provider_unavailable")
   await execute("ready", job, { guide })
+  return { skipped }
 }
 /** The run already ended in the database (for example, the account needs reconnecting). */
 export class StyleStopped extends Error {
   constructor() {
     super("style_stopped")
+  }
+}
+/** A failure code for the database, and a finer one for the journal. */
+export class StyleFailure extends Error {
+  constructor(
+    code: "gmail_unavailable",
+    public diagnostic: string
+  ) {
+    super(code)
   }
 }

@@ -100,7 +100,7 @@ export const styleErrors: Record<string, string> = {
   reconnect:
     "Google pidió volver a conectar la cuenta. Desconéctala y conéctala de nuevo antes de intentarlo.",
   gmail_unavailable:
-    "Gmail no respondió a tiempo. Inténtalo de nuevo en unos minutos.",
+    "Gmail no está respondiendo en este momento. Inténtalo de nuevo en unos minutos.",
   budget_exhausted:
     "Se alcanzó el límite de gasto autorizado. Inténtalo de nuevo con un límite mayor.",
   provider_unavailable:

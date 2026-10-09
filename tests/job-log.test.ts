@@ -98,3 +98,23 @@ it("drops malformed ids and kinds instead of logging them", () => {
     durationMs: 0,
   })
 })
+
+it("counts what a style run skipped and names Gmail's status class only", () => {
+  const style = {
+    service: "knowledge" as const,
+    job: { id: job, kind: "style", lane: "style" },
+    startedAt: queued,
+    finishedAt: queued + 30000,
+  }
+  expect(jobLine({ ...style, skipped: 2 })).toMatchObject({
+    event: "knowledge_job_completed",
+    skipped: 2,
+  })
+  expect(jobLine({ ...style, skipped: 0 })).not.toHaveProperty("skipped")
+  expect(
+    jobLine({ ...style, skipped: "2; Hola Ana" as unknown as number })
+  ).not.toHaveProperty("skipped")
+  expect(jobLine({ ...style, code: "gmail_http_503" })).toMatchObject({
+    error: "gmail_http_503",
+  })
+})

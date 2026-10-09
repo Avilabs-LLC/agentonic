@@ -7,13 +7,17 @@ import {
   phraseIndex,
   runStyleGuide,
   scrubGuide,
+  StyleFailure,
   StyleStopped,
   usableMessage,
   type StyleJob,
 } from "../apps/worker/src/style-guide"
 // Aprender mi estilo (architecture §57): the worker side, with Gmail and the
 // model mocked. Mail text must never reach the database.
-afterEach(() => vi.unstubAllGlobals())
+afterEach(() => {
+  vi.unstubAllGlobals()
+  vi.useRealTimers()
+})
 const account = "nico@example.invalid"
 const keys = keyring("c".repeat(64))
 const job: StyleJob = {
@@ -118,12 +122,17 @@ it("removes guide lines that copy nine words from the mail, and every address", 
   )
 })
 
-function providers(texts: string[]) {
-  const calls: { url: string; body?: Record<string, unknown> }[] = []
+/** Gmail's answer to one read of message `n`, or undefined to deliver it. */
+type GmailFault = (n: number, attempt: number) => Response | Error | undefined
+function providers(texts: string[], fault?: GmailFault) {
+  const calls: { url: string; at: number; body?: Record<string, unknown> }[] =
+    []
+  const attempts = new Map<number, number>()
   const fetch = vi.fn(async (input: string | URL, init?: RequestInit) => {
     const url = String(input)
     calls.push({
       url,
+      at: Date.now(),
       body:
         typeof init?.body === "string" && init.body.startsWith("{")
           ? JSON.parse(init.body)
@@ -136,9 +145,15 @@ function providers(texts: string[]) {
         messages: texts.map((_, i) => ({ id: `m${i}`, threadId: `t${i}` })),
       })
     const read = /\/messages\/m(\d+)\?format=full/.exec(url)
-    if (read)
+    if (read) {
+      const n = Number(read[1]),
+        attempt = (attempts.get(n) ?? 0) + 1
+      attempts.set(n, attempt)
+      const failure = fault?.(n, attempt)
+      if (failure instanceof Error) throw failure
+      if (failure) return failure
       return Response.json({
-        id: `m${read[1]}`,
+        id: `m${n}`,
         payload: {
           mimeType: "text/plain",
           headers: [
@@ -147,10 +162,11 @@ function providers(texts: string[]) {
             { name: "Subject", value: "Re: Informe" },
           ],
           body: {
-            data: Buffer.from(texts[Number(read[1])]!).toString("base64url"),
+            data: Buffer.from(texts[n]!).toString("base64url"),
           },
         },
       })
+    }
     // The model: observations for each batch, then the guide.
     const body = calls.at(-1)!.body!
     const markdown = String(body.instructions).startsWith("Redactas")
@@ -275,6 +291,134 @@ it("stops before the analysis when there is too little mail, and asks to reconne
   ).rejects.toBeInstanceOf(StyleStopped)
   expect(second.calls.map(([operation]) => operation)).toEqual([
     "credential",
+    "reconnect",
+  ])
+})
+
+// Gmail fails now and then over hundreds of reads in a row (a 9 October run
+// stopped at 100 of 200 on one such error): retries wait on fake timers.
+const mail = (count: number) =>
+  Array.from(
+    { length: count },
+    (_, i) =>
+      `Laura, gracias por el avance número ${i}. Lo reviso esta tarde y te confirmo mañana temprano.`
+  )
+const status = (code: number, headers: Record<string, string> = {}) =>
+  new Response('{"error":{"code":' + code + "}}", { status: code, headers })
+async function settle<T>(run: Promise<T>) {
+  let done = false
+  run.then(
+    () => (done = true),
+    () => (done = true)
+  )
+  while (!done) await vi.advanceTimersByTimeAsync(250)
+  return run
+}
+const reads = (calls: { url: string; at: number }[], n: number) =>
+  calls.filter((c) => c.url.includes(`/messages/m${n}?format=full`))
+
+it("retries a passing Gmail error, waiting as long as Gmail asks", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] })
+  const calls = providers(mail(6), (n, attempt) => {
+    if (attempt > 1) return undefined
+    if (n === 1) return status(503)
+    if (n === 2) return status(429, { "Retry-After": "2" })
+    if (n === 3)
+      return new Response(
+        '{"error":{"errors":[{"reason":"userRateLimitExceeded"}]}}',
+        { status: 403 }
+      )
+    if (n === 4) return new TypeError("fetch failed")
+  })
+  const { execute, calls: stored } = database()
+  await expect(
+    settle(runStyleGuide(job, execute, config, new AbortController().signal))
+  ).resolves.toEqual({ skipped: 0 })
+  for (const n of [1, 2, 3, 4]) expect(reads(calls, n)).toHaveLength(2)
+  expect(reads(calls, 0)).toHaveLength(1)
+  const [first, second] = reads(calls, 2)
+  expect(second!.at - first!.at).toBe(2000)
+  expect(stored.find(([, p]) => p.status === "analyzing")![1]).toMatchObject({
+    messagesUsed: 6,
+  })
+  expect(stored.at(-1)![0]).toBe("ready")
+})
+
+it("skips a message Gmail will not hand over and keeps the run going", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] })
+  const calls = providers(mail(9), (n) => {
+    if (n === 1) return status(404)
+    if (n === 3) return Response.json({ padding: "x".repeat(2_100_000) })
+    if (n === 5) return status(503)
+  })
+  const { execute, calls: stored } = database()
+  await expect(
+    settle(runStyleGuide(job, execute, config, new AbortController().signal))
+  ).resolves.toEqual({ skipped: 3 })
+  // Gone or too large stays that way; only the passing error is retried.
+  expect(reads(calls, 1)).toHaveLength(1)
+  expect(reads(calls, 3)).toHaveLength(1)
+  expect(reads(calls, 5)).toHaveLength(5)
+  expect(stored.find(([, p]) => p.messagesRead === 9)).toBeDefined()
+  expect(stored.find(([, p]) => p.status === "analyzing")![1]).toMatchObject({
+    messagesUsed: 6,
+  })
+  expect(stored.at(-1)![0]).toBe("ready")
+})
+
+it("gives up when Gmail keeps failing, naming the error for the journal only", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] })
+  providers(mail(10), (n) => (n >= 2 && n <= 4 ? status(503) : undefined))
+  const { execute, calls } = database()
+  const failed = await settle(
+    runStyleGuide(job, execute, config, new AbortController().signal)
+  ).catch((error: unknown) => error)
+  expect(failed).toBeInstanceOf(StyleFailure)
+  expect(failed).toMatchObject({
+    message: "gmail_unavailable",
+    diagnostic: "gmail_http_503",
+  })
+  expect(calls.map(([operation]) => operation)).not.toContain("reserve")
+  // More than 20 skipped in all also stops the run, even never three in a row.
+  providers(mail(50), (n) => (n % 2 ? status(404) : undefined))
+  const scattered = database()
+  await expect(
+    settle(
+      runStyleGuide(
+        job,
+        scattered.execute,
+        config,
+        new AbortController().signal
+      )
+    )
+  ).rejects.toMatchObject({
+    message: "gmail_unavailable",
+    diagnostic: "gmail_http_404",
+  })
+  expect(
+    scattered.calls.filter(([operation]) => operation === "progress").at(-1)![1]
+  ).toEqual({ status: "reading", messagesRead: 40 })
+})
+
+it("stops waiting for Gmail when the lease is lost, and asks to reconnect on a 401", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] })
+  const lease = new AbortController()
+  providers(mail(6), (n) => {
+    if (n !== 1) return undefined
+    lease.abort()
+    return status(503)
+  })
+  await expect(
+    settle(runStyleGuide(job, database().execute, config, lease.signal))
+  ).rejects.toThrow("lease_lost")
+  providers(mail(6), (n) => (n === 2 ? status(401) : undefined))
+  const { execute, calls } = database()
+  await expect(
+    settle(runStyleGuide(job, execute, config, new AbortController().signal))
+  ).rejects.toBeInstanceOf(StyleStopped)
+  expect(calls.map(([operation]) => operation)).toEqual([
+    "credential",
+    "progress",
     "reconnect",
   ])
 })

@@ -1,5 +1,10 @@
 export const VERSION_HISTORY = [
   {
+    "version": "0.33.1",
+    "date": "2026-10-09",
+    "summary": "Aprender mi estilo retries a passing Gmail error and skips a message Gmail will not hand over, instead of ending the run"
+  },
+  {
     "version": "0.33.0",
     "date": "2026-10-09",
     "summary": "Careful grading: draft-only criteria and rubric 6 on GPT-5.4 mini at medium reasoning"
