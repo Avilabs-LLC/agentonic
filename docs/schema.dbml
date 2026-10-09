@@ -2437,6 +2437,100 @@ Ref: agentonic.gmail_oauth_states.(workspace_id,owner_member_id) > agentonic.wor
 Ref: agentonic.gmail_invocations.(workspace_id,agent_id,connection_id) > agentonic.gmail_connections.(workspace_id,agent_id,id)
 Ref: agentonic.gmail_invocations.(workspace_id,owner_member_id) > agentonic.workspace_members.(workspace_id,id)
 
+// Implemented Google Drive slice (migration 65, architecture section 62). Same-ID
+// extensions of connections and tool_invocations, like Gmail's; knowledge
+// imports are knowledge_sources of kind google_drive with one document each.
+Table agentonic.drive_connections {
+ id uuid [pk, note: 'Same ID as its connections row (provider google_drive)']
+ workspace_id uuid [not null]
+ purpose text [not null, note: 'tools (bound to one agent) | knowledge (a curator''s imports)']
+ agent_id uuid [note: 'Set exactly for purpose tools']
+ owner_member_id uuid [not null]
+ account text [not null, note: 'From Drive about.get, lowercased']
+ status text [not null, note: 'connected | reconnect | disconnected']
+ credential_ciphertext text [note: 'Sealed refresh token for drive.file; erased unless connected']
+ operations jsonb [not null, note: 'Tools only: at most drive.files.list, drive.files.read, drive.docs.create, drive.docs.update']
+ created_at timestamptz [not null]
+ indexes { (workspace_id,id) [unique] }
+ Note: 'Owner-only. Connecting grants no operation. Google revocation is project-wide, so it is skipped while another connection holds the same account (google_account_shared). No direct application table grants.'
+}
+Table agentonic.drive_oauth_states {
+ state_hash text [pk]
+ workspace_id uuid [not null]
+ purpose text [not null]
+ agent_id uuid
+ owner_member_id uuid [not null]
+ connection_id uuid [not null, unique]
+ verifier_ciphertext text [not null]
+ expires_at timestamptz [not null]
+ consumed_at timestamptz
+ finished_at timestamptz
+ Note: 'One-use OAuth state, PKCE and browser binding, as for Gmail; the same callback serves both.'
+}
+Table agentonic.drive_files {
+ id uuid [pk]
+ workspace_id uuid [not null]
+ connection_id uuid [not null]
+ file_id text [not null]
+ name text [not null]
+ mime_type text [not null]
+ origin text [not null, note: 'picked (in the Picker) | created (a confirmed drive.docs.create)']
+ added_by_member_id uuid [not null]
+ created_at timestamptz [not null]
+ indexes { (connection_id,file_id) [unique] }
+ Note: 'What an agent''s Drive tools may reach; narrower than Google''s drive.file grant, which covers the whole project.'
+}
+Table agentonic.drive_invocations {
+ id uuid [pk, note: 'Same ID as its tool_invocations row']
+ workspace_id uuid [not null]
+ agent_id uuid [not null]
+ connection_id uuid [not null]
+ owner_member_id uuid [not null]
+ turn_id uuid [not null]
+ conversation_id uuid [not null]
+ operation text [not null, note: 'drive.docs.create | drive.docs.update']
+ file_id text [note: 'An update''s Doc, in the clear (an ID, never content)']
+ execution_context text [not null]
+ arguments_ciphertext text
+ arguments_sha256 text [not null]
+ status text [not null]
+ created_at timestamptz [not null]
+ expires_at timestamptz [not null]
+ approved_at timestamptz
+ finished_at timestamptz
+ result jsonb [note: 'Outcome code, created file ID and link only']
+ approved_by_schedule_id uuid
+ Note: 'Durable exact-argument one-use write approval, as for Gmail. An update is bound to the Doc version seen when proposed and refused if it changed.'
+}
+Table agentonic.drive_knowledge_files {
+ source_id uuid [pk, note: 'Its knowledge_sources row (kind google_drive)']
+ workspace_id uuid [not null]
+ connection_id uuid [not null]
+ collection_id uuid [not null]
+ document_id uuid [not null, unique]
+ file_id text [not null]
+ name text [not null]
+ mime_type text [not null]
+ status text [not null, note: 'pending | synced | held | unavailable | failed']
+ drive_version text [note: 'The Drive version whose text is indexed']
+ held_version text [note: 'A newer version waiting for its curator: a running or approved version cites the current text']
+ error_code text
+ checked_at timestamptz
+ synced_at timestamptz
+ next_check_at timestamptz [not null]
+ created_at timestamptz [not null]
+ indexes { (connection_id,collection_id,file_id) [unique] }
+ Note: 'Checked hourly by the knowledge worker. Versions keep no stored object: the text lives in Drive and only chunks are kept.'
+}
+Ref: agentonic.drive_connections.(workspace_id,agent_id) > agentonic.agents.(workspace_id,id)
+Ref: agentonic.drive_connections.(workspace_id,owner_member_id) > agentonic.workspace_members.(workspace_id,id)
+Ref: agentonic.drive_connections.(workspace_id,id) - agentonic.connections.(workspace_id,id)
+Ref: agentonic.drive_files.(workspace_id,connection_id) > agentonic.drive_connections.(workspace_id,id)
+Ref: agentonic.drive_invocations.(workspace_id,connection_id) > agentonic.drive_connections.(workspace_id,id)
+Ref: agentonic.drive_invocations.(workspace_id,id) - agentonic.tool_invocations.(workspace_id,id)
+Ref: agentonic.drive_knowledge_files.(workspace_id,source_id) - agentonic.knowledge_sources.(workspace_id,id)
+Ref: agentonic.drive_knowledge_files.(workspace_id,connection_id) > agentonic.drive_connections.(workspace_id,id)
+
 // Browserbase public web slice (migration 31): requested_access.tools accepts a
 // platform grant {capability:"web",operations:["web.search","web.read"]} alongside
 // an optional Gmail grant. No OAuth connection row is created for web access.

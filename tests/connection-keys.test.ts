@@ -185,7 +185,7 @@ async function proposeDraft(
   )
 }
 
-it("re-seals every stored Gmail secret with the active key and leaves nothing for the old one", async () => {
+it("re-seals every stored Gmail and Drive secret with the active key and leaves nothing for the old one", async () => {
   // A connection and an OAuth start sealed before keys had names, and a
   // proposal sealed with the old key's name.
   const connection = id(501),
@@ -220,10 +220,40 @@ it("re-seals every stored Gmail secret with the active key and leaves nothing fo
     invocation,
     seal({ to: ["x@example.invalid"] }, `invocation:${invocation}`, oldKey)
   )
+  // A Google Drive connection sealed with the old key's name (migration 65).
+  const drive = id(504),
+    driveState = "f".repeat(64)
+  const driveCommand = async (
+    operation: string,
+    payload: Record<string, unknown>
+  ) => {
+    await f.actor()
+    return (
+      await f.db.query<{ r: Record<string, unknown> }>(
+        "SELECT agentonic.drive_command($1,$2::jsonb) r",
+        [operation, JSON.stringify(payload)]
+      )
+    ).rows[0]!.r
+  }
+  await driveCommand("oauth.start", {
+    purpose: "tools",
+    agentId: id(20),
+    connectionId: drive,
+    state: driveState,
+    verifier: seal("verifier-3", `oauth:${driveState}`, oldKey),
+  })
+  await driveCommand("oauth.consume", { state: driveState })
+  await driveCommand("oauth.finish", {
+    state: driveState,
+    account: "synthetic@example.invalid",
+    connectionId: drive,
+    credential: seal({ refreshToken: "drive" }, `drive:${drive}`, oldKey),
+  })
   expect(await rotation.keyUsage(query)).toEqual([
     { kind: "connection", key: "v1", count: 1 },
     { kind: "invocation", key: keyId(oldKey), count: 1 },
     { kind: "oauth", key: "v1", count: 1 },
+    { kind: "drive_connection", key: keyId(oldKey), count: 1 },
   ])
 
   // A key the ring lacks stops the step before anything changes.
@@ -235,11 +265,12 @@ it("re-seals every stored Gmail secret with the active key and leaves nothing fo
   ).not.toContain(keyId(newKey))
 
   const keys = keyring(newKey, [oldKey])
-  expect(await rotation.rekey(query, keys)).toEqual({ resealed: 3, skipped: 0 })
+  expect(await rotation.rekey(query, keys)).toEqual({ resealed: 4, skipped: 0 })
   expect(await rotation.keyUsage(query)).toEqual([
     { kind: "connection", key: keyId(newKey), count: 1 },
     { kind: "invocation", key: keyId(newKey), count: 1 },
     { kind: "oauth", key: keyId(newKey), count: 1 },
+    { kind: "drive_connection", key: keyId(newKey), count: 1 },
   ])
   // Contents and bindings survive; the old key is no longer needed.
   const only = keyring(newKey)
@@ -258,6 +289,15 @@ it("re-seals every stored Gmail secret with the active key and leaves nothing fo
     to: ["x@example.invalid"],
   })
   expect(unseal(stored.v, `oauth:${pending}`, only)).toBe("verifier-2")
+  const sealedDrive = (
+    await f.sql<{ c: string }>(
+      "SELECT credential_ciphertext c FROM agentonic.drive_connections WHERE id=$1",
+      [drive]
+    )
+  ).rows[0]!.c
+  expect(unseal(sealedDrive, `drive:${drive}`, only)).toEqual({
+    refreshToken: "drive",
+  })
   // Nothing is left to do, and a finished OAuth's emptied verifier is never touched.
   expect(await rotation.rekey(query, keys)).toEqual({ resealed: 0, skipped: 0 })
 })
