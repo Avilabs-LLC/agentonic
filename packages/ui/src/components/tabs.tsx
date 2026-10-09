@@ -1,5 +1,6 @@
 "use client"
 
+import * as React from "react"
 import { Tabs as TabsPrimitive } from "@base-ui/react/tabs"
 import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "cn"
@@ -52,6 +53,58 @@ function TabsList({
   )
 }
 
+// Fades the edge that has more tabs past it, so hidden tabs are discoverable.
+const edgeFade = (left: boolean, right: boolean) =>
+  left || right
+    ? `linear-gradient(to right, ${left ? "transparent, #000 2.5rem" : "#000"}, ${right ? "#000 calc(100% - 2.5rem), transparent" : "#000"})`
+    : undefined
+
+/**
+ * A line tab row under a header. When its tabs outgrow a narrow screen it
+ * scrolls sideways inside the page instead of widening it, fades the edge
+ * that has more tabs, and starts scrolled to the selected tab.
+ */
+function TabsBar({ className, ...props }: TabsPrimitive.List.Props) {
+  const ref = React.useRef<HTMLDivElement>(null)
+  const [more, setMore] = React.useState({ left: false, right: false })
+  React.useEffect(() => {
+    const row = ref.current
+    if (!row) return
+    const active = row.querySelector<HTMLElement>("[data-active]")
+    // Clear of the fade too: 40px is its 2.5rem; the browser stops at the end.
+    if (active && active.offsetLeft + active.offsetWidth > row.clientWidth)
+      row.scrollLeft =
+        active.offsetLeft + active.offsetWidth - row.clientWidth + 40
+    const update = () =>
+      setMore({
+        left: row.scrollLeft > 1,
+        right: row.scrollLeft + row.clientWidth < row.scrollWidth - 1,
+      })
+    update()
+    row.addEventListener("scroll", update, { passive: true })
+    const resize = new ResizeObserver(update)
+    resize.observe(row)
+    return () => {
+      row.removeEventListener("scroll", update)
+      resize.disconnect()
+    }
+  }, [])
+  const mask = edgeFade(more.left, more.right)
+  return (
+    <div
+      ref={ref}
+      className="relative overflow-x-auto"
+      style={{ maskImage: mask, WebkitMaskImage: mask }}
+    >
+      <TabsList
+        variant="line"
+        className={cn("w-max min-w-full justify-start border-b", className)}
+        {...props}
+      />
+    </div>
+  )
+}
+
 function TabsTrigger({ className, ...props }: TabsPrimitive.Tab.Props) {
   return (
     <TabsPrimitive.Tab
@@ -78,4 +131,4 @@ function TabsContent({ className, ...props }: TabsPrimitive.Panel.Props) {
   )
 }
 
-export { Tabs, TabsList, TabsTrigger, TabsContent, tabsListVariants }
+export { Tabs, TabsList, TabsBar, TabsTrigger, TabsContent, tabsListVariants }

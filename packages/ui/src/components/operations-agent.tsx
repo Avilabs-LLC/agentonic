@@ -44,7 +44,7 @@ import {
 import {
   Tabs,
   TabsContent,
-  TabsList,
+  TabsBar,
   TabsTrigger,
 } from "@workspace/ui/components/tabs"
 
@@ -163,7 +163,7 @@ export function OperationsAgentOverview({
         />
       </div>
       <Tabs defaultValue="propuestas" className="gap-6">
-        <TabsList variant="line" className="w-full justify-start border-b">
+        <TabsBar aria-label="Secciones del agente">
           <TabsTrigger value="propuestas" className="flex-none px-4">
             <TabLabel title="Propuestas" count={agent.proposals.length} />
           </TabsTrigger>
@@ -173,7 +173,7 @@ export function OperationsAgentOverview({
           <TabsTrigger value="actividad" className="flex-none px-4">
             <TabLabel title="Actividad" />
           </TabsTrigger>
-        </TabsList>
+        </TabsBar>
         <TabsContent value="propuestas">
           <ProposalsTable
             proposals={agent.proposals}
