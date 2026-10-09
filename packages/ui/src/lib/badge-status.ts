@@ -70,6 +70,9 @@ export const statusMaps = {
     withdrawn: state(submissionLabels.withdrawn!, "slate", "minus"),
     approved: state(submissionLabels.approved!, "success", "check"),
     revoked: state(submissionLabels.revoked!, "violet", "ban"),
+    // Closed when a newer version was approved (migration 67); the same tone
+    // and icon as a superseded deployment.
+    superseded: state(submissionLabels.superseded!, "teal", "archive"),
   },
   review: {
     queued: state(reviewFlowLabels.queued, "warning", "clock"),
@@ -245,9 +248,13 @@ export function proposalStatus(
   review?: string
 ): StatusDescriptor {
   if (
-    ["revoked", "rejected", "withdrawn", "changes_requested"].includes(
-      submission
-    )
+    [
+      "revoked",
+      "rejected",
+      "withdrawn",
+      "superseded",
+      "changes_requested",
+    ].includes(submission)
   )
     return statusDescriptor("submission", submission)
   if (review) return statusDescriptor("review", review)
@@ -302,6 +309,7 @@ export const submissionBadgeVariants: Record<string, BadgeVariant> = {
   withdrawn: "slate",
   approved: "success",
   revoked: "violet",
+  superseded: "teal",
 }
 
 export type BadgeVariant =

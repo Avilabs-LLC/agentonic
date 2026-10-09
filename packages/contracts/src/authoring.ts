@@ -268,6 +268,9 @@ export const reviewQueue = z.array(
     userEmail: z.string().nullable(),
     versionNumber: z.number().int().positive(),
     canOpen: z.boolean(),
+    // A decision can be recorded now: the client confirmed the criteria and
+    // the evaluation finished (migration 67).
+    canDecide: z.boolean().default(false),
     approvalReason: z.string().optional(),
     approvalExpiresAt: z.string().nullable().optional(),
     deploymentStatus: z.string().optional(),
@@ -314,4 +317,20 @@ export const submissionLabels: Record<string, string> = {
   withdrawn: "Retirada",
   approved: "Aprobada",
   revoked: "Revocada",
+  superseded: "Reemplazada",
 }
+
+// Cambiar estado in Revisiones: the decisions staff can record from the list,
+// with the comment the client reads. Approval stays on the review page, with
+// its evidence; revocation has its own action.
+export const reviewStateChange = z
+  .object({
+    decision: z.enum(["in_review", "changes_requested", "rejected"]),
+    feedback: z
+      .string()
+      .trim()
+      .min(10, "Explica el motivo en al menos 10 caracteres.")
+      .max(2000, "Usa como máximo 2000 caracteres."),
+  })
+  .strict()
+export type ReviewStateChange = z.infer<typeof reviewStateChange>

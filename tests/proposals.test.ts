@@ -90,7 +90,7 @@ describe("proposal standing", () => {
   })
 
   it("preserves closed decisions ahead of approval and evaluation progress", () => {
-    for (const status of ["rejected", "withdrawn", "revoked"])
+    for (const status of ["rejected", "withdrawn", "revoked", "superseded"])
       expect(
         proposalStatus(status, evaluated("running"), { reason: "valid" })
       ).toBe("closed")

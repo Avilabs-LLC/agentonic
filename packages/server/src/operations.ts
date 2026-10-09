@@ -7,8 +7,10 @@ import {
   operationsCosts,
   operationsDeployments,
   operationsReleases,
+  operationsUser,
   operationsWorkspaces,
 } from "@agentonic/contracts/operations"
+import { uuid } from "@agentonic/contracts/identity"
 import { requireVerifiedUser } from "./auth"
 
 // The Admin operations screens' reads (architecture §52). Each runs as the
@@ -40,6 +42,15 @@ export const loadOperationsAgent = (id: string) =>
     (tx) => tx.$queryRaw`SELECT agentonic.operations_agent(${id}::uuid) result`,
     (v) => ({ agent: operationsAgent.nullable().parse(v) })
   )
+// Ver usuario in Revisiones: null when the read fails or no such user exists.
+export const loadOperationsUser = async (id: string) =>
+  uuid.safeParse(id).success
+    ? operations(
+        (tx) =>
+          tx.$queryRaw`SELECT agentonic.operations_user(${id}::uuid) result`,
+        (v) => operationsUser.nullable().parse(v)
+      )
+    : null
 export const loadOperationsActivity = () =>
   operations(
     (tx) => tx.$queryRaw`SELECT agentonic.operations_activity() result`,

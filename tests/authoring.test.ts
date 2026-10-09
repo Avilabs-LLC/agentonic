@@ -688,6 +688,8 @@ it("returns submitter metadata and the prepared version number without exposing 
       userName: "Owner",
       userEmail: "submitter@example.invalid",
       canOpen: true,
+      // The contract's default before migration 67's queue.
+      canDecide: false,
     },
   ])
   const grants = await sql(

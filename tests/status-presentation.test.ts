@@ -114,6 +114,7 @@ describe("status meaning and precedence", () => {
       "revoked",
       "rejected",
       "withdrawn",
+      "superseded",
       "changes_requested",
     ])
       expect(proposalStatus(status, "approved")).toEqual(
@@ -179,6 +180,16 @@ describe("one look per state", () => {
       expect(statusDescriptor("deployment", status).variant).toBe(
         deploymentBadgeVariants[status]
       )
+  })
+  it("shows a superseded review like a superseded deployment", () => {
+    expect(statusDescriptor("submission", "superseded")).toEqual({
+      label: "Reemplazada",
+      variant: "teal",
+      icon: "archive",
+    })
+    expect(statusDescriptor("submission", "superseded").icon).toBe(
+      statusDescriptor("deployment", "superseded").icon
+    )
   })
   it("gives a submission badge and its inline indicator the same tone", () => {
     for (const status of Object.keys(submissionLabels))

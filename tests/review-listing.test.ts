@@ -25,6 +25,7 @@ const row = (workspace: string) => ({
   userName: "Synthetic submitter",
   userEmail: "submitter@example.invalid",
   canOpen: true,
+  canDecide: false,
 })
 beforeEach(() => {
   vi.resetAllMocks()

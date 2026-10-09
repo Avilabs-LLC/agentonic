@@ -1,6 +1,6 @@
 # Agentonic: current state
 
-**As of 9 October 2026 · platform v0.35.3 · nonproduction only.** A short summary of what runs where, what works and what doesn't exist yet. [The architecture record](agentonic-architecture.md) keeps the full, dated history. If the two disagree about the present, fix this page. Update it whenever a change alters what runs where.
+**As of 9 October 2026 · platform v0.36.0 · nonproduction only.** A short summary of what runs where, what works and what doesn't exist yet. [The architecture record](agentonic-architecture.md) keeps the full, dated history. If the two disagree about the present, fix this page. Update it whenever a change alters what runs where.
 
 ## What runs where
 
@@ -50,7 +50,14 @@ Only `drive.file` is requested, in the same Google project as Gmail. The live ac
 
 **Ongoing authorization (architecture §59, outstanding D5/D6), installed 9 October with platform v0.30.0 and migration 63.** Authorization lasts 30 days and renews automatically while nothing changed (opt-out), each period with its own budget (US$1–20, default US$5). Conversations follow the agent across versions and last 30 days from their last message; only closing, revocation, offboarding or that expiry erase them. Deployments authorized before the install keep their terms until their owner turns renewal on in Activación. No renewal has happened live yet.
 
-The Admin app has **Revisiones** (submissions, receipts, renewal and activation), **Vencimientos** (what expires, when and who must act), and the operations screens **Agentes**, **Despliegues**, **Actividad**, **Costos**, **Espacios de trabajo** and **Runtime** (architecture §52). Both agent lists show each agent's Recursos (the saved draft's counts), version in use and next version, Admin has a page per agent that every agent name opens, and Vencimientos groups servers by place (architecture §55). Installing servers, publishing runtimes and renewing verification are still done with scripts on the Mac; the screens show their state.
+The Admin app has **Revisiones** (submissions, receipts, renewal and activation), **Vencimientos** (what expires, when and who must act), and the operations screens **Agentes**, **Despliegues**, **Actividad**, **Costos**, **Espacios de trabajo** and **Runtime** (architecture §52). Both agent lists show each agent's Recursos (the saved draft's counts), version in use and next version, and Admin has a page per agent that every agent name opens (architecture §55). Installing servers, publishing runtimes and renewing verification are still done with scripts on the Mac; the screens show their state.
+
+**Admin review polish (architecture §63), in platform v0.36.0 with migration 67; not yet installed.**
+
+- Approving a version closes the open reviews of older versions of the same agent as "Reemplazada", the way a withdrawal does. Reviews already left behind are closed by the migration.
+- In Revisiones, **Ver usuario** shows who sent a review and where they belong. **Cambiar estado** offers only the changes the database allows, with a comment for the client.
+- Despliegues and Vencimientos show servers as a grid: a row per kind, a column per place, one fact per line.
+- The agent page shows the latest version's tools as Gmail's, Drive's and a web mark.
 
 ## Operations
 
@@ -114,5 +121,6 @@ The ordered plan is architecture §37; the owner's audit brief tracks progress. 
 | CI timings, prepared test databases and automatic releases             | §60                  |
 | Draft-only situations and a careful grader (rubric 6)                  | §61                  |
 | Google Drive: live tools and knowledge sync                            | §62                  |
+| Superseded reviews, Revisiones actions, server cards by kind           | §63                  |
 
-Presentation rules are in the [UI contract](ui/ui-contract.md). The [target schema](schema.dbml) describes 88 tables; 71 exist in the 66 checked-in migrations.
+Presentation rules are in the [UI contract](ui/ui-contract.md). The [target schema](schema.dbml) describes 88 tables; 71 exist in the 67 checked-in migrations.

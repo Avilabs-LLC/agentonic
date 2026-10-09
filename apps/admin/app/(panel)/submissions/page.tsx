@@ -3,7 +3,12 @@ import { requireIdentity } from "@agentonic/server/auth"
 import { loadReviewListing } from "@agentonic/server/authoring"
 import { PageHeader } from "@workspace/ui/components/page-header"
 import { ReviewTable } from "@workspace/ui/components/review-table"
-import { beginReview, revokeApproval } from "./actions"
+import {
+  beginReview,
+  changeReviewState,
+  loadMember,
+  revokeApproval,
+} from "./actions"
 export default async function Page({
   searchParams,
 }: {
@@ -28,6 +33,8 @@ export default async function Page({
         selectedState={state}
         now={new Date().toISOString()}
         openReview={beginReview}
+        changeState={changeReviewState}
+        loadMember={loadMember}
         revokeApproval={
           identity.staff &&
           ["administrator", "operator"].includes(identity.staff.role)

@@ -34,7 +34,9 @@ export function proposalStatus(
   approval: Pick<LifecycleState["submissions"][number], "reason"> | undefined
 ): ProposalStatus {
   if (
-    ["rejected", "withdrawn", "revoked"].includes(submissionStatus) ||
+    ["rejected", "withdrawn", "revoked", "superseded"].includes(
+      submissionStatus
+    ) ||
     record?.status === "revoked"
   )
     return "closed"

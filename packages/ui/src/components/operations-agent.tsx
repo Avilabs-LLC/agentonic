@@ -2,6 +2,7 @@
 // The Admin agent page (architecture §55): what is in use and what comes next,
 // then the agent's proposals, deployments and activity. Metadata only; a
 // proposal's content stays behind its review and receipt.
+import type { ReactNode } from "react"
 import type { ColumnDef } from "@tanstack/react-table"
 import {
   formatCount,
@@ -32,7 +33,9 @@ import {
   StatusIndicator,
 } from "@workspace/ui/components/status-badge"
 import { facetTitles } from "@workspace/ui/components/agent-versions"
-import { capabilities } from "@workspace/ui/components/operations"
+import { GmailIcon } from "@workspace/ui/components/gmail-icon"
+import { DriveIcon } from "@workspace/ui/components/drive-icon"
+import { WebIcon } from "@workspace/ui/components/web-icon"
 import { DataTable } from "@workspace/ui/components/data-table"
 import {
   Card,
@@ -79,7 +82,7 @@ function Metric({
   detail,
 }: {
   label: string
-  value: string
+  value: ReactNode
   tone?: string
   detail: string | null
 }) {
@@ -96,7 +99,7 @@ function Metric({
             "truncate text-lg leading-snug font-semibold",
             tone ?? "text-foreground"
           )}
-          title={value}
+          title={typeof value === "string" ? value : undefined}
         >
           {value}
         </p>
@@ -108,6 +111,26 @@ function Metric({
         </p>
       </CardContent>
     </Card>
+  )
+}
+// The latest version's tools as their coloured marks, each named for screen
+// readers and on hover; knowledge is counted in the tile's detail.
+function Capabilities({ tools }: { tools: OperationsAgentDetail["tools"] }) {
+  const marks = [
+    ...(tools.gmail ? [{ name: "Gmail", Icon: GmailIcon }] : []),
+    ...(tools.drive ? [{ name: "Google Drive", Icon: DriveIcon }] : []),
+    ...(tools.web ? [{ name: "Acceso web", Icon: WebIcon }] : []),
+  ]
+  if (marks.length === 0) return "Sin herramientas"
+  return (
+    <span className="flex items-center gap-2.5">
+      {marks.map(({ name, Icon }) => (
+        <span key={name} title={name} className="inline-flex">
+          <Icon className="size-6" />
+          <span className="sr-only">{name}</span>
+        </span>
+      ))}
+    </span>
   )
 }
 function TabLabel({ title, count }: { title: string; count?: number }) {
@@ -154,10 +177,17 @@ export function OperationsAgentOverview({
         })}
         <Metric
           label="Capacidades de la última versión"
-          value={capabilities(agent.tools)}
+          value={<Capabilities tools={agent.tools} />}
           detail={
             agent.latestVersion
-              ? `Versión ${agent.latestVersion}`
+              ? [
+                  `Versión ${agent.latestVersion}`,
+                  ...(agent.tools.collections
+                    ? [
+                        `${formatCount(agent.tools.collections)} ${agent.tools.collections === 1 ? "colección" : "colecciones"}`,
+                      ]
+                    : []),
+                ].join(" · ")
               : "Sin versiones congeladas"
           }
         />
