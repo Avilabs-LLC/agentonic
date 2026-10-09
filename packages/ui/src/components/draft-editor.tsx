@@ -24,10 +24,9 @@ import { AgentSettingsCard } from "@workspace/ui/components/agent-settings-card"
 import { AgentAssetList } from "@workspace/ui/components/agent-asset-list"
 import { AgentCapabilityPlaceholder } from "@workspace/ui/components/agent-capability-placeholder"
 import { SkillEditorDialog } from "@workspace/ui/components/skill-editor-dialog"
-import { Textarea } from "@workspace/ui/components/textarea"
+import { MarkdownField } from "@workspace/ui/components/markdown"
 import {
   Field,
-  FieldLabel,
   FieldDescription,
   FieldError,
 } from "@workspace/ui/components/field"
@@ -132,11 +131,13 @@ export function DraftEditor({
             footer="Estas instrucciones orientan al agente; no conceden permisos ni reemplazan las reglas de seguridad."
           >
             <Field data-invalid={!!promptError}>
-              <FieldLabel htmlFor="systemPrompt">Instrucciones</FieldLabel>
-              <Textarea
+              <MarkdownField
                 id="systemPrompt"
+                label="Instrucciones"
+                markdown={prompt ?? ""}
+                paneClassName="min-h-52 max-h-[min(28rem,55dvh)]"
                 maxLength={32000}
-                className="min-h-52 text-sm leading-relaxed"
+                className="text-sm leading-relaxed"
                 placeholder="Explica qué debe hacer tu agente, cómo debe responder y qué límites debe respetar…"
                 aria-invalid={!!promptError}
                 aria-describedby="system-prompt-help system-prompt-error"

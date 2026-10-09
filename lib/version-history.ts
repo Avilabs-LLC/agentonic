@@ -1,5 +1,10 @@
 export const VERSION_HISTORY = [
   {
+    "version": "0.31.0",
+    "date": "2026-10-09",
+    "summary": "Markdown texts with Vista previa and Texto sides, bounded so long instructions and guides stay on screen; Gmail accounts as tabs with tools on; Acceso web marked Solo lectura; version frames that line up"
+  },
+  {
     "version": "0.30.0",
     "date": "2026-10-08",
     "summary": "Ongoing authorization: 30-day periods renewing automatically while nothing changed, a budget per period, and conversations that carry on across versions"

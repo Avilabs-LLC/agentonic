@@ -1,6 +1,12 @@
 "use client"
 import type { GmailState } from "@agentonic/contracts/gmail"
-import { useEffect, useRef, useState, useTransition } from "react"
+import {
+  useEffect,
+  useRef,
+  useState,
+  useTransition,
+  type ReactNode,
+} from "react"
 import { useRouter } from "next/navigation"
 import { Controller, useForm, useWatch } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -51,6 +57,46 @@ import { ConsentCheckbox } from "@workspace/ui/components/consent-checkbox"
 import { IconTile } from "@workspace/ui/components/icon-tile"
 import { notify } from "@workspace/ui/lib/toast"
 
+/**
+ * The Borrador and version frames side by side: one anatomy, the state note in
+ * the violet highlight, and a body at least four lines tall, so both frames
+ * end at the same height whether their text runs one line or four.
+ */
+function VersionFrame({
+  tone,
+  title,
+  revision,
+  state,
+  children,
+}: {
+  tone: "yellow" | "sky"
+  title: string
+  revision: number
+  state: string
+  children: ReactNode
+}) {
+  return (
+    <div className="overflow-hidden rounded-lg border bg-muted/20">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b p-4">
+        <div className="flex items-center gap-3">
+          <IconTile tone={tone}>
+            <PackageIcon aria-hidden="true" />
+          </IconTile>
+          <div className="space-y-0.5">
+            <p className="text-sm font-medium">{title}</p>
+            <p className="font-mono text-xs text-muted-foreground">
+              Revisión {revision}
+            </p>
+          </div>
+        </div>
+        <span className="text-[0.8125rem] text-highlight">{state}</span>
+      </div>
+      <div className="min-h-[calc(4lh+2rem)] p-4 text-sm leading-relaxed text-muted-foreground">
+        {children}
+      </div>
+    </div>
+  )
+}
 type Base = Omit<
   Parameters<typeof workflowRequirements>[0],
   "codeReleaseId" | "candidateId" | "consent" | "note"
@@ -96,7 +142,7 @@ function Requirements({
     </ul>
   )
 }
-function VersionCards({
+export function VersionCards({
   base,
   run,
   message,
@@ -188,35 +234,26 @@ function VersionCards({
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-1 flex-col gap-5">
-          <div className="overflow-hidden rounded-lg border bg-muted/20">
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b p-4">
-              <div className="flex items-center gap-3">
-                <IconTile tone="yellow">
-                  <PackageIcon aria-hidden="true" />
-                </IconTile>
-                <div className="space-y-0.5">
-                  <p className="text-sm font-medium">Borrador</p>
-                  <p className="font-mono text-xs text-muted-foreground">
-                    Revisión {base.draft.revision}
-                  </p>
-                </div>
-              </div>
-              <span className="text-sm text-muted-foreground">
-                {!clean
-                  ? "Cambios sin guardar"
-                  : current
-                    ? "Sin cambios nuevos"
-                    : "Por preparar"}
-              </span>
-            </div>
-            <p className="p-4 text-sm leading-relaxed text-muted-foreground">
+          <VersionFrame
+            tone="yellow"
+            title="Borrador"
+            revision={base.draft.revision}
+            state={
+              !clean
+                ? "Cambios sin guardar"
+                : current
+                  ? "Sin cambios nuevos"
+                  : "Por preparar"
+            }
+          >
+            <p>
               {!clean
                 ? "Guarda los cambios y cierra los diálogos antes de preparar una nueva versión."
                 : current
                   ? "Los cambios guardados ya están en la versión actual. Edita y guarda el borrador para preparar otra."
                   : "Se creará una versión fija de tus instrucciones, habilidades y conocimiento."}
             </p>
-          </div>
+          </VersionFrame>
           {!current && (
             <Requirements
               label="Pendiente para preparar la versión"
@@ -247,46 +284,35 @@ function VersionCards({
         <CardContent className="flex flex-1 flex-col gap-5">
           {candidate ? (
             <>
-              <div className="overflow-hidden rounded-lg border bg-muted/20">
-                <div className="flex flex-wrap items-center justify-between gap-3 border-b p-4">
-                  <div className="flex items-center gap-3">
-                    <IconTile tone="sky">
-                      <PackageIcon aria-hidden="true" />
-                    </IconTile>
-                    <div className="space-y-0.5">
-                      <p className="text-sm font-medium">{label}</p>
-                      <p className="font-mono text-xs text-muted-foreground">
-                        Revisión {candidate.revision}
-                      </p>
-                    </div>
-                  </div>
-                  <span className="text-sm text-muted-foreground">
-                    {submitted
-                      ? "Enviada a revisión"
-                      : candidate.canPreview
-                        ? "Preparada"
-                        : "Prueba no disponible"}
-                  </span>
-                </div>
-                <div className="p-4">
-                  {candidate.createdAt && (
-                    <p className="text-sm leading-relaxed text-muted-foreground">
-                      Preparada el{" "}
-                      <span className="font-medium text-foreground">
-                        {new Intl.DateTimeFormat("es-VE", {
-                          dateStyle: "medium",
-                          timeZone: "UTC",
-                        }).format(new Date(candidate.createdAt))}
-                      </span>
-                    </p>
-                  )}
-                  <p className="text-sm leading-relaxed text-muted-foreground">
-                    {current
-                      ? "Esta versión incluye los últimos cambios guardados."
-                      : "Los cambios del borrador todavía no forman parte de esta versión."}
+              <VersionFrame
+                tone="sky"
+                title={label}
+                revision={candidate.revision}
+                state={
+                  submitted
+                    ? "Enviada a revisión"
+                    : candidate.canPreview
+                      ? "Preparada"
+                      : "Prueba no disponible"
+                }
+              >
+                {candidate.createdAt && (
+                  <p>
+                    Preparada el{" "}
+                    <span className="font-medium text-foreground">
+                      {new Intl.DateTimeFormat("es-VE", {
+                        dateStyle: "medium",
+                        timeZone: "UTC",
+                      }).format(new Date(candidate.createdAt))}
+                    </span>
                   </p>
-                </div>
-              </div>
+                )}
+                <p>
+                  {current
+                    ? "Esta versión incluye los últimos cambios guardados."
+                    : "Los cambios del borrador todavía no forman parte de esta versión."}
+                </p>
+              </VersionFrame>
               {!clean && (
                 <p role="status" className="text-sm text-muted-foreground">
                   Guarda los cambios y cierra los diálogos antes de continuar.

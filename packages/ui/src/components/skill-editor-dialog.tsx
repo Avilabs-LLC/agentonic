@@ -1,6 +1,6 @@
 "use client"
 import { useId } from "react"
-import { useForm } from "react-hook-form"
+import { useForm, useWatch } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import {
@@ -17,7 +17,7 @@ import {
   FieldError,
 } from "@workspace/ui/components/field"
 import { Input } from "@workspace/ui/components/input"
-import { Textarea } from "@workspace/ui/components/textarea"
+import { MarkdownField } from "@workspace/ui/components/markdown"
 import { Button } from "@workspace/ui/components/button"
 
 export type SkillValues = { name: string; instructions: string }
@@ -54,6 +54,7 @@ export function SkillEditorDialog({
   })
   const {
     register,
+    control,
     handleSubmit,
     formState: { errors, isValid },
   } = useForm<SkillValues>({
@@ -61,6 +62,7 @@ export function SkillEditorDialog({
     mode: "onChange",
     defaultValues: initial ?? { name: "", instructions: "" },
   })
+  const instructions = useWatch({ control, name: "instructions" })
   return (
     <Dialog
       open
@@ -97,12 +99,11 @@ export function SkillEditorDialog({
             <FieldError id={`${id}-name-error`} errors={[errors.name]} />
           </Field>
           <Field data-invalid={!!errors.instructions}>
-            <FieldLabel htmlFor={`${id}-instructions`}>
-              Instrucciones
-            </FieldLabel>
-            <Textarea
+            <MarkdownField
               id={`${id}-instructions`}
-              className="min-h-56"
+              label="Instrucciones"
+              markdown={instructions ?? ""}
+              paneClassName="min-h-56 max-h-[min(24rem,45dvh)]"
               maxLength={16000}
               aria-invalid={!!errors.instructions}
               aria-describedby={`${id}-instructions-error`}

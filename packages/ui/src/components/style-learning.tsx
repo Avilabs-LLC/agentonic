@@ -48,7 +48,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@workspace/ui/components/select"
-import { Textarea } from "@workspace/ui/components/textarea"
+import { MarkdownField } from "@workspace/ui/components/markdown"
 import { iconTones } from "@workspace/ui/components/status-badge"
 import { statusDescriptor } from "@workspace/ui/lib/badge-status"
 import { notify } from "@workspace/ui/lib/toast"
@@ -600,10 +600,12 @@ function ReviewDialog({
           </DialogDescription>
         </DialogHeader>
         <Field>
-          <FieldLabel htmlFor="style-guide-text">Guía (Markdown)</FieldLabel>
-          <Textarea
+          <MarkdownField
             id="style-guide-text"
-            className="min-h-80 font-mono text-xs"
+            label="Guía"
+            markdown={markdown}
+            paneClassName="h-[min(24rem,45dvh)]"
+            className="font-mono text-xs"
             maxLength={40000}
             value={markdown}
             onChange={(e) => setMarkdown(e.target.value)}

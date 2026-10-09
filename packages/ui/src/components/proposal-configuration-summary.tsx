@@ -7,6 +7,7 @@ import {
 import type { ConfigurationSnapshot } from "@agentonic/contracts/authoring"
 import { gmailLabels } from "@agentonic/contracts/gmail"
 import { gmailGrants, hasWeb } from "@agentonic/contracts/tools"
+import { MarkdownView } from "@workspace/ui/components/markdown"
 
 export function ProposalConfigurationSummary({
   snapshot,
@@ -54,12 +55,12 @@ export function ProposalConfigurationSummary({
           </div>
         ))}
       </dl>
-      <section className="space-y-2">
-        <h3 className="font-medium">Instrucciones del sistema</h3>
-        <p className="max-h-60 overflow-y-auto pr-2 leading-relaxed break-words whitespace-pre-wrap text-muted-foreground">
-          {content.systemPrompt || "Sin instrucciones."}
-        </p>
-      </section>
+      <MarkdownView
+        label={<h3 className="font-medium">Instrucciones del sistema</h3>}
+        markdown={content.systemPrompt}
+        paneClassName="max-h-[min(15rem,40dvh)]"
+        empty="Sin instrucciones."
+      />
       <section className="space-y-2">
         <h3 className="font-medium">Habilidades</h3>
         <p className="break-words text-muted-foreground">

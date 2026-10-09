@@ -132,7 +132,11 @@
   --color-link: var(--link);
   --font-sans: var(--font-inter);
 }
-/* Clickable text: the blue of the ID links, lighter in dark mode so it reads
+/* Highlight: Acachuchazo's violet (violet-600, violet-400 in dark mode) for a
+   card's key value and the state notes of the Borrador and version frames
+   (ui-contract §1). Named "highlight" because shadcn's --accent is a
+   hover-surface token.
+   Clickable text: the blue of the ID links, lighter in dark mode so it reads
    on cards, dialogs and tables. Not the emerald primary (preset b1zBuS). */
 :root {
   --highlight: oklch(0.541 0.281 293.009);

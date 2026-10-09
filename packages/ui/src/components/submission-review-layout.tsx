@@ -17,6 +17,7 @@ import {
 import { MutationForm } from "@workspace/ui/components/mutation-form"
 import { Field, FieldLabel } from "@workspace/ui/components/field"
 import { Textarea } from "@workspace/ui/components/textarea"
+import { MarkdownView } from "@workspace/ui/components/markdown"
 import {
   Select,
   SelectTrigger,
@@ -166,11 +167,11 @@ export function SubmissionVersionContent({
         icon={<ScrollTextIcon />}
         description="El comportamiento y los límites definidos para esta versión."
       >
-        <div className="rounded-lg border bg-muted/20 p-4 sm:p-5">
-          <p className="text-sm leading-relaxed break-words whitespace-pre-wrap">
-            {content.systemPrompt}
-          </p>
-        </div>
+        <MarkdownView
+          markdown={content.systemPrompt}
+          paneClassName="max-h-[min(32rem,60dvh)] p-4 sm:p-5"
+          empty="Sin instrucciones."
+        />
       </AgentSettingsCard>
       <AgentSettingsCard
         title="Habilidades"
@@ -190,10 +191,11 @@ export function SubmissionVersionContent({
                 key={skill.name}
                 className="space-y-2 py-5 first:pt-4 last:pb-0"
               >
-                <h3 className="text-sm font-medium">{skill.name}</h3>
-                <p className="text-sm leading-relaxed break-words whitespace-pre-wrap text-muted-foreground">
-                  {skill.instructions}
-                </p>
+                <MarkdownView
+                  label={<h3 className="text-sm font-medium">{skill.name}</h3>}
+                  markdown={skill.instructions}
+                  paneClassName="max-h-[min(20rem,45dvh)] p-4"
+                />
               </div>
             ))
           ) : (

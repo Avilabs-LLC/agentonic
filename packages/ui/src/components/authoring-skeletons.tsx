@@ -85,6 +85,7 @@ export function AgentEditorSkeleton() {
                     <CardContent className="space-y-3">
                       {section === "prompt" ? (
                         <div className="space-y-3">
+                          <MarkdownSidesSkeleton label />
                           <Skeleton className="h-60 w-full" />
                           <Skeleton className="h-4 w-2/3" />
                         </div>
@@ -106,11 +107,18 @@ export function AgentEditorSkeleton() {
                         </div>
                       ) : section === "tools" ? (
                         <div className="space-y-5">
-                          <Skeleton className="h-28 w-full" />
-                          <div className="grid gap-3 border-t pt-5 sm:grid-cols-2">
-                            {Array.from({ length: 8 }, (_, i) => (
-                              <Skeleton key={i} className="h-12 w-full" />
-                            ))}
+                          <Skeleton className="h-24 w-full" />
+                          <div className="space-y-4 border-t pt-5">
+                            <Skeleton className="h-5 w-24" />
+                            <div className="flex gap-4 border-b pb-2">
+                              <Skeleton className="h-5 w-56 max-w-full" />
+                              <Skeleton className="h-5 w-48 max-w-full" />
+                            </div>
+                            <div className="grid gap-3 sm:grid-cols-2">
+                              {Array.from({ length: 8 }, (_, i) => (
+                                <Skeleton key={i} className="h-12 w-full" />
+                              ))}
+                            </div>
                           </div>
                         </div>
                       ) : section === "connections" ? (
@@ -164,9 +172,9 @@ export function AgentEditorSkeleton() {
                             <Skeleton className="h-4 w-24" />
                           </div>
                         </div>
-                        <Skeleton className="h-5 w-24" />
+                        <Skeleton className="h-4 w-24" />
                       </div>
-                      <div className="space-y-2 p-4">
+                      <div className="min-h-[calc(4lh+2rem)] space-y-2 p-4 text-sm leading-relaxed">
                         {kind === "current" && (
                           <Skeleton className="h-4 w-44" />
                         )}
@@ -360,7 +368,10 @@ export function ReviewDetailSkeleton() {
           </CardHeader>
           <CardContent className="space-y-3">
             {section === "prompt" ? (
-              <Skeleton className="h-40 w-full" />
+              <>
+                <MarkdownSidesSkeleton />
+                <Skeleton className="h-40 w-full" />
+              </>
             ) : (
               <EmptyFrameSkeleton />
             )}
@@ -471,7 +482,10 @@ export function ReviewReceiptSkeleton() {
             ) : section === "activation" ? (
               <ApprovalPackageSkeleton />
             ) : section === "prompt" ? (
-              <Skeleton className="h-40 w-full" />
+              <div className="space-y-3">
+                <MarkdownSidesSkeleton />
+                <Skeleton className="h-40 w-full" />
+              </div>
             ) : section === "criteria" ? (
               <div className="divide-y border-y">
                 {[0, 1, 2].map((row) => (
@@ -522,6 +536,15 @@ function ApprovalPackageSkeleton() {
   )
 }
 
+/** The Vista previa / Texto tabs over a Markdown text, with its label when it has one. */
+function MarkdownSidesSkeleton({ label = false }: { label?: boolean }) {
+  return (
+    <div className="flex items-center justify-between gap-2">
+      {label ? <Skeleton className="h-5 w-28" /> : <span />}
+      <Skeleton className="h-8 w-40 rounded-lg" />
+    </div>
+  )
+}
 function EmptyFrameSkeleton() {
   return (
     <div className="flex min-h-32 flex-col items-center justify-center gap-2 rounded-xl border border-dashed bg-muted/20 p-6">
