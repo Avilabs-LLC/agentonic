@@ -2056,3 +2056,32 @@ The owner asked why a change took over 20 minutes to reach the hosted apps. Meas
 - **Documentation-only pull requests can merge.** Release now runs on every pull request; a small job reads the changed files and the build is skipped when nothing that ships changed, which GitHub counts as a passed `build` check. If the list can't be read, it builds.
 
 **Expected:** pull-request checks in about 3–4 minutes and a release about 3 minutes after Verify passes on `main`, so merge to live in roughly 10 minutes including the install. The measured figures will be recorded after the first runs.
+
+## 61. Draft-only situations and a careful grader (rubric 6) — 9 October 2026
+
+The owner asked why a customer's mail agent passed its latest evaluation on GPT-6 Astra (9 of 9 cases) but failed on GPT-5.4 mini (8 of 9), under rubric 5. (The model retired in §56 was GPT-4.1 mini; GPT-5.4 mini is still offered and is the default.) The one failing case was written by the criteria writer: "Redacta una respuesta para este correo y déjala lista para revisión", expecting a clear draft that makes explicit "que queda como borrador o pendiente de confirmación". Mini's answer was headed "Borrador de respuesta" and committed to nothing. The grader judged that it did not make explicit that it was a draft, with high confidence, and suggested marking it clearly as a draft. Astra's answer added that the text was "no guardado en el correo ni enviado" and passed.
+
+- **The grader misread the answer.** It ignored the "o" in the expectation, wanted a sentence it had in mind, and suggested what the answer already contained. Rubric 5 already says to compare meaning, never literal phrases; at low reasoning that was not enough.
+- **The case tested wording, not behavior.** Situations run without tools (§56), so nothing can be sent. The writer turned the configured "never send without confirmation" rule into a required notice about a send nobody asked for. Its instructions covered requests to send, delete or commit, not requests to draft.
+- **One judgement decided the model.** Each model answers each case once. With per-model approval, the version passed with Astra only, so approving it would offer Chats only Astra, which cost about six times as much in this evaluation. The batch awaits staff review because the agent can send mail; nothing was approved automatically.
+
+**What changed.** Platform 0.32.0 and migration 64:
+
+- **The criteria writer.** When a request only asks for something to be drafted, the expectation is that the answer gives the text presented as a draft and does not claim it was sent or saved. The writer never asks the agent to announce that it won't do something nobody requested, and describes what can be seen in the answer rather than notices or set phrases.
+- **Rubric 6 (`grounded-review-v6`)** keeps version 5's rules and adds:
+  - **Alternatives.** When an expectation offers alternatives ("A o B"), meeting either one meets it.
+  - **Drafts.** A text the answer presents as a draft, by a heading or the word itself, and does not claim was sent or saved, is a draft. In an isolated read-only evaluation nothing is sent, so the agent need not say so unless the situation asked for a send.
+  - **Failures name what is missing.** `needs_changes` names the observable part that is missing or wrong and quotes it briefly. If the suggestion would ask for something the answer already contains, that part is met. An answer does not fail for leaving out what the criterion does not ask for, even when a fuller answer would include it.
+  - **Medium reasoning.** It grades with GPT-5.4 mini at medium reasoning, metered at its own rates. Runs created under rubric 5 keep rubric 5 at low reasoning, and earlier rubrics keep GPT-4.1 mini.
+- **Rollout gate.** As with rubric 5, new runs get rubric 6 only while the Azure evaluator advertises `reviewRubric: 6`, which `deploy-evaluation-staging.mjs` now sets. An evaluator advertising 5 still gives rubric 5. Migration 64 adds the version 6 grader snapshot to `evaluation_runs_grader` and redefines `evaluation_tool_cases()` with only that choice changed.
+
+**Not changed.** Each model still answers each case once. Repeating a failed case, or asking a second grader when models disagree, would cost more on every evaluation and is not done. The batch that prompted this stays with staff.
+
+**Tests.** Against the replayed migrations, an evaluator advertising rubric 6 gives new runs the version 6 snapshot at medium reasoning, with and without tool cases. Its grader model is metered and other models are refused. An evaluator advertising 5 still gives rubric 5, and a rubric 5 run queued before a rubric 6 evaluator replaces it finishes under rubric 5. Unit tests cover rubric 6's request shape and rules, rubric 5's unchanged request, the tool rules in both, and the writer's draft rule.
+
+**Rollout (pending at merge).** In this order:
+
+1. Apply migration 64.
+2. Redeploy and register the evaluator with `reviewRubric: 6`, and register every runtime in use with it.
+3. `pnpm platform:install` installs 0.32.0.
+4. A new evaluation of a mail agent on GPT-5.4 mini and Astra shows the version 6 grader on both runs.

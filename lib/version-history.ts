@@ -1,5 +1,10 @@
 export const VERSION_HISTORY = [
   {
+    "version": "0.32.0",
+    "date": "2026-10-09",
+    "summary": "Careful grading: draft-only criteria and rubric 6 on GPT-5.4 mini at medium reasoning"
+  },
+  {
     "version": "0.31.1",
     "date": "2026-10-09",
     "summary": "On phones the agent page keeps its width: tab rows scroll sideways, fade the edge with more tabs and open on the selected one"

@@ -286,8 +286,9 @@ it("grades tool cases with the version 4 rules", async () => {
   }
   expect(await instructions("grounded-review-v4")).toContain("toolCalls")
   expect(await instructions("grounded-review-v3")).not.toContain("toolCalls")
-  // Rubric 5 keeps version 4's tool rules.
+  // Rubrics 5 and 6 keep version 4's tool rules.
   expect(await instructions("grounded-review-v5")).toContain("toolCalls")
+  expect(await instructions("grounded-review-v6")).toContain("toolCalls")
 })
 
 let f: Awaited<ReturnType<typeof createRagFixture>>
