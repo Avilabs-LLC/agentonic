@@ -19,6 +19,10 @@ export type FinishedJob = {
   code?: string
   /** Items the job passed over, such as mail Gmail would not hand over. */
   skipped?: number
+  /** A provider rate limit the job met, such as `gmail_http_403_user_rate_limit`. */
+  limited?: string
+  /** How long that provider asked the job to wait, when it said. */
+  limitWaitMs?: number
 }
 
 const iso = (ms: number) => new Date(ms).toISOString()
@@ -55,6 +59,9 @@ export function jobLine(entry: FinishedJob) {
   set("durationMs", Math.max(0, entry.finishedAt - entry.startedAt))
   if (Number.isSafeInteger(entry.skipped) && entry.skipped! > 0)
     set("skipped", entry.skipped)
+  if (entry.limited && CODE.test(entry.limited)) set("limited", entry.limited)
+  if (Number.isSafeInteger(entry.limitWaitMs) && entry.limitWaitMs! >= 0)
+    set("limitWaitMs", entry.limitWaitMs)
   return line
 }
 
