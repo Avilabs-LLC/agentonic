@@ -215,6 +215,10 @@ Still on 0.34.2, Chrome showed "La clave de desarrollador de la API no es válid
 
 `platform-0.34.3-1e7276f89821` (PR #84) was installed the same day, with every service healthy and `hosted:check` passing. In the owner's Chrome, with nothing added to the page, the Picker listed the account's files and "Cancelar" closed it. Picking a file and the rest of the acceptance matrix are next.
 
+- The owner then picked three files in Chrome, and they appear under "Archivos del agente".
+- `platform-0.35.0-ee0f65b4f024` (0.34.4's changes plus migration 66), installed the same day, keeps the page still while the Picker is open, shows the "Gmail" and "Google Drive" buttons with their marks, and tells Brave users about Shields.
+- Brave with cross-site cookies allowed is still to be confirmed.
+
 ## Acceptance matrix
 
 | Boundary           | Required evidence                                                                                                                                                | Synthetic evidence (this PR)                                                                                                                  |
