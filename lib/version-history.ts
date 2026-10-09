@@ -1,5 +1,10 @@
 export const VERSION_HISTORY = [
   {
+    "version": "0.36.0",
+    "date": "2026-10-09",
+    "summary": "Approving a version closes older open reviews as Reemplazada; Revisiones' Ver usuario and Cambiar estado work; server cards by kind and place; capability marks on the agent page"
+  },
+  {
     "version": "0.35.1",
     "date": "2026-10-09",
     "summary": "Anyone still named Miembro chooses a name before using the customer app"

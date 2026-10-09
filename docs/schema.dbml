@@ -447,7 +447,7 @@ Table agentonic.agent_submissions {
   support_access_grant_id uuid
   customer_note text
   review_consent jsonb [not null, note: 'Explicit bounded consent for staff configuration review and selected preview evidence; no broad mailbox/transcript access.']
-  status text [not null, default: 'submitted', check: `status IN ('submitted', 'in_review', 'changes_requested', 'approved', 'rejected', 'withdrawn', 'revoked')`]
+  status text [not null, default: 'submitted', check: `status IN ('submitted', 'in_review', 'changes_requested', 'approved', 'rejected', 'withdrawn', 'revoked', 'superseded')`, note: 'superseded: an open review closed when a newer version of the agent was approved (migration 67).']
   submitted_at timestamptz [not null, default: `now()`]
   created_at timestamptz [not null, default: `now()`]
 
@@ -468,13 +468,13 @@ Table agentonic.agent_submissions {
 }
 
 Table agentonic.submission_review_decisions {
-  actor_policy_version text [note: 'Explicit automatic approval actor; mutually exclusive with member/staff. readonly-review-v1 only.']
+  actor_policy_version text [note: 'Explicit automatic actor; mutually exclusive with member/staff. readonly-review-v1 approves; superseded-by-approval-v1 records superseded (migration 67).']
   id uuid [pk, not null, default: `gen_random_uuid()`]
   workspace_id uuid [not null]
   agent_id uuid [not null]
   submission_id uuid [not null]
   decision_number bigint [not null, check: `decision_number > 0`]
-  decision text [not null, check: `decision IN ('in_review', 'changes_requested', 'approved', 'rejected', 'withdrawn', 'revoked')`]
+  decision text [not null, check: `decision IN ('in_review', 'changes_requested', 'approved', 'rejected', 'withdrawn', 'revoked', 'superseded')`]
   actor_member_id uuid
   actor_staff_id uuid
   support_access_grant_id uuid

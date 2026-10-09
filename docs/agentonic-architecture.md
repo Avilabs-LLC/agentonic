@@ -2177,3 +2177,29 @@ In Brave, which withholds Google's cookies from the Picker's frame, Google asked
 Google's frame script shows what Brave does. "Iniciar sesión" opens a Google sign-in window, not a Picker that returns files. The frame then checks its own cookies every second for Google's sign-in cookies; once it sees them, it closes the window and reloads. Brave does not share those cookies with the frame, so the frame never sees the sign-in, and the window shows a standalone Picker connected to nothing. `same-origin-allow-popups` still matters, because it lets the frame close that window. In Brave, the way out is to allow cross-site cookies for the site in Shields, and 0.34.4 says so in Brave only. 0.34.4 also keeps the page where it was while the Picker is open (Google focuses its dialog, which scrolled a long page to its end), and the connect buttons show each service's mark and name.
 
 **Not covered yet.** Folders (a live check decides), sharing, moving and deleting, merges of concurrent edits, Admin's agent-list Drive flag, and Google verification (one project with Gmail, so it follows B5). No live Drive has been read or changed; the hosted acceptance is the owner's step.
+
+## 63. Superseded reviews, Revisiones actions and clearer server cards — 9 October 2026
+
+Owner review of four Admin screens. Migration 67, platform v0.36.0.
+
+**Superseded reviews (owner decision).** The partial index allowed one open review per candidate, not per agent as §11 intended, so an agent could keep versions 1 to 5 in Enviada after version 6 was approved. A sent version can never be sent again or previewed, yet staff could still open, evaluate and approve it, and the customer saw it "En proceso". Now approving a version closes every open review (Enviada or En revisión) of an older version of the same agent as **Reemplazada**:
+
+- A trigger on the submission's change to `approved` runs `supersede_older_reviews`, so staff approval, automatic approval and renewal approval all apply it.
+- Each closed review gets an appended `superseded` decision by the policy actor `superseded-by-approval-v1`, naming the approved review. The approval trigger refuses such a decision unless it closes an open review of an older version and names a review with an approval.
+- The status becomes `superseded` and the review's access grants are revoked, as a withdrawal does. Pending preparation and evaluation stop, because they require an open review. Reservations and recorded usage are untouched.
+- Newer versions and reviews with an outcome (changes requested, rejected, withdrawn, approved, revoked) are not changed. Approved older versions keep their approval: one may still be running while the new one waits for activation.
+- The migration closed reviews already in that situation, oldest approval first.
+
+Admin shows a **Reemplazadas** tab in Revisiones when it has reviews, and the "Reemplazada" badge (teal, like a superseded deployment) on the agent page's Propuestas. The customer's Propuestas shows them as Cerrada.
+
+**Revisiones actions.** The row menu's placeholders now work.
+
+- **Ver usuario** reads `operations_user` (staff only, metadata only): the submitter's name, email, and each workspace they belong to, with role, status, joining date, agents they own and reviews they sent.
+- **Cambiar estado** offers only what the database allows. An open review whose criteria the client confirmed and whose evaluation finished can move to En revisión (from Enviada), Cambios solicitados or Rechazada, with a comment the client reads. Recording it opens the review first, so it counts as a review access, exactly as on the review page. An approved review can be revoked by administrators and operators; this replaces the separate "Revocar aprobación" item. Otherwise the item is disabled and its tooltip says why. Approval stays on the review page, with its evidence.
+- The queue's new `canDecide` is the evaluation half of `can_record_review_decision`, now `review_decision_ready`, without the review grant.
+
+**Server cards.** Despliegues and Vencimientos show servers as a grid: a row per kind, named once with its icon (Agentes, Evaluaciones), and a column per place. Each cell lists one fact per line instead of joining them with "·". Despliegues shows the newest runtime by number, picked by comparing numbers because the database orders versions as text, and the rest behind "y N más", which lists every runtime with its full version.
+
+**Capabilities.** The agent page's "Capacidades de la última versión" shows Gmail's and Drive's marks and a coloured globe for web access, each named for screen readers. `operations_agent` now reports Drive. The knowledge count moved to the tile's detail line.
+
+**Tests.** `tests/superseded-reviews-database.test.ts` (closing, policy decisions, revoked grants, refused forgeries, idempotence, the queue's `canDecide`, Drive in `operations_agent`, the member card); `tests/review-actions.test.ts` (which changes each review offers); the server-card and capability rendering in `tests/admin-operations-render.test.ts`; status and proposal tests for the new state.
