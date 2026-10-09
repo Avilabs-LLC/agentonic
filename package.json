@@ -1,6 +1,6 @@
 {
   "name": "agentonic",
-  "version": "0.34.4",
+  "version": "0.35.1",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@11.21.0",

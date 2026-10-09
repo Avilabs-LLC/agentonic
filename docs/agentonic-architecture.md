@@ -2045,6 +2045,19 @@ This closes outstanding actions **D5** (operating terms, owner decisions of 8 Oc
 
 **Rollout.** Apply migration 63, then install platform 0.30.0.
 
+**One authorization per version and host (migration 66, owner decision, 9 October 2026).**
+- **The problem.** "Autorizar activación" stayed available while a version already had an authorization in place. `deployment_command` deduplicated only an exact retry with the same request ID, so a member authorized one version twice on `vm-agents-01`, 25 seconds apart, at US$5 and US$20.
+- **The rule.** `deployment_command` now answers `already_authorized` while that version has an authorization on that host that is pending, starting or running and still authorized. The workspace lock already serializes concurrent requests.
+- **The page.** `lifecycle_state` hides "Autorizar activación" in the same case.
+- **What still works.**
+  - A retry of the original request still returns its deployment.
+  - A stopped, revoked or expired authorization no longer counts.
+  - To change the budget, the customer stops the authorization and authorizes again.
+- **The duplicate.** At the owner's instruction, the migration deletes the US$5 duplicate (never activated, nothing spent, nothing referencing it). Deployment history is otherwise retained, so the guard is lifted for that row only, inside one rolled-back-as-a-whole statement. Its `deployment.authorize` audit event is kept.
+- **Rollout, 9 October.**
+  - Migration 66 was applied. Read-only checks afterwards: the US$5 row is gone, the US$20 authorization remains (by then running), its audit event remains, the deployment guard is enabled again, and no live duplicates remain.
+  - `platform-0.35.0-ee0f65b4f024` (with 0.34.4's Picker and button changes) was installed with every service healthy, and `hosted:check` passed.
+
 ## 60. Faster CI and releases that follow a green main — 9 October 2026
 
 The owner asked why a change took over 20 minutes to reach the hosted apps. Measured over every successful run since 6 October: pull-request checks (Verify) averaged 9.0 minutes (6.2–11.3), the Release run on `main` 10.4 minutes (6.9–13.1), and installing about 3, so merge to live took about 25 minutes, more with the time to start the release by hand.
@@ -2159,6 +2172,8 @@ On the first live try, Google placed the Picker from the window's scroll positio
 
 In Brave, which withholds Google's cookies from the Picker's frame, Google asked for a sign-in and then reopened the Picker in a popup from that frame. The popup listed nothing. Under the customer app's `Cross-Origin-Opener-Policy: same-origin`, a popup opened by a cross-origin frame has no opener; a local check confirmed this in Chrome and Brave, and that `same-origin-allow-popups` keeps it. So the popup could never return the picked files. Platform 0.34.2 sets `same-origin-allow-popups` in the customer app only, and `hosted:check` checks both apps' values. `platform-0.34.2-53b1360fad4e` (PR #82) was installed the same day: every service was healthy, `hosted:check` passed, and the hosted headers show both values.
 
-0.34.2 did not fix it. In Chrome, which has Google's session in the frame, the Picker said "La clave de desarrollador de la API no es válida". The key is restricted to the app's site, and under `Referrer-Policy: same-origin` the browser never told Google which site loaded the Picker. With `strict-origin-when-cross-origin` set in the owner's Chrome for one page load, the Picker listed the account's files and "Cancelar" returned to the app. Platform 0.34.3 sets that policy in the customer app only. Other sites learn its origin, never a path or query, and `hosted:check` checks both apps' values.
+0.34.2 did not fix it. In Chrome, which has Google's session in the frame, the Picker said "La clave de desarrollador de la API no es válida". The key is restricted to the app's site, and under `Referrer-Policy: same-origin` the browser never told Google which site loaded the Picker. With `strict-origin-when-cross-origin` set in the owner's Chrome for one page load, the Picker listed the account's files and "Cancelar" returned to the app. Platform 0.34.3 sets that policy in the customer app only. Other sites learn its origin, never a path or query, and `hosted:check` checks both apps' values. The release smoke test also checks both apps' referrer and opener values. `platform-0.34.3-1e7276f89821` (PR #84) was installed the same day: every service was healthy and `hosted:check` passed. In the owner's Chrome, with nothing added to the page, the Picker listed the account's files and "Cancelar" closed it.
+
+Google's frame script shows what Brave does. "Iniciar sesión" opens a Google sign-in window, not a Picker that returns files. The frame then checks its own cookies every second for Google's sign-in cookies; once it sees them, it closes the window and reloads. Brave does not share those cookies with the frame, so the frame never sees the sign-in, and the window shows a standalone Picker connected to nothing. `same-origin-allow-popups` still matters, because it lets the frame close that window. In Brave, the way out is to allow cross-site cookies for the site in Shields, and 0.34.4 says so in Brave only. 0.34.4 also keeps the page where it was while the Picker is open (Google focuses its dialog, which scrolled a long page to its end), and the connect buttons show each service's mark and name.
 
 **Not covered yet.** Folders (a live check decides), sharing, moving and deleting, merges of concurrent edits, Admin's agent-list Drive flag, and Google verification (one project with Gmail, so it follows B5). No live Drive has been read or changed; the hosted acceptance is the owner's step.

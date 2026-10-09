@@ -37,9 +37,9 @@ The callback URI stays the same. As with Gmail in Testing mode, consent lapses a
 
 **Configuración → Conexiones** (one card with Gmail):
 
-- "Conectar Google Drive" explains `drive.file` before Google asks.
+- The "Google Drive" button (accessible name "Conectar Google Drive", with Drive's mark) explains `drive.file` before Google asks.
 - Each account's frame shows Drive's logo, the account and its state, and the agent's files, with each file's type and "Creado por el agente" where it applies.
-- "Elegir archivos" opens Google's Picker, which offers files only, in the supported formats, at most 25 per account.
+- "Elegir archivos" opens Google's Picker, which offers files only, in the supported formats, at most 25 per account. The page stays where it was while the Picker is open; Google focuses its dialog after opening, which used to scroll a long page to its end.
 - Each file has "Quitar"; the frame has "Desconectar".
 
 **Herramientas.** Drive's account tabs show the tools on (`x/4`), with four tools: Ver archivos elegidos, Leer archivos, Crear documento and Editar documento. As with Gmail, an agent uses one Drive account at a time.
@@ -92,7 +92,11 @@ The callback URI stays the same. As with Gmail in Testing mode, consent lapses a
 - This is the one exception to "no tokens in the browser". It is bounded to `drive.file`, about an hour, that member's session and `no-store` responses.
 - Picked file IDs are checked with Drive through the connection before they are kept. Names and types come from Drive, never from the browser.
 - Google requires the person to be signed in to Google in that browser while the Picker is open. Without a Google session, the Picker shows Google's own "Debes iniciar sesión" page instead of the files. The Drive shown should be the connected account's, since only that account's token can read the picked files.
-- When a browser withholds Google's cookies from the Picker's frame (Brave by default, Safari), the frame shows "Iniciar sesión", and Google reopens the Picker in a popup from that frame. The popup hands the picked files back through its opener. That is why the customer app sends `Cross-Origin-Opener-Policy: same-origin-allow-popups`: under `same-origin`, browsers open that popup without an opener. Admin keeps `same-origin`.
+- When the Picker's frame cannot see the Google session, Google's frame page decides what to show (read from its script, 9 October). Where the browser offers the Storage Access API and access is not yet granted, it asks for that access. Otherwise it shows "Iniciar sesión".
+  - That button opens a Google sign-in window. The frame then checks its own cookies every second for Google's sign-in cookies; once it sees them, it closes the window and reloads itself.
+  - Brave does not share Google's cookies with the frame, so the frame never sees the sign-in. If the person is already signed in, the window shows a standalone Picker whose "Seleccionar" and "Cancelar" reach nothing.
+  - In Brave, the way out is to allow cross-site cookies for the site in Shields, and the app says so in Brave only.
+  - The customer app sends `Cross-Origin-Opener-Policy: same-origin-allow-popups` so that Google's frame keeps a handle on the window it opened and can close it. Under `same-origin`, browsers open that window without an opener. Admin keeps `same-origin`.
 - Google positions the Picker from the window's scroll position. The shared stylesheet keeps `.picker-dialog` fixed and centred in the viewport, and the window fits the screen within Google's size limits.
 
 **Connections, grants and files**
@@ -208,6 +212,12 @@ In Brave, the Picker then asked "Debes iniciar sesión" and, after "Iniciar sesi
 - The connected account must be the one whose files are picked, since each picked file is checked through that connection.
 
 Still on 0.34.2, Chrome showed "La clave de desarrollador de la API no es válida". The key's website restrictions need the browser to report the app's site, and `Referrer-Policy: same-origin` reported nothing. With `strict-origin-when-cross-origin` set in the owner's Chrome for one page load, the Picker listed the account's files in the page, and "Cancelar" returned to the app. Platform 0.34.3 sends that policy from the customer app. Brave's popup path still needs a retest, since its frame may have failed the same key check.
+
+`platform-0.34.3-1e7276f89821` (PR #84) was installed the same day, with every service healthy and `hosted:check` passing. In the owner's Chrome, with nothing added to the page, the Picker listed the account's files and "Cancelar" closed it. Picking a file and the rest of the acceptance matrix are next.
+
+- The owner then picked three files in Chrome, and they appear under "Archivos del agente".
+- `platform-0.35.0-ee0f65b4f024` (0.34.4's changes plus migration 66), installed the same day, keeps the page still while the Picker is open, shows the "Gmail" and "Google Drive" buttons with their marks, and tells Brave users about Shields.
+- Brave with cross-site cookies allowed is still to be confirmed.
 
 ## Acceptance matrix
 

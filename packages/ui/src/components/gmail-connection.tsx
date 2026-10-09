@@ -9,7 +9,6 @@ import {
   WrenchIcon,
   CheckIcon,
   CircleCheckIcon,
-  PlusIcon,
   TriangleAlertIcon,
 } from "lucide-react"
 import {
@@ -47,6 +46,7 @@ import {
   driveCommand,
   startDriveConnection,
 } from "@workspace/ui/components/drive-connection"
+import { DriveIcon } from "@workspace/ui/components/drive-icon"
 import { iconTones } from "@workspace/ui/components/status-badge"
 import { cn } from "cn"
 export async function gmailCommand(
@@ -393,9 +393,10 @@ export function GmailConnection({
               variant="outline"
               disabled={disabled || busy || state.available === false}
               onClick={() => setConnecting(true)}
+              aria-label="Conectar Gmail"
             >
-              <PlusIcon aria-hidden="true" />
-              Conectar Gmail
+              <GmailIcon className="size-4 shrink-0" />
+              Gmail
             </Button>
             {drive && (
               <Button
@@ -403,9 +404,10 @@ export function GmailConnection({
                 variant="outline"
                 disabled={disabled || busy || drive.available === false}
                 onClick={() => setConnectingDrive(true)}
+                aria-label="Conectar Google Drive"
               >
-                <PlusIcon aria-hidden="true" />
-                Conectar Google Drive
+                <DriveIcon className="size-4 shrink-0" />
+                Google Drive
               </Button>
             )}
           </div>

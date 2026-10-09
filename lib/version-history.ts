@@ -1,8 +1,18 @@
 export const VERSION_HISTORY = [
   {
-    "version": "0.34.4",
+    "version": "0.35.1",
     "date": "2026-10-09",
     "summary": "Anyone still named Miembro chooses a name before using the customer app"
+  },
+  {
+    "version": "0.35.0",
+    "date": "2026-10-09",
+    "summary": "A version can be authorized only once per host while that authorization is in place; Nico's duplicate is removed."
+  },
+  {
+    "version": "0.34.4",
+    "date": "2026-10-09",
+    "summary": "Connect buttons show Gmail's and Drive's marks; the page stays put while Google's Picker is open; Brave is told how to allow it."
   },
   {
     "version": "0.34.3",

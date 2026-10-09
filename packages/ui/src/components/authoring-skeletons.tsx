@@ -124,7 +124,10 @@ export function AgentEditorSkeleton() {
                       ) : section === "connections" ? (
                         <div className="space-y-4">
                           <EmptyFrameSkeleton />
-                          <Skeleton className="h-9 w-36" />
+                          <div className="flex flex-wrap gap-2">
+                            <Skeleton className="h-9 w-24" />
+                            <Skeleton className="h-9 w-36" />
+                          </div>
                         </div>
                       ) : (
                         <div className="flex items-center gap-4 border-t py-5">
