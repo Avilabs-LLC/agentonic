@@ -131,6 +131,10 @@ it("allows only the app's own nonce'd scripts and Google's consent screen as a f
   expect(policy).toContain("frame-ancestors 'none'")
   expect(policy).toContain("form-action 'self' https://accounts.google.com")
   expect(policy).toContain("object-src 'none'")
+  // Only Google's Picker may be framed, for picking Drive files (§62).
+  expect(policy).toContain(
+    "frame-src https://docs.google.com https://drive.google.com"
+  )
   expect(nonceOf(policy)).toBe(value)
   expect(nonceOf(null)).toBeUndefined()
   expect(new Map(securityHeaders(false)).has("Strict-Transport-Security")).toBe(

@@ -21,13 +21,17 @@ try {
       "AGENTONIC_CONNECTION_KEY",
       // Present only while a key rotation is under way (rotate-connection-key.mjs).
       "AGENTONIC_CONNECTION_STANDBY_KEYS",
+      // Google's Picker for Drive (§62); only the customer app opens it.
+      ...(target.startsWith("apps/customer")
+        ? ["GOOGLE_PICKER_API_KEY", "GOOGLE_CLOUD_PROJECT_NUMBER"]
+        : []),
     ])
       if (credentials[name]) customer[name] = credentials[name]
       else delete customer[name]
     writeLocal(resolve(source, target), customer)
   }
   console.log(
-    "Google configuration copied to protected customer and preview worker environments. Restart the customer app and preview worker to load it. No account connected and no mailbox accessed."
+    "Google configuration copied to protected customer and preview worker environments. Restart the customer app and preview worker to load it. No account connected, no mailbox or Drive accessed."
   )
 } catch (e) {
   fail(e)

@@ -191,11 +191,32 @@ export async function gmailPermissions(
     operations: parsed,
   })
 }
+/**
+ * Whether another Agentonic connection, Gmail or Drive, still holds the same
+ * Google account. Google's revocation ends every grant the person gave the
+ * project, so revoking one connection's token would also end that one's.
+ */
+export async function accountShared(
+  workspace: string,
+  provider: "gmail" | "drive",
+  connectionId: string
+) {
+  uuid.parse(workspace)
+  const user = await requireVerifiedUser("customer")
+  return withIdentity(user.authId, workspace, async (tx) => {
+    const rows = await tx.$queryRaw<
+      { shared: boolean }[]
+    >`SELECT agentonic.google_account_shared(${provider},${uuid.parse(connectionId)}::uuid) shared`
+    return rows[0]?.shared !== false
+  })
+}
 export async function disconnectGmail(workspace: string, connectionId: string) {
   const config = googleConfig(),
     r = await command(workspace, "disconnect", {
       connectionId: uuid.parse(connectionId),
     })
+  if (r.credential && (await accountShared(workspace, "gmail", connectionId)))
+    return { revoked: false }
   if (r.credential) {
     const secret = unseal(
       String(r.credential),

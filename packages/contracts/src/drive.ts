@@ -217,3 +217,26 @@ export const driveSyncLabels: Record<DriveSyncStatus, string> = {
   unavailable: "Sin acceso en Drive",
   failed: "No se pudo sincronizar",
 }
+/** One imported file as Conocimiento shows it; the account only to its owner. */
+export const driveKnowledgeFile = z.object({
+  sourceId: z.uuid(),
+  collectionId: z.uuid(),
+  name: z.string(),
+  mimeType: z.string(),
+  url: z.string().nullable(),
+  status: driveSyncStatus,
+  errorCode: z.string().nullable(),
+  checkedAt: z.string().nullable(),
+  syncedAt: z.string().nullable(),
+  modifiedAt: z.string().nullable(),
+  chunkCount: z.number().int(),
+  account: z.string().nullable(),
+  connectionStatus: status,
+  canManage: z.boolean(),
+  citedBy: z.array(z.object({ id: z.uuid(), name: z.string() })),
+})
+export type DriveKnowledgeFile = z.infer<typeof driveKnowledgeFile>
+/** File IDs the Picker returned; each is checked with Drive before it is kept. */
+export const pickedFileIds = z.array(driveFileId).min(1).max(50)
+/** What a sealed Drive credential holds. */
+export const driveCredential = z.object({ refreshToken: z.string().min(1) })

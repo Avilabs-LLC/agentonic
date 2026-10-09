@@ -239,6 +239,10 @@ const files = {
       "AGENTONIC_DATABASE_ROLE",
       "GOOGLE_CLIENT_ID",
       "GOOGLE_CLIENT_SECRET",
+      // Google's Picker for Drive (§62): a browser key restricted to the
+      // hosted name and docs.google.com, and the Cloud project number.
+      "GOOGLE_PICKER_API_KEY",
+      "GOOGLE_CLOUD_PROJECT_NUMBER",
       ...gmailKeys,
     ]),
     GOOGLE_REDIRECT_URI: callback,

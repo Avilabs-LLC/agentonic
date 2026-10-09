@@ -1,6 +1,9 @@
 // Response headers for both apps (architecture §53). Pages may run only the
-// app's own scripts carrying this request's nonce; the one outside destination
-// is Google's consent screen, where the Gmail connection form redirects.
+// app's own scripts carrying this request's nonce; the outside destinations are
+// Google's consent screen, where the Gmail and Drive connection forms
+// redirect, and Google's Picker, which the app's own script loads on demand
+// (allowed by 'strict-dynamic') and which renders in a frame from Google
+// (architecture §62).
 export function contentSecurityPolicy(nonce: string) {
   return [
     "default-src 'self'",
@@ -9,7 +12,7 @@ export function contentSecurityPolicy(nonce: string) {
     "img-src 'self' data: blob:",
     "font-src 'self'",
     "connect-src 'self'",
-    "frame-src 'none'",
+    "frame-src https://docs.google.com https://drive.google.com",
     "object-src 'none'",
     "base-uri 'none'",
     "form-action 'self' https://accounts.google.com",

@@ -1,4 +1,4 @@
-import { gmailGrants, hasWeb } from "@agentonic/contracts/tools"
+import { driveGrants, gmailGrants, hasWeb } from "@agentonic/contracts/tools"
 import "server-only"
 import { randomUUID } from "node:crypto"
 import {
@@ -87,6 +87,7 @@ export async function runAuthoringCommand(app: AppKind, input: unknown) {
             AND retired_at IS NULL AND agentonic.can_use_code(id)
             AND execution_manifest->>'previewContract'='1'
             AND (${gmailGrants(view.draft.requestedAccess.tools).length === 0} OR execution_manifest->>'gmailContract'='1')
+            AND (${driveGrants(view.draft.requestedAccess.tools).length === 0} OR execution_manifest->>'driveContract'='1')
             AND (${!hasWeb(view.draft.requestedAccess.tools)} OR execution_manifest->>'webContract'='1')
           ORDER BY created_at DESC, id DESC`
         const enriched = view.candidates.map((candidate) => ({
