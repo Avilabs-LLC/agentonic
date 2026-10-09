@@ -821,9 +821,12 @@ DECLARE f agentonic.drive_knowledge_files; queued integer:=0;
 BEGIN
  IF agentonic.application_role()<>'agentonic_worker' THEN RAISE insufficient_privilege; END IF;
  DELETE FROM agentonic.background_jobs WHERE kind='drive_sync' AND status IN ('succeeded','failed','cancelled') AND updated_at<clock_timestamp()-interval '7 days';
+ -- Workspace before file, the order customer commands lock in.
  FOR f IN SELECT df.* FROM agentonic.drive_knowledge_files df JOIN agentonic.drive_connections c ON c.id=df.connection_id
-  WHERE df.next_check_at<=clock_timestamp() AND c.status='connected' ORDER BY df.next_check_at LIMIT 50 FOR UPDATE OF df SKIP LOCKED LOOP
+  WHERE df.next_check_at<=clock_timestamp() AND c.status='connected' ORDER BY df.next_check_at LIMIT 50 LOOP
   PERFORM 1 FROM agentonic.workspaces WHERE id=f.workspace_id FOR SHARE;
+  PERFORM 1 FROM agentonic.drive_knowledge_files WHERE source_id=f.source_id AND next_check_at<=clock_timestamp() FOR UPDATE SKIP LOCKED;
+  IF NOT FOUND THEN CONTINUE; END IF;
   IF agentonic.drive_enqueue(f.source_id,false) IS NOT NULL THEN queued:=queued+1; END IF;
   UPDATE agentonic.drive_knowledge_files SET next_check_at=clock_timestamp()+interval '1 hour' WHERE source_id=f.source_id;
  END LOOP;
