@@ -1,5 +1,10 @@
 export const VERSION_HISTORY = [
   {
+    "version": "0.32.0",
+    "date": "2026-10-09",
+    "summary": "Evaluation results and criteria receipts colour each kind of text, like the criteria review: expected answer emerald, the agent's answer sky, the review violet"
+  },
+  {
     "version": "0.31.1",
     "date": "2026-10-09",
     "summary": "On phones the agent page keeps its width: tab rows scroll sideways, fade the edge with more tabs and open on the selected one"
