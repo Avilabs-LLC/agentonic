@@ -1,5 +1,10 @@
 export const VERSION_HISTORY = [
   {
+    "version": "0.31.1",
+    "date": "2026-10-09",
+    "summary": "On phones the agent page keeps its width: tab rows scroll sideways, fade the edge with more tabs and open on the selected one"
+  },
+  {
     "version": "0.31.0",
     "date": "2026-10-09",
     "summary": "Markdown texts with Vista previa and Texto sides, bounded so long instructions and guides stay on screen; Gmail accounts as tabs with tools on; Acceso web marked Solo lectura; version frames that line up"

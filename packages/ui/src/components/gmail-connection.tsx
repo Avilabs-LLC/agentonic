@@ -30,7 +30,7 @@ import {
 } from "@workspace/ui/components/dialog"
 import {
   Tabs,
-  TabsList,
+  TabsBar,
   TabsTrigger,
   TabsContent,
 } from "@workspace/ui/components/tabs"
@@ -141,23 +141,17 @@ export function GmailTools({
           onValueChange={(value) => setTab(String(value))}
           className="gap-4"
         >
-          <div className="overflow-x-auto">
-            <TabsList
-              variant="line"
-              aria-label="Cuentas de Gmail"
-              className="w-max min-w-full justify-start border-b"
-            >
-              {connections.map((c) => (
-                <TabsTrigger key={c.id} value={c.id} className="flex-none px-3">
-                  {c.account}
-                  <span className="text-xs text-muted-foreground tabular-nums">
-                    {grant?.connectionId === c.id ? grant.operations.length : 0}
-                    /{total}
-                  </span>
-                </TabsTrigger>
-              ))}
-            </TabsList>
-          </div>
+          <TabsBar aria-label="Cuentas de Gmail">
+            {connections.map((c) => (
+              <TabsTrigger key={c.id} value={c.id} className="flex-none px-3">
+                {c.account}
+                <span className="text-xs text-muted-foreground tabular-nums">
+                  {grant?.connectionId === c.id ? grant.operations.length : 0}/
+                  {total}
+                </span>
+              </TabsTrigger>
+            ))}
+          </TabsBar>
           {connections.map((c) => (
             <TabsContent key={c.id} value={c.id}>
               {holder && holder.id !== c.id && (

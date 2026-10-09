@@ -3,7 +3,7 @@ import type { ReactNode } from "react"
 import { useSearchParams } from "next/navigation"
 import {
   Tabs,
-  TabsList,
+  TabsBar,
   TabsTrigger,
   TabsContent,
 } from "@workspace/ui/components/tabs"
@@ -38,7 +38,7 @@ export function AgentPageTabs({
         window.history.replaceState(null, "", url)
       }}
     >
-      <TabsList variant="line" className="w-full justify-start border-b">
+      <TabsBar aria-label="Secciones del agente">
         <TabsTrigger value="configuracion" className="flex-none px-4">
           Configuración
         </TabsTrigger>
@@ -55,7 +55,7 @@ export function AgentPageTabs({
             Programaciones
           </TabsTrigger>
         )}
-      </TabsList>
+      </TabsBar>
       <TabsContent value="configuracion" keepMounted className="space-y-6">
         {configuration}
       </TabsContent>
