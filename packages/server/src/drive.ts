@@ -80,7 +80,10 @@ async function access(
   credential: unknown
 ) {
   try {
-    return await refresh(config, sealedRefresh(config, credential, connectionId))
+    return await refresh(
+      config,
+      sealedRefresh(config, credential, connectionId)
+    )
   } catch (e) {
     if (e instanceof GoogleError && e.code === "reconnect")
       await command(workspace, "reconnect", { connectionId })
@@ -129,13 +132,17 @@ export async function startDrive(
     verifier: seal(verifier, `oauth:${digest(state)}`, config.keys),
   })
   const jar = await cookies()
-  jar.set(COOKIE, seal({ state, workspace }, "drive-oauth-cookie", config.keys), {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: new URL(config.redirectUri).protocol === "https:",
-    maxAge: 600,
-    path: CALLBACK,
-  })
+  jar.set(
+    COOKIE,
+    seal({ state, workspace }, "drive-oauth-cookie", config.keys),
+    {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: new URL(config.redirectUri).protocol === "https:",
+      maxAge: 600,
+      path: CALLBACK,
+    }
+  )
   const url = new URL("https://accounts.google.com/o/oauth2/v2/auth")
   const challenge = Buffer.from(digest(verifier), "hex").toString("base64url")
   // Only drive.file, and never the scopes granted earlier for Gmail.
@@ -157,7 +164,11 @@ export async function isDriveCallback(url: URL) {
   const cookie = (await cookies()).get(COOKIE)?.value
   if (!cookie) return false
   try {
-    const stored = unseal(cookie, "drive-oauth-cookie", googleConfig().keys) as {
+    const stored = unseal(
+      cookie,
+      "drive-oauth-cookie",
+      googleConfig().keys
+    ) as {
       state: string
     }
     const state = url.searchParams.get("state") ?? ""
@@ -218,10 +229,12 @@ export async function finishDrive(url: URL) {
   // grant the person gave this project, Gmail's included.
   const account = await driveAccount(tokens.access_token)
   const target = uuid.parse(
-    (await command(stored.workspace, "oauth.target", {
-      state: digest(state),
-      account,
-    })).connectionId
+    (
+      await command(stored.workspace, "oauth.target", {
+        state: digest(state),
+        account,
+      })
+    ).connectionId
   )
   await command(stored.workspace, "oauth.finish", {
     state: digest(state),
@@ -267,7 +280,10 @@ export async function drivePicker(workspace: string, connectionId: string) {
   let token: string
   try {
     token = (
-      await pickerToken(config, sealedRefresh(config, c.credential, connectionId))
+      await pickerToken(
+        config,
+        sealedRefresh(config, c.credential, connectionId)
+      )
     ).token
   } catch (e) {
     if (e instanceof GoogleError && e.code === "reconnect")
@@ -307,10 +323,17 @@ async function verifyPicked(
   for (const fileId of new Set(ids)) {
     try {
       const meta = await fileMetadata(token, fileId)
-      accepted.push({ fileId, name: meta.name.slice(0, 500), mimeType: meta.mimeType })
+      accepted.push({
+        fileId,
+        name: meta.name.slice(0, 500),
+        mimeType: meta.mimeType,
+      })
     } catch (e) {
       if (!(e instanceof DriveFileError)) throw new Error("drive_unavailable")
-      refused.push({ fileId, reason: refusals[e.problem] ?? "Sin acceso en Drive" })
+      refused.push({
+        fileId,
+        reason: refusals[e.problem] ?? "Sin acceso en Drive",
+      })
     }
   }
   return { accepted, refused }
@@ -322,7 +345,11 @@ export async function addDriveFiles(
   fileIds: unknown
 ) {
   uuid.parse(connectionId)
-  const { accepted, refused } = await verifyPicked(workspace, connectionId, fileIds)
+  const { accepted, refused } = await verifyPicked(
+    workspace,
+    connectionId,
+    fileIds
+  )
   if (accepted.length) {
     const r = await command(workspace, "files.add", {
       agentId: uuid.parse(agentId),
@@ -355,7 +382,8 @@ export async function drivePermissions(
   await command(workspace, "permissions", {
     agentId: uuid.parse(agentId),
     connectionId: uuid.parse(connectionId),
-    operations: driveState.shape.connections.element.shape.operations.parse(operations),
+    operations:
+      driveState.shape.connections.element.shape.operations.parse(operations),
   })
   return { ok: true }
 }
@@ -375,7 +403,11 @@ export async function driveInvocations(
     driveInvocation.parse({
       ...v,
       arguments: v.argumentsCiphertext
-        ? unseal(String(v.argumentsCiphertext), `invocation:${v.id}`, config.keys)
+        ? unseal(
+            String(v.argumentsCiphertext),
+            `invocation:${v.id}`,
+            config.keys
+          )
         : null,
     })
   )
@@ -388,7 +420,11 @@ const hashed = (id: string, hash: string) => {
   if (!/^[a-f0-9]{64}$/.test(hash)) throw new Error("invalid")
 }
 /** The Doc's text now, beside a proposed update, without consuming the approval. */
-export async function driveCurrent(workspace: string, id: string, hash: string) {
+export async function driveCurrent(
+  workspace: string,
+  id: string,
+  hash: string
+) {
   hashed(id, hash)
   const config = googleConfig()
   const inspected = await command(workspace, "inspect", { id, hash })
@@ -408,7 +444,11 @@ export async function driveCurrent(workspace: string, id: string, hash: string) 
     throw new Error("drive_unavailable")
   }
 }
-export async function confirmDrive(workspace: string, id: string, hash: string) {
+export async function confirmDrive(
+  workspace: string,
+  id: string,
+  hash: string
+) {
   hashed(id, hash)
   const config = googleConfig()
   // Refresh before consuming the approval: a failed refresh changes nothing.
@@ -436,7 +476,9 @@ export async function confirmDrive(workspace: string, id: string, hash: string) 
     result = { fileId: file.fileId, name: file.name }
   } catch (e) {
     status =
-      e instanceof GoogleError && e.code !== "uncertain" ? "failed" : "uncertain"
+      e instanceof GoogleError && e.code !== "uncertain"
+        ? "failed"
+        : "uncertain"
     result = {
       code:
         e instanceof DriveFileError
@@ -459,7 +501,11 @@ export async function importDriveKnowledge(
   fileIds: unknown
 ) {
   uuid.parse(connectionId)
-  const { accepted, refused } = await verifyPicked(workspace, connectionId, fileIds)
+  const { accepted, refused } = await verifyPicked(
+    workspace,
+    connectionId,
+    fileIds
+  )
   if (!accepted.length) return { ok: true, added: 0, refused }
   const r = await command(workspace, "knowledge.add", {
     connectionId,

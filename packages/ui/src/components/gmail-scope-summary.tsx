@@ -1,4 +1,5 @@
-import { gmailGrants, hasWeb } from "@agentonic/contracts/tools"
+import { driveGrants, gmailGrants, hasWeb } from "@agentonic/contracts/tools"
+import { driveLabels } from "@agentonic/contracts/drive"
 import { WrenchIcon } from "lucide-react"
 import { gmailLabels } from "@agentonic/contracts/gmail"
 import type { AgentView } from "@agentonic/contracts/authoring"
@@ -13,7 +14,7 @@ export function GmailScopeSummary({
       title="Herramientas solicitadas"
       description="Capacidades incluidas en esta versión y sujetas a sus permisos vigentes."
       icon={<WrenchIcon />}
-      footer="Las evaluaciones automáticas no utilizan estas herramientas. Las versiones con herramientas requieren revisión del equipo; los cambios de correo necesitan confirmación del titular."
+      footer="Las evaluaciones automáticas no utilizan estas herramientas. Las versiones con herramientas requieren revisión del equipo; los cambios de correo y de documentos necesitan confirmación del titular."
     >
       {hasWeb(tools) && (
         <div className="mb-4 space-y-2 rounded-lg border bg-muted/20 p-4">
@@ -40,6 +41,26 @@ export function GmailScopeSummary({
           <p className="text-xs text-muted-foreground">
             Uso privado de pruebas · Sin tareas desatendidas ni acceso
             compartido al buzón.
+          </p>
+        </div>
+      ))}
+      {driveGrants(tools).map((g) => (
+        <div
+          key={g.driveConnectionId}
+          className="mt-4 space-y-3 rounded-lg border bg-muted/20 p-4"
+        >
+          <p className="text-sm font-medium">Google Drive</p>
+          <p className="text-xs text-muted-foreground">
+            Conexión {g.driveConnectionId}
+          </p>
+          <ul className="grid gap-2 text-sm sm:grid-cols-2">
+            {g.operations.map((op) => (
+              <li key={op}>{driveLabels[op]}</li>
+            ))}
+          </ul>
+          <p className="text-xs text-muted-foreground">
+            Solo los archivos que el titular eligió y los documentos que el
+            agente creó · Uso privado de pruebas.
           </p>
         </div>
       ))}

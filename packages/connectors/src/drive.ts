@@ -202,7 +202,10 @@ export async function fileContent(access: string, meta: DriveMetadata) {
     : `${files(meta.id)}?alt=media&supportsAllDrives=true`
   return {
     bytes: await bytes(await request(access, url)),
-    format: meta.mimeType === "application/pdf" ? ("pdf" as const) : ("text" as const),
+    format:
+      meta.mimeType === "application/pdf"
+        ? ("pdf" as const)
+        : ("text" as const),
     exported: Boolean(as),
   }
 }

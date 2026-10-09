@@ -41,7 +41,10 @@ export async function runReviewCase(
       return { ok: true }
     }
     // The frozen version's own grants, answered from fixtures: nothing live is consulted.
-    if (fixtures && (operation === "gmail-tools" || operation === "drive-tools"))
+    if (
+      fixtures &&
+      (operation === "gmail-tools" || operation === "drive-tools")
+    )
       return { tools }
     if (fixtures && operation === "web-tools")
       return { enabled: !!fixtures.web }

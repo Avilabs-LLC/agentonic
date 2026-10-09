@@ -240,3 +240,8 @@ export type DriveKnowledgeFile = z.infer<typeof driveKnowledgeFile>
 export const pickedFileIds = z.array(driveFileId).min(1).max(50)
 /** What a sealed Drive credential holds. */
 export const driveCredential = z.object({ refreshToken: z.string().min(1) })
+/** Conocimiento's Google Drive card: the member's accounts and every import they may see. */
+export const driveKnowledgeView = driveKnowledgeState.extend({
+  files: z.array(driveKnowledgeFile),
+})
+export type DriveKnowledgeView = z.infer<typeof driveKnowledgeView>

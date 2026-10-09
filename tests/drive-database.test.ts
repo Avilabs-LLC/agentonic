@@ -33,7 +33,9 @@ async function rpc(fn: string, params: unknown[]) {
     await f.db.exec("RELEASE SAVEPOINT drive_rpc")
     return r.rows[0]!.r
   } catch (e) {
-    await f.db.exec("ROLLBACK TO SAVEPOINT drive_rpc; RELEASE SAVEPOINT drive_rpc")
+    await f.db.exec(
+      "ROLLBACK TO SAVEPOINT drive_rpc; RELEASE SAVEPOINT drive_rpc"
+    )
     throw Object.assign(e as Error, {
       message: `${fn}(${String(params[0])}): ${(e as Error).message} ${(e as { where?: string }).where ?? ""}`,
     })
@@ -107,7 +109,9 @@ describe("Drive tools", () => {
         },
       ],
     })
-    await expect(command("oauth.consume", { state: "a".repeat(64) })).rejects.toThrow()
+    await expect(
+      command("oauth.consume", { state: "a".repeat(64) })
+    ).rejects.toThrow()
     // A finish must use the connection the target named.
     await command("oauth.start", {
       purpose: "tools",
@@ -128,7 +132,9 @@ describe("Drive tools", () => {
     // Another workspace's member sees and changes nothing.
     await f.actor(id(2), id(11))
     await expect(command("list", { agentId: agent })).rejects.toThrow()
-    await expect(command("disconnect", { connectionId: tools })).rejects.toThrow()
+    await expect(
+      command("disconnect", { connectionId: tools })
+    ).rejects.toThrow()
     // Staff never reach Drive commands.
     await f.actor(id(3), id(10), "agentonic_admin")
     await expect(command("list", { agentId: agent })).rejects.toThrow()
@@ -144,14 +150,26 @@ describe("Drive tools", () => {
     await command("files.add", {
       agentId: agent,
       connectionId: tools,
-      files: [{ fileId: doc, name: "Plan", mimeType: "application/vnd.google-apps.document" }],
+      files: [
+        {
+          fileId: doc,
+          name: "Plan",
+          mimeType: "application/vnd.google-apps.document",
+        },
+      ],
     })
     await command("reconnect", { connectionId: tools })
     // Same account, any letter case: the old connection comes back with its files and operations.
     expect(
-      await connect("tools", id(604), "SYNTHETIC@example.invalid", "d".repeat(64))
+      await connect(
+        "tools",
+        id(604),
+        "SYNTHETIC@example.invalid",
+        "d".repeat(64)
+      )
     ).toBe(tools)
-    const listed = (await command("list", { agentId: agent })).connections as Record<string, unknown>[]
+    const listed = (await command("list", { agentId: agent }))
+      .connections as Record<string, unknown>[]
     expect(listed).toHaveLength(1)
     expect(listed[0]).toMatchObject({
       status: "connected",
@@ -183,10 +201,18 @@ describe("Drive tools", () => {
         mimeType: "text/plain",
       }))
     expect(
-      await command("files.add", { agentId: agent, connectionId: tools, files: many(20) })
+      await command("files.add", {
+        agentId: agent,
+        connectionId: tools,
+        files: many(20),
+      })
     ).toEqual({ ok: true })
     expect(
-      await command("files.add", { agentId: agent, connectionId: tools, files: many(6, 20) })
+      await command("files.add", {
+        agentId: agent,
+        connectionId: tools,
+        files: many(6, 20),
+      })
     ).toEqual({ ok: false, code: "too_many_files" })
     await command("files.remove", {
       agentId: agent,
@@ -194,7 +220,11 @@ describe("Drive tools", () => {
       fileId: "fileSynthetic0000",
     })
     expect(
-      ((await command("list", { agentId: agent })).connections as { files: unknown[] }[])[0]!.files
+      (
+        (await command("list", { agentId: agent })).connections as {
+          files: unknown[]
+        }[]
+      )[0]!.files
     ).toHaveLength(19)
   })
 
@@ -219,7 +249,11 @@ describe("Drive tools", () => {
     expect((await draft(["drive.files.read"])).ok).toBe(true)
     // A runtime without driveContract cannot freeze Drive tools.
     await expect(
-      f.command("candidate.freeze", { agentId: agent, revision: 1, codeReleaseId: id(40) })
+      f.command("candidate.freeze", {
+        agentId: agent,
+        revision: 1,
+        codeReleaseId: id(40),
+      })
     ).rejects.toThrow()
     const frozen = await f.command("candidate.freeze", {
       agentId: agent,
@@ -240,17 +274,37 @@ describe("Drive tools", () => {
     expect((await draft(["drive.files.read"], 1)).ok).toBe(false)
   })
 
-  async function preview(operations = ["drive.files.list", "drive.files.read", "drive.docs.create", "drive.docs.update"], enableTools = true) {
+  async function preview(
+    operations = [
+      "drive.files.list",
+      "drive.files.read",
+      "drive.docs.create",
+      "drive.docs.update",
+    ],
+    enableTools = true
+  ) {
     await driveRelease()
     await f.actor()
     await connect()
-    await command("permissions", { agentId: agent, connectionId: tools, operations })
+    await command("permissions", {
+      agentId: agent,
+      connectionId: tools,
+      operations,
+    })
     await command("files.add", {
       agentId: agent,
       connectionId: tools,
       files: [
-        { fileId: doc, name: "Plan de lanzamiento", mimeType: "application/vnd.google-apps.document" },
-        { fileId: sheet, name: "Presupuesto", mimeType: "application/vnd.google-apps.spreadsheet" },
+        {
+          fileId: doc,
+          name: "Plan de lanzamiento",
+          mimeType: "application/vnd.google-apps.document",
+        },
+        {
+          fileId: sheet,
+          name: "Presupuesto",
+          mimeType: "application/vnd.google-apps.spreadsheet",
+        },
       ],
     })
     expect((await draft(operations)).ok).toBe(true)
@@ -261,17 +315,37 @@ describe("Drive tools", () => {
     })
     const start = async (op: string, payload: Record<string, unknown>) => {
       await f.actor()
-      return rpc("preview_command", [op, JSON.stringify({ agentId: agent, ...payload })])
+      return rpc("preview_command", [
+        op,
+        JSON.stringify({ agentId: agent, ...payload }),
+      ])
     }
     const p = await start("start", { candidateId: candidate.id, enableTools })
     expect(p.ok).toBe(true)
-    await start("turn", { previewId: p.id, query: "Lee el plan", requestKey: id(605) })
+    await start("turn", {
+      previewId: p.id,
+      query: "Lee el plan",
+      requestKey: id(605),
+    })
     const job = await f.claim()
-    const tool = async (operation: string, payload: Record<string, unknown> = {}, token = job.token) => {
+    const tool = async (
+      operation: string,
+      payload: Record<string, unknown> = {},
+      token = job.token
+    ) => {
       await f.db.exec("RESET ROLE; SET LOCAL ROLE agentonic_worker")
-      return rpc("drive_preview_worker", [operation, job.id, token, JSON.stringify(payload)])
+      return rpc("drive_preview_worker", [
+        operation,
+        job.id,
+        token,
+        JSON.stringify(payload),
+      ])
     }
-    const propose = (n: number, operation = "drive.docs.create", extra: Record<string, unknown> = {}) =>
+    const propose = (
+      n: number,
+      operation = "drive.docs.create",
+      extra: Record<string, unknown> = {}
+    ) =>
       tool("drive-propose", {
         connectionId: tools,
         operation,
@@ -289,52 +363,105 @@ describe("Drive tools", () => {
       tools: [
         {
           driveConnectionId: tools,
-          operations: ["drive.files.list", "drive.files.read", "drive.docs.create", "drive.docs.update"],
+          operations: [
+            "drive.files.list",
+            "drive.files.read",
+            "drive.docs.create",
+            "drive.docs.update",
+          ],
         },
       ],
     })
     expect(
-      await p.tool("drive-read", { connectionId: tools, operation: "drive.files.read" })
+      await p.tool("drive-read", {
+        connectionId: tools,
+        operation: "drive.files.read",
+      })
     ).toEqual({
       credential: "sealed-credential",
       account: "synthetic@example.invalid",
       files: [
-        { fileId: doc, name: "Plan de lanzamiento", mimeType: "application/vnd.google-apps.document" },
-        { fileId: sheet, name: "Presupuesto", mimeType: "application/vnd.google-apps.spreadsheet" },
+        {
+          fileId: doc,
+          name: "Plan de lanzamiento",
+          mimeType: "application/vnd.google-apps.document",
+        },
+        {
+          fileId: sheet,
+          name: "Presupuesto",
+          mimeType: "application/vnd.google-apps.spreadsheet",
+        },
       ],
     })
     expect(
-      await p.tool("drive-check", { connectionId: tools, operation: "drive.files.read", fileId: doc })
+      await p.tool("drive-check", {
+        connectionId: tools,
+        operation: "drive.files.read",
+        fileId: doc,
+      })
     ).toEqual({ ok: true })
     await expect(
-      p.tool("drive-check", { connectionId: tools, operation: "drive.files.read", fileId: "notPickedFile123" })
+      p.tool("drive-check", {
+        connectionId: tools,
+        operation: "drive.files.read",
+        fileId: "notPickedFile123",
+      })
     ).rejects.toThrow()
-    expect(await p.propose(606)).toEqual({ pendingApproval: true, id: id(606), automatic: false })
+    expect(await p.propose(606)).toEqual({
+      pendingApproval: true,
+      id: id(606),
+      automatic: false,
+    })
     // An update names an allowlisted Google Doc; a sheet or an unpicked file is refused.
     await expect(p.propose(607, "drive.docs.update")).rejects.toThrow()
-    await expect(p.propose(607, "drive.docs.update", { fileId: sheet })).rejects.toThrow()
-    await expect(p.propose(607, "drive.docs.update", { fileId: "notPickedFile123" })).rejects.toThrow()
-    expect(await p.propose(607, "drive.docs.update", { fileId: doc })).toMatchObject({ pendingApproval: true })
+    await expect(
+      p.propose(607, "drive.docs.update", { fileId: sheet })
+    ).rejects.toThrow()
+    await expect(
+      p.propose(607, "drive.docs.update", { fileId: "notPickedFile123" })
+    ).rejects.toThrow()
+    expect(
+      await p.propose(607, "drive.docs.update", { fileId: doc })
+    ).toMatchObject({ pendingApproval: true })
     await f.actor()
-    const listed = (await command("invocations", { conversationId: p.p.id, context: "preview" })).items as Record<string, unknown>[]
-    expect(listed.map((i) => [i.operation, i.status, i.argumentsCiphertext])).toEqual([
+    const listed = (
+      await command("invocations", {
+        conversationId: p.p.id,
+        context: "preview",
+      })
+    ).items as Record<string, unknown>[]
+    expect(
+      listed.map((i) => [i.operation, i.status, i.argumentsCiphertext])
+    ).toEqual([
       ["drive.docs.create", "pending", "sealed-arguments"],
       ["drive.docs.update", "pending", "sealed-arguments"],
     ])
     // Staging listing never shows preview proposals.
-    await expect(command("invocations", { conversationId: p.p.id })).rejects.toThrow()
-    await expect(command("confirm", { id: id(606), hash: "b".repeat(64) })).rejects.toThrow()
-    expect(await command("confirm", { id: id(606), hash: "a".repeat(64) })).toMatchObject({
+    await expect(
+      command("invocations", { conversationId: p.p.id })
+    ).rejects.toThrow()
+    await expect(
+      command("confirm", { id: id(606), hash: "b".repeat(64) })
+    ).rejects.toThrow()
+    expect(
+      await command("confirm", { id: id(606), hash: "a".repeat(64) })
+    ).toMatchObject({
       operation: "drive.docs.create",
       credential: "sealed-credential",
       argumentsCiphertext: "sealed-arguments",
       fileId: null,
     })
-    await expect(command("confirm", { id: id(606), hash: "a".repeat(64) })).rejects.toThrow()
+    await expect(
+      command("confirm", { id: id(606), hash: "a".repeat(64) })
+    ).rejects.toThrow()
     await command("complete", {
       id: id(606),
       status: "succeeded",
-      result: { fileId: "1NewDocAbCdEfGhIjKlMnOp", name: "Resumen", body: "never kept" },
+      result: {
+        fileId: "1NewDocAbCdEfGhIjKlMnOp",
+        name: "Resumen",
+        body: "never kept",
+      },
     })
     await expect(
       command("complete", { id: id(606), status: "succeeded", result: {} })
@@ -358,19 +485,37 @@ describe("Drive tools", () => {
       },
     ])
     await f.actor()
-    const files = ((await command("list", { agentId: agent })).connections as { files: { fileId: string; origin: string }[] }[])[0]!.files
-    expect(files.map((x) => [x.fileId, x.origin])).toContainEqual(["1NewDocAbCdEfGhIjKlMnOp", "created"])
+    const files = (
+      (await command("list", { agentId: agent })).connections as {
+        files: { fileId: string; origin: string }[]
+      }[]
+    )[0]!.files
+    expect(files.map((x) => [x.fileId, x.origin])).toContainEqual([
+      "1NewDocAbCdEfGhIjKlMnOp",
+      "created",
+    ])
     // An update names its file, so removing it from the agent stops the update.
-    expect(await command("inspect", { id: id(607), hash: "a".repeat(64) })).toMatchObject({ fileId: doc })
-    await command("files.remove", { agentId: agent, connectionId: tools, fileId: doc })
-    await expect(command("confirm", { id: id(607), hash: "a".repeat(64) })).rejects.toThrow()
+    expect(
+      await command("inspect", { id: id(607), hash: "a".repeat(64) })
+    ).toMatchObject({ fileId: doc })
+    await command("files.remove", {
+      agentId: agent,
+      connectionId: tools,
+      fileId: doc,
+    })
+    await expect(
+      command("confirm", { id: id(607), hash: "a".repeat(64) })
+    ).rejects.toThrow()
   })
 
   it("keeps no-tool previews closed, refuses lost leases, other members and staff, and scrubs on cancel", async () => {
     const closed = await preview(undefined, false)
     expect(await closed.tool("drive-tools")).toEqual({ tools: [] })
     await expect(
-      closed.tool("drive-read", { connectionId: tools, operation: "drive.files.read" })
+      closed.tool("drive-read", {
+        connectionId: tools,
+        operation: "drive.files.read",
+      })
     ).rejects.toThrow()
     await expect(closed.tool("drive-tools", {}, id(999))).rejects.toThrow()
   })
@@ -379,11 +524,20 @@ describe("Drive tools", () => {
     const p = await preview()
     await p.propose(608)
     await f.actor(id(2), id(11))
-    await expect(command("invocations", { conversationId: p.p.id, context: "preview" })).rejects.toThrow()
-    await expect(command("confirm", { id: id(608), hash: "a".repeat(64) })).rejects.toThrow()
+    await expect(
+      command("invocations", { conversationId: p.p.id, context: "preview" })
+    ).rejects.toThrow()
+    await expect(
+      command("confirm", { id: id(608), hash: "a".repeat(64) })
+    ).rejects.toThrow()
     await p.start("cancel", { previewId: p.p.id })
     expect(
-      (await f.sql("SELECT status,arguments_ciphertext FROM agentonic.drive_invocations WHERE id=$1", [id(608)])).rows
+      (
+        await f.sql(
+          "SELECT status,arguments_ciphertext FROM agentonic.drive_invocations WHERE id=$1",
+          [id(608)]
+        )
+      ).rows
     ).toEqual([{ status: "cancelled", arguments_ciphertext: null }])
   })
 
@@ -391,17 +545,33 @@ describe("Drive tools", () => {
     const p = await preview()
     await p.propose(609)
     await f.actor()
-    await command("permissions", { agentId: agent, connectionId: tools, operations: ["drive.files.list"] })
+    await command("permissions", {
+      agentId: agent,
+      connectionId: tools,
+      operations: ["drive.files.list"],
+    })
     await expect(
-      p.tool("drive-read", { connectionId: tools, operation: "drive.files.read" })
+      p.tool("drive-read", {
+        connectionId: tools,
+        operation: "drive.files.read",
+      })
     ).rejects.toThrow()
     await f.actor()
-    await expect(command("confirm", { id: id(609), hash: "a".repeat(64) })).rejects.toThrow()
+    await expect(
+      command("confirm", { id: id(609), hash: "a".repeat(64) })
+    ).rejects.toThrow()
     await command("disconnect", { connectionId: tools })
     expect(
-      (await f.sql("SELECT status,arguments_ciphertext FROM agentonic.drive_invocations WHERE id=$1", [id(609)])).rows
+      (
+        await f.sql(
+          "SELECT status,arguments_ciphertext FROM agentonic.drive_invocations WHERE id=$1",
+          [id(609)]
+        )
+      ).rows
     ).toEqual([{ status: "cancelled", arguments_ciphertext: null }])
-    expect((await f.sql("SELECT count(*)::int n FROM agentonic.drive_files")).rows).toEqual([{ n: 0 }])
+    expect(
+      (await f.sql("SELECT count(*)::int n FROM agentonic.drive_files")).rows
+    ).toEqual([{ n: 0 }])
   })
 
   it("expires pending writes with the preview and in the retention sweep", async () => {
@@ -414,7 +584,12 @@ describe("Drive tools", () => {
     await f.db.exec("RESET ROLE; SET LOCAL ROLE agentonic_worker")
     expect(await rpc("drive_retention_sweep", [])).toMatchObject({ expired: 1 })
     expect(
-      (await f.sql("SELECT status,arguments_ciphertext FROM agentonic.drive_invocations WHERE id=$1", [id(610)])).rows
+      (
+        await f.sql(
+          "SELECT status,arguments_ciphertext FROM agentonic.drive_invocations WHERE id=$1",
+          [id(610)]
+        )
+      ).rows
     ).toEqual([{ status: "expired", arguments_ciphertext: null }])
   })
 
@@ -423,7 +598,11 @@ describe("Drive tools", () => {
     await p.propose(611)
     await f.actor()
     await command("confirm", { id: id(611), hash: "a".repeat(64) })
-    await command("complete", { id: id(611), status: "uncertain", result: { code: "uncertain" } })
+    await command("complete", {
+      id: id(611),
+      status: "uncertain",
+      result: { code: "uncertain" },
+    })
     expect(
       (
         await f.sql(
@@ -437,7 +616,12 @@ describe("Drive tools", () => {
         status: "active",
         secret_reference: `drive_connections:${tools}`,
         purpose: "tools",
-        allowed_operations: ["drive.files.list", "drive.files.read", "drive.docs.create", "drive.docs.update"],
+        allowed_operations: [
+          "drive.files.list",
+          "drive.files.read",
+          "drive.docs.create",
+          "drive.docs.update",
+        ],
       },
     ])
     expect(
@@ -448,12 +632,23 @@ describe("Drive tools", () => {
         )
       ).rows
     ).toEqual([
-      { status: "unknown", authorization_kind: "one_off", redacted_result: { code: "uncertain" }, decision: "approved", consumed: true },
+      {
+        status: "unknown",
+        authorization_kind: "one_off",
+        redacted_result: { code: "uncertain" },
+        decision: "approved",
+        consumed: true,
+      },
     ])
     // A knowledge account is a connection with no agent grant.
     await connect("knowledge")
     expect(
-      (await f.sql("SELECT count(*)::int n FROM agentonic.agent_connection_grants WHERE connection_id=$1", [knowledge])).rows
+      (
+        await f.sql(
+          "SELECT count(*)::int n FROM agentonic.agent_connection_grants WHERE connection_id=$1",
+          [knowledge]
+        )
+      ).rows
     ).toEqual([{ n: 0 }])
     await f.actor()
     await command("disconnect", { connectionId: tools })
@@ -465,6 +660,88 @@ describe("Drive tools", () => {
         )
       ).rows
     ).toEqual([{ status: "revoked", revoked: true, allowed_operations: [] }])
+  })
+
+  it("lets a schedule pre-authorize one Drive write per run, and drops it when its authority lapses", async () => {
+    const p = await preview()
+    // Only Drive and Gmail writes can be pre-authorized.
+    await f.db.exec("RESET ROLE; SAVEPOINT refused")
+    await expect(
+      f.db.exec(
+        `INSERT INTO agentonic.agent_schedules(workspace_id,agent_id,member_id,request_id,name,instruction,cadence,time_of_day,timezone,model,reasoning,autonomy,consent,next_run_at)
+         VALUES('${id(10)}','${agent}','${member}','${id(624)}','Lectura','Lee','daily','08:00','UTC','gpt-5.4-mini','medium','["drive.files.read"]','{"operations":["drive.files.read"]}',now()+interval '1 day')`
+      )
+    ).rejects.toThrow(/agent_schedules_autonomy/)
+    await f.db.exec("ROLLBACK TO SAVEPOINT refused; RELEASE SAVEPOINT refused")
+    // A schedule that pre-authorized Drive Docs, and a run on this turn.
+    await f.db.exec(
+      `RESET ROLE; SET session_replication_role=replica;
+       INSERT INTO agentonic.agent_schedules(id,workspace_id,agent_id,member_id,request_id,name,instruction,cadence,time_of_day,timezone,model,reasoning,autonomy,consent,next_run_at)
+       VALUES('${id(620)}','${id(10)}','${agent}','${member}','${id(621)}','Informe','Crea el informe','daily','08:00','UTC','gpt-5.4-mini','medium','["drive.docs.create"]','{"operations":["drive.docs.create"]}',now()+interval '1 day');
+       INSERT INTO agentonic.agent_schedule_runs(id,workspace_id,schedule_id,scheduled_for,status,turn_id) VALUES('${id(622)}','${id(10)}','${id(620)}',now(),'running','${p.job.id}');
+       SET session_replication_role=origin;`
+    )
+    // A deployed turn's proposal (staging context) for that run.
+    const propose = async (n: number) =>
+      (
+        (
+          await f.sql(
+            "SELECT agentonic.drive_tool_step('drive-propose',r,r.requested_access_snapshot->'tools',r.workspace_id,r.agent_id,$1,$2,$3,'staging',NULL,$4::jsonb) r FROM agentonic.configuration_releases r JOIN agentonic.agent_previews p ON p.configuration_release_id=r.id WHERE p.id=$5",
+            [
+              member,
+              p.job.id,
+              id(623),
+              JSON.stringify({
+                connectionId: tools,
+                operation: "drive.docs.create",
+                id: id(n),
+                argumentsCiphertext: "sealed",
+                hash: "a".repeat(64),
+              }),
+              p.p.id,
+            ]
+          )
+        ).rows[0] as { r: Record<string, unknown> }
+      ).r
+    expect(await propose(625)).toMatchObject({ automatic: true })
+    expect(await propose(626)).toMatchObject({ automatic: false })
+    // The person cannot confirm a pre-authorized write.
+    await f.actor()
+    await expect(
+      command("confirm", { id: id(625), hash: "a".repeat(64) })
+    ).rejects.toThrow()
+    // Without a staging conversation it stands on, the claim cancels it.
+    await f.db.exec("RESET ROLE; SET LOCAL ROLE agentonic_worker")
+    expect(await rpc("drive_action_claim", [])).toBeNull()
+    expect(
+      (
+        await f.sql(
+          "SELECT id,status,arguments_ciphertext IS NULL erased FROM agentonic.drive_invocations WHERE id IN ($1,$2) ORDER BY id",
+          [id(625), id(626)]
+        )
+      ).rows
+    ).toEqual([
+      { id: id(625), status: "cancelled", erased: true },
+      { id: id(626), status: "pending", erased: false },
+    ])
+    // Deleting a schedule cancels what it pre-authorized and has not started.
+    await f.sql(
+      "UPDATE agentonic.agent_schedule_runs SET actions_approved=0 WHERE id=$1",
+      [id(622)]
+    )
+    expect(await propose(627)).toMatchObject({ automatic: true })
+    await f.sql(
+      "UPDATE agentonic.agent_schedules SET status='deleted',next_run_at=NULL WHERE id=$1",
+      [id(620)]
+    )
+    expect(
+      (
+        await f.sql(
+          "SELECT status FROM agentonic.drive_invocations WHERE id IN ($1,$2) ORDER BY id",
+          [id(626), id(627)]
+        )
+      ).rows
+    ).toEqual([{ status: "pending" }, { status: "cancelled" }])
   })
 
   it("revokes at Google only when no other connection holds the same account", async () => {
@@ -479,7 +756,9 @@ describe("Drive tools", () => {
     expect(await rpc("google_account_shared", ["gmail", id(612)])).toBe(false)
     // Only the connection's own member may ask.
     await f.actor(id(2), id(11))
-    await expect(rpc("google_account_shared", ["drive", tools])).rejects.toThrow()
+    await expect(
+      rpc("google_account_shared", ["drive", tools])
+    ).rejects.toThrow()
   })
 
   it("admits one Drive grant beside Gmail and web in a version's access", async () => {
@@ -490,24 +769,45 @@ describe("Drive tools", () => {
     expect(toolGrants.safeParse([drive, drive]).success).toBe(false)
     const valid = async (value: unknown) =>
       (
-        (await f.sql("SELECT agentonic.valid_tools($1::jsonb) v", [JSON.stringify(value)])).rows[0] as { v: boolean }
+        (
+          await f.sql("SELECT agentonic.valid_tools($1::jsonb) v", [
+            JSON.stringify(value),
+          ])
+        ).rows[0] as { v: boolean }
       ).v
     expect(await valid([gmail, drive, web])).toBe(true)
-    expect(await valid([drive, { ...drive, driveConnectionId: id(613) }])).toBe(false)
-    expect(await valid([{ ...drive, operations: ["drive.files.delete"] }])).toBe(false)
+    expect(await valid([drive, { ...drive, driveConnectionId: id(613) }])).toBe(
+      false
+    )
+    expect(
+      await valid([{ ...drive, operations: ["drive.files.delete"] }])
+    ).toBe(false)
     expect(await valid([{ ...drive, extra: true }])).toBe(false)
     // Gmail's readers ignore Drive grants.
     expect(
-      (await f.sql("SELECT agentonic.gmail_grants($1::jsonb) g", [JSON.stringify([gmail, drive])])).rows
+      (
+        await f.sql("SELECT agentonic.gmail_grants($1::jsonb) g", [
+          JSON.stringify([gmail, drive]),
+        ])
+      ).rows
     ).toEqual([{ g: [gmail] }])
   })
 })
 
 describe("Drive knowledge", () => {
   type Job = { id: string; token: string; kind: string }
-  async function sync(job: Job, operation: string, payload: Record<string, unknown> = {}) {
+  async function sync(
+    job: Job,
+    operation: string,
+    payload: Record<string, unknown> = {}
+  ) {
     await f.db.exec("RESET ROLE; SET LOCAL ROLE agentonic_worker")
-    return rpc("drive_sync_worker", [operation, job.id, job.token, JSON.stringify(payload)])
+    return rpc("drive_sync_worker", [
+      operation,
+      job.id,
+      job.token,
+      JSON.stringify(payload),
+    ])
   }
   async function claim() {
     await f.db.exec("RESET ROLE; SET LOCAL ROLE agentonic_worker")
@@ -515,18 +815,29 @@ describe("Drive knowledge", () => {
   }
   async function imported() {
     // The fixture starts with no embedding budget.
-    await f.sql("UPDATE agentonic.retrieval_provider_budgets SET cap_microusd=1000000 WHERE provider='voyage'")
+    await f.sql(
+      "UPDATE agentonic.retrieval_provider_budgets SET cap_microusd=1000000 WHERE provider='voyage'"
+    )
     await connect("knowledge")
     await f.actor()
     expect(
       await command("knowledge.add", {
         connectionId: knowledge,
         collectionId: collection,
-        files: [{ fileId: doc, name: "Plan de lanzamiento", mimeType: "application/vnd.google-apps.document" }],
+        files: [
+          {
+            fileId: doc,
+            name: "Plan de lanzamiento",
+            mimeType: "application/vnd.google-apps.document",
+          },
+        ],
       })
     ).toEqual({ ok: true, added: 1 })
     const row = (
-      await f.sql("SELECT source_id,document_id FROM agentonic.drive_knowledge_files WHERE file_id=$1", [doc])
+      await f.sql(
+        "SELECT source_id,document_id FROM agentonic.drive_knowledge_files WHERE file_id=$1",
+        [doc]
+      )
     ).rows[0] as { source_id: string; document_id: string }
     await f.actor()
     return row
@@ -540,9 +851,19 @@ describe("Drive knowledge", () => {
   beforeEach(() => {
     reservations = 0
   })
-  async function publish(job: Job, version: string, body = text, sha = "a".repeat(64)) {
+  async function publish(
+    job: Job,
+    version: string,
+    body = text,
+    sha = "a".repeat(64)
+  ) {
     const operation = id(700 + ++reservations)
-    await sync(job, "reserve", { id: operation, provider: "voyage", model: "voyage-4", microusd: 10 })
+    await sync(job, "reserve", {
+      id: operation,
+      provider: "voyage",
+      model: "voyage-4",
+      microusd: 10,
+    })
     await sync(job, "settle", { id: operation, tokens: 10, microusd: 1 })
     return sync(job, "publish", {
       version,
@@ -550,7 +871,13 @@ describe("Drive knowledge", () => {
       modifiedTime: "2026-10-09T12:00:00Z",
       contentSha256: sha,
       parser: "drive-export-v1",
-      chunks: [{ text: body, locator: { page: 1, start: 0, end: body.length }, embedding }],
+      chunks: [
+        {
+          text: body,
+          locator: { page: 1, start: 0, end: body.length },
+          embedding,
+        },
+      ],
     })
   }
 
@@ -568,7 +895,13 @@ describe("Drive knowledge", () => {
       await command("knowledge.add", {
         connectionId: knowledge,
         collectionId: collection,
-        files: [{ fileId: doc, name: "Plan", mimeType: "application/vnd.google-apps.document" }],
+        files: [
+          {
+            fileId: doc,
+            name: "Plan",
+            mimeType: "application/vnd.google-apps.document",
+          },
+        ],
       })
     ).toEqual({ ok: true, added: 0 })
     expect(await files()).toMatchObject([
@@ -609,7 +942,9 @@ describe("Drive knowledge", () => {
           [source.source_id]
         )
       ).rows
-    ).toEqual([{ usable: true, kind: "google_drive", connection_id: knowledge }])
+    ).toEqual([
+      { usable: true, kind: "google_drive", connection_id: knowledge },
+    ])
   })
 
   it("checks hourly, records unchanged files without spend and re-indexes changes", async () => {
@@ -619,20 +954,37 @@ describe("Drive knowledge", () => {
     // Nothing is due yet.
     await f.db.exec("RESET ROLE; SET LOCAL ROLE agentonic_worker")
     expect(await rpc("drive_sync_tick", [])).toEqual({ queued: 0 })
-    await f.sql("UPDATE agentonic.drive_knowledge_files SET next_check_at=clock_timestamp()-interval '1 minute'")
+    await f.sql(
+      "UPDATE agentonic.drive_knowledge_files SET next_check_at=clock_timestamp()-interval '1 minute'"
+    )
     await f.db.exec("RESET ROLE; SET LOCAL ROLE agentonic_worker")
     expect(await rpc("drive_sync_tick", [])).toEqual({ queued: 1 })
     const second = (await claim())!
-    expect(await sync(second, "read")).toMatchObject({ appliedVersion: "7", indexed: true, contentSha256: "a".repeat(64) })
+    expect(await sync(second, "read")).toMatchObject({
+      appliedVersion: "7",
+      indexed: true,
+      contentSha256: "a".repeat(64),
+    })
     await sync(second, "unchanged", { version: "8", name: "Plan renombrado" })
-    expect(await files()).toMatchObject([{ status: "synced", name: "Plan renombrado" }])
+    expect(await files()).toMatchObject([
+      { status: "synced", name: "Plan renombrado" },
+    ])
     // A real change replaces the text.
     await f.actor()
-    await f.sql("UPDATE agentonic.drive_knowledge_files SET checked_at=clock_timestamp()-interval '2 minutes'")
+    await f.sql(
+      "UPDATE agentonic.drive_knowledge_files SET checked_at=clock_timestamp()-interval '2 minutes'"
+    )
     await f.actor()
-    expect(await command("knowledge.sync", { sourceId: source.source_id })).toEqual({ ok: true })
+    expect(
+      await command("knowledge.sync", { sourceId: source.source_id })
+    ).toEqual({ ok: true })
     const third = (await claim())!
-    await publish(third, "9", "Aurora se lanza el 21 de noviembre.", "b".repeat(64))
+    await publish(
+      third,
+      "9",
+      "Aurora se lanza el 21 de noviembre.",
+      "b".repeat(64)
+    )
     expect(
       (
         await f.sql(
@@ -642,7 +994,12 @@ describe("Drive knowledge", () => {
       ).rows
     ).toEqual([{ content: "Aurora se lanza el 21 de noviembre." }])
     expect(
-      (await f.sql("SELECT count(*)::int n FROM agentonic.document_versions WHERE document_id=$1", [source.document_id])).rows
+      (
+        await f.sql(
+          "SELECT count(*)::int n FROM agentonic.document_versions WHERE document_id=$1",
+          [source.document_id]
+        )
+      ).rows
     ).toEqual([{ n: 1 }])
   })
 
@@ -662,18 +1019,31 @@ describe("Drive knowledge", () => {
        VALUES('${id(10)}','${agent}','${id(40)}','${id(901)}','${id(902)}','${id(903)}','${id(904)}','local','${member}','${id(905)}',1,clock_timestamp()+interval '1 day','[{"id":"${chunk.id}","hash":"${chunk.content_sha256}"}]');
        SET session_replication_role=origin;`
     )
-    await f.sql("UPDATE agentonic.drive_knowledge_files SET checked_at=clock_timestamp()-interval '2 minutes'")
+    await f.sql(
+      "UPDATE agentonic.drive_knowledge_files SET checked_at=clock_timestamp()-interval '2 minutes'"
+    )
     await f.actor()
     await command("knowledge.sync", { sourceId: source.source_id })
     const job = (await claim())!
     expect(await sync(job, "read")).toMatchObject({ held: true })
     // Even a publish is recorded as held, and the cited text stays.
-    expect(await publish(job, "9", "Aurora se retrasa.", "c".repeat(64))).toEqual({ ok: true, held: true })
+    expect(
+      await publish(job, "9", "Aurora se retrasa.", "c".repeat(64))
+    ).toEqual({ ok: true, held: true })
     expect(await files()).toMatchObject([
-      { status: "held", citedBy: [{ id: agent, name: "Synthetic agent" }], chunkCount: 1 },
+      {
+        status: "held",
+        citedBy: [{ id: agent, name: "Synthetic agent" }],
+        chunkCount: 1,
+      },
     ])
     expect(
-      (await f.sql("SELECT content FROM agentonic.document_chunks WHERE id=$1", [chunk.id])).rows
+      (
+        await f.sql(
+          "SELECT content FROM agentonic.document_chunks WHERE id=$1",
+          [chunk.id]
+        )
+      ).rows
     ).toEqual([{ content: text }])
     // Applying it is the curator's decision; the next sync then publishes.
     await f.actor()
@@ -682,33 +1052,60 @@ describe("Drive knowledge", () => {
     expect(await sync(applied, "read")).toMatchObject({ held: false })
     await publish(applied, "9", "Aurora se retrasa.", "c".repeat(64))
     expect(await files()).toMatchObject([{ status: "synced", citedBy: [] }])
-    expect((await f.sql("SELECT count(*)::int n FROM agentonic.document_chunks WHERE id=$1", [chunk.id])).rows).toEqual([{ n: 0 }])
+    expect(
+      (
+        await f.sql(
+          "SELECT count(*)::int n FROM agentonic.document_chunks WHERE id=$1",
+          [chunk.id]
+        )
+      ).rows
+    ).toEqual([{ n: 0 }])
   })
 
   it("removes text Drive no longer shares, pauses on reconnect and purges on disconnect", async () => {
     const source = await imported()
     await publish((await claim())!, "7")
-    await f.sql("UPDATE agentonic.drive_knowledge_files SET checked_at=clock_timestamp()-interval '2 minutes'")
+    await f.sql(
+      "UPDATE agentonic.drive_knowledge_files SET checked_at=clock_timestamp()-interval '2 minutes'"
+    )
     await f.actor()
     await command("knowledge.sync", { sourceId: source.source_id })
     const job = (await claim())!
-    await expect(sync(job, "gone", { code: "deleted_by_magic" })).rejects.toThrow()
+    await expect(
+      sync(job, "gone", { code: "deleted_by_magic" })
+    ).rejects.toThrow()
     await sync(job, "gone", { code: "trashed" })
-    expect(await files()).toMatchObject([{ status: "unavailable", errorCode: "trashed", chunkCount: 0 }])
+    expect(await files()).toMatchObject([
+      { status: "unavailable", errorCode: "trashed", chunkCount: 0 },
+    ])
     // A refused token pauses syncing and keeps what was imported usable.
-    await f.sql("UPDATE agentonic.drive_knowledge_files SET checked_at=clock_timestamp()-interval '2 minutes'")
+    await f.sql(
+      "UPDATE agentonic.drive_knowledge_files SET checked_at=clock_timestamp()-interval '2 minutes'"
+    )
     await f.actor()
     await command("knowledge.sync", { sourceId: source.source_id })
     const next = (await claim())!
     await sync(next, "reconnect")
     expect(
-      (await f.sql("SELECT status,credential_ciphertext FROM agentonic.drive_connections WHERE id=$1", [knowledge])).rows
+      (
+        await f.sql(
+          "SELECT status,credential_ciphertext FROM agentonic.drive_connections WHERE id=$1",
+          [knowledge]
+        )
+      ).rows
     ).toEqual([{ status: "reconnect", credential_ciphertext: null }])
     expect(
-      (await f.sql("SELECT agentonic.knowledge_source_usable(k) u FROM agentonic.knowledge_sources k WHERE id=$1", [source.source_id])).rows
+      (
+        await f.sql(
+          "SELECT agentonic.knowledge_source_usable(k) u FROM agentonic.knowledge_sources k WHERE id=$1",
+          [source.source_id]
+        )
+      ).rows
     ).toEqual([{ u: true }])
     await f.actor()
-    expect(await command("knowledge.sync", { sourceId: source.source_id })).toEqual({ ok: false, code: "reconnect" })
+    expect(
+      await command("knowledge.sync", { sourceId: source.source_id })
+    ).toEqual({ ok: false, code: "reconnect" })
     // Disconnecting removes the sources and everything derived from them.
     await command("disconnect", { connectionId: knowledge })
     expect(
@@ -731,14 +1128,28 @@ describe("Drive knowledge", () => {
        INSERT INTO agentonic.collection_member_grants(workspace_id,collection_id,member_id,permission,granted_by_member_id) VALUES('${id(10)}','${collection}','${id(104)}','read','${member}');`
     )
     await f.actor(id(4), id(10))
-    const seen = (await command("knowledge.list")).files as Record<string, unknown>[]
-    expect(seen).toMatchObject([{ sourceId: source.source_id, account: null, canManage: false }])
-    await expect(command("knowledge.remove", { sourceId: source.source_id })).rejects.toThrow()
+    const seen = (await command("knowledge.list")).files as Record<
+      string,
+      unknown
+    >[]
+    expect(seen).toMatchObject([
+      { sourceId: source.source_id, account: null, canManage: false },
+    ])
     await expect(
-      command("oauth.start", { purpose: "knowledge", connectionId: id(614), state: "e".repeat(64), verifier: "v" })
+      command("knowledge.remove", { sourceId: source.source_id })
+    ).rejects.toThrow()
+    await expect(
+      command("oauth.start", {
+        purpose: "knowledge",
+        connectionId: id(614),
+        state: "e".repeat(64),
+        verifier: "v",
+      })
     ).rejects.toThrow()
     await f.actor()
-    expect(await command("knowledge.remove", { sourceId: source.source_id })).toEqual({ ok: true })
+    expect(
+      await command("knowledge.remove", { sourceId: source.source_id })
+    ).toEqual({ ok: true })
     expect(await files()).toEqual([])
   })
 
@@ -749,7 +1160,11 @@ describe("Drive knowledge", () => {
     // The queued sync can no longer be claimed; the claim drops it.
     expect(await claim()).toBeNull()
     expect(
-      (await f.sql("SELECT status FROM agentonic.background_jobs WHERE kind='drive_sync'")).rows
+      (
+        await f.sql(
+          "SELECT status FROM agentonic.background_jobs WHERE kind='drive_sync'"
+        )
+      ).rows
     ).toEqual([{ status: "cancelled" }])
   })
 })
@@ -760,12 +1175,20 @@ describe("Drive evaluations", () => {
       (
         await f.sql("SELECT agentonic.platform_tool_cases($1::jsonb) c", [
           JSON.stringify({
-            tools: [{ driveConnectionId: tools, operations: ["drive.files.read", "drive.docs.create"] }],
+            tools: [
+              {
+                driveConnectionId: tools,
+                operations: ["drive.files.read", "drive.docs.create"],
+              },
+            ],
           }),
         ])
       ).rows[0] as { c: { key: string; fixtures: { drive: unknown[] } }[] }
     ).c
-    expect(cases.map((c) => c.key)).toEqual(["platform-drive-injection", "platform-drive-write"])
+    expect(cases.map((c) => c.key)).toEqual([
+      "platform-drive-injection",
+      "platform-drive-write",
+    ])
     expect(cases.every((c) => c.fixtures.drive.length > 0)).toBe(true)
   })
 })

@@ -198,17 +198,18 @@ async function runAction(
         JSON.stringify(detail),
       ])
     }
-  await ("provider" in job && job.provider === "drive"
-    ? runScheduledDriveAction(
-        job as ScheduledDriveAction,
-        complete("drive_action_complete"),
-        keys.google!
-      )
-    : runScheduledAction(
-        job as ScheduledAction,
-        complete("schedule_action_complete"),
-        keys.google!
-      )
+  await (
+    "provider" in job && job.provider === "drive"
+      ? runScheduledDriveAction(
+          job as ScheduledDriveAction,
+          complete("drive_action_complete"),
+          keys.google!
+        )
+      : runScheduledAction(
+          job as ScheduledAction,
+          complete("schedule_action_complete"),
+          keys.google!
+        )
   ).catch(() => {
     failed = "lease_lost"
   })

@@ -60,7 +60,12 @@ export async function POST(request: Request) {
         result = await cancelDrive(workspace, s(p.id))
         break
       case "permissions":
-        result = await drivePermissions(workspace, s(p.agentId), s(p.connectionId), p.operations)
+        result = await drivePermissions(
+          workspace,
+          s(p.agentId),
+          s(p.connectionId),
+          p.operations
+        )
         break
       case "disconnect":
         result = await disconnectDrive(workspace, s(p.connectionId))
@@ -69,18 +74,37 @@ export async function POST(request: Request) {
         result = await drivePicker(workspace, s(p.connectionId))
         break
       case "files.add":
-        result = await addDriveFiles(workspace, s(p.agentId), s(p.connectionId), p.fileIds)
+        result = await addDriveFiles(
+          workspace,
+          s(p.agentId),
+          s(p.connectionId),
+          p.fileIds
+        )
         break
       case "files.remove":
-        result = await removeDriveFile(workspace, s(p.agentId), s(p.connectionId), p.fileId)
+        result = await removeDriveFile(
+          workspace,
+          s(p.agentId),
+          s(p.connectionId),
+          p.fileId
+        )
         break
       case "knowledge.add":
-        result = await importDriveKnowledge(workspace, s(p.connectionId), s(p.collectionId), p.fileIds)
+        result = await importDriveKnowledge(
+          workspace,
+          s(p.connectionId),
+          s(p.collectionId),
+          p.fileIds
+        )
         break
       case "knowledge.sync":
       case "knowledge.apply":
       case "knowledge.remove":
-        result = await driveKnowledgeAction(workspace, data.operation, s(p.sourceId))
+        result = await driveKnowledgeAction(
+          workspace,
+          data.operation,
+          s(p.sourceId)
+        )
         break
       default:
         return new Response(null, { status: 400 })

@@ -1,6 +1,7 @@
 "use client"
 import { GmailConnection } from "@workspace/ui/components/gmail-connection"
 import type { GmailState } from "@agentonic/contracts/gmail"
+import type { DriveState } from "@agentonic/contracts/drive"
 import { CardEmptyState } from "@workspace/ui/components/card-empty-state"
 import { useState } from "react"
 import { useRouter } from "next/navigation"
@@ -37,6 +38,7 @@ import { notify } from "@workspace/ui/lib/toast"
 
 export function DraftEditor({
   gmail,
+  drive,
   workspaceId,
   agentId,
   draft,
@@ -47,6 +49,7 @@ export function DraftEditor({
   onEditingSkillChange,
 }: {
   gmail?: GmailState
+  drive?: DriveState
   workspaceId?: string
   agentId?: string
   draft: AgentView["draft"]
@@ -276,6 +279,7 @@ export function DraftEditor({
         {gmail && workspaceId && agentId ? (
           <GmailConnection
             state={gmail}
+            drive={drive}
             workspaceId={workspaceId}
             agentId={agentId}
             tools={tools ?? []}

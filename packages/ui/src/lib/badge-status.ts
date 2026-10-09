@@ -6,6 +6,10 @@ import {
 import { evaluationStatus } from "@agentonic/contracts/evaluation"
 import type { RegistrationState } from "@agentonic/contracts/expiry"
 import type { StyleGuideStatus } from "@agentonic/contracts/style-guide"
+import {
+  driveSyncLabels,
+  type DriveSyncStatus,
+} from "@agentonic/contracts/drive"
 import { approvalLabels } from "@agentonic/contracts/lifecycle"
 import {
   reviewFlowLabels,
@@ -206,6 +210,15 @@ export const statusMaps = {
     failed: state("No se pudo completar", "error", "x"),
     cancelled: state("Cancelada", "slate", "minus"),
   } satisfies Record<StyleGuideStatus, StatusDescriptor>,
+  // A Google Drive file imported into Conocimiento (§62): the row's one badge.
+  driveSync: {
+    queued: state(driveSyncLabels.queued, "warning", "clock"),
+    syncing: state(driveSyncLabels.syncing, "sky", "activity"),
+    synced: state(driveSyncLabels.synced, "success", "check"),
+    held: state(driveSyncLabels.held, "orange", "pause"),
+    unavailable: state(driveSyncLabels.unavailable, "error", "ban"),
+    failed: state(driveSyncLabels.failed, "error", "x"),
+  } satisfies Record<DriveSyncStatus, StatusDescriptor>,
   // Host and evaluator verification. "Vence pronto" means within a day, when
   // the twice-daily renewal should already have run.
   registration: {

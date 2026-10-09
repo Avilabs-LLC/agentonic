@@ -1,5 +1,6 @@
 "use client"
 import type { GmailState } from "@agentonic/contracts/gmail"
+import type { DriveState } from "@agentonic/contracts/drive"
 import {
   useEffect,
   useRef,
@@ -477,6 +478,7 @@ export function VersionCards({
 
 export function AgentWorkflow({
   gmail,
+  drive,
   workspaceId,
   data,
   collections,
@@ -486,6 +488,7 @@ export function AgentWorkflow({
   submit,
 }: {
   gmail?: GmailState
+  drive?: DriveState
   workspaceId?: string
   data: AgentView
   collections: WorkspaceView["collections"]
@@ -574,6 +577,7 @@ export function AgentWorkflow({
     <>
       <DraftEditor
         gmail={gmail}
+        drive={drive}
         workspaceId={workspaceId}
         agentId={data.agent.id}
         draft={data.draft}

@@ -42,9 +42,9 @@ it("survives a failed sweep without logging its error text", async () => {
 
 it("sweeps Gmail and Drive at start and every interval until stopped", async () => {
   vi.useFakeTimers()
-  const query = vi.fn<(sql: string) => Promise<{ rows: { result: unknown }[] }>>(
-    async () => ({ rows: [{ result: {} }] })
-  )
+  const query = vi.fn<
+    (sql: string) => Promise<{ rows: { result: unknown }[] }>
+  >(async () => ({ rows: [{ result: {} }] }))
   const stop = new AbortController()
   scheduleRetention(query, stop.signal, 1000)
   await vi.advanceTimersByTimeAsync(0)
