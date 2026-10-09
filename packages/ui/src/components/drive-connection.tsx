@@ -1,5 +1,5 @@
 "use client"
-import { useState } from "react"
+import { useState, useSyncExternalStore } from "react"
 import { useRouter } from "next/navigation"
 import {
   CheckIcon,
@@ -170,13 +170,78 @@ export async function pickDriveFiles(session: PickerSession, title: string) {
       Math.max(566, Math.min(1051, window.innerWidth - 32)),
       Math.max(350, Math.min(650, window.innerHeight - 32))
     )
+    const release = holdScroll()
     builder.setCallback!((data: PickerData) => {
-      if (data.action === picker.Action.PICKED)
+      if (data.action === picker.Action.PICKED) {
+        release()
         resolve((data.docs ?? []).map((d) => d.id))
-      else if (data.action === picker.Action.CANCEL) resolve([])
+      } else if (data.action === picker.Action.CANCEL) {
+        release()
+        resolve([])
+      }
     })
-    builder.build().setVisible(true)
+    try {
+      builder.build().setVisible(true)
+    } catch (error) {
+      release()
+      throw error
+    }
   })
+}
+/**
+ * Keeps the page where it was while the Picker is open. Google focuses its
+ * dialog after opening, which scrolled a long page to its end, so closing
+ * the Picker left the person at the bottom. Focus returns to the button that
+ * opened it. The hold also ends on the first scroll after the Picker is gone,
+ * or ten seconds after it never appeared, in case Google never calls back.
+ */
+function holdScroll() {
+  const x = window.scrollX,
+    y = window.scrollY,
+    opener = document.activeElement,
+    started = Date.now()
+  let seen = false,
+    released = false
+  const open = () =>
+    Array.from(document.querySelectorAll(".picker-dialog")).some((d) => {
+      const style = getComputedStyle(d)
+      return style.display !== "none" && style.visibility !== "hidden"
+    })
+  const hold = () => {
+    if (open()) seen = true
+    else if (seen || Date.now() - started > 10000) return release()
+    if (window.scrollY !== y || window.scrollX !== x) window.scrollTo(x, y)
+  }
+  function release() {
+    if (released) return
+    released = true
+    window.removeEventListener("scroll", hold)
+    window.scrollTo(x, y)
+    if (opener instanceof HTMLElement) opener.focus({ preventScroll: true })
+  }
+  window.addEventListener("scroll", hold)
+  return release
+}
+const unsubscribed = () => () => {}
+/**
+ * Brave keeps Google's cookies from the Picker's frame, so Google asks for a
+ * sign-in the frame never sees, and the window it opens cannot return the
+ * picked files (architecture §62). Brave alone gets the way out.
+ */
+export function DriveBrowserNote() {
+  const brave = useSyncExternalStore(
+    unsubscribed,
+    () => "brave" in navigator,
+    () => false
+  )
+  if (!brave) return null
+  return (
+    <p className="text-sm text-muted-foreground">
+      En Brave, Google Drive necesita sus cookies dentro de esta página: en
+      Shields (el ícono del león), permite las cookies entre sitios para este
+      sitio.
+    </p>
+  )
 }
 /** Asks the server for a Picker session, opens it, and returns what was picked. */
 export async function chooseDriveFiles(
@@ -312,6 +377,7 @@ export function DriveFiles({
           Agentonic.
         </p>
       )}
+      {picker && <DriveBrowserNote />}
       {files.length ? (
         <ul className="divide-y rounded-lg border">
           {files.map((f) => (
