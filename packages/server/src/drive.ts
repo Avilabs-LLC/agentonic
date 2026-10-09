@@ -31,6 +31,7 @@ import {
   driveAccount,
   driveWrite,
   fileMetadata,
+  pickerAppId,
   pickerToken,
 } from "@agentonic/connectors/drive"
 
@@ -41,9 +42,11 @@ const CALLBACK = "/api/connections/google/callback"
 /** The Picker's browser key and the Cloud project number, when configured. */
 export function pickerConfig() {
   const apiKey = process.env.GOOGLE_PICKER_API_KEY,
-    appId = process.env.GOOGLE_CLOUD_PROJECT_NUMBER
-  if (!apiKey || !appId || !/^\d{1,20}$/.test(appId))
-    throw new Error("picker_configuration_required")
+    appId = pickerAppId(
+      process.env.GOOGLE_CLOUD_PROJECT_NUMBER,
+      process.env.GOOGLE_CLIENT_ID
+    )
+  if (!apiKey || !appId) throw new Error("picker_configuration_required")
   return { apiKey, appId }
 }
 const configured = (check: () => unknown) => {

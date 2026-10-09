@@ -23,6 +23,18 @@ const PICKER_SCOPES = new Set([
   "https://www.googleapis.com/auth/userinfo.profile",
 ])
 export const DRIVE_OAUTH_SCOPES = [DRIVE_FILE_SCOPE] as const
+/**
+ * The Cloud project number the Picker needs as its app ID. A Google OAuth
+ * client ID begins with it (`<number>-….apps.googleusercontent.com`), so a
+ * missing or non-numeric setting, such as the project ID, falls back to it.
+ */
+export function pickerAppId(projectNumber?: string, clientId?: string) {
+  const configured = projectNumber?.trim().replace(/^"|"$/g, "")
+  if (configured && /^\d{1,20}$/.test(configured)) return configured
+  return /^(\d{1,20})-[^.]+\.apps\.googleusercontent\.com$/.exec(
+    clientId ?? ""
+  )?.[1]
+}
 
 /** Why Drive refused a file; nothing else about the file is kept. */
 export type DriveFileProblem =

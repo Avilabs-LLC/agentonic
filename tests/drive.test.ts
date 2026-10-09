@@ -16,6 +16,7 @@ import {
   driveWrite,
   fileContent,
   fileMetadata,
+  pickerAppId,
   pickerToken,
 } from "../packages/connectors/src/drive"
 import { GoogleError } from "../packages/connectors/src/google"
@@ -169,6 +170,16 @@ describe("the Drive connector", () => {
     await expect(pickerToken(google, "refresh")).rejects.toMatchObject({
       reason: "drive_picker_scope",
     })
+  })
+
+  it("takes the Picker's app ID from the project number, or from the client ID it begins", () => {
+    const client = "123456789012-abcdef.apps.googleusercontent.com"
+    expect(pickerAppId("987654321098", client)).toBe("987654321098")
+    expect(pickerAppId('"987654321098"', client)).toBe("987654321098")
+    // A project ID in the setting falls back to the client ID's number.
+    expect(pickerAppId("agentonic-123456", client)).toBe("123456789012")
+    expect(pickerAppId(undefined, client)).toBe("123456789012")
+    expect(pickerAppId("agentonic", "not-a-client-id")).toBeUndefined()
   })
 
   it("creates a Doc from Markdown and refuses an update when the Doc changed since it was proposed", async () => {
@@ -756,15 +767,13 @@ describe("Drive turns by runtime", () => {
   }
   async function sent(driveContract: boolean) {
     const runtime = standIn(driveContract)
-    const fetch = vi
-      .fn()
-      .mockResolvedValue(
-        json({
-          status: "completed",
-          usage: { input_tokens: 1, output_tokens: 1 },
-          output: [],
-        })
-      )
+    const fetch = vi.fn().mockResolvedValue(
+      json({
+        status: "completed",
+        usage: { input_tokens: 1, output_tokens: 1 },
+        output: [],
+      })
+    )
     vi.stubGlobal("fetch", fetch)
     const execute = vi.fn<Execute>().mockImplementation(async (op) => {
       if (op === "context")
