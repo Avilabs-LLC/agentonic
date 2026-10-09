@@ -201,6 +201,11 @@ No Drive account has been connected, and no file read or written. The live accep
 
 In Brave, the Picker then asked "Debes iniciar sesión" and, after "Iniciar sesión", opened as a popup that listed "No hay documentos". Brave withholds Google's cookies from the frame, so Google falls back to the popup. Under the app's `same-origin` opener policy, that popup had no link back (checked locally in Chrome and Brave). Platform 0.34.2 lets it keep that link.
 
+- The first connected account's Drive was empty, which explains "No hay documentos".
+- With an account that has files, the popup listed them. Before 0.34.2, choosing files, "Seleccionar" and "Cancelar" did nothing, and the frame stayed on "Iniciar sesión": these are the symptoms of the missing link.
+- `platform-0.34.2-53b1360fad4e` (PR #82) was installed the same day, with every service healthy and `hosted:check` passing.
+- The connected account must be the one whose files are picked, since each picked file is checked through that connection.
+
 ## Acceptance matrix
 
 | Boundary           | Required evidence                                                                                                                                                | Synthetic evidence (this PR)                                                                                                                  |
