@@ -2279,6 +2279,19 @@ Neither table grants anything to an application role.
   - `billing` is refused.
 - `tests/staff-team-render.test.ts`: the table for administrators and for others, staff invitations and the dialog.
 
+**Rollout, 9 October 2026.**
+
+1. Migration 68 applied with `pnpm db:migrate`. Read-only checks afterwards:
+   - both tables exist with row-level security, and are empty;
+   - the sign-up hook reads staff invitations;
+   - only the Admin role may run `staff_command`;
+   - `operations_workspaces` still returns the team;
+   - the team is one active administrator.
+2. `platform-0.37.0-1bfecda33711` installed with `pnpm platform:install --azure`, replacing `platform-0.36.0-7f8f7b270395`:
+   - Admin, the customer app and the knowledge worker each passed their health gate;
+   - `hosted:check` passed;
+   - a signed-out visit to `/team` goes to the login page.
+
 **Not covered:**
 
 - showing `staff_events` in Actividad;
