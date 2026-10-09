@@ -2044,6 +2044,16 @@ This closes outstanding actions **D5** (operating terms, owner decisions of 8 Oc
 
 **Rollout.** Apply migration 63, then install platform 0.30.0.
 
+**One authorization per version and host (migration 66, owner decision, 9 October 2026).**
+- **The problem.** "Autorizar activación" stayed available while a version already had an authorization in place. `deployment_command` deduplicated only an exact retry with the same request ID, so a member authorized one version twice on `vm-agents-01`, 25 seconds apart, at US$5 and US$20.
+- **The rule.** `deployment_command` now answers `already_authorized` while that version has an authorization on that host that is pending, starting or running and still authorized. The workspace lock already serializes concurrent requests.
+- **The page.** `lifecycle_state` hides "Autorizar activación" in the same case.
+- **What still works.**
+  - A retry of the original request still returns its deployment.
+  - A stopped, revoked or expired authorization no longer counts.
+  - To change the budget, the customer stops the authorization and authorizes again.
+- **The duplicate.** At the owner's instruction, the migration deletes the US$5 duplicate (never activated, nothing spent, nothing referencing it). Deployment history is otherwise retained, so the guard is lifted for that row only, inside one rolled-back-as-a-whole statement. Its `deployment.authorize` audit event is kept.
+
 ## 60. Faster CI and releases that follow a green main — 9 October 2026
 
 The owner asked why a change took over 20 minutes to reach the hosted apps. Measured over every successful run since 6 October: pull-request checks (Verify) averaged 9.0 minutes (6.2–11.3), the Release run on `main` 10.4 minutes (6.9–13.1), and installing about 3, so merge to live took about 25 minutes, more with the time to start the release by hand.

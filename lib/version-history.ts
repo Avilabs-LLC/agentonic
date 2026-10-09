@@ -1,5 +1,10 @@
 export const VERSION_HISTORY = [
   {
+    "version": "0.35.0",
+    "date": "2026-10-09",
+    "summary": "A version can be authorized only once per host while that authorization is in place; Nico's duplicate is removed."
+  },
+  {
     "version": "0.34.3",
     "date": "2026-10-09",
     "summary": "Google's Picker accepts its key: the customer app tells other sites its origin, never a path."

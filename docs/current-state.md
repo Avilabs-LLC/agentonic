@@ -1,6 +1,6 @@
 # Agentonic: current state
 
-**As of 9 October 2026 · platform v0.34.3 · nonproduction only.** A short summary of what runs where, what works and what doesn't exist yet. [The architecture record](agentonic-architecture.md) keeps the full, dated history. If the two disagree about the present, fix this page. Update it whenever a change alters what runs where.
+**As of 9 October 2026 · platform v0.35.0 · nonproduction only.** A short summary of what runs where, what works and what doesn't exist yet. [The architecture record](agentonic-architecture.md) keeps the full, dated history. If the two disagree about the present, fix this page. Update it whenever a change alters what runs where.
 
 ## What runs where
 
@@ -113,4 +113,4 @@ The ordered plan is architecture §37; the owner's audit brief tracks progress. 
 | Draft-only situations and a careful grader (rubric 6)                  | §61                  |
 | Google Drive: live tools and knowledge sync                            | §62                  |
 
-Presentation rules are in the [UI contract](ui/ui-contract.md). The [target schema](schema.dbml) describes 88 tables; 71 exist in the 65 checked-in migrations.
+Presentation rules are in the [UI contract](ui/ui-contract.md). The [target schema](schema.dbml) describes 88 tables; 71 exist in the 66 checked-in migrations.
