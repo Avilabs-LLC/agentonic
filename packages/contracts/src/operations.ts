@@ -62,6 +62,8 @@ export const operationsAgent = z.object({
   latestVersion: count,
   tools: z.object({
     gmail: z.boolean(),
+    // Google Drive since migration 67.
+    drive: z.boolean().default(false),
     web: z.boolean(),
     collections: count,
   }),
@@ -100,6 +102,27 @@ export const operationsAgent = z.object({
   }),
 })
 export type OperationsAgentDetail = z.infer<typeof operationsAgent>
+
+// Ver usuario in Revisiones (migration 67): who sent a review, and where they
+// belong. Null when no such user exists.
+export const operationsUser = z.object({
+  id: z.uuid(),
+  name: z.string(),
+  email: z.string().nullable(),
+  createdAt: time,
+  memberships: z.array(
+    z.object({
+      workspaceId: z.uuid(),
+      workspaceName: z.string(),
+      role: z.string(),
+      status: z.string(),
+      joinedAt: time,
+      agents: count,
+      reviews: count,
+    })
+  ),
+})
+export type OperationsUser = z.infer<typeof operationsUser>
 
 export const operationsActivity = z.object({
   runs: z.object({ succeeded: count, failed: count, active: count }),

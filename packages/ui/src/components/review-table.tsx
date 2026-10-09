@@ -15,6 +15,7 @@ import { useId, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import type { ColumnDef } from "@tanstack/react-table"
 import type { FormResult, ReviewListing } from "@agentonic/contracts/authoring"
+import type { OperationsUser } from "@agentonic/contracts/operations"
 import { DataTable } from "@workspace/ui/components/data-table"
 import { Button } from "@workspace/ui/components/button"
 import {
@@ -47,7 +48,12 @@ import {
 } from "@workspace/ui/components/dropdown-menu"
 import { actionsMenuClassName } from "@workspace/ui/lib/menus"
 import { notify } from "@workspace/ui/lib/toast"
-import { RevokeApprovalDialog } from "@workspace/ui/components/revoke-approval-dialog"
+import {
+  ChangeReviewStateDialog,
+  reviewStateTargets,
+  type ReviewStateTarget,
+} from "@workspace/ui/components/change-review-state-dialog"
+import { MemberCardDialog } from "@workspace/ui/components/member-card-dialog"
 
 const reviewStates = [
   { value: "submitted", label: "Enviadas" },
@@ -57,7 +63,11 @@ const reviewStates = [
   { value: "withdrawn", label: "Retiradas" },
   { value: "approved", label: "Aprobadas" },
   { value: "revoked", label: "Revocadas" },
+  // Closed when a newer version of the agent was approved (migration 67).
+  { value: "superseded", label: "Reemplazadas" },
 ]
+// Tabs that appear only when they have reviews.
+const occasionalStates = ["approved", "revoked", "superseded"]
 
 type Review = ReviewListing[number]
 
@@ -67,6 +77,8 @@ export function ReviewTable({
   selectedWorkspace,
   selectedState = "submitted",
   openReview,
+  changeState,
+  loadMember,
   revokeApproval,
   now,
 }: {
@@ -76,6 +88,14 @@ export function ReviewTable({
   selectedWorkspace: string
   selectedState?: string
   openReview: (workspaceId: string, submissionId: string) => Promise<FormResult>
+  changeState: (
+    workspaceId: string,
+    submissionId: string,
+    decision: string,
+    feedback: string
+  ) => Promise<FormResult>
+  loadMember: (userId: string) => Promise<OperationsUser | null>
+  /** Only for administrators and operators. */
   revokeApproval?: (
     workspaceId: string,
     submissionId: string,
@@ -95,7 +115,11 @@ export function ReviewTable({
   const [pending, startTransition] = useTransition()
   const [openingId, setOpeningId] = useState<string | null>(null)
   const [error, setError] = useState("")
-  const [revoking, setRevoking] = useState<Review | null>(null)
+  const [changing, setChanging] = useState<{
+    review: Review
+    targets: ReviewStateTarget[]
+  } | null>(null)
+  const [viewing, setViewing] = useState<Review | null>(null)
 
   function selectWorkspace(value: string) {
     setError("")
@@ -160,12 +184,9 @@ export function ReviewTable({
             <EllipsisIcon />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className={actionsMenuClassName}>
-            <DropdownMenuItem disabled>
+            <DropdownMenuItem onClick={() => setViewing(row.original)}>
               <UserRoundIcon />
               Ver usuario
-              <span className="ml-auto text-xs text-muted-foreground">
-                Pronto
-              </span>
             </DropdownMenuItem>
             <DropdownMenuItem
               disabled={
@@ -178,19 +199,25 @@ export function ReviewTable({
               Ver revisión
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            {row.original.status === "approved" && revokeApproval && (
-              <DropdownMenuItem onClick={() => setRevoking(row.original)}>
-                <ArrowRightLeftIcon />
-                Revocar aprobación
-              </DropdownMenuItem>
-            )}
-            <DropdownMenuItem disabled>
-              <ArrowRightLeftIcon />
-              Cambiar estado
-              <span className="ml-auto text-xs text-muted-foreground">
-                Pronto
-              </span>
-            </DropdownMenuItem>
+            {(() => {
+              const change = reviewStateTargets(row.original, !!revokeApproval)
+              return (
+                <DropdownMenuItem
+                  disabled={"reason" in change || pending}
+                  title={"reason" in change ? change.reason : undefined}
+                  onClick={() =>
+                    "targets" in change &&
+                    setChanging({
+                      review: row.original,
+                      targets: change.targets,
+                    })
+                  }
+                >
+                  <ArrowRightLeftIcon />
+                  Cambiar estado
+                </DropdownMenuItem>
+              )
+            })()}
           </DropdownMenuContent>
         </DropdownMenu>
       ),
@@ -341,13 +368,22 @@ export function ReviewTable({
           {error}
         </p>
       )}
-      {revoking && revokeApproval && (
-        <RevokeApprovalDialog
-          name={revoking.agentName}
-          onClose={() => setRevoking(null)}
-          action={(feedback) =>
-            revokeApproval(revoking.workspaceId, revoking.id, feedback)
-          }
+      {changing && (
+        <ChangeReviewStateDialog
+          review={changing.review}
+          targets={changing.targets}
+          onClose={() => setChanging(null)}
+          changeState={changeState}
+          revokeApproval={revokeApproval}
+        />
+      )}
+      {viewing && (
+        <MemberCardDialog
+          userId={viewing.userId}
+          name={viewing.userName}
+          email={viewing.userEmail}
+          loadMember={loadMember}
+          onClose={() => setViewing(null)}
         />
       )}
       <Tabs
@@ -363,7 +399,7 @@ export function ReviewTable({
             {reviewStates
               .filter(
                 (state) =>
-                  !["approved", "revoked"].includes(state.value) ||
+                  !occasionalStates.includes(state.value) ||
                   reviews.some((review) => review.status === state.value)
               )
               .map((state) => (

@@ -29,6 +29,7 @@ export default async function Page({
         "changes_requested",
         "rejected",
         "withdrawn",
+        "superseded",
       ].includes(closed.status)
     )
       notFound()

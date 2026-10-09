@@ -26,6 +26,7 @@ function review(
     versionNumber: 1,
     number: 1,
     canOpen: false,
+    canDecide: false,
     status: "approved",
     approvalReason: "valid",
     approvalExpiresAt: day(2),
