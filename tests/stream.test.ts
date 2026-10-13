@@ -154,3 +154,34 @@ it("streams a model call: writes the answer as it comes, then settles from the f
   ).toEqual({ kind: "uncertain" })
   expect(cut.mock.calls.map(([op]) => op)).not.toContain("settle")
 })
+
+it("streams the final answer only, never the model's progress notes (§75)", async () => {
+  const seen: string[] = []
+  const note =
+    '{"text":"Voy a revisar tus correos.","citations":[],"insufficientEvidence":true}'
+  const answer =
+    '{"text":"Listo: dos necesitan respuesta.","citations":[],"insufficientEvidence":true}'
+  await readResponseStream(
+    sse([
+      {
+        type: "response.output_item.added",
+        item: { id: "m1", type: "message", phase: "commentary" },
+      },
+      ...deltas(note).map((d) => ({ ...d, item_id: "m1" })),
+      {
+        type: "response.output_item.added",
+        item: { id: "m2", type: "message", phase: "final_answer" },
+      },
+      ...deltas(answer).map((d) => ({ ...d, item_id: "m2" })),
+      {
+        type: "response.completed",
+        response: { status: "completed", output: [] },
+      },
+    ]),
+    (text) => seen.push(text)
+  )
+  expect(seen.every((text) => !text.includes("Voy a revisar"))).toBe(true)
+  expect(partialAnswerText(seen.at(-1)!)).toBe(
+    "Listo: dos necesitan respuesta."
+  )
+})

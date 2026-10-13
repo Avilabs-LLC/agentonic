@@ -169,6 +169,8 @@ const INVALID_ARGUMENTS = {
 export class TurnBroker {
   answer?: TurnAnswer & { model: PreviewModel }
   private items = new Map<string, StoredItem>()
+  /** Item references only increase: a deleted item's is never given out again. */
+  private refs = 0
   private calls = new Map<string, { name: string; arguments: string }>()
   private latestCalls = new Set<string>()
   private executed = new Set<string>()
@@ -329,13 +331,19 @@ export class TurnBroker {
     for (const item of output.output) {
       const view = this.view(item)
       if (!view) continue
-      const ref = `r${this.items.size + 1}`
+      const ref = `r${++this.refs}`
       this.items.set(ref, { item, view })
       items.push({ ref, item: view })
     }
     const calls = items.filter((x) => x.item.type === "function_call")
     if (calls.length && request.toolChoice === "none")
       throw mismatch("call_after_final")
+    // A reply without calls is the answer, and frozen runtimes join every
+    // message's text to read it (§75). GPT-5.4 may write progress notes as
+    // "commentary" messages before its "final_answer" one, and the joined
+    // text was no longer JSON. Only the final answer reaches the runtime,
+    // with its evidence flag made consistent.
+    if (!calls.length) this.answerOnly(items)
     // A model may ask for more calls in one response than a turn takes at once
     // (§73). The first ones are kept and the rest are dropped before the runtime
     // sees them: never executed, never resent, so the model can ask again.
@@ -355,6 +363,51 @@ export class TurnBroker {
       ok: true,
       items: items.filter((x) => !dropped.has(x.ref)),
     }
+  }
+
+  /**
+   * Keeps one message in a final reply: the model's `final_answer`, or the
+   * last message when it names no phase. Then checks the answer's citations
+   * against the passages offered: an invented one is dropped, and an answer
+   * citing none is marked insufficient, since the flag measures knowledge-base
+   * evidence only (§75). A text that isn't such an answer is left for the
+   * runtime to refuse, as before.
+   */
+  private answerOnly(items: { ref: string; item: ProviderItem }[]) {
+    const messages = items.filter((x) => x.item.type === "message")
+    if (!messages.length) return
+    const final = messages.filter(
+      (x) => this.items.get(x.ref)?.item.phase === "final_answer"
+    )
+    const kept = final.length ? final : [messages.at(-1)!]
+    for (const x of messages)
+      if (!kept.includes(x)) {
+        this.items.delete(x.ref)
+        items.splice(items.indexOf(x), 1)
+      }
+    if (kept.length !== 1) return
+    const view = kept[0]!.item
+    if (view.type !== "message") return
+    let answer: unknown
+    try {
+      answer = JSON.parse(view.text)
+    } catch {
+      return
+    }
+    if (
+      typeof answer !== "object" ||
+      answer === null ||
+      !Array.isArray((answer as { citations?: unknown }).citations) ||
+      typeof (answer as { insufficientEvidence?: unknown })
+        .insufficientEvidence !== "boolean"
+    )
+      return
+    const a = answer as { citations: unknown[]; insufficientEvidence: boolean }
+    a.citations = a.citations.filter(
+      (id) => typeof id === "string" && this.o.passageIds.includes(id)
+    )
+    if (!a.citations.length) a.insufficientEvidence = true
+    view.text = JSON.stringify(a)
   }
 
   private view(item: Record<string, unknown>): ProviderItem | undefined {

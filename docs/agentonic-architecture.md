@@ -2660,3 +2660,37 @@ The harness spent about US$5.20 on the development key, outside the platform's l
 3. Staging broker `9a036fa1` installed with `install-staging --azure`; the controller moved NicolAI-Mail, the one running deployment, to it.
 
 The evaluator stays on `6bea27a6`, since evaluations record no steps. `staging:reverify` shows the host on `9a036fa1` serving runtimes 0.3.0–0.7.0, and every registration valid.
+
+## 75. A model's answer is read as it was meant — 13 October 2026
+
+**Found 13 October.** The owner's first evaluation of `leonardo@avilabs.tech` (runtime 0.7.0; batch `578622d8`, US$8) showed "0/10 superadas · Interrumpida" for GPT-5.4 mini, "1/10 · Interrumpida" for GPT-5.4 and "7/10 · Con fallos" for GPT-6 Astra. The two interruptions were not provider outages. The evaluator's log names the diagnostics, and the case replayed live against the frozen runtime with the agent's own configuration reproduced both:
+
+- **GPT-5.4, case 2 (`answer_json_invalid`):** before its `final_answer` message, GPT-5.4 writes progress notes ("Voy a revisar tus 5 correos…") as separate messages with `phase: "commentary"`, each valid JSON in the answer's format. Frozen runtimes join every message's text to read the answer, so the joined text was no longer JSON. Reproduced in 2 of 2 replays.
+- **GPT-5.4 mini, case 1 (`answer_citations_invalid`):** a draft built only from the email the person pasted was marked `insufficientEvidence: false` with no citations. The frozen runtime refuses that combination, although the flag only measures knowledge-base evidence. Reproduced in 2 of 3 replays.
+- **Either way the whole run stopped:** the evaluator treated a model's malformed answer like an outage, ending the run with `provider_unavailable` instead of failing that case.
+
+The same answers in Chats or Probar agente failed with "No se pudo completar la respuesta". While streaming, a progress note also showed as the start of the answer.
+
+**Change (broker, stream reader and evaluator; no runtime change; platform v0.43.1).**
+
+- **One message for the answer.** A reply without tool calls reaches the runtime with one message: the `final_answer`, or the last message when the model names no phase. Notes are dropped. Replies with calls are unchanged, since the runtime reads no message text from them.
+- **Consistent evidence flag.** In that message, citations that name no offered passage are dropped. An answer that cites none is marked `insufficientEvidence: true`, as the runtime already does after tool use. Text that isn't an answer still reaches the runtime unchanged and is refused as before.
+- **Streaming** skips `commentary` messages, so the answer that appears as it is written is the final one.
+- **Evaluations.** A malformed answer (invalid JSON, wrong shape, citations or an incomplete response) fails its own case, with an explanation and nothing graded, and the run goes on. Any other failure still stops it.
+- **Item references** now only increase. They were `items.size + 1`, which could reuse a live reference after §73 deleted extra calls. The new code deletes notes too.
+
+**Live check (13 October), with the agent's frozen configuration, no tools as business cases run, and this broker:**
+
+| Case | Model | Before | After |
+|---|---|---|---|
+| Case 2, "Procesa mis últimos 5 correos…" | GPT-5.4 medium | 2 of 2 failed | 3 of 3 answered, each reply carrying 2–4 progress notes |
+| Same case, streamed | GPT-5.4 medium | | 2 of 2 answered; the streamed text began with the answer, never a note |
+| Case 1, the pasted-email draft | GPT-5.4 mini medium | 2 of 3 failed | 8 of 8 answered; 2 cited nothing and were marked insufficient |
+
+About US$0.40 on the development key, outside the platform's ledger.
+
+**Tests.**
+
+- `tests/runtime-engine.test.ts`, "the final answer reaches the runtime in one readable piece (§75)": notes before a final answer, unnamed phases, an uncited answer, an invented citation, and text that is still refused.
+- `tests/stream.test.ts`: notes are never streamed.
+- `tests/evaluation-tools.test.ts`: a malformed answer fails its case without grading, and other failures still stop the run.
