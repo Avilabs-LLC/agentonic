@@ -2392,4 +2392,82 @@ Each function is its live definition with only those changes, as in §66.
 4. An evaluator release that advertises `batchFixtures`.
 5. Runtime 0.7.0: `package:runtime`, `setup:preview`, `runtime:install`.
 
-Running versions keep their runtime. NicolAI-Mail benefits from a new version: freeze, evaluation with the batch case, staff approval for its tools, then authorization (outstanding N20).
+Running versions keep their runtime. NicolAI-Mail benefits from a new version: freeze, evaluation with the batch case, staff approval for its tools, then authorization (outstanding N20). §68 adds threads, labels, streaming and the style guide to the same rollout.
+
+## 68. Mailbox follow-ups: threads, labels, answers as they are written, the style guide — 13 October 2026
+
+The four gaps [the batch audit](mailbox-batch-audit.md) left open, built before §67's rollout so runtime 0.7.0 ships with them. As in §67, only runtimes declaring `mailboxBatch` change.
+
+**Owner decisions (13 October).**
+
+- Labels use Google's `gmail.modify` scope, and one card confirms a whole batch of labels.
+- Answers stream in Chats and Probar, for runtime 0.7.0.
+- An attached style guide is always in context, not left to retrieval.
+
+**Whole threads.** `gmail.threads.read` is a model tool, not a permission: the "Leer correos" grant covers it, and the worker and database check `gmail.read` as for any read.
+
+- It returns the latest 10 messages of a thread, oldest first, each cut to 4,000 characters and marked when cut, with a count of earlier messages left out.
+- Batch runtimes are offered it whenever the read grant is live. Earlier runtimes never see it.
+
+**Labels.** `gmail.labels.apply` is a new grantable write, "Aplicar etiquetas", and the ninth Gmail permission.
+
+- **The proposal.** One proposal labels up to 10 messages. Each item gives the message, the subject as the agent read it, and a label name. Gmail's own labels (INBOX, SPAM, TRASH, UNREAD, STARRED, IMPORTANT, SENT, DRAFT, CHAT, CATEGORY_*) are refused.
+- **The card.** It lists subject → label and says subjects are checked and missing labels created.
+- **On confirmation** (`applyLabels` in the connector):
+  1. Each message's subject must match, or nothing changes (`gmail_subject_mismatch`).
+  2. Missing user labels are created.
+  3. Each label is added to its messages with `batchModify`.
+
+  Nothing is ever removed or archived, although the scope would allow it.
+- **The scope.** It needs `gmail.modify`, now part of Gmail's consent, and `exchange()` still refuses a consent missing any scope.
+  - Connections record `can_label`.
+  - Older connections show "Volver a conectar", which refreshes the same connection (`gmail_oauth_states.reconnects`). Only the same Google account is accepted, and its tools are kept.
+  - Without `can_label`:
+    - the checkbox is disabled with a hint;
+    - permissions refuse the operation;
+    - `gmail_tools_usable` drops labels from the frozen grant a turn receives;
+    - the propose step refuses it.
+  - Only runtimes declaring mailboxBatch register the code tool, so freezing labels on an earlier runtime fails.
+- **Not pre-authorizable.** Schedules can't pre-authorize labels.
+
+**Answers as they are written.**
+
+- **In the provider.** With `stream`, `respond()` reads OpenAI's event stream and decodes the answer's `text` from the JSON prefix (`partialAnswerText`). It writes the text so far through the job's own call (`partial`) at most once a second, best effort, and never queues writes.
+- **What stays the same.** Usage, settlement and the recorded answer come from the final response object. A stream cut short is an unknown outcome, so its reservation stays.
+- **Where it applies.** Chats (`staging_turns.partial_answer`) and Probar (`background_jobs.partial_answer`), batch runtimes only; evaluations never stream.
+- **Clearing.** A trigger clears the partial answer once the turn leaves running.
+- **On screen.** Chat and preview states show it, and both views follow a running turn every second with "Escribiendo…".
+
+**The style guide.** `agent_style_guide` picks the latest accepted Aprender mi estilo guide made for the agent whose document is ready in a source the version's frozen knowledge includes, up to 12,000 characters. Batch runtimes get it as `styleGuide` in chats, previews and evaluations. The runtime gives it as reference for what it writes for the owner: style only, never authorization or evidence. NicolAI-Mail's guide was accepted on 9 October into "NICOLAS DIGITAL"; its next version must include that collection (N20).
+
+**Migration 71.**
+
+- New columns: `can_label`, `reconnects`, and `partial_answer` on staging_turns and background_jobs.
+- Gmail connections may hold 9 operations.
+- New helpers: `clear_partial_answer`, `gmail_tools_usable`, `agent_style_guide`.
+- `valid_gmail_tools`, `gmail_register_tools`, `gmail_command_v29` (list, reconnect and permissions), `gmail_staging`, `gmail_preview_worker`, `staging_worker` and `rag_worker` take on the partial answer and the guide; `evaluation_worker_v46` takes on the guide only.
+- `staging_chat` and `preview_command` show partial answers.
+
+Each function is its live definition, or migration 70's (not yet applied), with only these changes.
+
+**Tests.**
+
+- `tests/stream.test.ts`: decoding, pieces, throttled writes, settlement, a cut stream.
+- `tests/gmail.test.ts`: threads; labels refused on a mismatched subject before any change, and created and applied otherwise; system labels refused.
+- `tests/runtime-engine.test.ts`: a thread read under the read grant, refused without it, and the guide in the input.
+- `tests/evaluation-database.test.ts`:
+  - reconnect with the same account only, `canLabel`, permissions and usable grants;
+  - partial answers by runtime and cleared after the answer;
+  - the guide chosen from the version's sources.
+  - The later-migrations fixture now includes migration 61.
+
+**Rollout.** With §67's:
+1. Migrations 70 and 71.
+2. Platform 0.40.0.
+3. The staging broker.
+4. The evaluator.
+5. Runtime 0.7.0.
+
+Then two owner and customer steps:
+- **Google Cloud:** confirm the consent screen accepts `gmail.modify` for test users (N21).
+- **Each Gmail account:** reconnect it once to allow labels.
