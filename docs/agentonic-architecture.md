@@ -2528,3 +2528,5 @@ Web and Drive fixture searches are unchanged. No runtime, migration or agent ver
 The database rule is unchanged: reservations still count against the limit, and the limit is still what the person authorizes. Until 0.40.2 is installed, a person evaluating with Astra sets the limit by hand.
 
 **Tests.** `tests/model-evaluation.test.ts`, "suggests an evaluation limit that leaves room for each model's reservations (§70)".
+
+**Rollout, 13 October 2026.** `platform-0.40.2-2277987ddbea` installed on `vm-agents-01` at about 11:40 UTC: the customer and Admin apps and the knowledge worker run release `889550b7`, all healthy, and `hosted:check` passed. The evaluator, broker and runtimes were not touched.
