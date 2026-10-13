@@ -101,7 +101,7 @@ New versions use runtime 0.7.0. Labels wait for the owner to confirm `gmail.modi
 
 **An evaluation's limit follows the selected models (architecture §70), installed 13 October with `platform-0.40.2-2277987ddbea`.** Runtime 0.7.0 reserves a call's full output ceiling, so GPT-5.4 and Astra no longer fit the old US$3.00 default together. "Evaluar modelos" suggests US$1 for GPT-5.4 mini, US$2 for GPT-5.4 and US$5 for Astra per configuration, and explains a run that stops on its limit.
 
-**The grader sees that a write was only proposed (architecture §71), in platform v0.40.3; the evaluator is not yet redeployed.** Fixture calls that were proposed for confirmation say so, so an answer that correctly says nothing was applied is not failed against them.
+**The grader sees that a write was only proposed (architecture §71), installed 13 October with evaluator `607e4a2d` (platform v0.40.3).** Fixture calls that were proposed for confirmation say so, so an answer that correctly says nothing was applied is not failed against them.
 
 ## Operations
 

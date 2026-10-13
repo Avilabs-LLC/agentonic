@@ -2542,3 +2542,5 @@ The database rule is unchanged: reservations still count against the limit, and 
 **Change (evaluator only).** In `apps/worker/src/evaluation-fixtures.ts` a write answered with `pendingApproval` (Gmail sends, drafts and labels, Drive Docs) marks its recorded call `pendingApproval: true`, the same flag the agent receives. The rubric text and version do not change. The evaluator is redeployed; results recorded so far keep their grades.
 
 **Tests.** `tests/evaluation-tools.test.ts`: in the fixture-tools test only the proposed send carries `pendingApproval: true`.
+
+**Rollout, 13 October 2026.** Evaluator `607e4a2d` was deployed from `556acb2` on `main` at 12:35 UTC and registered with `--replace` (`batchFixtures: 1`, `driveFixtures: 1`, rubric 6), replacing `7c84bad6`. Runtimes 0.3.0–0.6.0 were registered with it again through `runtime:install`. `staging:reverify` shows it serving runtimes 0.3.0–0.7.0, valid for 30 days, and the service recovered after its usual 16 s wait. GPT-5.4's passed run (`0e23e962`) remains approvable. The apps were not reinstalled, since 0.40.3 changes only their version label.
