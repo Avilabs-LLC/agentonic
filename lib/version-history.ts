@@ -1,5 +1,10 @@
 export const VERSION_HISTORY = [
   {
+    "version": "0.38.0",
+    "date": "2026-10-13",
+    "summary": "An activated chat keeps its finished answer when a failed web read or an interrupted model call leaves a reservation open"
+  },
+  {
     "version": "0.37.1",
     "date": "2026-10-09",
     "summary": "Volver atrás returns to the page you came from; the agent page opens an open review directly; Revisiones keeps its tab"
