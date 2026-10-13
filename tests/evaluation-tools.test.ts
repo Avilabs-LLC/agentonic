@@ -311,6 +311,46 @@ it("runs a case without fixtures exactly as before: no tools, nothing extra for 
   expect(Object.keys(grade.mock.calls[0]![0])).toEqual(["context", "answer"])
 })
 
+it("fails one case on a malformed answer and lets the run go on (§75)", async () => {
+  const { PreviewFailure } = await import("../apps/worker/src/failure")
+  const config = {
+    providers: base,
+    allowTools: false,
+  } as unknown as Configuration
+  processJob.mockImplementation(async (_job: Lease, execute: Execute) => {
+    await execute("context", job)
+    throw new PreviewFailure("answer_json_invalid")
+  })
+  const execute = vi.fn<Execute>(async (operation) =>
+    operation === "fixtures"
+      ? { fixtures: null }
+      : operation === "context"
+        ? { previewModel: "gpt-5.4" }
+        : { ok: true }
+  )
+  const grade = vi.fn<Grade>()
+  await runReviewCase(job, execute, config, grade, signal)
+  expect(grade).not.toHaveBeenCalled()
+  const [, , recorded] = execute.mock.calls.find(([op]) => op === "answer")!
+  expect(recorded).toMatchObject({
+    citations: [],
+    insufficientEvidence: true,
+    model: "gpt-5.4",
+    assessment: {
+      verdict: "needs_changes",
+      meetsExpectation: false,
+      explanation: expect.stringContaining("no era JSON válido"),
+    },
+  })
+  // Anything else still stops the run, as before.
+  processJob.mockImplementation(async () => {
+    throw new Error("provider_unavailable")
+  })
+  await expect(
+    runReviewCase(job, execute, config, grade, signal)
+  ).rejects.toThrow("provider_unavailable")
+})
+
 it("grades tool cases with the version 4 rules", async () => {
   const fetch = vi.fn(
     async () =>

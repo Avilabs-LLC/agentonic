@@ -9,12 +9,22 @@ import {
 } from "@agentonic/contracts/evaluation-fixtures"
 import { toolGrants } from "@agentonic/contracts/tools"
 import { fixtureProviders } from "./evaluation-fixtures"
+import { PreviewFailure } from "./failure"
 import {
   processJob,
   type Configuration,
   type Execute,
   type Lease,
 } from "./pipeline"
+
+/** Why a model's final answer could not be read, as the person sees it (§75). */
+const unreadable: Record<PreviewFailure["diagnostic"], string> = {
+  answer_json_invalid: "La respuesta del modelo no era JSON válido.",
+  answer_schema_invalid: "La respuesta del modelo no tenía la forma esperada.",
+  answer_citations_invalid:
+    "La respuesta del modelo citaba fuentes que no se le dieron.",
+  response_incomplete: "La respuesta del modelo quedó incompleta.",
+}
 
 export type Grade = (
   input: Record<string, unknown>,
@@ -35,6 +45,7 @@ export async function runReviewCase(
   const calls: FixtureCall[] = []
   let answer: Record<string, unknown> | undefined
   let tools: unknown[] = []
+  let model: unknown
   const capture: Execute = async (operation, lease, payload) => {
     if (operation === "answer") {
       answer = payload
@@ -49,6 +60,7 @@ export async function runReviewCase(
     // The version's web grant is checked before this is asked (§72).
     if (fixtures && operation === "web-tools") return { enabled: true }
     const result = await execute(operation, lease, payload)
+    if (operation === "context") model = result.previewModel
     if (operation === "context" && typeof result.accessJson === "string")
       tools = toolGrants.parse(
         z
@@ -57,18 +69,42 @@ export async function runReviewCase(
       )
     return result
   }
-  await processJob(
-    job,
-    capture,
-    fixtures
-      ? {
-          ...config,
-          allowTools: true,
-          providers: fixtureProviders(config.providers, fixtures, calls),
-        }
-      : config,
-    signal
-  )
+  try {
+    await processJob(
+      job,
+      capture,
+      fixtures
+        ? {
+            ...config,
+            allowTools: true,
+            providers: fixtureProviders(config.providers, fixtures, calls),
+          }
+        : config,
+      signal
+    )
+  } catch (error) {
+    if (!(error instanceof PreviewFailure)) throw error
+    // The model's own malformed answer fails its case, not the whole run
+    // (§75): nothing is graded, and the next case still runs.
+    await execute("answer", job, {
+      text: "[Sin respuesta válida: la plataforma no pudo leer la respuesta del modelo.]",
+      citations: [],
+      insufficientEvidence: true,
+      model,
+      assessment: {
+        verdict: "needs_changes",
+        explanation: `${unreadable[error.diagnostic]} Este caso cuenta como no superado; la evaluación siguió con los demás.`,
+        suggestion:
+          "Si se repite con este modelo, evalúa con otro o simplifica la situación.",
+        grounded: false,
+        meetsExpectation: false,
+        safe: true,
+        routine: true,
+        confidence: "high",
+      },
+    })
+    return
+  }
   if (!answer) throw new Error("provider_unavailable")
   const context = await execute("grade-context", job)
   const assessment = await grade(

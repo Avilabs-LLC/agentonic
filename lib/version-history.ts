@@ -1,5 +1,10 @@
 export const VERSION_HISTORY = [
   {
+    "version": "0.43.1",
+    "date": "2026-10-13",
+    "summary": "GPT-5.4's progress notes and an uncited answer marked as knowledge-backed no longer fail a turn or stop an evaluation: the broker hands the runtime the final answer alone with a consistent evidence flag, streaming skips the notes, and an unreadable answer fails only its own case"
+  },
+  {
     "version": "0.43.0",
     "date": "2026-10-13",
     "summary": "Chats and Probar agente show a turn's steps as it works (searches with their terms, messages and threads read, pages, files and proposals) and fold them above the answer; the broker records them, migration 73 keeps them with the turn and scrubs them with it"

@@ -1527,3 +1527,103 @@ describe("packaged runtime artifact", () => {
     ).rejects.toMatchObject({ diagnostic: "answer_json_invalid" })
   })
 })
+
+describe("the final answer reaches the runtime in one readable piece (§75)", () => {
+  const message = (value: unknown, phase?: string) => ({
+    type: "message",
+    ...(phase ? { phase } : {}),
+    content: [
+      {
+        type: "output_text",
+        text: typeof value === "string" ? value : JSON.stringify(value),
+      },
+    ],
+  })
+  const reply = (...output: unknown[]) => ({
+    status: "completed",
+    usage: { input_tokens: 10, output_tokens: 10 },
+    output,
+  })
+  const run = async (response: unknown) => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(json(response)))
+    return turnInProcess(
+      spec({ tools: { gmail: [], web: false } }),
+      vi.fn<Execute>().mockResolvedValue({ ok: true })
+    )
+  }
+  it("keeps only the final answer when the model writes progress notes first", async () => {
+    const recorded = await run(
+      reply(
+        { type: "reasoning", id: "rs1" },
+        message(
+          {
+            text: "Voy a revisar tus correos.",
+            citations: [],
+            insufficientEvidence: true,
+          },
+          "commentary"
+        ),
+        { type: "reasoning", id: "rs2" },
+        message(
+          {
+            text: "No tengo acceso a tus correos aquí.",
+            citations: [],
+            insufficientEvidence: true,
+          },
+          "final_answer"
+        )
+      )
+    )
+    expect(recorded?.text).toBe("No tengo acceso a tus correos aquí.")
+  })
+  it("keeps the last message when no phase is named", async () => {
+    const recorded = await run(
+      reply(
+        message({
+          text: "Primero.",
+          citations: [],
+          insufficientEvidence: true,
+        }),
+        message({ text: "Final.", citations: [], insufficientEvidence: true })
+      )
+    )
+    expect(recorded?.text).toBe("Final.")
+  })
+  it("marks an answer that cites no passage as insufficient, and drops invented citations", async () => {
+    // The draft rested on the person's own text: nothing to cite.
+    const uncited = await run(
+      reply(
+        message(
+          {
+            text: "Hola, Ana: recibido.",
+            citations: [],
+            insufficientEvidence: false,
+          },
+          "final_answer"
+        )
+      )
+    )
+    expect(uncited).toMatchObject({
+      text: "Hola, Ana: recibido.",
+      citations: [],
+      insufficientEvidence: true,
+    })
+    const invented = await run(
+      reply(
+        message({
+          text: "Según la guía.",
+          citations: [passage, "29999999-0000-4000-8000-000000000009"],
+          insufficientEvidence: false,
+        })
+      )
+    )
+    expect(invented).toMatchObject({
+      citations: [passage],
+      insufficientEvidence: false,
+    })
+    // Text that isn't an answer is still refused, as before.
+    await expect(run(reply(message("not json")))).rejects.toMatchObject({
+      diagnostic: "answer_json_invalid",
+    })
+  })
+})
