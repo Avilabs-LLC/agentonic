@@ -116,10 +116,12 @@ export function fixtureProviders(
   }
   return {
     ...base,
-    web: pages.length > 0,
-    gmail: mailbox.length > 0,
-    // Never the live Drive: without Drive fixtures no Drive tool is offered.
-    drive: files.length > 0,
+    // A fixture case offers every tool the version grants, as a chat does
+    // (§72): a capability without fixtures answers with nothing found. Every
+    // call is answered here, so no live mailbox, Drive or website is reached.
+    web: true,
+    gmail: true,
+    drive: true,
     async driveTool(operation, args, grant) {
       const call = parseDriveCall(operation, args)
       if (!grant.operations.includes(call.operation))

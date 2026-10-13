@@ -94,6 +94,25 @@ type StoredItem = { item: Record<string, unknown>; view: ProviderItem }
 /** A protocol violation, named for the log (§67); the turn shows runtime_mismatch. */
 const mismatch = (diagnostic: string) =>
   new TurnFailure("runtime_mismatch", diagnostic)
+const MESSAGE_FIELDS = new Set([
+  "type",
+  "id",
+  "input",
+  "tools",
+  "toolChoice",
+  "format",
+  "timeoutMs",
+  "callId",
+  "result",
+  "code",
+])
+/** Names the field a refused runtime message broke, never its content (§72). */
+function messageInvalid(error: { issues: { path: PropertyKey[] }[] }) {
+  const field = error.issues[0]?.path[0]
+  return typeof field === "string" && MESSAGE_FIELDS.has(field)
+    ? `message_invalid_${field.toLowerCase()}`
+    : "message_invalid"
+}
 /** Argument schemas always come from the shared contracts, never the child. */
 export const toolParameters = (op: Operation, batch = false) =>
   z.toJSONSchema(
@@ -135,7 +154,7 @@ export class TurnBroker {
   async handle(raw: unknown): Promise<BrokerReply | undefined> {
     if (this.answer) throw mismatch("after_answer")
     const parsed = runtimeMessage.safeParse(raw)
-    if (!parsed.success) throw mismatch("message_invalid")
+    if (!parsed.success) throw mismatch(messageInvalid(parsed.error))
     const message = parsed.data
     if (message.type === "model") return this.model(message)
     if (message.type === "tool") return this.tool(message)

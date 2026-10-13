@@ -1,6 +1,7 @@
 import { z } from "zod"
 import { gmailToolOperation } from "./gmail"
 import { driveOperation } from "./drive"
+import { webArguments } from "./web"
 import { modelId, reasoningLevel } from "./models"
 
 // Broker protocol 2. The frozen runtime artifact runs the agent loop: it
@@ -53,10 +54,16 @@ export const turnSpec = z
     // (runtime 0.6.0): earlier runtimes' strict copies of this schema refuse them.
     tools: z
       .object({
-        // Batch runtimes may also get gmail.threads.read (§68).
-        gmail: z.array(gmailToolOperation).max(10),
+        // Batch runtimes may also get gmail.threads.read (§68). Each list may
+        // hold every operation of its catalog (§72).
+        gmail: z
+          .array(gmailToolOperation)
+          .max(gmailToolOperation.options.length),
         web: z.boolean(),
-        drive: z.array(driveOperation).max(4).optional(),
+        drive: z
+          .array(driveOperation)
+          .max(driveOperation.options.length)
+          .optional(),
       })
       .strict(),
     limits: z
@@ -137,12 +144,27 @@ export const toolOffer = z
   })
   .strict()
 
+/**
+ * Every tool one request can offer, derived from the catalogs so a new tool
+ * raises it (§72): all Gmail tools, all Drive operations and all web tools. It
+ * was a fixed 10, which a batch turn with full Gmail and the web exceeded.
+ */
+export const MAX_TOOL_OFFERS =
+  gmailToolOperation.options.length +
+  driveOperation.options.length +
+  Object.keys(webArguments).length
+/**
+ * Input items in one request. The broker's byte ceiling (`requestBytes`) is
+ * what bounds a request; this only stops a runaway list (§72).
+ */
+export const MAX_INPUT_ITEMS = 1000
+
 export const modelRequest = z
   .object({
     type: z.literal("model"),
     id: requestId,
-    input: z.array(inputItem).min(1).max(200),
-    tools: z.array(toolOffer).max(10),
+    input: z.array(inputItem).min(1).max(MAX_INPUT_ITEMS),
+    tools: z.array(toolOffer).max(MAX_TOOL_OFFERS),
     toolChoice: z.enum(["auto", "none"]),
     format: z
       .object({

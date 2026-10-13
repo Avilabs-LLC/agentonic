@@ -2548,3 +2548,23 @@ The database rule is unchanged: reservations still count against the limit, and 
 **Tests.** `tests/evaluation-tools.test.ts`: in the fixture-tools test only the proposed send carries `pendingApproval: true`.
 
 **Rollout, 13 October 2026.** Evaluator `607e4a2d` was deployed from `556acb2` on `main` at 12:35 UTC and registered with `--replace` (`batchFixtures: 1`, `driveFixtures: 1`, rubric 6), replacing `7c84bad6`. Runtimes 0.3.0–0.6.0 were registered with it again through `runtime:install`. `staging:reverify` shows it serving runtimes 0.3.0–0.7.0, valid for 30 days, and the service recovered after its usual 16 s wait. GPT-5.4's passed run (`0e23e962`) remains approvable. The apps were not reinstalled, since 0.40.3 changes only their version label.
+
+## 72. A request may offer every granted tool — 13 October 2026
+
+**Found 13 October.** NicolAI-Mail's version on runtime 0.7.0 passed its evaluation on GPT-6 Astra (10/10, criteria revision 6) and was approved and activated. Nico's first message in Chats (turn 3 of his conversation, 14:29 UTC) failed after 2.6 s with "No se pudo completar la respuesta por un problema de nuestro lado", and the job log named `runtime_mismatch` with diagnostic `message_invalid`.
+
+- The version grants all 9 Gmail permissions and the web. A batch turn also offers `gmail.threads.read` under the read grant (§68), so the runtime's first model request carried 12 tools: 10 for Gmail and 2 for the web.
+- The protocol's model request allowed at most 10 tools, so the broker refused the request before any model call. The turn spent only its retrieval (104 µUSD).
+- On runtime 0.6.0 the same agent offered exactly 10 (8 Gmail permissions and the web); §68 added labels and thread reads without raising the ceiling.
+- No evaluation case offers Gmail and the web together: a fixture case offers only the tools its fixtures cover, so the evaluation sent at most 10.
+
+**Change (platform v0.42.1).** The owner asked for the fix to tolerate what comes next, not only this case:
+
+- **Limits from the catalogs.** A model request may offer `MAX_TOOL_OFFERS` tools: every Gmail tool operation (10), every Drive operation (4) and every web tool (2), 16 today, and more as soon as a catalog grows. The turn spec's Gmail and Drive lists may likewise hold their whole catalogs. Input items go from 200 to 1,000, since the broker's byte ceiling is what bounds a request.
+- **A test for the largest grant.** Every Gmail tool, every Drive operation and the web must fit one turn spec and one model request, so a new tool that broke the protocol would fail in tests.
+- **Evaluations offer what a chat offers.** A fixture case now offers every tool the version grants, as a chat does; a capability without fixtures answers with nothing found, and nothing live is reached. NicolAI-Mail's batch case would have offered 12 tools and failed in evaluation instead of in Nico's chat. For a version on runtime 0.6.0 or earlier, granted web tools now also apply research pressure in its Gmail cases, as in its chats.
+- **Refusals name the field.** A refused runtime message is logged as `message_invalid_<field>` (`tools`, `input`, `type` and so on), never with its content, so the next refusal says what broke.
+
+The runtime is unchanged: runtimes never validated their own requests against these limits, so no version needs re-freezing. The broker, the evaluator and the preview worker carry the contract, so all three are reinstalled.
+
+**Tests.** `tests/runtime-engine.test.ts`: "offers all nine Gmail permissions, thread reads and the web in one request (§72)" (fails with `runtime_mismatch` on the old limit), "fits every tool a version can be granted in one turn and one request (§72)" and "names the field a refused message broke, never its content (§72)". `tests/evaluation-tools.test.ts`: "offers every granted tool in a fixture case, as a chat does (§72)". `tests/drive.test.ts`: a case without Drive fixtures offers Drive and finds nothing, and never reaches the live Drive.
