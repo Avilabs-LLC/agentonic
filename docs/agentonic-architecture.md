@@ -2613,3 +2613,42 @@ The harness spent about US$5.20 on the development key, outside the platform's l
 3. `platform-0.42.2-babe3286d13f` installed (release `baa07daa`): the apps and the knowledge worker restarted healthy and `hosted:check` passed.
 
 `staging:reverify` shows the host on `b5844821` and the evaluator on `6bea27a6`, both serving runtimes 0.3.0–0.7.0.
+
+## 74. A turn shows its steps — 13 October 2026
+
+**Owner request (13 October).** Chats and Probar agente showed two states: "Preparando respuesta…" and the final answer, with the answer appearing as it is written since §68. The owner asked for something closer to Claude Code and Codex: glimpses of what the agent is doing while it works, before the final answer.
+
+**Owner decisions (13 October).**
+
+- **Detail:** steps show the search terms, the subjects of messages read, the sites read and the names of files. They are kept with the turn and scrubbed with it, like the query and the answer. Until now a web search's terms and a read page's URL were never stored. They are still never logged.
+- **After the answer:** the steps fold into one line above it ("Hizo 6 pasos"), which opens to the list.
+
+**Model (no runtime change).**
+
+- **Broker.** The broker already runs every tool call, so it records the steps; frozen runtimes and approved versions are untouched, and nothing needs evaluating again.
+  - A step is `{tool, target, count, status}`, from `@agentonic/contracts/turn-steps`. The tool is one of the 16 Gmail, Drive and web tools. The target is the search's terms, the message's or thread's subject, the page's host, a file's name, or a draft's subject: one line of at most 200 characters, never message text. The count is how many items it found. The status is `running`, `done`, `proposed` or `failed`.
+  - `StepLog` opens a step when a call's arguments pass and closes it with what came back: a refused or failed read is `failed`, a proposal is `proposed`.
+  - Every change sends the whole list through the turn's lease, one write at a time and best effort, so a failed write never stops the turn. The last list is written before the answer.
+  - Chats and previews record steps (`steps: stream` in `runPreview`). Evaluations don't.
+- **Database (migration 73).**
+  - `steps jsonb` on `staging_turns` and `background_jobs`. `valid_turn_steps` bounds a list to 40 steps with exactly those four fields, known tools and statuses, targets of up to 200 characters and whole counts from 0 to 1,000. It is checked both in the operations and in a CHECK on each column.
+  - `staging_worker` and `rag_worker` take a new `steps` operation, only on the running turn the caller leases.
+  - The chat and preview states return each turn's steps.
+  - Every path that scrubs a chat turn sets `scrubbed_at`, and a trigger then clears its steps. Preview turns keep theirs as long as their query and answer.
+- **Presentation.** `TurnSteps`, shared by Chats and Probar agente:
+  - While the turn runs, it lists the steps in muted text, one line each with the tool's icon. A running step shows a spinner, and a failed one shows "No se pudo …".
+  - Between steps "Pensando…" shows, and the answer still appears as it is written.
+  - Afterwards a "Hizo N pasos" trigger above the answer opens the list. A step left running when its turn ended reads "(sin terminar)".
+  - The copy is past tense and Spanish, for example "Buscó en Gmail «from:ana newer_than:7d» · 8 correos", "Leyó la conversación «Cotización Q4» · 4 mensajes" and "Propuso el borrador «Re: Cotización Q4»".
+- **Not included.**
+  - The model's own reasoning: showing a summary of it would mean asking the provider for reasoning summaries, a change to the model request that the frozen runtimes and evaluations don't make.
+  - Model calls: they show only as "Pensando…" between steps.
+
+**Google verification text.** The `gmail.readonly` justification drafted in `google-restricted-scope-verification.md` said reads "are not stored". The conversation already kept the answer, and now it also keeps the subjects of the messages read. The draft now says what the conversation keeps and for how long.
+
+**Tests.**
+
+- `tests/runtime-engine.test.ts`, "shows each tool call as a step, and writes the last list before the answer (§74)": a search, a read, a refused read and a proposal give four steps; every list is valid for the database; the last list is written before the answer; a failing write doesn't stop the turn; evaluations write none.
+- `tests/evaluation-database.test.ts`: a chat turn's steps are kept, 11 malformed lists are refused, an answered turn's lease can't change them, and closing the conversation clears them.
+- `tests/gmail-database.test.ts`: a preview turn's steps appear in its state, and a wrong lease or status is refused.
+- `tests/turn-steps.test.ts`: every tool and status has a phrase; the text bounds hold.

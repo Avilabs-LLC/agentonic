@@ -8,6 +8,7 @@ import {
 import { ModelPicker } from "@workspace/ui/components/model-picker"
 import { ChatComposer } from "@workspace/ui/components/chat-composer"
 import { AgentAnswer } from "@workspace/ui/components/agent-answer"
+import { TurnSteps, thinking } from "@workspace/ui/components/turn-steps"
 import { useCallback, useEffect, useRef, useState } from "react"
 import {
   Loader2Icon,
@@ -322,6 +323,10 @@ export function AgentPreview({
                 <p className="text-xs font-medium text-muted-foreground">
                   Agente · Prueba · {previewModelName(turn.model)}
                 </p>
+                <TurnSteps
+                  steps={turn.steps}
+                  live={turn.status === "queued" || turn.status === "running"}
+                />
                 {turn.answer ? (
                   <>
                     <AgentAnswer text={turn.answer.text} />
@@ -360,6 +365,14 @@ export function AgentPreview({
                       Escribiendo…
                     </p>
                   </>
+                ) : turn.status === "running" && turn.steps?.length ? (
+                  // A running step shows its own spinner (§74).
+                  thinking(turn.steps) && (
+                    <p className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <Loader2Icon className="size-3 animate-spin" />
+                      Pensando…
+                    </p>
+                  )
                 ) : (
                   <p className="text-sm text-muted-foreground">
                     {turn.status === "queued"

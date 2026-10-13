@@ -7,6 +7,7 @@ import {
 import { ModelPicker } from "@workspace/ui/components/model-picker"
 import { ChatComposer } from "@workspace/ui/components/chat-composer"
 import { AgentAnswer } from "@workspace/ui/components/agent-answer"
+import { TurnSteps, thinking } from "@workspace/ui/components/turn-steps"
 import { GmailApprovals } from "@workspace/ui/components/gmail-approvals"
 import { DriveApprovals } from "@workspace/ui/components/drive-approvals"
 import { formatUtcMinute } from "@agentonic/contracts/format"
@@ -388,6 +389,11 @@ export function StagingChats({
                       <p className="mb-1 text-xs text-muted-foreground">
                         Agente
                       </p>
+                      <TurnSteps
+                        steps={t.steps}
+                        live={t.status === "queued" || t.status === "running"}
+                        className="mb-3"
+                      />
                       {t.answer ? (
                         <AgentAnswer text={t.answer} />
                       ) : t.status === "failed" ? (
@@ -403,11 +409,19 @@ export function StagingChats({
                             Escribiendo…
                           </p>
                         </>
-                      ) : (
+                      ) : !t.steps?.length ? (
                         <p className="flex items-center gap-2 text-sm text-muted-foreground">
                           <Loader2Icon className="size-4 animate-spin" />
                           Preparando respuesta…
                         </p>
+                      ) : (
+                        // A running step shows its own spinner (§74).
+                        thinking(t.steps) && (
+                          <p className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <Loader2Icon className="size-3 animate-spin" />
+                            Pensando…
+                          </p>
+                        )
                       )}
                       {t.citations.length > 0 && (
                         <p className="mt-2 text-xs text-muted-foreground">

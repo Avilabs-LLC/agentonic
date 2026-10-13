@@ -535,6 +535,8 @@ export async function runPreview(
       web,
       batch,
       stream,
+      // Chats and previews show their tool calls as they run (§74).
+      steps: stream,
       passageIds: z
         .array(z.object({ id: z.uuid() }))
         .max(8)
