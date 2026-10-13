@@ -1,4 +1,5 @@
 import { modelConfiguration, modelId, reasoningLevel } from "./models"
+import { turnSteps } from "./turn-steps"
 import { z } from "zod"
 export const approvalReason = z.enum([
   "unapproved",
@@ -255,6 +256,8 @@ export const chatState = z.object({
       answer: z.string().nullable(),
       /** The answer as it is being written, while the turn runs (§68). */
       partial: z.string().nullable().optional(),
+      /** What the turn did, step by step (§74); a malformed list shows no steps. */
+      steps: turnSteps.nullable().optional().catch(null),
       citations: z.array(z.uuid()),
       status: z.enum(["queued", "running", "succeeded", "failed", "cancelled"]),
       errorCode: z.string().nullable(),

@@ -32,6 +32,7 @@ import { GoogleError } from "@agentonic/connectors/google"
 import { PreviewFailure, TurnFailure } from "./failure"
 import type { Execute, Lease } from "./pipeline"
 import type { Providers } from "./providers"
+import { StepLog } from "./turn-steps"
 
 // Fixed outcomes the broker records itself: they describe platform state
 // (spend limits, pending confirmations), so no runtime can reword them.
@@ -84,6 +85,8 @@ type Options = {
   batch?: boolean
   /** A chat or preview of a batch runtime shows its answer as it is written (§68). */
   stream?: boolean
+  /** A chat or preview shows the turn's tool calls as they run (§74). */
+  steps?: boolean
 }
 export type Operation =
   | { kind: "gmail"; operation: keyof typeof gmailArguments }
@@ -181,7 +184,14 @@ export class TurnBroker {
   private usedToolEvidence = false
   private webSources = new Set<string>()
 
-  constructor(private o: Options) {}
+  private stepLog?: StepLog
+
+  constructor(private o: Options) {
+    if (o.steps)
+      this.stepLog = new StepLog((steps) =>
+        o.execute("steps", o.job, { steps })
+      )
+  }
 
   /** Handles one runtime message; no reply means the turn is complete. */
   async handle(raw: unknown): Promise<BrokerReply | undefined> {
@@ -405,6 +415,11 @@ export class TurnBroker {
     }
     if (!argumentSchema(op, this.o.batch === true).safeParse(args).success)
       return { type: "tool", id: request.id, output: INVALID_ARGUMENTS }
+    const step = this.stepLog?.start(op, args) ?? -1
+    const shown = (output: unknown) => {
+      this.stepLog?.end(step, op, args, output)
+      return output
+    }
     if (op.kind === "web") {
       const result = await this.o.providers.webTool(
         op.operation,
@@ -420,7 +435,7 @@ export class TurnBroker {
       if (typeof result.url === "string" && typeof result.text === "string")
         this.webSources.add(result.url)
       if (result.ok !== false) this.usedToolEvidence = true
-      return { type: "tool", id: request.id, output: result }
+      return { type: "tool", id: request.id, output: shown(result) }
     }
     if (op.kind === "drive") {
       if (++this.driveCalls > (turn.limits.driveCalls ?? 0))
@@ -438,7 +453,7 @@ export class TurnBroker {
       } catch (error) {
         const output = recoverable(error)
         if (!output) throw error
-        return { type: "tool", id: request.id, output }
+        return { type: "tool", id: request.id, output: shown(output) }
       }
       // A proposal ends the turn, except in batch turns, where it returns to
       // the model; a refused write (an unknown file) goes back like a read.
@@ -447,6 +462,7 @@ export class TurnBroker {
         (result as { pendingApproval?: unknown } | null)?.pendingApproval ===
           true
       ) {
+        shown(result)
         if (this.continues(result)) {
           this.proposals++
           return { type: "tool", id: request.id, output: result }
@@ -459,7 +475,7 @@ export class TurnBroker {
         return undefined
       }
       this.usedToolEvidence = true
-      return { type: "tool", id: request.id, output: result }
+      return { type: "tool", id: request.id, output: shown(result) }
     }
     const read = gmailReads.some((r) => r === op.operation)
     // Batch turns count reads and proposals apart; earlier runtimes share three.
@@ -484,8 +500,9 @@ export class TurnBroker {
     } catch (error) {
       const output = recoverable(error)
       if (!output) throw error
-      return { type: "tool", id: request.id, output }
+      return { type: "tool", id: request.id, output: shown(output) }
     }
+    shown(result)
     if (!read) {
       if (this.continues(result)) {
         this.proposals++
@@ -553,6 +570,8 @@ export class TurnBroker {
 
   private async finish(answer: TurnAnswer) {
     const recorded = { ...answer, model: this.o.turn.model as PreviewModel }
+    // The last steps reach the turn before its answer closes it (§74).
+    await this.stepLog?.flush()
     try {
       await this.o.execute("answer", this.o.job, recorded)
     } catch (error) {

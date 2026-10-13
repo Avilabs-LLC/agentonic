@@ -1,6 +1,6 @@
 # Agentonic: current state
 
-**As of 13 October 2026 · platform v0.42.3 · nonproduction only.** A short summary of what runs where, what works and what doesn't exist yet. [The architecture record](agentonic-architecture.md) keeps the full, dated history. If the two disagree about the present, fix this page. Update it whenever a change alters what runs where.
+**As of 13 October 2026 · platform v0.43.0 · nonproduction only.** A short summary of what runs where, what works and what doesn't exist yet. [The architecture record](agentonic-architecture.md) keeps the full, dated history. If the two disagree about the present, fix this page. Update it whenever a change alters what runs where.
 
 ## What runs where
 
@@ -107,6 +107,8 @@ New versions use runtime 0.7.0. Google accepts `gmail.modify` for test users, an
 
 **A turn survives what the model asks for (architecture §73), installed 13 October with staging broker `b5844821`, evaluator `6bea27a6` and `platform-0.42.2-babe3286d13f`.** NicolAI-Mail's turn 4 failed when Astra asked to read 10 messages in one response, past the 5 a batch turn takes. The broker now keeps the first calls and drops the rest, and gives refused arguments, failed reads and refused proposals back to the model; only a needed reconnect still ends the turn. A live harness on the real runtime 0.7.0 with Astra passed 10 of 10 turns of Nico's request; the previous broker failed the same case.
 
+**A turn shows its steps (architecture §74), not yet installed.** While a chat or Probar agente turn runs, it lists what the agent does, one line per tool call: "Buscó en Gmail «…» · 8 correos", "Leyó «…»", "Propuso el borrador «…»". Then the list folds into "Hizo N pasos" above the answer. The broker records the steps, with no runtime change. Migration 73 keeps them with the turn and clears them when the turn is scrubbed.
+
 ## Operations
 
 - **Verification.** Hosts and evaluators stay trusted for 30 days (migration 52; it was 7 until 7 October). A launchd job on the Mac runs `pnpm staging:reverify --renew --publish` at 09:00 and 21:00. It checks the installed files and services over SSH, renews only what passes, and renews anything a week old or more, so the VM keeps working for 23 to 30 days with the Mac off. The GitHub alert for a silent Mac only fires once an expiry is within 5 days. Run `pnpm staging:reverify` (read-only) for live expiry dates and what each environment runs: its worker release and each runtime's version and source commit. The local deployment host has been expired since 26 September on purpose; run `install-staging --local` before using local staging chats.
@@ -180,5 +182,6 @@ The ordered plan is architecture §37; the owner's audit brief tracks progress. 
 | The grader sees that a write was only proposed                         | §71                  |
 | A request may offer every granted tool                                 | §72                  |
 | A turn survives what the model asks for                                | §73                  |
+| A turn shows its steps                                                 | §74                  |
 
-Presentation rules are in the [UI contract](ui/ui-contract.md). The [target schema](schema.dbml) describes 90 tables; 73 exist in the 72 checked-in migrations.
+Presentation rules are in the [UI contract](ui/ui-contract.md). The [target schema](schema.dbml) describes 90 tables; 73 exist in the 73 checked-in migrations.

@@ -1,5 +1,10 @@
 export const VERSION_HISTORY = [
   {
+    "version": "0.43.0",
+    "date": "2026-10-13",
+    "summary": "Chats and Probar agente show a turn's steps as it works (searches with their terms, messages and threads read, pages, files and proposals) and fold them above the answer; the broker records them, migration 73 keeps them with the turn and scrubs them with it"
+  },
+  {
     "version": "0.42.3",
     "date": "2026-10-13",
     "summary": "The usage tray under the Chats and Probar agente composer hangs from its bottom edge instead of tucking beneath it, so it no longer shows through the translucent composer in dark mode"

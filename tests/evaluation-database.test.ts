@@ -2445,6 +2445,7 @@ async function modelReview() {
     "202610130071_mailbox_followups",
     // Removes two named test agents; any other database is left as it was.
     "202610130072_remove_test_agents",
+    "202610130073_turn_steps",
   ])
     await db.exec(
       readFileSync(
@@ -4055,6 +4056,82 @@ describe("mailbox batch turns (§67)", () => {
         )
       ).rows
     ).toEqual([{ partial_answer: null }])
+  })
+
+  it("keeps a chat turn's steps, refuses malformed ones and scrubs them with the conversation (§74)", async () => {
+    const { turnStepTool } =
+      await import("../packages/contracts/src/turn-steps")
+    const deploymentId = await running()
+    const conversation = await chat("start", {
+      deploymentId,
+      title: "Synthetic steps",
+    })
+    await chat("turn", {
+      conversationId: conversation.id,
+      requestId: id(1520),
+      query: "Busca los correos de Ana",
+      model: "gpt-5.4-mini",
+      reasoning: "medium",
+    })
+    const job = (await stagingWork(deploymentId, "claim")) as unknown as Job
+    // Every tool the contract names is a valid step, on any runtime.
+    const steps = turnStepTool.options.map((tool, n) => ({
+      tool,
+      target: n % 2 ? null : "from:ana newer_than:7d",
+      count: n % 3 ? null : n,
+      status: (["running", "done", "proposed", "failed"] as const)[n % 4],
+    }))
+    await stagingWork(deploymentId, "steps", job, { steps })
+    const step = {
+      tool: "gmail.search",
+      target: "from:ana",
+      count: 8,
+      status: "done",
+    }
+    for (const bad of [
+      null,
+      { tool: "gmail.search" },
+      [{ ...step, extra: true }],
+      [{ ...step, tool: "gmail.forward" }],
+      [{ ...step, status: "skipped" }],
+      [{ ...step, target: "x".repeat(201) }],
+      [{ ...step, target: 3 }],
+      [{ ...step, count: 1.5 }],
+      [{ ...step, count: -1 }],
+      [{ ...step, count: "8" }],
+      Array.from({ length: 41 }, () => step),
+    ])
+      await expect(
+        stagingWork(deploymentId, "steps", job, { steps: bad })
+      ).rejects.toMatchObject({ code: "42501" })
+    await stagingWork(deploymentId, "steps", job, { steps: [step] })
+    await actor()
+    expect(
+      await chat("state", { conversationId: conversation.id })
+    ).toMatchObject({ turns: [{ status: "running", steps: [step] }] })
+    await stagingWork(deploymentId, "answer", job, {
+      text: "Ana te escribió dos veces.",
+      citations: [],
+      insufficientEvidence: true,
+      model: "gpt-5.4-mini",
+    })
+    // An answered turn keeps its steps, and its lease no longer writes them.
+    await expect(
+      stagingWork(deploymentId, "steps", job, { steps: [] })
+    ).rejects.toMatchObject({ code: "42501" })
+    await actor()
+    expect(
+      await chat("state", { conversationId: conversation.id })
+    ).toMatchObject({ turns: [{ status: "succeeded", steps: [step] }] })
+    await actor()
+    await chat("close", { conversationId: conversation.id })
+    expect(
+      (
+        await sql("SELECT steps FROM agentonic.staging_turns WHERE id=$1", [
+          job.id,
+        ])
+      ).rows
+    ).toEqual([{ steps: null }])
   })
 
   it("finds the owner's accepted style guide in the version's own sources (§68)", async () => {

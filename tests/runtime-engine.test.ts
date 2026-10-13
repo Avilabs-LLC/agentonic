@@ -14,6 +14,7 @@ import {
   gmailToolOperation,
 } from "../packages/contracts/src/gmail"
 import { driveOperation } from "../packages/contracts/src/drive"
+import { turnSteps } from "../packages/contracts/src/turn-steps"
 import { toolOffers } from "../packages/runtime/src/tools/registry"
 import { runAgentTurn } from "../packages/runtime/src/agent/turn"
 import { RuntimeError } from "../packages/runtime/src/agent/envelope"
@@ -1049,6 +1050,117 @@ describe("mailbox batch turns (§67)", () => {
     await expect(run(new GoogleError("reconnect"))).rejects.toMatchObject({
       code: "reconnect",
     })
+  })
+
+  it("shows each tool call as a step, and writes the last list before the answer (§74)", async () => {
+    const run = async (
+      options: { steps?: boolean } = {},
+      execute = vi.fn<Execute>().mockResolvedValue({ ok: true })
+    ) => {
+      let models = 0
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () =>
+          ++models === 1
+            ? json(
+                calls(
+                  [
+                    "gmail_search",
+                    { query: "from:ana  newer_than:7d", limit: 10 },
+                  ],
+                  ["gmail_read", { id: "b01" }],
+                  ["gmail_read", { id: "b04" }],
+                  ["gmail_drafts_create", draft("b01")]
+                )
+              )
+            : json(
+                answer({
+                  text: "Listo.",
+                  citations: [],
+                  insufficientEvidence: true,
+                })
+              )
+        )
+      )
+      const gmailTool = vi.fn()
+      const mail = mailbox(gmailTool)
+      gmailTool.mockImplementation(
+        async (operation: string, args: { id?: string }) => {
+          if (operation === "gmail.drafts.create")
+            return {
+              pendingApproval: true,
+              id: "50000000-0000-4000-8000-000000000001",
+            }
+          if (operation === "gmail.read" && args.id === "b04")
+            throw new GoogleError("rejected", "gmail_http_404")
+          if (operation === "gmail.read")
+            return {
+              id: "b01",
+              headers: [
+                { name: "From", value: "Ana <ana@example.invalid>" },
+                { name: "Subject", value: "Cotización\n Q4" },
+              ],
+              text: "Synthetic",
+              untrusted: true,
+            }
+          return found
+        }
+      )
+      const recorded = await turnInProcess(batchSpec(), execute, {
+        providers: mail,
+        gmail: grant,
+        batch: true,
+        ...options,
+      })
+      return { recorded, execute }
+    }
+    const { recorded, execute } = await run({ steps: true })
+    expect(recorded?.text).toContain("Listo.")
+    const operations = execute.mock.calls.map(([operation]) => operation)
+    const lists = execute.mock.calls
+      .filter(([operation]) => operation === "steps")
+      .map(([, , payload]) => payload!.steps)
+    // Every list the database gets is valid, and the last arrives before the answer.
+    for (const list of lists)
+      expect(turnSteps.safeParse(list).success).toBe(true)
+    expect(operations.lastIndexOf("steps")).toBeLessThan(
+      operations.indexOf("answer")
+    )
+    expect(lists.at(-1)).toEqual([
+      {
+        tool: "gmail.search",
+        target: "from:ana newer_than:7d",
+        count: 2,
+        status: "done",
+      },
+      {
+        tool: "gmail.read",
+        target: "Cotización Q4",
+        count: null,
+        status: "done",
+      },
+      { tool: "gmail.read", target: null, count: null, status: "failed" },
+      {
+        tool: "gmail.drafts.create",
+        target: "Re: Synthetic",
+        count: null,
+        status: "proposed",
+      },
+    ])
+    // A step that can't be written never stops the turn.
+    const failing = await run(
+      { steps: true },
+      vi.fn<Execute>(async (operation) => {
+        if (operation === "steps") throw new Error("busy")
+        return { ok: true }
+      })
+    )
+    expect(failing.recorded?.text).toContain("Listo.")
+    // Evaluations record no steps.
+    const evaluation = await run()
+    expect(
+      evaluation.execute.mock.calls.some(([operation]) => operation === "steps")
+    ).toBe(false)
   })
 
   it("shows the agent what its earlier proposals became (B8)", async () => {

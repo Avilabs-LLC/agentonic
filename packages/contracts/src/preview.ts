@@ -1,6 +1,7 @@
 import { z } from "zod"
 import { isSelectableModel, reasoningLevel } from "./models"
 import { retrievalResult } from "./rag"
+import { turnSteps } from "./turn-steps"
 import { previewModel, DEFAULT_PREVIEW_MODEL } from "./preview-models"
 const identity = { agentId: z.uuid(), previewId: z.uuid() }
 export const previewStartResult = z.discriminatedUnion("ok", [
@@ -68,6 +69,8 @@ export const previewState = z.object({
         query: z.string().nullable(),
         /** The answer as it is being written, while the turn runs (§68). */
         partial: z.string().nullable().optional(),
+        /** What the turn did, step by step (§74); a malformed list shows no steps. */
+        steps: turnSteps.nullable().optional().catch(null),
       })
     )
     .max(10),
