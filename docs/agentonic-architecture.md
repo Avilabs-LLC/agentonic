@@ -2694,3 +2694,11 @@ About US$0.40 on the development key, outside the platform's ledger.
 - `tests/runtime-engine.test.ts`, "the final answer reaches the runtime in one readable piece (§75)": notes before a final answer, unnamed phases, an uncited answer, an invented citation, and text that is still refused.
 - `tests/stream.test.ts`: notes are never streamed.
 - `tests/evaluation-tools.test.ts`: a malformed answer fails its case without grading, and other failures still stop the run.
+
+**Rollout, 13 October 2026.** From `9e55a9b` on `main`, with no chat turn, preview, job or evaluation running:
+
+1. Staging broker `9dfa013a` installed with `install-staging --azure`; the controller moved NicolAI-Mail to it.
+2. Evaluator `ddbdd1cd` deployed and registered with `--replace`, replacing `6bea27a6`; runtimes 0.3.0–0.6.0 registered with it again through `runtime:install`.
+3. `platform-0.43.1-9e55a9ba3796` installed (release `c74e7af7`): the apps and the knowledge worker restarted healthy and `hosted:check` passed.
+
+`staging:reverify` shows the host on `9dfa013a` and the evaluator on `ddbdd1cd`, both serving runtimes 0.3.0–0.7.0, and every registration valid.
