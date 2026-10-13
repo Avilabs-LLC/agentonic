@@ -1,5 +1,10 @@
 export const VERSION_HISTORY = [
   {
+    "version": "0.40.3",
+    "date": "2026-10-13",
+    "summary": "Evaluations show the grader which tool calls were only proposed, so an agent that correctly says nothing was applied is not failed for it"
+  },
+  {
     "version": "0.40.2",
     "date": "2026-10-13",
     "summary": "Evaluar modelos suggests a limit that fits the selected models, since each call reserves its maximum cost first, and explains a run that stops on its limit"

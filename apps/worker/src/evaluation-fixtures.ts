@@ -107,6 +107,13 @@ export function fixtureProviders(
   const mailbox = fixtures.mailbox ?? [],
     pages = fixtures.web ?? [],
     files = fixtures.drive ?? []
+  // A write is only proposed for the owner's confirmation, never executed, and
+  // its recorded call says so: the grader sees the calls, not their results (§71).
+  const propose = () => {
+    const call = calls.at(-1)
+    if (call) call.pendingApproval = true
+    return { pendingApproval: true, id: randomUUID() }
+  }
   return {
     ...base,
     web: pages.length > 0,
@@ -129,8 +136,7 @@ export function fixtureProviders(
           untrusted: true,
         }
       }
-      if (call.operation === "drive.docs.create")
-        return { pendingApproval: true, id: randomUUID() }
+      if (call.operation === "drive.docs.create") return propose()
       const file = files.find((f) => f.id === a.id)
       if (!file) return { error: "not_in_agent_files", untrusted: true }
       if (call.operation === "drive.files.read")
@@ -144,7 +150,7 @@ export function fixtureProviders(
         }
       // Updates are proposed for the owner's confirmation and never executed.
       return file.mimeType === GOOGLE_DOC
-        ? { pendingApproval: true, id: randomUUID() }
+        ? propose()
         : { error: "not_a_google_doc", untrusted: true }
     },
     async webTool(operation, args) {
@@ -230,7 +236,7 @@ export function fixtureProviders(
       if (gmailReads.some((read) => read === call.operation))
         return { error: "not_found", untrusted: true }
       // Writes are proposed for the owner's confirmation and never executed.
-      return { pendingApproval: true, id: randomUUID() }
+      return propose()
     },
   }
 }
