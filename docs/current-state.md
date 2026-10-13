@@ -1,6 +1,6 @@
 # Agentonic: current state
 
-**As of 13 October 2026 · platform v0.42.2 · nonproduction only.** A short summary of what runs where, what works and what doesn't exist yet. [The architecture record](agentonic-architecture.md) keeps the full, dated history. If the two disagree about the present, fix this page. Update it whenever a change alters what runs where.
+**As of 13 October 2026 · platform v0.42.3 · nonproduction only.** A short summary of what runs where, what works and what doesn't exist yet. [The architecture record](agentonic-architecture.md) keeps the full, dated history. If the two disagree about the present, fix this page. Update it whenever a change alters what runs where.
 
 ## What runs where
 

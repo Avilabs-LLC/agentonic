@@ -1,5 +1,10 @@
 export const VERSION_HISTORY = [
   {
+    "version": "0.42.3",
+    "date": "2026-10-13",
+    "summary": "The usage tray under the Chats and Probar agente composer hangs from its bottom edge instead of tucking beneath it, so it no longer shows through the translucent composer in dark mode"
+  },
+  {
     "version": "0.42.2",
     "date": "2026-10-13",
     "summary": "A chat turn goes on when the model asks for too much at once: extra tool calls in one response are dropped, refused arguments, failed reads and refused proposals go back to the model, and only a needed reconnect still ends the turn"
