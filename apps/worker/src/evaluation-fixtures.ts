@@ -17,6 +17,7 @@ import type {
   FixtureCall,
 } from "@agentonic/contracts/evaluation-fixtures"
 import type { Providers } from "./providers"
+import { searchExcerpt } from "./gmail"
 
 const words = (text: string) =>
   text
@@ -114,7 +115,7 @@ export function fixtureProviders(
               "This source was not verified. Do not infer its contents or retry this request. Try a different source within the remaining allowance, or explain the limitation.",
           }
     },
-    async gmailTool(operation, args, grant) {
+    async gmailTool(operation, args, grant, _job, _execute, options) {
       const call = parseGmailCall(operation, args)
       if (!grant.operations.includes(call.operation))
         throw new Error("runtime_mismatch")
@@ -131,8 +132,12 @@ export function fixtureProviders(
           messages: grant.operations.includes("gmail.read")
             ? found.map((m) => ({
                 id: m.id,
+                ...(options?.batch ? { threadId: m.id } : {}),
                 headers: headers(m),
-                excerpt: m.text.slice(0, 500),
+                excerpt: m.text.slice(
+                  0,
+                  searchExcerpt(options?.batch === true)
+                ),
                 untrusted: true,
               }))
             : found.map((m) => ({ id: m.id, threadId: m.id })),

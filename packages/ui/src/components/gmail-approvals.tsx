@@ -63,6 +63,13 @@ function Details({ item }: { item: GmailInvocation }) {
           <dd>{String(args.id)}</dd>
         </div>
       )}
+      {/* A reply goes in the thread of the message it answers (§67). */}
+      {typeof m.replyTo === "string" && (
+        <div>
+          <dt className="text-muted-foreground">Hilo</dt>
+          <dd>Responde en el hilo del correo original</dd>
+        </div>
+      )}
     </dl>
   )
 }

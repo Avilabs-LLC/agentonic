@@ -1,7 +1,10 @@
 import { createHash } from "node:crypto"
 import { z } from "zod"
 import { toolGrants } from "@agentonic/contracts/tools"
-import type { RuntimeErrorCode } from "@agentonic/contracts/runtime-protocol"
+import {
+  batchCeilings,
+  type RuntimeErrorCode,
+} from "@agentonic/contracts/runtime-protocol"
 import { compose, configurationSchema } from "./prompt-loader"
 
 export class RuntimeError extends Error {
@@ -11,6 +14,17 @@ export class RuntimeError extends Error {
 }
 const digest = (text: string) => createHash("sha256").update(text).digest("hex")
 const hash = z.string().regex(/^[a-f0-9]{64}$/)
+const gmailId = z.string().regex(/^[a-zA-Z0-9_-]{1,128}$/)
+/** IDs and outcomes only: never arguments or content. */
+export const historyAction = z
+  .object({
+    operation: z.string().regex(/^[a-z][a-z.]{1,40}$/),
+    status: z.string().regex(/^[a-z_]{1,40}$/),
+    draftId: gmailId.optional(),
+    messageId: gmailId.optional(),
+    threadId: gmailId.optional(),
+  })
+  .strict()
 export const envelopeSchema = z
   .object({
     environment: z.literal("staging"),
@@ -29,7 +43,9 @@ export const envelopeSchema = z
         z
           .object({
             query: z.string().max(1000),
-            answer: z.string().max(12000),
+            answer: z.string().max(batchCeilings.answerChars),
+            // The Gmail actions that turn proposed and what became of them (B8, §67).
+            actions: z.array(historyAction).max(20).optional(),
           })
           .strict()
       )

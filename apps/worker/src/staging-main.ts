@@ -54,6 +54,7 @@ import {
   providerKeys,
   type Providers,
 } from "./providers"
+import { PreviewFailure, TurnFailure } from "./failure"
 // One program, three services: the host's deployment controller (--manager),
 // its gateway (--gateway: database connections and provider keys) and one agent
 // copy per deployment, which holds neither.
@@ -594,6 +595,10 @@ async function serviceLoop() {
         startedAt,
         finishedAt: Date.now(),
         code,
+        diagnostic:
+          error instanceof TurnFailure || error instanceof PreviewFailure
+            ? error.diagnostic
+            : undefined,
       })
     } finally {
       clearInterval(timer)

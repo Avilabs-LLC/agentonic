@@ -316,3 +316,111 @@ it("does not expand email content when only search is enabled", async () => {
   ).toEqual({ messages: [{ id: "m1", threadId: "t1" }] })
   expect(fetch).toHaveBeenCalledTimes(2)
 })
+
+// §67: a reply draft goes in the thread of the message it answers.
+it("puts a reply in the original's thread with reply headers, and leaves other drafts alone", async () => {
+  const fetch = vi
+    .fn()
+    .mockResolvedValueOnce(
+      Response.json({
+        id: "orig-1",
+        threadId: "thread-1",
+        payload: {
+          headers: [
+            { name: "Message-Id", value: "<abc@mail.example.invalid>" },
+            { name: "References", value: "<root@mail.example.invalid>" },
+          ],
+        },
+      })
+    )
+    .mockResolvedValueOnce(
+      Response.json({ id: "r-9", message: { id: "m-9", threadId: "thread-1" } })
+    )
+    .mockResolvedValueOnce(
+      Response.json({ id: "r-10", message: { id: "m-10" } })
+    )
+  vi.stubGlobal("fetch", fetch)
+  await gmail(
+    "synthetic",
+    "gmail.drafts.create",
+    { ...message, subject: "Re: Prueba", replyTo: "orig-1" },
+    "sender@example.invalid",
+    id
+  )
+  expect(String(fetch.mock.calls[0]![0])).toContain(
+    "messages/orig-1?format=metadata"
+  )
+  const body = JSON.parse(String(fetch.mock.calls[1]![1].body))
+  expect(body.message.threadId).toBe("thread-1")
+  const raw = Buffer.from(body.message.raw, "base64url").toString()
+  expect(raw).toContain("In-Reply-To: <abc@mail.example.invalid>")
+  expect(raw).toContain(
+    "References: <root@mail.example.invalid> <abc@mail.example.invalid>"
+  )
+  // A new conversation (replyTo null) reads nothing and sets no thread.
+  await gmail(
+    "synthetic",
+    "gmail.drafts.create",
+    { ...message, replyTo: null },
+    "sender@example.invalid",
+    id
+  )
+  expect(fetch).toHaveBeenCalledTimes(3)
+  const plain = JSON.parse(String(fetch.mock.calls[2]![1].body))
+  expect(plain.message).not.toHaveProperty("threadId")
+  expect(Buffer.from(plain.message.raw, "base64url").toString()).not.toContain(
+    "In-Reply-To"
+  )
+})
+it("shows batch searches longer excerpts with their thread; earlier runtimes keep 500 characters", async () => {
+  const run = async (batch: boolean) => {
+    const execute = vi.fn().mockResolvedValue({ ok: true })
+    execute.mockResolvedValueOnce({
+      credential: seal({ refreshToken: "synthetic" }, `gmail:${id}`, key),
+      account: "sender@example.invalid",
+    })
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(
+          Response.json({ access_token: "synthetic", expires_in: 3600 })
+        )
+        .mockResolvedValueOnce(
+          Response.json({ messages: [{ id: "m0", threadId: "t0" }] })
+        )
+        .mockResolvedValueOnce(
+          Response.json({
+            id: "m0",
+            threadId: "t0",
+            payload: {
+              mimeType: "text/plain",
+              body: {
+                data: Buffer.from("x".repeat(3000)).toString("base64url"),
+              },
+            },
+          })
+        )
+    )
+    return (await executeGmail(
+      "gmail.search",
+      { query: "in:inbox", limit: 1 },
+      { connectionId: id, operations: ["gmail.search", "gmail.read"] },
+      { id, token: id, kind: "retrieve" },
+      execute,
+      {
+        clientId: "test",
+        clientSecret: "test",
+        redirectUri: "http://localhost",
+        keys: keyring(key),
+      },
+      { batch }
+    )) as { messages: { excerpt: string; threadId?: string }[] }
+  }
+  const batch = (await run(true)).messages[0]!
+  expect(batch.excerpt).toHaveLength(2000)
+  expect(batch.threadId).toBe("t0")
+  const legacy = (await run(false)).messages[0]!
+  expect(legacy.excerpt).toHaveLength(500)
+  expect(legacy).not.toHaveProperty("threadId")
+})

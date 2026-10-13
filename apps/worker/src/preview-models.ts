@@ -25,11 +25,14 @@ export function previewModelProfile(
 export function previewReservation(
   model: PreviewModel,
   body: string,
-  reasoning?: string | null
+  reasoning?: string | null,
+  /** The output ceiling actually requested, when larger than the profile's (§67). */
+  maxOutput?: number
 ) {
   const p = previewModelProfile(model, reasoning)
   return Math.ceil(
-    (Buffer.byteLength(body) + 4096) * p.inputRate + p.maxOutput * p.outputRate
+    (Buffer.byteLength(body) + 4096) * p.inputRate +
+      (maxOutput ?? p.maxOutput) * p.outputRate
   )
 }
 export function previewCost(

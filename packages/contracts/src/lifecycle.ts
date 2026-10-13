@@ -279,6 +279,8 @@ export const lifecycleErrors: Record<string, string> = {
   provider_unavailable:
     "No se pudo completar la respuesta. El consumo o la reserva pendiente se conserva.",
   lease_lost: "La respuesta se interrumpió. Puedes enviar un nuevo mensaje.",
+  runtime_mismatch:
+    "No se pudo completar la respuesta por un problema de nuestro lado. Puedes enviar un nuevo mensaje.",
   too_early: "Puedes renovar a mano en los últimos 10 días de la autorización.",
   budget_required: "Elige un presupuesto por período antes de renovar.",
   ...renewalBlockedLabels,

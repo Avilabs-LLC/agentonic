@@ -50,20 +50,29 @@ const address = z
   .email()
   .max(254)
   .refine((s) => !/[\r\n]/.test(s))
+const messageShape = {
+  to: z.array(address).min(1).max(10),
+  cc: z.array(address).max(10),
+  bcc: z.array(address).max(10),
+  subject: z
+    .string()
+    .min(1)
+    .max(200)
+    .refine((s) => !/[\r\n]/.test(s)),
+  body: z.string().min(1).max(20000),
+}
+const recipients = (v: { to: string[]; cc: string[]; bcc: string[] }) =>
+  v.to.length + v.cc.length + v.bcc.length <= 10
+// A reply names the message it answers; the platform sends it in that
+// message's thread with the reply headers (architecture §67).
+const replyTo = messageId.describe(
+  "Gmail message ID this email answers, from gmail_search or gmail_read: it is sent in that message's thread. null for a new conversation."
+)
+/** A message a tool call may carry. Earlier calls have no `replyTo`. */
 export const gmailMessage = z
-  .object({
-    to: z.array(address).min(1).max(10),
-    cc: z.array(address).max(10),
-    bcc: z.array(address).max(10),
-    subject: z
-      .string()
-      .min(1)
-      .max(200)
-      .refine((s) => !/[\r\n]/.test(s)),
-    body: z.string().min(1).max(20000),
-  })
+  .object({ ...messageShape, replyTo: replyTo.nullable().optional() })
   .strict()
-  .refine((v) => v.to.length + v.cc.length + v.bcc.length <= 10)
+  .refine(recipients)
 export const gmailArguments = {
   "gmail.search": z
     .object({
@@ -83,6 +92,32 @@ export const gmailArguments = {
   "gmail.drafts.delete": z.object({ id: draftId }).strict(),
   "gmail.send": gmailMessage,
 } as const
+/**
+ * The argument schema offered to a model. Strict function schemas need every
+ * property, so mailbox-batch runtimes (§67) must give `replyTo`, null for a new
+ * conversation, and earlier runtimes are offered the message without it.
+ */
+export function offeredGmailArguments(
+  operation: keyof typeof gmailArguments,
+  batch: boolean
+) {
+  const message = z
+    .object(
+      batch ? { ...messageShape, replyTo: replyTo.nullable() } : messageShape
+    )
+    .strict()
+    .refine(recipients)
+  if (operation === "gmail.drafts.create" || operation === "gmail.send")
+    return message
+  if (operation === "gmail.drafts.update")
+    return z.object({ id: draftId, message }).strict()
+  return gmailArguments[operation]
+}
+/** The message a write carries, wherever its operation keeps it. */
+export function gmailWriteMessage(operation: string, args: unknown) {
+  const a = args as { message?: unknown } | null
+  return operation === "gmail.drafts.update" ? a?.message : args
+}
 export function parseGmailCall(operation: string, args: unknown) {
   const op = gmailOperation.parse(operation)
   return { operation: op, arguments: gmailArguments[op].parse(args) }

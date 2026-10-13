@@ -17,6 +17,8 @@ export type FinishedJob = {
   finishedAt: number
   /** An error code such as `lease_lost`; anything else becomes "unexpected". */
   code?: string
+  /** What caused a failure, such as `answer_refused` (§67); never a message. */
+  diagnostic?: string
   /** Items the job passed over, such as mail Gmail would not hand over. */
   skipped?: number
   /** A provider rate limit the job met, such as `gmail_http_403_user_rate_limit`. */
@@ -50,6 +52,8 @@ export function jobLine(entry: FinishedJob) {
   set("deploymentId", id(entry.deploymentId))
   set("outcome", failed ? "failed" : "completed")
   if (failed) set("error", CODE.test(entry.code!) ? entry.code : "unexpected")
+  if (failed && entry.diagnostic && CODE.test(entry.diagnostic))
+    set("diagnostic", entry.diagnostic)
   if (Number.isFinite(queued)) {
     set("queuedAt", iso(queued))
     set("queueDelayMs", Math.max(0, entry.startedAt - queued))

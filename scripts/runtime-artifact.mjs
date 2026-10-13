@@ -58,6 +58,8 @@ export async function buildRuntimeArtifact({ output, gitCommit }) {
       gmailContract: "1",
       // Drive tools (§62): brokers send `drive` turn keys only to runtimes with this.
       driveContract: "1",
+      // Mailbox batch turns (§67): brokers send batch limits only to runtimes with this.
+      mailboxBatch: "1",
       webContract: "1",
       webResearch: "1",
       model: "gpt-4.1-mini-2025-04-14",

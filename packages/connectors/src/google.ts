@@ -1,5 +1,9 @@
 import { z } from "zod"
-import { parseGmailCall, gmailMessage } from "@agentonic/contracts/gmail"
+import {
+  parseGmailCall,
+  gmailMessage,
+  gmailWriteMessage,
+} from "@agentonic/contracts/gmail"
 import type { Keyring } from "./secrets"
 export const GOOGLE_SCOPES = [
   "https://www.googleapis.com/auth/gmail.readonly",
@@ -117,10 +121,64 @@ export async function revoke(refreshToken: string) {
   })
   return response.ok
 }
+/** What a reply carries from the message it answers (§67). */
+export type ReplyContext = {
+  threadId: string
+  messageId?: string
+  references: string[]
+}
+const headerId = /^<[^<>\s]{1,250}>$/
+/**
+ * Reads the thread and Message-ID of the message a reply answers. Only those
+ * headers are requested; nothing of the message is returned to anyone.
+ */
+async function replyContext(access: string, id: string): Promise<ReplyContext> {
+  let response: Response
+  try {
+    response = await fetch(
+      `https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodeURIComponent(id)}?format=metadata&metadataHeaders=Message-ID&metadataHeaders=References`,
+      {
+        headers: { Authorization: `Bearer ${access}` },
+        signal: AbortSignal.timeout(15000),
+      }
+    )
+  } catch {
+    // Nothing was written yet.
+    throw new GoogleError("unavailable")
+  }
+  if (!response.ok)
+    throw new GoogleError(response.status === 401 ? "reconnect" : "rejected")
+  const m = z
+    .object({
+      threadId: z.string().regex(/^[a-zA-Z0-9_-]{1,128}$/),
+      payload: z
+        .object({
+          headers: z
+            .array(z.object({ name: z.string(), value: z.string() }))
+            .optional(),
+        })
+        .optional(),
+    })
+    .parse(await json(response))
+  const header = (name: string) =>
+    m.payload?.headers
+      ?.find((h) => h.name.toLowerCase() === name)
+      ?.value.trim() ?? ""
+  const messageId = header("message-id")
+  return {
+    threadId: m.threadId,
+    messageId: headerId.test(messageId) ? messageId : undefined,
+    references: header("references")
+      .split(/\s+/)
+      .filter((r) => headerId.test(r))
+      .slice(-10),
+  }
+}
 export function rawMessage(
   input: unknown,
   account: string,
-  invocation: string
+  invocation: string,
+  reply?: ReplyContext
 ) {
   const m = gmailMessage.parse(input)
   if (
@@ -136,6 +194,16 @@ export function rawMessage(
     ...(m.bcc.length ? [`Bcc: ${m.bcc.join(", ")}`] : []),
     `Subject: =?UTF-8?B?${Buffer.from(m.subject).toString("base64")}?=`,
     `Message-ID: <${invocation}@agentonic.invalid>`,
+    // A reply names the message it answers, so mail clients thread it.
+    ...(reply?.messageId
+      ? [
+          `In-Reply-To: ${reply.messageId}`,
+          `References: ${[
+            ...reply.references.filter((r) => r !== reply.messageId),
+            reply.messageId,
+          ].join(" ")}`,
+        ]
+      : []),
     "MIME-Version: 1.0",
     'Content-Type: text/plain; charset="UTF-8"',
     "Content-Transfer-Encoding: base64",
@@ -213,13 +281,30 @@ export async function gmail(
   if (operation === "gmail.read") path = `messages/${a.id}?format=full`
   if (operation === "gmail.drafts.list") path = `drafts?maxResults=${a.limit}`
   if (operation === "gmail.drafts.read") path = `drafts/${a.id}?format=full`
+  // A reply goes in the thread of the message it answers (§67).
+  const replyTo = (
+    gmailWriteMessage(call.operation, a) as { replyTo?: string | null } | null
+  )?.replyTo
+  const reply =
+    replyTo &&
+    ["gmail.drafts.create", "gmail.drafts.update", "gmail.send"].includes(
+      call.operation
+    )
+      ? await replyContext(access, replyTo)
+      : undefined
+  const thread = reply ? { threadId: reply.threadId } : {}
   if (
     operation === "gmail.drafts.create" ||
     operation === "gmail.drafts.update"
   ) {
     path = operation.endsWith("update") ? `drafts/${a.id}` : "drafts"
     method = operation.endsWith("update") ? "PUT" : "POST"
-    body = { message: { raw: rawMessage(a.message ?? a, account, invocation) } }
+    body = {
+      message: {
+        raw: rawMessage(a.message ?? a, account, invocation, reply),
+        ...thread,
+      },
+    }
   }
   if (operation === "gmail.drafts.delete") {
     path = `drafts/${a.id}`
@@ -228,7 +313,7 @@ export async function gmail(
   if (operation === "gmail.send") {
     path = "messages/send"
     method = "POST"
-    body = { raw: rawMessage(a, account, invocation) }
+    body = { raw: rawMessage(a, account, invocation, reply), ...thread }
   }
   const write = method !== "GET"
   let response: Response

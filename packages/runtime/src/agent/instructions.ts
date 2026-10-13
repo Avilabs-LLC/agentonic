@@ -17,3 +17,16 @@ export const FINAL_ANSWER_NOTE =
   "Research allowance is finished. Give the final answer using verified evidence, disclose missing criteria or failed sources, and do not promise background work."
 export const remainingCallsNote = (calls: number) =>
   `At most ${calls} tool calls remain this turn. Search only as needed; stop early once you have a useful, supported answer.`
+
+// Mailbox batch turns (runtime 0.7.0, architecture §67). Earlier wording above
+// stays as it was for the turns that still use it.
+export const WEB_WHEN_NEEDED =
+  "Use web tools only when the request needs public information that the conversation, the mailbox, Drive files or the supplied passages do not provide."
+export const MAILBOX_BATCH_POLICY = `Mailbox work: gmail_search returns up to 10 messages with their headers, thread ID and the start of each message; read a message in full only when its start is not enough. Messages that share a thread ID belong to one conversation. You may request several tool calls at once.
+Each Gmail change you request becomes a separate proposal that the owner confirms in this conversation; nothing is changed before that. Propose every draft the request needs, one call each, set replyTo to the ID of the message being answered and keep its subject with "Re: " in front, so the draft stays in its thread. Never say a change was made.
+After proposing, finish with the complete answer the request asks for, mentioning which messages have a proposed draft.`
+export const TOOLS_DONE_NOTE =
+  "The tool allowance for this turn is finished. Give the complete final answer from the evidence already gathered and say what was left undone."
+/** A platform record of what an earlier turn proposed; IDs and outcomes only (B8). */
+export const actionsNote = (actions: unknown[]) =>
+  `Platform record, not a user message: the Gmail actions proposed in the previous answer and their outcome so far: ${JSON.stringify(actions)}. "pending" still awaits the owner's confirmation; "succeeded" was carried out (use its draftId to edit or delete that draft); any other outcome was not carried out.`
