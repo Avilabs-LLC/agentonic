@@ -99,7 +99,7 @@ New versions use runtime 0.7.0. Labels wait for the owner to confirm `gmail.modi
 
 **The batch case's mailbox reads Gmail search operators (architecture §69), installed 13 October with evaluator `7c84bad6` (platform v0.40.1).** The 10-email case's synthetic mailbox ignored operators, so `in:inbox` found nothing and NicolAI-Mail's first 0.7.0 version failed that case on both models. Only the evaluator changed; it serves runtimes 0.3.0–0.7.0, and the version is evaluated again.
 
-**An evaluation's limit follows the selected models (architecture §70), in platform v0.40.2; not yet installed.** Runtime 0.7.0 reserves a call's full output ceiling, so GPT-5.4 and Astra no longer fit the old US$3.00 default together. "Evaluar modelos" suggests US$1 for GPT-5.4 mini, US$2 for GPT-5.4 and US$5 for Astra per configuration, and explains a run that stops on its limit.
+**An evaluation's limit follows the selected models (architecture §70), installed 13 October with `platform-0.40.2-2277987ddbea`.** Runtime 0.7.0 reserves a call's full output ceiling, so GPT-5.4 and Astra no longer fit the old US$3.00 default together. "Evaluar modelos" suggests US$1 for GPT-5.4 mini, US$2 for GPT-5.4 and US$5 for Astra per configuration, and explains a run that stops on its limit.
 
 ## Operations
 
