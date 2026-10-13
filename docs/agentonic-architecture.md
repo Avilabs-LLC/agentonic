@@ -2576,3 +2576,32 @@ The runtime is unchanged: runtimes never validated their own requests against th
 3. `platform-0.42.1-63bd5949875b` installed (release `846d14de`): the apps and the knowledge worker restarted healthy and `hosted:check` passed.
 
 `staging:reverify` shows the host on `dc6c65b4` and the evaluator on `02f5920e`, both serving runtimes 0.3.0–0.7.0 and valid for 30 days.
+
+## 73. A turn survives what the model asks for — 13 October 2026
+
+**Found 13 October.** With §72 installed, Nico's next turn in NicolAI-Mail (turn 4, GPT-6 Astra, 15:18 UTC) failed after 16.5 s with `runtime_mismatch`, diagnostic `calls_per_response`. Astra searched the inbox, then asked to read all 10 messages in one response. A batch turn takes at most 5 calls per response (`batchCeilings.callsPerResponse`), and the broker failed the whole turn instead of handling the extra calls. No evaluation saw it: the synthetic mailbox's excerpts carried everything, so models answered without reading each message.
+
+Reviewing the turn for the same kind of fault turned up three more ways a model's request, rather than a real failure, could end a turn:
+
+- arguments that were not JSON;
+- a read Gmail or Drive refused, such as a 404 for a message ID the model named wrongly, or a passing rate limit (the synthetic mailbox answers "not found" instead, so evaluations never saw it);
+- a proposal or check the database refused.
+
+**Change (broker; platform v0.42.2).** At the owner's request, the turn goes on wherever the model can work around the problem:
+
+- **Too many calls in one response.** The broker keeps the first ones up to the limit and drops the rest before the runtime sees them: never executed and never resent, so the model can ask again. The frozen runtimes, which refuse more calls than their limit, never see the excess. Item references only increase, so a dropped item's reference is never given out again.
+- **Arguments the contract refuses**, malformed JSON included, go back to the model as `invalid_arguments`; nothing runs.
+- **A refused or failed read** (Google `unavailable` or `rejected`) goes back as `not_found` or `unavailable`, and **a database refusal** (42501) as `refused`. Nothing ran or was released.
+- **Still fatal:** a connection that must be reconnected, which only its owner can fix, and a write whose outcome is unknown.
+
+**Live check (13 October).** A harness ran the real frozen runtime 0.7.0 artifact and this broker against GPT-6 Astra (low), with Nico's grants (9 Gmail permissions and the web), his request, a 10-email synthetic mailbox sized like real mail, streaming, and his deployment budget (US$5.00 with US$0.56 used):
+
+- Excerpts sufficient: 5 of 5 turns succeeded, each in about 45 s with 3 model calls, labels and 3 drafts proposed, every email covered, peak commitment US$1.73.
+- Each message's request past its 2,000-character excerpt: 5 of 5 succeeded. Astra's second response asked for 10 reads, the broker kept 5, and each turn finished in about 50 s with every email covered; peak commitment US$2.70.
+- The same case on the previous broker failed after 17 s with `calls_per_response`, as Nico's turn did.
+
+The harness spent about US$5.20 on the development key, outside the platform's ledger.
+
+**Budget.** A full Astra turn on mail like this costs US$0.3–0.9 and reserves up to about US$2.1 per call before it starts, since a reservation counts the whole request at the output ceiling. With US$5.00 for 30 days, Nico's deployment can run about four such turns before a reservation no longer fits and the turn ends with the budget answer. Authorizing more (up to US$20 per period) is his decision.
+
+**Tests.** `tests/runtime-engine.test.ts`: "keeps the first five calls of a response, drops the rest and goes on (§73)", "returns refused arguments to the model instead of failing the turn (§73)" and "gives a refused read or proposal back to the model, but stops for a reconnect (§73)". All three fail on the previous broker. Earlier runtimes keep one call per response; the extra one is now dropped instead of failing the turn.
