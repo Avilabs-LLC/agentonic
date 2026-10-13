@@ -1086,7 +1086,7 @@ Owner selected public website search and reading. **Acceso web** belongs in **He
 
 ### 39.1 Bounded research and recoverable reads — 2026-09-18
 
-Migration 32 preserves immutable registry limits while newly published runtimes opt into eight research calls with `webResearch: "1"`. Shared broker policy retains mandatory criteria, rejects unsupported matches and background-work promises. Recoverable read errors can lead to another source; live authorization and spending remain hard boundaries. A failed read keeps its reservation open, and activated chats still record the turn's answer (§66). Content-free failure diagnostics and a metered synthetic-model benchmark cover constrained comparison, failed reads and follow-up context. See [web research acceptance](web-access.md#research-quality-and-recovery--migration-32) for execution, evidence and limits.
+Migration 32 preserves immutable registry limits while newly published runtimes opt into eight research calls with `webResearch: "1"`. Shared broker policy retains mandatory criteria, rejects unsupported matches and background-work promises. Recoverable read errors can lead to another source; live authorization and spending remain hard boundaries. A failed read keeps its reservation open, and activated chats still record the turn's answer (§66). Batch turns (§67) offer the web only when a request needs it. Content-free failure diagnostics and a metered synthetic-model benchmark cover constrained comparison, failed reads and follow-up context. See [web research acceptance](web-access.md#research-quality-and-recovery--migration-32) for execution, evidence and limits.
 
 ### 39.2 Versioned VM staging release — 2026-09-18
 
@@ -2334,3 +2334,62 @@ Owner report on the hosted Admin. Three paths misled:
 The owner decided to fix the recorded answer now and to plan the Gmail turn limits separately (outstanding B9).
 
 **Tests.** `tests/evaluation-database.test.ts`, "open reservations in activated chats (§66)", on the later-migrations fixture (now including migration 69). A turn's answer is recorded while a failed web read's reservation stays open, the reservation keeps its status, and an over-budget deployment is still refused. Without migration 69 the test fails.
+
+## 67. Mailbox batch turns — 13 October 2026
+
+Nico's request to NicolAI-Mail (process the last 10 emails, draft the replies, list tasks, appointments and alerts) couldn't fit one turn: [the audit](mailbox-batch-audit.md) found five blocking limits, and the work below found a sixth, a database window of 2 minutes for every chat turn. Runtime 0.7.0 declares `mailboxBatch: "1"`, and only turns of runtimes that declare it change. Earlier runtimes keep their limits, schemas, deadlines and texts byte for byte, since approval binds them.
+
+**Owner decisions (13 October).**
+
+- Each draft keeps its own confirmation card, and one turn may propose up to 10.
+- A mailbox turn may run up to about 4 minutes.
+- The batch evaluation case, error diagnostics and B8 ship together with this.
+
+**What a batch turn gets** (`batchCeilings` in `packages/contracts/src/runtime-protocol.ts`):
+
+- **Allowances of its own.** 6 Gmail reads, 10 Gmail proposals, 8 web calls, 3 Drive calls, 24 tool calls and 16 model calls in all. The runtime offers a tool only while its own allowance lasts, so spent reads no longer take drafting away.
+- **Several calls per response.** Up to 5 (`parallel_tool_calls`). The runtime refuses a call past its allowance itself, and the broker still counts every call.
+- **Proposals continue the turn.** A Gmail or Drive proposal returns to the model, which then writes the full answer. The broker appends the count of actions awaiting confirmation (`pendingNotice`); the model never states it. A scheduled run's pre-authorized write still ends its turn, as §58 decided. If the answer then fails, the turn records the count instead of failing with cards behind it.
+- **Replies in their thread.** A draft or send names `replyTo`, required and nullable in batch schemas and absent from earlier ones. On confirmation, the connector reads only that message's thread, Message-ID and References, and sends the reply in the thread with `In-Reply-To` and `References`. The confirmed content is never changed. The card says "Responde en el hilo del correo original", and the runtime tells the model to keep the subject with "Re: ", which Gmail needs to thread a reply.
+- **Richer searches.** 2,000-character excerpts instead of 500, with each message's thread ID.
+- **Web only when needed.** The runtime adds "use the web only when the request needs public information" and shows no "calls remain" note until the model has used the web.
+- **Room to answer.** Any call may write the answer, so each gets up to 12,000 output tokens and up to 120 s of what is left. New tool calls stop at 105 s, the runtime finishes by 230 s, and the broker's deadline is 240 s. Answers may hold 30,000 characters. Reservations follow the larger output ceiling: at most about US$1.60 for one GPT-6 Astra call, under the database's US$5 per call.
+- **Earlier turns' actions (B8).** The chat context gives each earlier turn its Gmail actions: operation, outcome, and the draft, message and thread IDs of what succeeded. It never carries arguments or content. The runtime shows them to the model as a platform record after that turn's answer.
+
+**Migration 70.**
+
+- `staging_worker`:
+  - allows 5 minutes per turn to batch runtimes (`staging_turn_window`) and keeps 2 minutes for earlier ones;
+  - adds history actions (`turn_gmail_actions`) for batch runtimes only;
+  - cuts earlier runtimes' history answers to their 12,000 characters.
+- A turn may leave 10 Gmail proposals instead of 3, in chats (`gmail_staging`) and previews (`gmail_preview_worker`); the 30 per member per hour stay.
+- Answers may hold 30,000 characters in chats, previews (`rag_worker_core_v8`) and evaluations (`evaluation_worker_v46`).
+- `evaluation_tool_cases` adds `platform-gmail-batch` (`platform_batch_case`). It applies when the version's runtime declares mailboxBatch, its Gmail grant includes search, read and draft creation, and the evaluator advertises `batchFixtures` (evaluator release with §67). The case holds 10 synthetic emails, 3 of which need a reply, and is graded with the tool calls. A dataset may hold 20 cases.
+
+Each function is its live definition with only those changes, as in §66.
+
+**Diagnostics.** Turn failures carry a content-free cause (`TurnFailure`), such as `answer_refused`, `calls_per_response`, `runtime_runtime_failed`, `turn_deadline` or `google_rejected`. Staging and evaluation job lines log it as `diagnostic`. The chat now shows `runtime_mismatch` as "No se pudo completar la respuesta por un problema de nuestro lado. Puedes enviar un nuevo mensaje."
+
+**Tests.**
+
+- `tests/runtime-engine.test.ts`, "mailbox batch turns (§67)":
+  - drafts in one response, continuing to the answer with the count;
+  - separate allowances;
+  - no web pressure before web use;
+  - B8 history;
+  - the fallback answer and named refusals;
+  - earlier runtimes' single call and schemas.
+- The packaged artifact declares mailboxBatch.
+- `tests/gmail.test.ts`: reply threading, and excerpts by mode.
+- `tests/job-log.test.ts`: diagnostics.
+- `tests/evaluation-database.test.ts`: the window, history and answer length by runtime, 10 proposals but not 11, and the batch case only with both flags.
+
+**Rollout.**
+
+1. Migration 70.
+2. Platform 0.39.0.
+3. A staging broker release, which the gateway's new optional fields need: `install-staging`.
+4. An evaluator release that advertises `batchFixtures`.
+5. Runtime 0.7.0: `package:runtime`, `setup:preview`, `runtime:install`.
+
+Running versions keep their runtime. NicolAI-Mail benefits from a new version: freeze, evaluation with the batch case, staff approval for its tools, then authorization (outstanding N20).
