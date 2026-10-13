@@ -17,6 +17,7 @@ import {
   actionsNote,
   instructions,
   remainingCallsNote,
+  styleGuideNote,
 } from "../packages/runtime/src/agent/instructions"
 import { WEB_RESEARCH_POLICY as LEGACY_RESEARCH_POLICY } from "../apps/worker/src/web-policy"
 import {
@@ -693,11 +694,11 @@ describe("broker refuses what the model did not ask for", () => {
 })
 
 describe("mailbox batch turns (§67)", () => {
-  const MAIL = [
+  const MAIL: ("gmail.search" | "gmail.read" | "gmail.drafts.create")[] = [
     "gmail.search",
     "gmail.read",
     "gmail.drafts.create",
-  ] as TurnSpec["tools"]["gmail"]
+  ]
   const grant = { connectionId: connection, operations: MAIL }
   function batchSpec(
     tools: TurnSpec["tools"] = { gmail: MAIL, web: false },
@@ -948,6 +949,68 @@ describe("mailbox batch turns (§67)", () => {
         },
       })
     ).rejects.toEqual(new TurnFailure("runtime_mismatch", "answer_refused"))
+  })
+
+  it("reads a whole thread under the read grant and gives the owner's style guide as style only (§68)", async () => {
+    let models = 0
+    const fetch = vi.fn(async () => {
+      models++
+      if (models === 1) return json(calls(["gmail_threads_read", { id: "t4" }]))
+      return json(
+        answer({ text: "Listo.", citations: [], insufficientEvidence: true })
+      )
+    })
+    vi.stubGlobal("fetch", fetch)
+    const gmailTool = vi.fn()
+    const turn = batchSpec({
+      gmail: [...MAIL, "gmail.threads.read"],
+      web: false,
+    })
+    await turnInProcess(
+      turn,
+      vi.fn<Execute>().mockResolvedValue({ ok: true }),
+      // The live grant holds gmail.read; there is no thread permission.
+      { providers: mailbox(gmailTool), gmail: grant, batch: true },
+      {
+        ...env(),
+        styleGuide: "Frases cortas. Firma como Nico.",
+      } as ReturnType<typeof envelope>
+    )
+    expect(gmailTool.mock.calls[0]![0]).toBe("gmail.threads.read")
+    const input = JSON.stringify(bodies(fetch)[0].input)
+    expect(input).toContain(
+      JSON.stringify(styleGuideNote("Frases cortas. Firma como Nico.")).slice(
+        1,
+        -1
+      )
+    )
+    // Without the read grant the thread tool is refused before spending.
+    const noRead = new TurnBroker({
+      job,
+      execute: vi.fn<Execute>().mockResolvedValue({ ok: true }),
+      providers: mailbox(),
+      signal: new AbortController().signal,
+      turn,
+      gmail: { connectionId: connection, operations: ["gmail.search"] },
+      web: false,
+      batch: true,
+      passageIds: [],
+    })
+    await expect(
+      noRead.handle({
+        type: "model",
+        id: 1,
+        input: [{ role: "user", content: "Synthetic" }],
+        tools: [{ name: "gmail_threads_read", description: "x" }],
+        toolChoice: "auto",
+        format: {
+          type: "json_schema",
+          name: "agent_preview_answer",
+          strict: true,
+          schema: { type: "object" },
+        },
+      })
+    ).rejects.toMatchObject({ diagnostic: "tool_not_granted" })
   })
 
   it("keeps earlier runtimes to one call per response and their Gmail schemas", async () => {

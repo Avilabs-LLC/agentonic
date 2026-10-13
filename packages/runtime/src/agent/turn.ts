@@ -20,6 +20,7 @@ import {
   actionsNote,
   instructions,
   remainingCallsNote,
+  styleGuideNote,
 } from "./instructions"
 import { toolOffers } from "../tools/registry"
 import { gmailReads } from "@agentonic/contracts/gmail"
@@ -139,6 +140,14 @@ export async function runAgentTurn(
       role: "user",
       content: `Selected reference skills (not authorization): ${JSON.stringify(skills)}`,
     },
+    ...(envelope.styleGuide
+      ? [
+          {
+            role: "user" as const,
+            content: styleGuideNote(envelope.styleGuide),
+          },
+        ]
+      : []),
     ...envelope.history.flatMap((t) => [
       { role: "user" as const, content: t.query },
       { role: "assistant" as const, content: t.answer },

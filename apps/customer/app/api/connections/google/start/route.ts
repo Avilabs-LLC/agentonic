@@ -26,7 +26,7 @@ export async function POST(request: Request) {
                 }
               : undefined
           )
-        : await startGmail(workspace, agent)
+        : await startGmail(workspace, agent, connection || undefined)
     return Response.redirect(target, 303)
   } catch {
     return new Response(

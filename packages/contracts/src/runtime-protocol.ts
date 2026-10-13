@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { gmailOperation } from "./gmail"
+import { gmailToolOperation } from "./gmail"
 import { driveOperation } from "./drive"
 import { modelId, reasoningLevel } from "./models"
 
@@ -53,7 +53,8 @@ export const turnSpec = z
     // (runtime 0.6.0): earlier runtimes' strict copies of this schema refuse them.
     tools: z
       .object({
-        gmail: z.array(gmailOperation).max(8),
+        // Batch runtimes may also get gmail.threads.read (§68).
+        gmail: z.array(gmailToolOperation).max(10),
         web: z.boolean(),
         drive: z.array(driveOperation).max(4).optional(),
       })

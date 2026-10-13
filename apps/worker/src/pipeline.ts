@@ -24,6 +24,8 @@ export type Configuration = {
   /** Paid and credentialed calls; an agent copy's go through its gateway. */
   providers: import("./providers").Providers
   allowTools?: boolean
+  /** Show answers as they are written: chats and previews, never evaluations (§68). */
+  stream?: boolean
   rerankEnabled?: boolean
   runtimeRoot?: string
 }
@@ -196,7 +198,8 @@ export async function processJob(
           fileURLToPath(new URL("../../../.local/runtime/", import.meta.url)),
         config.providers,
         signal,
-        config.allowTools
+        config.allowTools,
+        config.stream
       )
     else if (data.generateAnswer)
       await answer(job, execute, config.providers, signal)

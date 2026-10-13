@@ -53,6 +53,9 @@ export const envelopeSchema = z
     passages: z
       .array(z.object({ id: z.uuid(), text: z.string().max(12000) }).strict())
       .max(8),
+    // The owner's accepted writing-style guide, when the version's knowledge
+    // holds one made for this agent (§68).
+    styleGuide: z.string().min(1).max(12000).optional(),
   })
   .strict()
 const accessSchema = z

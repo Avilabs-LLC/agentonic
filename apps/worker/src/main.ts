@@ -74,6 +74,7 @@ const keys = providerKeys(env)
 const config = {
   storage: storageSession(env),
   rerankEnabled: env.AGENTONIC_RERANK_ENABLED === "true",
+  stream: true,
   runtimeRoot: env.AGENTONIC_RUNTIME_ROOT,
   providers: directProviders(keys),
 }

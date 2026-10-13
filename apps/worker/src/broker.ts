@@ -2,6 +2,7 @@ import { fork } from "node:child_process"
 import { z } from "zod"
 import {
   gmailArguments,
+  gmailGrantFor,
   gmailReads,
   offeredGmailArguments,
 } from "@agentonic/contracts/gmail"
@@ -81,6 +82,8 @@ type Options = {
   passageIds: string[]
   /** The runtime declares mailboxBatch (§67): the turn spec carries its limits. */
   batch?: boolean
+  /** A chat or preview of a batch runtime shows its answer as it is written (§68). */
+  stream?: boolean
 }
 export type Operation =
   | { kind: "gmail"; operation: keyof typeof gmailArguments }
@@ -153,7 +156,11 @@ export class TurnBroker {
 
   private operation(name: string): Operation | undefined {
     const gmail = this.o.turn.tools.gmail.find((op) => toolName(op) === name)
-    if (gmail && this.o.gmail?.operations.includes(gmail))
+    // A thread read needs the live read grant (§68).
+    if (
+      gmail &&
+      this.o.gmail?.operations.some((op) => op === gmailGrantFor(gmail))
+    )
       return { kind: "gmail", operation: gmail }
     const drive = this.o.turn.tools.drive?.find((op) => toolName(op) === name)
     if (drive && this.o.drive?.operations.includes(drive))
@@ -217,6 +224,7 @@ export class TurnBroker {
           ? {
               parallelToolCalls: !final && tools.length > 0,
               maxOutputTokens: batchCeilings.finalOutputTokens,
+              ...(this.o.stream ? { stream: true } : {}),
             }
           : {}),
         timeoutMs: Math.min(
