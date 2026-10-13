@@ -182,6 +182,27 @@ it("answers Gmail and web tools from fixtures with the real tools' shapes, and r
   ])
 })
 
+it("offers every granted tool in a fixture case, as a chat does (§72)", async () => {
+  // A mailbox-only case still offers the web and Drive: NicolAI-Mail's chat
+  // offered Gmail and the web together, which no fixture case did.
+  const providers = fixtureProviders(base, { mailbox: fixtures.mailbox }, [])
+  expect([providers.gmail, providers.web, providers.drive]).toEqual([
+    true,
+    true,
+    true,
+  ])
+  expect(
+    await providers.webTool(
+      "web.search",
+      { query: "horario" },
+      job,
+      vi.fn<Execute>(),
+      signal,
+      1000
+    )
+  ).toEqual({ results: [], ok: true, untrusted: true })
+})
+
 it("searches a fixture mailbox the way Gmail reads operators (§69)", async () => {
   const providers = fixtureProviders(base, fixtures, [])
   const search = async (query: string, limit = 10) =>

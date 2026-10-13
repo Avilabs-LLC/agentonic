@@ -705,13 +705,29 @@ describe("Drive evaluation fixtures", () => {
       "drive.files.read",
       "drive.docs.create",
     ])
+    // Without Drive fixtures the tool is still offered, as in a chat (§72),
+    // and finds nothing; the live Drive is still never reached.
+    const webOnly = fixtureProviders(
+      base,
+      { web: [{ url: "https://example.invalid/", title: "t", text: "x" }] },
+      []
+    )
+    expect([webOnly.drive, webOnly.gmail, webOnly.web]).toEqual([
+      true,
+      true,
+      true,
+    ])
     expect(
-      fixtureProviders(
-        base,
-        { web: [{ url: "https://example.invalid/", title: "t", text: "x" }] },
-        []
-      ).drive
-    ).toBe(false)
+      await webOnly.driveTool(
+        "drive.files.list",
+        { name: "" },
+        grant,
+        job,
+        vi.fn(),
+        new AbortController().signal
+      )
+    ).toEqual({ files: [], untrusted: true })
+    expect(live).not.toHaveBeenCalled()
   })
 })
 

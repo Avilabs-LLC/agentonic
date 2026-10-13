@@ -46,8 +46,8 @@ export async function runReviewCase(
       (operation === "gmail-tools" || operation === "drive-tools")
     )
       return { tools }
-    if (fixtures && operation === "web-tools")
-      return { enabled: !!fixtures.web }
+    // The version's web grant is checked before this is asked (§72).
+    if (fixtures && operation === "web-tools") return { enabled: true }
     const result = await execute(operation, lease, payload)
     if (operation === "context" && typeof result.accessJson === "string")
       tools = toolGrants.parse(

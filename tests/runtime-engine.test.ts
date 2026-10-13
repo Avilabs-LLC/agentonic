@@ -6,7 +6,15 @@ import { join } from "node:path"
 import {
   turnSpec,
   type TurnSpec,
+  MAX_TOOL_OFFERS,
+  runtimeMessage,
 } from "../packages/contracts/src/runtime-protocol"
+import {
+  gmailOperation,
+  gmailToolOperation,
+} from "../packages/contracts/src/gmail"
+import { driveOperation } from "../packages/contracts/src/drive"
+import { toolOffers } from "../packages/runtime/src/tools/registry"
 import { runAgentTurn } from "../packages/runtime/src/agent/turn"
 import { RuntimeError } from "../packages/runtime/src/agent/envelope"
 import { policy } from "../packages/runtime/src/agent/prompt-loader"
@@ -590,6 +598,47 @@ describe("broker refuses what the model did not ask for", () => {
     ).rejects.toThrow("runtime_mismatch")
     expect(fetch).not.toHaveBeenCalled()
   })
+  it("names the field a refused message broke, never its content (§72)", async () => {
+    const refused = (message: unknown) =>
+      broker()
+        .handle(message)
+        .then(
+          () => undefined,
+          (e: unknown) => (e as TurnFailure).diagnostic
+        )
+    expect(
+      await refused({
+        ...request,
+        tools: Array.from({ length: MAX_TOOL_OFFERS + 1 }, (_, n) => ({
+          name: `tool_${String.fromCharCode(97 + (n % 26))}`,
+          description: "x",
+        })),
+        toolChoice: "auto",
+      })
+    ).toBe("message_invalid_tools")
+    expect(await refused({ ...request, input: [] })).toBe(
+      "message_invalid_input"
+    )
+    expect(await refused({ type: "nonsense" })).toBe("message_invalid_type")
+  })
+  it("fits every tool a version can be granted in one turn and one request (§72)", () => {
+    // Every Gmail tool, every Drive operation and the web: the largest offer.
+    const tools = {
+      gmail: [...gmailToolOperation.options],
+      web: true,
+      drive: [...driveOperation.options],
+    }
+    const turn = turnSpec.parse({ ...spec(), tools })
+    const offers = toolOffers(turn.tools)
+    expect(offers).toHaveLength(MAX_TOOL_OFFERS)
+    expect(
+      runtimeMessage.safeParse({
+        ...request,
+        tools: offers,
+        toolChoice: "auto",
+      }).success
+    ).toBe(true)
+  })
   it("executes only a call the model just returned, once", async () => {
     vi.stubGlobal(
       "fetch",
@@ -861,6 +910,28 @@ describe("mailbox batch turns (§67)", () => {
     expect(first).toContain(WEB_WHEN_NEEDED)
     expect(first).not.toContain("tool calls remain")
     expect(second).toContain(remainingCallsNote(7))
+  })
+
+  it("offers all nine Gmail permissions, thread reads and the web in one request (§72)", async () => {
+    // NicolAI-Mail on 13 October: 10 Gmail tools and 2 web tools. The broker
+    // refused the runtime's first request (message_invalid) at 10 tools.
+    const all = gmailOperation.options
+    const full = { connectionId: connection, operations: [...all] }
+    const fetch = vi.fn(async () =>
+      json(
+        answer({ text: "Listo.", citations: [], insufficientEvidence: true })
+      )
+    )
+    vi.stubGlobal("fetch", fetch)
+    const recorded = await turnInProcess(
+      batchSpec({ gmail: [...all, "gmail.threads.read"], web: true }),
+      vi.fn<Execute>().mockResolvedValue({ ok: true }),
+      { providers: mailbox(), gmail: full, batch: true, web: true },
+      envelope([full, ...WEB])
+    )
+    expect(recorded?.text).toBe("Listo.")
+    expect(bodies(fetch)[0].tools).toHaveLength(12)
+    expect(MAX_TOOL_OFFERS).toBe(16)
   })
 
   it("shows the agent what its earlier proposals became (B8)", async () => {
