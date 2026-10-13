@@ -2435,12 +2435,14 @@ async function modelReview() {
     "202610060047_evaluation_tool_cases",
     "202610070052_registration_validity",
     "202610080060_evaluation_lessons",
+    "202610080061_style_guides",
     "202610080062_agent_schedules",
     "202610080063_ongoing_deployments",
     "202610090064_careful_grading",
     "202610090066_single_authorization",
     "202610130069_staging_open_reservations",
     "202610130070_mailbox_batch_turns",
+    "202610130071_mailbox_followups",
   ])
     await db.exec(
       readFileSync(
@@ -3914,6 +3916,182 @@ describe("mailbox batch turns (§67)", () => {
       insufficientEvidence: true,
       model: "gpt-5.4-mini",
     })
+  })
+
+  it("reconnects the same Gmail account to allow labels, keeping its tools, and offers labels only with that permission (§68)", async () => {
+    await modelReview()
+    const connection = id(1501)
+    await sql(
+      "INSERT INTO agentonic.gmail_connections(id,workspace_id,agent_id,owner_member_id,account,credential_ciphertext,operations) VALUES($1,$2,$3,$4,'synthetic@example.invalid','opaque','[\"gmail.search\"]')",
+      [connection, w, a, member]
+    )
+    await actor()
+    const list = async () =>
+      (
+        (await gmailCommand("list", { agentId: a })).connections as Record<
+          string,
+          unknown
+        >[]
+      )[0]!
+    expect(await list()).toMatchObject({ canLabel: false })
+    await expect(
+      gmailCommand("permissions", {
+        agentId: a,
+        connectionId: connection,
+        operations: ["gmail.search", "gmail.labels.apply"],
+      })
+    ).rejects.toThrow()
+    // A grant frozen with labels loses them on an account without the permission.
+    const usable = async () =>
+      (
+        await sql("SELECT agentonic.gmail_tools_usable($1::jsonb) t", [
+          JSON.stringify([
+            {
+              connectionId: connection,
+              operations: ["gmail.search", "gmail.labels.apply"],
+            },
+            { capability: "web", operations: ["web.search"] },
+          ]),
+        ])
+      ).rows[0] as { t: unknown }
+    expect((await usable()).t).toEqual([
+      { connectionId: connection, operations: ["gmail.search"] },
+      { capability: "web", operations: ["web.search"] },
+    ])
+    // Reconnecting refreshes the same connection, same account only.
+    const reconnect = async (state: string, account: string) => {
+      await actor()
+      await gmailCommand("oauth.start", {
+        agentId: a,
+        connectionId: id(Number(state.slice(-4))),
+        reconnect: connection,
+        state,
+        verifier: "opaque",
+      })
+      expect(await gmailCommand("oauth.consume", { state })).toMatchObject({
+        connectionId: connection,
+      })
+      return gmailCommand("oauth.finish", {
+        state,
+        account,
+        credential: "opaque-new",
+        canLabel: true,
+      })
+    }
+    await expect(
+      reconnect("b".repeat(60) + "1502", "other@example.invalid")
+    ).rejects.toThrow()
+    await reconnect("c".repeat(60) + "1503", "Synthetic@example.invalid")
+    expect(await list()).toMatchObject({
+      id: connection,
+      status: "connected",
+      canLabel: true,
+      operations: ["gmail.search"],
+    })
+    await gmailCommand("permissions", {
+      agentId: a,
+      connectionId: connection,
+      operations: ["gmail.search", "gmail.labels.apply"],
+    })
+    expect((await usable()).t).toEqual([
+      {
+        connectionId: connection,
+        operations: ["gmail.search", "gmail.labels.apply"],
+      },
+      { capability: "web", operations: ["web.search"] },
+    ])
+  })
+
+  it("shows a batch turn's answer as it is written, and clears it once answered (§68)", async () => {
+    const deploymentId = await running()
+    const conversation = await chat("start", {
+      deploymentId,
+      title: "Synthetic stream",
+    })
+    await chat("turn", {
+      conversationId: conversation.id,
+      requestId: id(1510),
+      query: "Resume mis correos",
+      model: "gpt-5.4-mini",
+      reasoning: "medium",
+    })
+    const job = (await stagingWork(deploymentId, "claim")) as unknown as Job
+    // Earlier runtimes don't stream.
+    await expect(
+      stagingWork(deploymentId, "partial", job, { text: "Hola" })
+    ).rejects.toMatchObject({ code: "42501" })
+    await batchRuntime()
+    await stagingWork(deploymentId, "partial", job, { text: "Hola, aquí" })
+    await actor()
+    expect(
+      await chat("state", { conversationId: conversation.id })
+    ).toMatchObject({
+      turns: [{ status: "running", partial: "Hola, aquí", answer: null }],
+    })
+    await stagingWork(deploymentId, "answer", job, {
+      text: "Hola, aquí está el resumen.",
+      citations: [],
+      insufficientEvidence: true,
+      model: "gpt-5.4-mini",
+    })
+    await actor()
+    const done = (
+      (await chat("state", { conversationId: conversation.id })) as {
+        turns: Record<string, unknown>[]
+      }
+    ).turns[0]!
+    expect(done).toMatchObject({
+      status: "succeeded",
+      answer: "Hola, aquí está el resumen.",
+      partial: null,
+    })
+    expect(
+      (
+        await sql(
+          "SELECT partial_answer FROM agentonic.staging_turns WHERE id=$1",
+          [job.id]
+        )
+      ).rows
+    ).toEqual([{ partial_answer: null }])
+  })
+
+  it("finds the owner's accepted style guide in the version's own sources (§68)", async () => {
+    await modelReview()
+    const object = await upload()
+    const job = await claim()
+    await publish(job, "Saluda con «Hola» y firma como Nico. Frases cortas.")
+    const source = (
+      (
+        await sql(
+          "SELECT doc.source_id FROM agentonic.documents doc JOIN agentonic.document_versions v ON v.document_id=doc.id WHERE v.object_id=$1",
+          [object]
+        )
+      ).rows[0] as { source_id: string }
+    ).source_id
+    await sql(
+      "INSERT INTO agentonic.gmail_connections(id,workspace_id,agent_id,owner_member_id,account,credential_ciphertext) VALUES($1,$2,$3,$4,'synthetic@example.invalid','opaque')",
+      [id(1520), w, a, member]
+    )
+    await sql(
+      "INSERT INTO agentonic.style_guides(workspace_id,agent_id,connection_id,member_id,request_id,status,budget_usd,consent,object_id) VALUES($1,$2,$3,$4,$5,'accepted',0.5,'{}',$6)",
+      [w, a, id(1520), member, id(1521), object]
+    )
+    const guide = async (sources: string[]) =>
+      (
+        (
+          await sql("SELECT agentonic.agent_style_guide($1,$2::jsonb) g", [
+            a,
+            JSON.stringify({
+              collections: [{ sources: sources.map((s) => ({ id: s })) }],
+            }),
+          ])
+        ).rows[0] as { g: string | null }
+      ).g
+    expect(await guide([source])).toBe(
+      "Saluda con «Hola» y firma como Nico. Frases cortas."
+    )
+    // A version whose knowledge doesn't hold that source doesn't get it.
+    expect(await guide([id(1522)])).toBeNull()
   })
 
   it("adds the 10-email case for a mail agent on a batch runtime, only when the evaluator can run it", async () => {
