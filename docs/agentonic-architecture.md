@@ -2652,3 +2652,11 @@ The harness spent about US$5.20 on the development key, outside the platform's l
 - `tests/evaluation-database.test.ts`: a chat turn's steps are kept, 11 malformed lists are refused, an answered turn's lease can't change them, and closing the conversation clears them.
 - `tests/gmail-database.test.ts`: a preview turn's steps appear in its state, and a wrong lease or status is refused.
 - `tests/turn-steps.test.ts`: every tool and status has a phrase; the text bounds hold.
+
+**Rollout, 13 October 2026.** From `5f9a0ac` on `main`, with no chat turn, preview, job or evaluation running:
+
+1. Migration 73 applied with `pnpm db:migrate`, after checking that the four functions it replaces were still identical to migration 71's.
+2. `platform-0.43.0-5f9a0ac94eee` installed (release `d2e8c24c`, which also carries 0.42.4): the apps and the knowledge worker, which runs previews, restarted healthy and `hosted:check` passed.
+3. Staging broker `9a036fa1` installed with `install-staging --azure`; the controller moved NicolAI-Mail, the one running deployment, to it.
+
+The evaluator stays on `6bea27a6`, since evaluations record no steps. `staging:reverify` shows the host on `9a036fa1` serving runtimes 0.3.0–0.7.0, and every registration valid.
