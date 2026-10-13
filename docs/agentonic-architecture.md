@@ -2471,3 +2471,17 @@ Each function is its live definition, or migration 70's (not yet applied), with 
 Then two owner and customer steps:
 - **Google Cloud:** confirm the consent screen accepts `gmail.modify` for test users (N21).
 - **Each Gmail account:** reconnect it once to allow labels.
+
+**Rollout of §§67–68, 13 October 2026.** In this order:
+
+1. Migrations 70 and 71 applied; the live `staging_worker` and `gmail_command_v29` carry the turn window, partial answers and `can_label`.
+2. Runtime 0.7.0 packaged from `e08c79a` (artifact `8a849679`, manifest with `mailboxBatch`).
+3. Evaluator `0fe1ffe2` deployed and registered with `--replace` (`batchFixtures: 1`, `driveFixtures: 1`, rubric 6), replacing `7fb7104a`. Runtimes 0.3.0–0.6.0 were registered with it again through `runtime:install`.
+4. Staging broker `cc9e991d` installed with its gateway; both running deployments moved to it.
+5. `platform-0.40.0-e08c79afab99` installed, every service healthy.
+6. Runtime 0.7.0 catalogued as `0.7.0-preview-e08c79af`, its code release registering `gmail.labels.apply`, and installed on the host.
+
+`hosted:check` passed. `staging:reverify` shows the host on `cc9e991d` and the Azure evaluator on `0fe1ffe2`, both serving runtimes 0.3.0–0.7.0 and valid for 30 days. The journal showed no failure: the evaluator waited 16 s for its registration, and the old gateway stopped when replaced. Still open:
+
+- NicolAI-Mail's new version on 0.7.0, including NICOLAS DIGITAL (N20);
+- `gmail.modify` in Google Cloud and the accounts' reconnect (N21).
