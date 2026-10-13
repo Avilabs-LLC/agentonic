@@ -22,7 +22,7 @@
 9. **N17** — Equipo in Admin (§64): installed 9 October (migration 68, 0.37.0); the owner pastes the invitation template again, then invites a second address as Soporte and tries role changes and deactivation.
 10. **N18** — Volver atrás (§65): installed 9 October (0.37.1); the owner retries the three paths from the report.
 11. **B9** — mailbox batch turns and follow-ups (§§67–68): installed 13 October (migrations 70–71, platform 0.40.0, broker `cc9e991d`, runtime 0.7.0; evaluator `7c84bad6` since §69); closes when a 0.7.0 version passes the batch case (N20).
-12. **N20** — NicolAI-Mail on runtime 0.7.0: passed on GPT-6 Astra (10/10, 13 Oct), approved and activated; Nico's first chat turn failed because the broker refused requests over 10 tools (§72, v0.42.1). Once §72 is installed, Nico sends his 10-email request again.
+12. **N20** — NicolAI-Mail on runtime 0.7.0: passed on GPT-6 Astra (10/10, 13 Oct), approved and activated; Nico's first chat turn failed because the broker refused requests over 10 tools (§72, v0.42.1, installed 13 Oct with broker `dc6c65b4`). Nico sends his 10-email request again.
 
 ## Follow-ups from recent work
 
