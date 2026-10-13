@@ -24,6 +24,27 @@ export const turnCeilings = {
   argumentsBytes: 30_000,
 } as const
 
+/**
+ * Mailbox batch turns (architecture §67): runtimes whose manifest declares
+ * `mailboxBatch: "1"` (runtime 0.7.0) get Gmail read and write allowances of
+ * their own, several tool calls per model response, proposals that don't end
+ * the turn, and room for a long final answer. Earlier runtimes keep
+ * `turnCeilings` exactly.
+ */
+export const batchCeilings = {
+  modelCalls: 16,
+  toolCalls: 24,
+  gmailReads: 6,
+  gmailWrites: 10,
+  callsPerResponse: 5,
+  modelTimeoutMs: 120_000,
+  /** Each model call's output ceiling, reasoning included: any call may write the answer. */
+  finalOutputTokens: 12_000,
+  answerChars: 30_000,
+  /** The broker's deadline for the whole turn. */
+  turnMs: 240_000,
+} as const
+
 export const turnSpec = z
   .object({
     model: modelId,
@@ -39,9 +60,28 @@ export const turnSpec = z
       .strict(),
     limits: z
       .object({
-        modelCalls: z.number().int().min(1).max(turnCeilings.modelCalls),
-        toolCalls: z.number().int().min(0).max(turnCeilings.toolCalls),
+        modelCalls: z.number().int().min(1).max(batchCeilings.modelCalls),
+        toolCalls: z.number().int().min(0).max(batchCeilings.toolCalls),
         gmailCalls: z.number().int().min(0).max(turnCeilings.gmailCalls),
+        // Mailbox batch runtimes only (§67); earlier runtimes' strict copies refuse them.
+        gmailReads: z
+          .number()
+          .int()
+          .min(0)
+          .max(batchCeilings.gmailReads)
+          .optional(),
+        gmailWrites: z
+          .number()
+          .int()
+          .min(0)
+          .max(batchCeilings.gmailWrites)
+          .optional(),
+        callsPerResponse: z
+          .number()
+          .int()
+          .min(1)
+          .max(batchCeilings.callsPerResponse)
+          .optional(),
         driveCalls: z
           .number()
           .int()
@@ -111,11 +151,12 @@ export const modelRequest = z
         schema: z.record(z.string(), z.unknown()),
       })
       .strict(),
+    // The broker clamps this to the ceiling of the runtime's mode.
     timeoutMs: z
       .number()
       .int()
       .min(1)
-      .max(turnCeilings.modelTimeoutMs)
+      .max(batchCeilings.modelTimeoutMs)
       .optional(),
   })
   .strict()
@@ -138,7 +179,8 @@ export type ToolRequest = z.infer<typeof toolRequest>
 
 export const turnAnswer = z
   .object({
-    text: z.string().min(1).max(12000),
+    // Earlier runtimes cap their own answers at 12,000 characters.
+    text: z.string().min(1).max(batchCeilings.answerChars),
     citations: z.array(z.uuid()).max(8),
     insufficientEvidence: z.boolean(),
   })

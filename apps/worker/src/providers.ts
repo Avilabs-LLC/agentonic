@@ -17,7 +17,10 @@ import {
   previewModel,
   type PreviewModel,
 } from "@agentonic/contracts/preview-models"
-import { turnCeilings } from "@agentonic/contracts/runtime-protocol"
+import {
+  batchCeilings,
+  turnCeilings,
+} from "@agentonic/contracts/runtime-protocol"
 import { GoogleError, type GoogleConfig } from "@agentonic/connectors/google"
 import { connectionKeys } from "@agentonic/connectors/secrets"
 import { embed, parsePdf, type Execute, type Lease } from "./pipeline"
@@ -49,8 +52,14 @@ export type ModelCall = {
   instructions?: string
   tools?: Record<string, unknown>[]
   toolChoice?: "auto" | "none"
+  /** Mailbox batch turns (§67): several tool calls in one response. */
+  parallelToolCalls?: boolean
+  /** Mailbox batch turns: a larger output ceiling for the final answer. */
+  maxOutputTokens?: number
   timeoutMs: number
 }
+/** Options a mailbox batch turn passes to Gmail tools (§67). */
+export type GmailOptions = { batch?: boolean }
 /**
  * budget: the reservation was refused, nothing was sent. uncertain: the
  * request may have reached the provider; its reservation stays and it is
@@ -106,7 +115,8 @@ export type Providers = Capabilities & {
     args: unknown,
     grant: z.infer<typeof gmailGrant>,
     job: Lease,
-    execute: Execute
+    execute: Execute,
+    options?: GmailOptions
   ): Promise<unknown>
   driveTool(
     operation: string,
@@ -134,6 +144,11 @@ export async function respond(
     reasoning: call.reasoning,
   })
   const profile = previewModelProfile(model, reasoning)
+  // A batch final answer may ask for more room, never less, up to 16,384.
+  const maxOutput = Math.min(
+    16384,
+    Math.max(profile.maxOutput, call.maxOutputTokens ?? 0)
+  )
   const body = JSON.stringify({
     model,
     store: false,
@@ -146,13 +161,13 @@ export async function respond(
       ? { temperature: 0, max_output_tokens: 1000 }
       : {
           reasoning: { effort: reasoning },
-          max_output_tokens: profile.maxOutput,
+          max_output_tokens: maxOutput,
           include: ["reasoning.encrypted_content"],
         }),
     ...(call.tools?.length
       ? {
           tools: call.tools,
-          parallel_tool_calls: false,
+          parallel_tool_calls: call.parallelToolCalls === true,
           tool_choice: call.toolChoice ?? "auto",
         }
       : {}),
@@ -164,7 +179,12 @@ export async function respond(
     id,
     provider: "openai",
     model,
-    microusd: previewReservation(model, body, reasoning),
+    microusd: previewReservation(
+      model,
+      body,
+      reasoning,
+      model === DEFAULT_PREVIEW_MODEL ? undefined : maxOutput
+    ),
   })
   if (!reserved.ok) return { kind: "budget" }
   await execute("heartbeat", job)
@@ -180,7 +200,7 @@ export async function respond(
       signal: AbortSignal.any([
         signal,
         AbortSignal.timeout(
-          Math.max(1, Math.min(call.timeoutMs, turnCeilings.modelTimeoutMs))
+          Math.max(1, Math.min(call.timeoutMs, batchCeilings.modelTimeoutMs))
         ),
       ]),
     })
@@ -269,9 +289,17 @@ export function directProviders(keys: {
         timeoutMs
       )
     },
-    gmailTool: async (operation, args, grant, job, execute) => {
+    gmailTool: async (operation, args, grant, job, execute, options) => {
       if (!keys.google) throw new Error("configuration_required")
-      return executeGmail(operation, args, grant, job, execute, keys.google)
+      return executeGmail(
+        operation,
+        args,
+        grant,
+        job,
+        execute,
+        keys.google,
+        options
+      )
     },
     driveTool: async (operation, args, grant, job, execute, signal) => {
       if (!keys.google) throw new Error("configuration_required")
@@ -312,6 +340,9 @@ const modelCall = z
     instructions: z.string().optional(),
     tools: z.array(z.record(z.string(), z.unknown())).max(16).optional(),
     toolChoice: z.enum(["auto", "none"]).optional(),
+    // Batch turns only (§67); copies on earlier brokers never send these.
+    parallelToolCalls: z.boolean().optional(),
+    maxOutputTokens: z.number().int().min(1).max(16384).optional(),
     timeoutMs: z.number().int().positive(),
   })
   .strict()
@@ -339,7 +370,12 @@ const payloads = {
     })
     .strict(),
   gmail: z
-    .object({ operation: z.string(), args: z.unknown(), grant: gmailGrant })
+    .object({
+      operation: z.string(),
+      args: z.unknown(),
+      grant: gmailGrant,
+      batch: z.boolean().optional(),
+    })
     .strict(),
   drive: z
     .object({ operation: z.string(), args: z.unknown(), grant: driveGrant })
@@ -456,7 +492,8 @@ export async function serveProvider(
         call.args,
         call.grant,
         job,
-        execute
+        execute,
+        { batch: call.batch === true }
       )
     } else if (operation === "drive") {
       const call = payloads.drive.parse(payload)
@@ -555,9 +592,14 @@ export function gatewayProviders(
         .record(z.string(), z.unknown())
         .parse(await call("web", job, { operation, args, timeoutMs }, signal))
     },
-    gmailTool: async (operation, args, grant, job) => {
+    gmailTool: async (operation, args, grant, job, _execute, options) => {
       needs(available.gmail)
-      return call("gmail", job, { operation, args, grant })
+      return call("gmail", job, {
+        operation,
+        args,
+        grant,
+        ...(options?.batch ? { batch: true } : {}),
+      })
     },
     driveTool: async (operation, args, grant, job, _execute, signal) => {
       needs(available.gmail)

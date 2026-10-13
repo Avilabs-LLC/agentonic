@@ -2440,6 +2440,7 @@ async function modelReview() {
     "202610090064_careful_grading",
     "202610090066_single_authorization",
     "202610130069_staging_open_reservations",
+    "202610130070_mailbox_batch_turns",
   ])
     await db.exec(
       readFileSync(
@@ -3275,6 +3276,53 @@ describe("scheduled jobs (§58)", () => {
     ])
   })
 
+  it("lets one chat turn leave up to 10 Gmail proposals (§67)", async () => {
+    const p = await running(true)
+    const c = await chat("start", {
+      deploymentId: p.deploymentId,
+      title: "Synthetic batch",
+    })
+    await chat("turn", {
+      conversationId: c.id,
+      requestId: id(1140),
+      query: "Prepara las respuestas",
+    })
+    const job = (await stagingWork(p.deploymentId, "claim")) as unknown as Job
+    const propose = async (n: number) => {
+      await db.exec(
+        "RESET ROLE; SET LOCAL ROLE agentonic_runtime_local; SAVEPOINT batch_tool"
+      )
+      try {
+        const r = await db.query<{ r: Record<string, unknown> }>(
+          "SELECT agentonic.gmail_staging('gmail-propose',$1,$2,$3,$4,$5) r",
+          [
+            p.deploymentId,
+            serviceSecret,
+            job.id,
+            job.token,
+            JSON.stringify({
+              connectionId: id(770),
+              operation: "gmail.send",
+              id: id(n),
+              argumentsCiphertext: "opaque-message",
+              hash: "a".repeat(64),
+            }),
+          ]
+        )
+        await db.exec("RELEASE SAVEPOINT batch_tool")
+        return r.rows[0]!.r
+      } catch (e) {
+        await db.exec(
+          "ROLLBACK TO SAVEPOINT batch_tool; RELEASE SAVEPOINT batch_tool"
+        )
+        throw e
+      }
+    }
+    for (let n = 0; n < 10; n++)
+      expect(await propose(1141 + n)).toMatchObject({ pendingApproval: true })
+    await expect(propose(1151)).rejects.toMatchObject({ code: "42501" })
+  })
+
   it("stops pre-authorized writes when the schedule loses that authority", async () => {
     const p = await running(true)
     const made = await schedule("create", {
@@ -3723,6 +3771,219 @@ describe("open reservations in activated chats (§66)", () => {
       ok: true,
       turns: [{ answer: answer.text, status: "succeeded" }],
     })
+  })
+})
+
+describe("mailbox batch turns (§67)", () => {
+  /** Flags the fixture's code release as a mailbox-batch runtime (0.7.0). */
+  async function batchRuntime() {
+    await sql(
+      "ALTER TABLE agentonic.code_releases DISABLE TRIGGER authoring_guard"
+    )
+    await sql(
+      `UPDATE agentonic.code_releases SET execution_manifest=execution_manifest||'{"mailboxBatch":"1"}' WHERE id=$1`,
+      [code]
+    )
+    await sql(
+      "ALTER TABLE agentonic.code_releases ENABLE TRIGGER authoring_guard"
+    )
+  }
+  async function running() {
+    const p = await modelReview()
+    await actor()
+    await flow("run", {
+      preparationId: p.preparationId,
+      revision: 1,
+      models: [{ model: "gpt-5.4-mini", reasoning: "medium" }],
+      budgetUsd: 3,
+      consent: true,
+      requestId: id(1401),
+    })
+    await finishFlow((await evalClaim())!, "passed", true, "gpt-5.4-mini")
+    await sql(
+      "WITH h AS (INSERT INTO agentonic.runtime_hosts(environment,database_role,broker_sha256,verified_at,heartbeat_at) VALUES('local','agentonic_deployer_local',repeat('f',64),clock_timestamp(),clock_timestamp()) RETURNING id), b AS (INSERT INTO agentonic.runtime_host_brokers(host_id,broker_sha256) SELECT id,repeat('f',64) FROM h) INSERT INTO agentonic.runtime_host_artifacts(host_id,runtime_sha256) SELECT id,repeat('b',64) FROM h"
+    )
+    await actor()
+    const d = await lifecycleCall("deployment_command", "authorize", {
+      submissionId: p.submissionId,
+      environment: "local",
+      budgetUsd: 5,
+      consent: true,
+      requestId: id(1402),
+    })
+    const deploymentId = String(d.id)
+    await readyStaging({ ...p, deploymentId })
+    await actor()
+    return deploymentId
+  }
+
+  it("gives batch runtimes 5 minutes, long answers and their earlier Gmail actions; earlier runtimes keep 2 minutes", async () => {
+    const deploymentId = await running()
+    const conversation = await chat("start", {
+      deploymentId,
+      title: "Synthetic inbox",
+    })
+    const ask = async (n: number) => {
+      await actor()
+      await chat("turn", {
+        conversationId: conversation.id,
+        requestId: id(n),
+        query: "Revisa mis correos",
+        model: "gpt-5.4-mini",
+        reasoning: "medium",
+      })
+      return (await stagingWork(deploymentId, "claim")) as unknown as Job
+    }
+    const first = await ask(1403)
+    const long = "x".repeat(13000)
+    await stagingWork(deploymentId, "answer", first, {
+      text: long,
+      citations: [],
+      insufficientEvidence: true,
+      model: "gpt-5.4-mini",
+    })
+    // The first turn proposed a draft that the owner confirmed.
+    await sql(
+      "INSERT INTO agentonic.gmail_connections(id,workspace_id,agent_id,owner_member_id,account,credential_ciphertext,operations) VALUES($1,$2,$3,$4,'synthetic@example.invalid','opaque','[\"gmail.drafts.create\"]')",
+      [id(1404), w, a, member]
+    )
+    // Recorded as history only: the version's tool registry is not under test.
+    await sql("SET LOCAL session_replication_role=replica")
+    await sql(
+      `INSERT INTO agentonic.gmail_invocations(id,workspace_id,agent_id,connection_id,owner_member_id,turn_id,conversation_id,operation,arguments_sha256,status,result)
+       VALUES($1,$2,$3,$4,$5,$6,$7,'gmail.drafts.create',repeat('a',64),'succeeded','{"id":"r-1","message":{"id":"m-1"},"threadId":"t-1"}')`,
+      [id(1405), w, a, id(1404), member, first.id, conversation.id]
+    )
+    await sql("SET LOCAL session_replication_role=origin")
+    const second = await ask(1406)
+    /** Seconds from the turn's start to the expiry its envelope carries. */
+    const window = async () => {
+      const context = await stagingWork(deploymentId, "context", second)
+      const turn = (
+        await sql(
+          "SELECT started_at FROM agentonic.staging_turns WHERE id=$1",
+          [second.id]
+        )
+      ).rows[0] as { started_at: Date }
+      return Math.round(
+        (Date.parse(String(context.expiresAt)) -
+          new Date(turn.started_at).getTime()) /
+          1000
+      )
+    }
+    // An earlier runtime: 2 minutes, answers within 12,000 characters, no actions.
+    const legacy = await stagingWork(deploymentId, "context", second)
+    const before = (
+      legacy.history as { answer: string; actions?: unknown }[]
+    )[0]!
+    expect(before.answer).toHaveLength(12000)
+    expect(before).not.toHaveProperty("actions")
+    expect(await window()).toBe(120)
+    await sql(
+      "UPDATE agentonic.staging_turns SET started_at=clock_timestamp()-interval '3 minutes' WHERE id=$1",
+      [second.id]
+    )
+    await expect(
+      stagingWork(deploymentId, "heartbeat", second)
+    ).rejects.toMatchObject({ code: "42501" })
+    // The same turn on a batch runtime: 5 minutes, the whole answer, the actions.
+    await batchRuntime()
+    expect(await stagingWork(deploymentId, "heartbeat", second)).toEqual({
+      ok: true,
+    })
+    const batch = await stagingWork(deploymentId, "context", second)
+    expect(batch.history).toEqual([
+      {
+        query: "Revisa mis correos",
+        answer: long,
+        actions: [
+          {
+            operation: "gmail.drafts.create",
+            status: "succeeded",
+            draftId: "r-1",
+            messageId: "m-1",
+            threadId: "t-1",
+          },
+        ],
+      },
+    ])
+    expect(await window()).toBe(300)
+    await stagingWork(deploymentId, "answer", second, {
+      text: "y".repeat(30000),
+      citations: [],
+      insufficientEvidence: true,
+      model: "gpt-5.4-mini",
+    })
+  })
+
+  it("adds the 10-email case for a mail agent on a batch runtime, only when the evaluator can run it", async () => {
+    await sql(
+      "INSERT INTO agentonic.gmail_connections(id,workspace_id,agent_id,owner_member_id,account,credential_ciphertext,operations) VALUES($1,$2,$3,$4,'synthetic@example.invalid','opaque','[\"gmail.search\",\"gmail.read\",\"gmail.drafts.create\"]')",
+      [id(1410), w, a, member]
+    )
+    requested.tools = [
+      {
+        connectionId: id(1410),
+        operations: ["gmail.search", "gmail.read", "gmail.drafts.create"],
+      },
+    ]
+    const p = await modelReview()
+    const evaluator = async (verification: string) => {
+      await sql(
+        "UPDATE agentonic.evaluation_workers SET retired_at=clock_timestamp() WHERE database_role='agentonic_eval_azure' AND retired_at IS NULL"
+      )
+      await sql(
+        `WITH w AS (INSERT INTO agentonic.evaluation_workers(database_role,environment,worker_sha256,verified_at,verification) VALUES('agentonic_eval_azure','azure_staging',md5(random()::text)||md5(random()::text),now(),'${verification}') RETURNING id) INSERT INTO agentonic.evaluation_worker_runtimes(worker_id,runtime_sha256) SELECT id,repeat('b',64) FROM w`
+      )
+    }
+    const keys = async (requestId: string) => {
+      await sql(
+        "UPDATE agentonic.evaluation_runs SET status='error',lease_token=NULL,lease_until=NULL WHERE preparation_id=$1 AND status IN ('queued','running')",
+        [p.preparationId]
+      )
+      await sql(
+        "UPDATE agentonic.evaluation_preparations SET status='criteria_ready' WHERE id=$1",
+        [p.preparationId]
+      )
+      await actor()
+      expect(
+        await flow("run", {
+          preparationId: p.preparationId,
+          revision: 1,
+          models: [{ model: "gpt-5.4-mini", reasoning: "medium" }],
+          budgetUsd: 3,
+          consent: true,
+          requestId,
+        })
+      ).toMatchObject({ ok: true })
+      return (
+        (
+          await sql(
+            "SELECT (SELECT jsonb_agg(c->>'key') FROM jsonb_array_elements(dataset_snapshot) c) keys FROM agentonic.evaluation_runs WHERE preparation_id=$1 ORDER BY created_at DESC LIMIT 1",
+            [p.preparationId]
+          )
+        ).rows[0] as { keys: string[] }
+      ).keys
+    }
+    const base =
+      '"reviewProtocol":3,"toolFixtures":1,"isolation":true,"recovery":true,"artifactIntegrity":true'
+    // A batch evaluator, but the version's runtime is not a batch runtime.
+    await evaluator(`{${base},"batchFixtures":1}`)
+    expect(await keys(id(1411))).not.toContain("platform-gmail-batch")
+    // A batch runtime, but an evaluator without batch fixtures.
+    await batchRuntime()
+    await evaluator(`{${base}}`)
+    expect(await keys(id(1412))).not.toContain("platform-gmail-batch")
+    // Both: the case is added, with its 10 synthetic emails.
+    await evaluator(`{${base},"batchFixtures":1}`)
+    expect((await keys(id(1413))).at(-1)).toBe("platform-gmail-batch")
+    const batch = (
+      await sql(
+        "SELECT c FROM agentonic.evaluation_runs r,jsonb_array_elements(r.dataset_snapshot) c WHERE r.preparation_id=$1 AND c->>'key'='platform-gmail-batch' ORDER BY r.created_at DESC LIMIT 1",
+        [p.preparationId]
+      )
+    ).rows[0] as { c: { fixtures: { mailbox: unknown[] } } }
+    expect(batch.c.fixtures.mailbox).toHaveLength(10)
   })
 })
 

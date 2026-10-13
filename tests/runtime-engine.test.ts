@@ -11,16 +11,23 @@ import { runAgentTurn } from "../packages/runtime/src/agent/turn"
 import { RuntimeError } from "../packages/runtime/src/agent/envelope"
 import { policy } from "../packages/runtime/src/agent/prompt-loader"
 import {
+  MAILBOX_BATCH_POLICY,
   WEB_RESEARCH_POLICY,
+  WEB_WHEN_NEEDED,
+  actionsNote,
   instructions,
+  remainingCallsNote,
 } from "../packages/runtime/src/agent/instructions"
 import { WEB_RESEARCH_POLICY as LEGACY_RESEARCH_POLICY } from "../apps/worker/src/web-policy"
 import {
   BUDGET_STOP_ANSWER,
   PROPOSAL_ANSWER,
   TurnBroker,
+  pendingNotice,
   toolParameters,
 } from "../apps/worker/src/broker"
+import { TurnFailure } from "../apps/worker/src/failure"
+import type { Providers } from "../apps/worker/src/providers"
 import { runPreview, verifyRuntime } from "../apps/worker/src/runtime"
 import type { Execute, Lease } from "../apps/worker/src/pipeline"
 import { keyring } from "../packages/connectors/src/secrets"
@@ -685,6 +692,311 @@ describe("broker refuses what the model did not ask for", () => {
   })
 })
 
+describe("mailbox batch turns (§67)", () => {
+  const MAIL = [
+    "gmail.search",
+    "gmail.read",
+    "gmail.drafts.create",
+  ] as TurnSpec["tools"]["gmail"]
+  const grant = { connectionId: connection, operations: MAIL }
+  function batchSpec(
+    tools: TurnSpec["tools"] = { gmail: MAIL, web: false },
+    limits: Partial<TurnSpec["limits"]> = {}
+  ): TurnSpec {
+    return turnSpec.parse({
+      model: "gpt-5.4",
+      reasoning: "medium",
+      tools,
+      limits: {
+        modelCalls: 16,
+        toolCalls: 24,
+        gmailCalls: 3,
+        gmailReads: 6,
+        gmailWrites: 10,
+        callsPerResponse: 5,
+        ...limits,
+      },
+    })
+  }
+  const found = {
+    messages: [
+      { id: "b01", threadId: "t1", excerpt: "¿Confirmamos?", untrusted: true },
+      { id: "b04", threadId: "t4", excerpt: "Informe", untrusted: true },
+    ],
+  }
+  /** Gmail answered in memory: searches find two messages, writes are proposals. */
+  function mailbox(gmailTool = vi.fn()) {
+    gmailTool.mockImplementation(async (operation: string) =>
+      operation === "gmail.drafts.create"
+        ? { pendingApproval: true, id: "50000000-0000-4000-8000-000000000001" }
+        : found
+    )
+    return { ...providers, gmailTool } as Providers
+  }
+  const draft = (replyTo: string) => ({
+    to: ["synthetic@example.invalid"],
+    cc: [],
+    bcc: [],
+    subject: "Re: Synthetic",
+    body: "Synthetic reply only",
+    replyTo,
+  })
+  const calls = (...items: [string, unknown][]) => ({
+    status: "completed",
+    usage: { input_tokens: 10, output_tokens: 10 },
+    output: items.map(([name, args], n) => ({
+      type: "function_call",
+      name,
+      call_id: `c${n}-${name}`,
+      arguments: JSON.stringify(args),
+    })),
+  })
+  const env = (history?: unknown[]) =>
+    ({
+      ...envelope([grant]),
+      ...(history ? { history } : {}),
+    }) as ReturnType<typeof envelope>
+
+  it("proposes several reply drafts in one response, continues and appends the platform's count", async () => {
+    let models = 0
+    const fetch = vi.fn(async () => {
+      models++
+      if (models === 1)
+        return json(calls(["gmail_search", { query: "in:inbox", limit: 10 }]))
+      if (models === 2)
+        return json(
+          calls(
+            ["gmail_drafts_create", draft("b01")],
+            ["gmail_drafts_create", draft("b04")]
+          )
+        )
+      return json(
+        answer({
+          text: "Resumen de 2 correos.",
+          citations: [],
+          insufficientEvidence: true,
+        })
+      )
+    })
+    vi.stubGlobal("fetch", fetch)
+    const gmailTool = vi.fn()
+    const recorded = await turnInProcess(
+      batchSpec(),
+      vi.fn<Execute>().mockResolvedValue({ ok: true }),
+      { providers: mailbox(gmailTool), gmail: grant, batch: true },
+      env()
+    )
+    expect(recorded?.text).toBe("Resumen de 2 correos.\n\n" + pendingNotice(2))
+    expect(models).toBe(3)
+    const sent = bodies(fetch)
+    expect(sent[0].parallel_tool_calls).toBe(true)
+    expect(sent[0].max_output_tokens).toBe(12000)
+    const create = sent[1].tools.find(
+      (t: { name: string }) => t.name === "gmail_drafts_create"
+    )
+    expect(create.parameters.required).toContain("replyTo")
+    expect(gmailTool.mock.calls.map((c) => [c[0], c[5]])).toEqual([
+      ["gmail.search", { batch: true }],
+      ["gmail.drafts.create", { batch: true }],
+      ["gmail.drafts.create", { batch: true }],
+    ])
+    expect(gmailTool.mock.calls[1]![1]).toMatchObject({ replyTo: "b01" })
+    expect(JSON.stringify(sent[0].input)).toContain(
+      JSON.stringify(MAILBOX_BATCH_POLICY).slice(1, 60)
+    )
+  })
+
+  it("keeps reads and proposals apart and refuses a call past its allowance in the same response", async () => {
+    let models = 0
+    const fetch = vi.fn(async () => {
+      models++
+      if (models === 1)
+        return json(
+          calls(
+            ["gmail_search", { query: "a", limit: 10 }],
+            ["gmail_search", { query: "b", limit: 10 }]
+          )
+        )
+      return json(
+        answer({ text: "Hecho.", citations: [], insufficientEvidence: true })
+      )
+    })
+    vi.stubGlobal("fetch", fetch)
+    const gmailTool = vi.fn()
+    await turnInProcess(
+      batchSpec(undefined, { gmailReads: 1 }),
+      vi.fn<Execute>().mockResolvedValue({ ok: true }),
+      { providers: mailbox(gmailTool), gmail: grant, batch: true },
+      env()
+    )
+    expect(gmailTool).toHaveBeenCalledTimes(1)
+    const second = bodies(fetch)[1]
+    expect(JSON.stringify(second.input)).toContain("allowance_exhausted")
+    // Reads are spent; the proposal tool is still offered.
+    expect(second.tools.map((t: { name: string }) => t.name)).toEqual([
+      "gmail_drafts_create",
+    ])
+  })
+
+  it("offers the web without research pressure until the model uses it", async () => {
+    let models = 0
+    const fetch = vi.fn(async (url: string) => {
+      if (!url.includes("api.openai.com")) return json({ results: [] })
+      models++
+      if (models === 1)
+        return json(calls(["web_search", { query: "public docs" }]))
+      return json(
+        answer({ text: "Listo.", citations: [], insufficientEvidence: true })
+      )
+    })
+    vi.stubGlobal("fetch", fetch)
+    await turnInProcess(
+      batchSpec({ gmail: MAIL, web: true }),
+      vi.fn<Execute>().mockResolvedValue({ ok: true }),
+      { providers: mailbox(), gmail: grant, batch: true, web: true },
+      envelope([grant, ...WEB])
+    )
+    const [first, second] = bodies(fetch).map((b) => JSON.stringify(b.input))
+    expect(first).toContain(WEB_WHEN_NEEDED)
+    expect(first).not.toContain("tool calls remain")
+    expect(second).toContain(remainingCallsNote(7))
+  })
+
+  it("shows the agent what its earlier proposals became (B8)", async () => {
+    const fetch = vi
+      .fn()
+      .mockResolvedValue(
+        json(answer({ text: "Ok.", citations: [], insufficientEvidence: true }))
+      )
+    vi.stubGlobal("fetch", fetch)
+    const actions = [
+      {
+        operation: "gmail.drafts.create",
+        status: "succeeded",
+        draftId: "r-1",
+        messageId: "m-1",
+      },
+    ]
+    await turnInProcess(
+      batchSpec(),
+      vi.fn<Execute>().mockResolvedValue({ ok: true }),
+      { providers: mailbox(), gmail: grant, batch: true },
+      env([{ query: "Prepara el borrador", answer: "Listo.", actions }])
+    )
+    expect(JSON.stringify(bodies(fetch)[0].input)).toContain(
+      JSON.stringify(actionsNote(actions)).slice(1, -1)
+    )
+  })
+
+  it("records the count of proposals when the final answer fails, and names refusals", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValue(json(calls(["gmail_drafts_create", draft("b01")])))
+    )
+    const execute = vi.fn<Execute>().mockResolvedValue({ ok: true })
+    const b = new TurnBroker({
+      job,
+      execute,
+      providers: mailbox(),
+      signal: new AbortController().signal,
+      turn: batchSpec(),
+      gmail: grant,
+      web: false,
+      batch: true,
+      passageIds: [],
+    })
+    await b.handle({
+      type: "model",
+      id: 1,
+      input: [{ role: "user", content: "Synthetic" }],
+      tools: [{ name: "gmail_drafts_create", description: "x" }],
+      toolChoice: "auto",
+      format: {
+        type: "json_schema",
+        name: "agent_preview_answer",
+        strict: true,
+        schema: { type: "object" },
+      },
+    })
+    await b.handle({ type: "tool", id: 2, callId: "c0-gmail_drafts_create" })
+    await expect(
+      b.handle({ type: "error", code: "answer_json_invalid" })
+    ).rejects.toMatchObject({ diagnostic: "answer_json_invalid" })
+    expect(await b.recordProposals()).toBe(true)
+    expect(b.answer?.text).toBe(pendingNotice(1))
+    // A database refusal of the answer is named, not a bare mismatch.
+    const refused = new TurnBroker({
+      job,
+      execute: vi
+        .fn<Execute>()
+        .mockRejectedValue(Object.assign(new Error("x"), { code: "42501" })),
+      providers,
+      signal: new AbortController().signal,
+      turn: spec(),
+      web: false,
+      passageIds: [passage],
+    })
+    await expect(
+      refused.handle({
+        type: "result",
+        result: {
+          text: "x",
+          citations: [passage],
+          insufficientEvidence: false,
+        },
+      })
+    ).rejects.toEqual(new TurnFailure("runtime_mismatch", "answer_refused"))
+  })
+
+  it("keeps earlier runtimes to one call per response and their Gmail schemas", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValue(
+          json(
+            calls(
+              ["gmail_search", { query: "a", limit: 10 }],
+              ["gmail_search", { query: "b", limit: 10 }]
+            )
+          )
+        )
+    )
+    const legacy = new TurnBroker({
+      job,
+      execute: vi.fn<Execute>().mockResolvedValue({ ok: true }),
+      providers: mailbox(),
+      signal: new AbortController().signal,
+      turn: spec({ tools: { gmail: MAIL, web: false } }),
+      gmail: grant,
+      web: false,
+      passageIds: [],
+    })
+    await expect(
+      legacy.handle({
+        type: "model",
+        id: 1,
+        input: [{ role: "user", content: "Synthetic" }],
+        tools: [{ name: "gmail_search", description: "x" }],
+        toolChoice: "auto",
+        format: {
+          type: "json_schema",
+          name: "agent_preview_answer",
+          strict: true,
+          schema: { type: "object" },
+        },
+      })
+    ).rejects.toMatchObject({ diagnostic: "calls_per_response" })
+    const create = { kind: "gmail", operation: "gmail.drafts.create" } as const
+    expect(JSON.stringify(toolParameters(create))).not.toContain("replyTo")
+    expect(toolParameters(create, true)).toMatchObject({
+      required: expect.arrayContaining(["replyTo"]),
+    })
+  })
+})
+
 describe("packaged runtime artifact", () => {
   async function artifact() {
     const root = mkdtempSync(join(tmpdir(), "agentonic-runtime-artifact-"))
@@ -706,6 +1018,8 @@ describe("packaged runtime artifact", () => {
       previewContract: "1",
       brokerProtocol: "2",
       webResearch: "1",
+      // Runtime 0.7.0 (§67): brokers send it batch limits.
+      mailboxBatch: "1",
     })
     const root = join(first.directory, "..")
     expect(

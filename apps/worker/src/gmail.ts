@@ -13,14 +13,18 @@ import {
 } from "@agentonic/connectors/google"
 import { digest, seal, unseal } from "@agentonic/connectors/secrets"
 import type { Execute, Lease } from "./pipeline"
+/** How much of each message a search shows: more, with its thread, in batch turns (§67). */
+export const searchExcerpt = (batch: boolean) => (batch ? 2000 : 500)
 export async function executeGmail(
   name: string,
   args: unknown,
   grant: unknown,
   job: Lease,
   execute: Execute,
-  config: GoogleConfig
+  config: GoogleConfig,
+  options: { batch?: boolean } = {}
 ) {
+  const batch = options.batch === true
   const g = gmailGrant.parse(grant),
     call = parseGmailCall(name, args)
   if (!g.operations.includes(call.operation)) throw new Error("gmail_denied")
@@ -78,6 +82,7 @@ export async function executeGmail(
         const content = z
           .object({
             id: z.string(),
+            threadId: z.string().optional(),
             headers: z
               .array(z.object({ name: z.string(), value: z.string() }))
               .optional(),
@@ -95,8 +100,9 @@ export async function executeGmail(
         await execute("gmail-check", job, authority)
         messages.push({
           id: content.id,
+          ...(batch && content.threadId ? { threadId: content.threadId } : {}),
           headers: content.headers,
-          excerpt: content.text.slice(0, 500),
+          excerpt: content.text.slice(0, searchExcerpt(batch)),
           untrusted: true,
         })
       }

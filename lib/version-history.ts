@@ -1,5 +1,10 @@
 export const VERSION_HISTORY = [
   {
+    "version": "0.39.0",
+    "date": "2026-10-13",
+    "summary": "Mailbox batch turns for runtime 0.7.0: Gmail read and write allowances, up to 10 drafts per turn each confirmed on its card, replies in their thread, up to 4 minutes per turn, earlier Gmail actions in context, a batch evaluation case and named failure causes"
+  },
+  {
     "version": "0.38.0",
     "date": "2026-10-13",
     "summary": "An activated chat keeps its finished answer when a failed web read or an interrupted model call leaves a reservation open"

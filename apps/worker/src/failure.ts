@@ -21,9 +21,30 @@ export class PreviewFailure extends Error {
     super("provider_unavailable")
   }
 }
+/**
+ * A turn's failure with its cause (architecture §67): `message` is the code
+ * recorded and shown, `diagnostic` a content-free name for the log, such as
+ * `answer_refused` or `runtime_runtime_failed`.
+ */
+export class TurnFailure extends Error {
+  constructor(
+    code: string,
+    public diagnostic: string
+  ) {
+    super(code)
+  }
+}
 export function workerFailure(error: unknown) {
   if (error instanceof PreviewFailure)
     return { code: error.message, diagnostic: error.diagnostic }
+  if (error instanceof TurnFailure)
+    return {
+      code:
+        error.message === "runtime_mismatch" || !known.has(error.message)
+          ? "provider_unavailable"
+          : error.message,
+      diagnostic: error.diagnostic,
+    }
   if (error instanceof Error && known.has(error.message))
     return { code: error.message, diagnostic: error.message }
   if (error instanceof Error && error.message === "runtime_mismatch")

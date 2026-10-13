@@ -239,6 +239,8 @@ systemctl is-active agentonic-evaluator-staging.service
       toolFixtures: 1,
       // Answers Drive calls from fixtures too (§62); Drive cases need it.
       driveFixtures: 1,
+      // Runs mailbox batch turns against a 10-message fixture (§67); the batch case needs it.
+      batchFixtures: 1,
       // Grades with rubric 6 on GPT-5.4 mini at medium reasoning (§61); writes
       // criteria as requests (§56).
       reviewRubric: 6,

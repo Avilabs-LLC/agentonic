@@ -136,3 +136,23 @@ it("counts what a style run skipped and names Gmail's status class only", () => 
   expect(careless).not.toHaveProperty("limited")
   expect(careless).not.toHaveProperty("limitWaitMs")
 })
+// §67: a failed turn says why, in a name only.
+it("names a failure's cause with an allowlisted diagnostic, never a message", () => {
+  const failed = {
+    service: "staging_turn" as const,
+    job: { id: job },
+    startedAt: queued,
+    finishedAt: queued,
+    code: "runtime_mismatch",
+  }
+  expect(jobLine({ ...failed, diagnostic: "answer_refused" })).toMatchObject({
+    error: "runtime_mismatch",
+    diagnostic: "answer_refused",
+  })
+  expect(
+    jobLine({ ...failed, diagnostic: "Error: mail from ana@example" })
+  ).not.toHaveProperty("diagnostic")
+  expect(
+    jobLine({ ...failed, code: undefined, diagnostic: "answer_refused" })
+  ).not.toHaveProperty("diagnostic")
+})

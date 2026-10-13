@@ -33,6 +33,7 @@ import type { Execute, Lease } from "./pipeline"
 import type { Providers } from "./providers"
 import {
   BROKER_PROTOCOL,
+  batchCeilings,
   turnSpec,
 } from "@agentonic/contracts/runtime-protocol"
 import {
@@ -53,6 +54,8 @@ const runtimeSchema = z
         gmailContract: z.literal("1").optional(),
         // Runtime 0.6.0 and later run Drive tools (§62).
         driveContract: z.literal("1").optional(),
+        // Runtime 0.7.0 and later run mailbox batch turns (§67).
+        mailboxBatch: z.literal("1").optional(),
         webContract: z.literal("1").optional(),
         webResearch: z.literal("1").optional(),
         brokerProtocol: z.literal(BROKER_PROTOCOL).optional(),
@@ -129,6 +132,7 @@ export function verifyRuntime(value: unknown, root: string) {
     installed.gitCommit !== runtime.gitCommit ||
     installed.gmailContract !== runtime.manifest.gmailContract ||
     installed.driveContract !== runtime.manifest.driveContract ||
+    installed.mailboxBatch !== runtime.manifest.mailboxBatch ||
     installed.webContract !== runtime.manifest.webContract ||
     installed.webResearch !== runtime.manifest.webResearch ||
     installed.brokerProtocol !== runtime.manifest.brokerProtocol ||
@@ -482,9 +486,11 @@ export async function runPreview(
         : (reasoningLevel as string | null)
     const configuration = modelConfiguration.parse({ model, reasoning })
     const toolCalls = web ? (manifest.webResearch === "1" ? 8 : 3) : 3
-    // Drive keys go only to runtimes that declare Drive: earlier runtimes'
-    // strict turn schemas refuse them.
+    // Drive keys go only to runtimes that declare Drive, and batch limits only
+    // to runtimes that declare mailboxBatch (§67): earlier runtimes' strict
+    // turn schemas refuse them.
     const driveRuntime = manifest.driveContract === "1"
+    const batch = manifest.mailboxBatch === "1"
     const turn = turnSpec.parse({
       model,
       reasoning: configuration.reasoning,
@@ -493,12 +499,22 @@ export async function runPreview(
         web,
         ...(driveRuntime ? { drive: drive?.operations ?? [] } : {}),
       },
-      limits: {
-        modelCalls: toolCalls + 1,
-        toolCalls,
-        gmailCalls: 3,
-        ...(driveRuntime ? { driveCalls: 3 } : {}),
-      },
+      limits: batch
+        ? {
+            modelCalls: batchCeilings.modelCalls,
+            toolCalls: batchCeilings.toolCalls,
+            gmailCalls: 3,
+            gmailReads: batchCeilings.gmailReads,
+            gmailWrites: batchCeilings.gmailWrites,
+            callsPerResponse: batchCeilings.callsPerResponse,
+            ...(driveRuntime ? { driveCalls: 3 } : {}),
+          }
+        : {
+            modelCalls: toolCalls + 1,
+            toolCalls,
+            gmailCalls: 3,
+            ...(driveRuntime ? { driveCalls: 3 } : {}),
+          },
     })
     const broker = new TurnBroker({
       job,
@@ -509,19 +525,30 @@ export async function runPreview(
       gmail: grant,
       drive,
       web,
+      batch,
       passageIds: z
         .array(z.object({ id: z.uuid() }))
         .max(8)
         .parse(context.passages)
         .map((p) => p.id),
     })
-    await runBrokeredTurn(
-      entry,
-      { envelope: context, turn },
-      broker,
-      signal,
-      grant || drive || web ? 110000 : 60000
-    )
+    try {
+      await runBrokeredTurn(
+        entry,
+        { envelope: context, turn },
+        broker,
+        signal,
+        batch ? batchCeilings.turnMs : grant || drive || web ? 110000 : 60000
+      )
+    } catch (error) {
+      // Proposals already made still get their answer (§67).
+      if (
+        !signal.aborted &&
+        (await broker.recordProposals().catch(() => false))
+      )
+        return
+      throw error
+    }
     return
   }
   // Protocol 1 (runtime 0.3.0 and earlier): the child composes one request and

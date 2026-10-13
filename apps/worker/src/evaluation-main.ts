@@ -8,6 +8,7 @@ import { prepareCriteria, gradeAnswer } from "./review-ai"
 import { processJob, type Execute, type Lease } from "./pipeline"
 import { directProviders } from "./providers"
 import { FAST, ServiceState, categorize, reasonOf } from "./service-state"
+import { PreviewFailure, TurnFailure } from "./failure"
 const life = new ServiceState("evaluator")
 // A configuration problem cannot fix itself: report it and exit so systemd's
 // start limit turns it into a visible failed unit.
@@ -173,7 +174,17 @@ async function run() {
               ? error.message
               : "lease_lost"
           await broker("fail", job, { code }).catch(() => {})
-          logJob({ service, job, startedAt, finishedAt: Date.now(), code })
+          logJob({
+            service,
+            job,
+            startedAt,
+            finishedAt: Date.now(),
+            code,
+            diagnostic:
+              error instanceof TurnFailure || error instanceof PreviewFailure
+                ? error.diagnostic
+                : undefined,
+          })
         } finally {
           clearInterval(heartbeat)
           active = undefined
