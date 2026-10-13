@@ -3,6 +3,7 @@
 // deployments, costs and runtime releases. Metadata only; one badge per row
 // for the record's primary state, nested states inline (UI contract §9).
 import type { ColumnDef } from "@tanstack/react-table"
+import { LaptopIcon } from "lucide-react"
 import {
   formatCount,
   formatMoney,
@@ -25,7 +26,10 @@ import {
   type OperationsWorkspace,
 } from "@agentonic/contracts/operations"
 import { statusDescriptor } from "@workspace/ui/lib/badge-status"
-import { StatusIndicator } from "@workspace/ui/components/status-badge"
+import {
+  iconTones,
+  StatusIndicator,
+} from "@workspace/ui/components/status-badge"
 import { WorkspaceName } from "@workspace/ui/components/workspace-name"
 import { deploymentColumns } from "@workspace/ui/components/deployment-columns"
 import {
@@ -46,14 +50,13 @@ import {
   DialogTrigger,
 } from "@workspace/ui/components/dialog"
 import {
-  PlaceGroups,
-  type PlaceItem,
-} from "@workspace/ui/components/place-groups"
-import {
   AgentLink,
   agentVersionColumns,
 } from "@workspace/ui/components/agent-versions"
 import { CardEmptyState } from "@workspace/ui/components/card-empty-state"
+import { MetricTile } from "@workspace/ui/components/metric-tile"
+import { Button } from "@workspace/ui/components/button"
+import { cn } from "@workspace/ui/lib/utils"
 import { ResourceCounts } from "@workspace/ui/components/resource-counts"
 import { DataTable } from "@workspace/ui/components/data-table"
 import {
@@ -347,6 +350,44 @@ function newestFirst(runtimes: Runtime[]) {
     return b.version.localeCompare(a.version)
   })
 }
+// "y N más" after the first of a list (UI contract §3.1, long lists open a
+// dialog): opens a dialog with the whole list.
+function MoreList({
+  count,
+  title,
+  description,
+  items,
+  className,
+}: {
+  count: number
+  title: string
+  description: string
+  items: string[]
+  className?: string
+}) {
+  return (
+    <Dialog>
+      <DialogTrigger
+        render={<CellButton className={cn("tabular-nums", className)} />}
+      >
+        y {formatCount(count)} más
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription>{description}</DialogDescription>
+        </DialogHeader>
+        <ul className="space-y-1 text-sm">
+          {items.map((item) => (
+            <li key={item} className="font-mono break-all">
+              {item}
+            </li>
+          ))}
+        </ul>
+      </DialogContent>
+    </Dialog>
+  )
+}
 // The newest runtime by its number; the rest behind "y N más", which lists
 // every runtime installed there with its full version.
 function RuntimesLine({
@@ -366,116 +407,171 @@ function RuntimesLine({
       {rest.length > 0 && (
         <>
           {" "}
-          <Dialog>
-            <DialogTrigger render={<CellButton className="tabular-nums" />}>
-              y {formatCount(rest.length)} más
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Runtimes en {place}</DialogTitle>
-                <DialogDescription>
-                  Instalados según la última verificación, del más reciente al
-                  más antiguo.
-                </DialogDescription>
-              </DialogHeader>
-              <ul className="space-y-1 text-sm">
-                {[newest!, ...rest].map((runtime) => (
-                  <li key={runtime.version} className="font-mono break-all">
-                    {runtimeLabel(runtime)}
-                  </li>
-                ))}
-              </ul>
-            </DialogContent>
-          </Dialog>
+          <MoreList
+            count={rest.length}
+            title={`Runtimes en ${place}`}
+            description="Instalados según la última verificación, del más reciente al más antiguo."
+            items={[newest!, ...rest].map(runtimeLabel)}
+          />
         </>
       )}
     </>
   )
 }
-export function OperationsInstallationsCard({
+type Environment = "local" | "azure_staging"
+type ServerHost = {
+  environment: Environment
+  state: string
+  heartbeatAt: string | null
+  current: string
+  workers: string[]
+  runtimes: Runtime[]
+}
+type ServerEvaluator = {
+  environment: Environment
+  state: string
+  current: string
+  toolFixtures: boolean
+  runtimes: Runtime[]
+}
+type Servers = { hosts: ServerHost[]; evaluators: ServerEvaluator[] }
+// A registration as a tile's value: its label in its state's colour, never a
+// badge (UI contract §9); a missing server reads "Sin registrar".
+function registration(state: string | undefined) {
+  if (state === undefined)
+    return { value: "Sin registrar", tone: "text-muted-foreground" }
+  const descriptor = statusDescriptor("registration", state)
+  return { value: descriptor.label, tone: iconTones[descriptor.variant] }
+}
+// What one place runs, as four tiles: each kind's registration, then its
+// release with the newest runtime. Despliegues shows vm-agents-01; Local
+// (desarrollo) opens from the page header.
+export function OperationsServerTiles({
   hosts,
   evaluators,
-}: {
-  hosts: {
-    environment: "local" | "azure_staging"
-    state: string
-    heartbeatAt: string | null
-    current: string
-    workers: string[]
-    runtimes: Runtime[]
-  }[]
-  evaluators: {
-    environment: "local" | "azure_staging"
-    state: string
-    current: string
-    toolFixtures: boolean
-    runtimes: Runtime[]
-  }[]
+  environment,
+  compact = false,
+}: Servers & {
+  environment: Environment
+  /** Two columns, for the Local (desarrollo) dialog. */
+  compact?: boolean
 }) {
-  const badge = (state: string) => (
-    <StatusIndicator
-      appearance="badge"
-      state={statusDescriptor("registration", state)}
-    />
-  )
-  const items: PlaceItem[] = [
-    ...hosts.map((h) => ({
-      environment: h.environment,
-      kind: "agents" as const,
-      lines: [
-        `Trabajador ${h.current}`,
-        ...(h.workers.length > 1
-          ? [`En servicio: ${h.workers.join(", ")}`]
-          : []),
-        <RuntimesLine
-          key="runtimes"
-          runtimes={h.runtimes}
-          place={`Agentes · ${environmentLabels[h.environment]}`}
-        />,
-        h.heartbeatAt
-          ? `Último reporte el ${utc(h.heartbeatAt)}`
-          : "Sin reportes",
-      ],
-      action: badge(h.state),
-    })),
-    ...evaluators.map((e) => ({
-      environment: e.environment,
-      kind: "evaluations" as const,
-      lines: [
-        `Evaluador ${e.current}`,
-        <RuntimesLine
-          key="runtimes"
-          runtimes={e.runtimes}
-          place={`Evaluaciones · ${environmentLabels[e.environment]}`}
-        />,
-        e.toolFixtures
-          ? "Prueba herramientas con datos sintéticos"
-          : "Sin pruebas de herramientas",
-      ],
-      action: badge(e.state),
-    })),
-  ]
+  const host = hosts.find((h) => h.environment === environment)
+  const evaluator = evaluators.find((e) => e.environment === environment)
+  const place = environmentLabels[environment]
+  const others = host
+    ? [host.current, ...host.workers.filter((w) => w !== host.current)]
+    : []
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Qué ejecuta cada servidor</CardTitle>
-        <CardDescription>
-          Versiones del trabajador y del runtime instaladas, como las informa la
-          verificación dos veces al día. Instalar una versión nueva se hace
-          desde el Mac con los scripts de instalación.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        {items.length === 0 ? (
+    <div
+      className={cn("grid gap-4 sm:grid-cols-2", !compact && "xl:grid-cols-4")}
+    >
+      <MetricTile
+        label="Servidor de agentes"
+        {...registration(host?.state)}
+        detail={
+          host
+            ? host.heartbeatAt
+              ? `Reportó el ${utc(host.heartbeatAt)}`
+              : "Sin reportes"
+            : null
+        }
+      />
+      <MetricTile
+        label="Trabajador"
+        value={
+          host ? (
+            <>
+              {host.current}
+              {others.length > 1 && (
+                <>
+                  {" "}
+                  <MoreList
+                    count={others.length - 1}
+                    title={`Trabajadores en servicio en ${place}`}
+                    description="Según la última verificación, empezando por el actual."
+                    items={others}
+                    className="text-sm"
+                  />
+                </>
+              )}
+            </>
+          ) : (
+            "Sin registrar"
+          )
+        }
+        tone={host ? undefined : "text-muted-foreground"}
+        detail={
+          host && (
+            <RuntimesLine
+              runtimes={host.runtimes}
+              place={`Agentes · ${place}`}
+            />
+          )
+        }
+      />
+      <MetricTile
+        label="Servidor de evaluaciones"
+        {...registration(evaluator?.state)}
+        detail={
+          evaluator
+            ? evaluator.toolFixtures
+              ? "Con pruebas de herramientas"
+              : "Sin pruebas de herramientas"
+            : null
+        }
+      />
+      <MetricTile
+        label="Evaluador"
+        value={evaluator?.current ?? "Sin registrar"}
+        tone={evaluator ? undefined : "text-muted-foreground"}
+        detail={
+          evaluator && (
+            <RuntimesLine
+              runtimes={evaluator.runtimes}
+              place={`Evaluaciones · ${place}`}
+            />
+          )
+        }
+      />
+    </div>
+  )
+}
+// Local (desarrollo) behind a button at the end of Despliegues' header: the
+// same tiles, so each fact keeps one rendering.
+export function OperationsLocalServers({ hosts, evaluators }: Servers) {
+  const local = (s: { environment: Environment }) => s.environment === "local"
+  const registered = hosts.some(local) || evaluators.some(local)
+  return (
+    <Dialog>
+      <DialogTrigger render={<Button variant="outline" />}>
+        <LaptopIcon aria-hidden="true" />
+        {environmentLabels.local}
+      </DialogTrigger>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>{environmentLabels.local}</DialogTitle>
+          <DialogDescription>
+            Qué ejecuta el entorno local, como lo informa su última
+            verificación. Instalar una versión nueva se hace desde el Mac con
+            los scripts de instalación.
+          </DialogDescription>
+        </DialogHeader>
+        {registered ? (
+          <OperationsServerTiles
+            hosts={hosts}
+            evaluators={evaluators}
+            environment="local"
+            compact
+          />
+        ) : (
           <CardEmptyState title="Sin servidores registrados">
-            Instala y registra un servidor para activar agentes o evaluar
+            Instala y registra un servidor local para probar agentes o evaluar
             versiones.
           </CardEmptyState>
-        ) : (
-          <PlaceGroups items={items} />
         )}
-      </CardContent>
-    </Card>
+      </DialogContent>
+    </Dialog>
   )
 }
 export function OperationsDeploymentsTable({

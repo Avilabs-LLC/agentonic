@@ -2,7 +2,6 @@
 // The Admin agent page (architecture §55): what is in use and what comes next,
 // then the agent's proposals, deployments and activity. Metadata only; a
 // proposal's content stays behind its review and receipt.
-import type { ReactNode } from "react"
 import type { ColumnDef } from "@tanstack/react-table"
 import {
   formatCount,
@@ -29,12 +28,12 @@ import {
   timeKey,
   When,
 } from "@workspace/ui/components/table-cells"
-import { cn } from "@workspace/ui/lib/utils"
 import {
   iconTones,
   StatusIndicator,
 } from "@workspace/ui/components/status-badge"
 import { facetTitles } from "@workspace/ui/components/agent-versions"
+import { MetricTile } from "@workspace/ui/components/metric-tile"
 import { GmailIcon } from "@workspace/ui/components/gmail-icon"
 import { DriveIcon } from "@workspace/ui/components/drive-icon"
 import { WebIcon } from "@workspace/ui/components/web-icon"
@@ -42,7 +41,6 @@ import { DataTable } from "@workspace/ui/components/data-table"
 import { useOpenReview } from "@workspace/ui/hooks/use-open-review"
 import {
   Card,
-  CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
@@ -72,47 +70,6 @@ function Stat({ label, value }: { label: string; value: string }) {
         </CardDescription>
         <CardTitle className="text-2xl tabular-nums">{value}</CardTitle>
       </CardHeader>
-    </Card>
-  )
-}
-// A metric tile: label, prominent value, detail. Every tile keeps all three
-// rows (a placeholder when a detail is missing) so their text lines up; the
-// value takes its state's colour instead of a badge.
-function Metric({
-  label,
-  value,
-  tone,
-  detail,
-}: {
-  label: string
-  value: ReactNode
-  tone?: string
-  detail: string | null
-}) {
-  return (
-    <Card>
-      <CardHeader>
-        <CardDescription className="text-xs font-medium tracking-wide uppercase">
-          {label}
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-1">
-        <p
-          className={cn(
-            "truncate text-lg leading-snug font-semibold",
-            tone ?? "text-foreground"
-          )}
-          title={typeof value === "string" ? value : undefined}
-        >
-          {value}
-        </p>
-        <p
-          className="truncate text-xs text-muted-foreground"
-          title={detail ?? undefined}
-        >
-          {detail ?? "—"}
-        </p>
-      </CardContent>
     </Card>
   )
 }
@@ -174,7 +131,7 @@ export function OperationsAgentOverview({
         {(["live", "next"] as const).map((facet) => {
           const f = view[facet]
           return (
-            <Metric
+            <MetricTile
               key={facet}
               label={facetTitles[facet]}
               value={f.state?.label ?? "Ninguna"}
@@ -189,7 +146,7 @@ export function OperationsAgentOverview({
             />
           )
         })}
-        <Metric
+        <MetricTile
           label="Capacidades de la última versión"
           value={<Capabilities tools={agent.tools} />}
           detail={

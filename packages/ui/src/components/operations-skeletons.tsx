@@ -3,7 +3,6 @@ import { Card, CardContent, CardHeader } from "@workspace/ui/components/card"
 import {
   BackRowSkeleton,
   PageHeaderSkeleton,
-  PlaceGroupsCardSkeleton,
   RecordHeaderSkeleton,
   TableSkeleton,
 } from "@workspace/ui/components/foundation-skeletons"
@@ -48,6 +47,30 @@ function StatsSkeleton({ count }: { count: number }) {
     </div>
   )
 }
+// Metric tiles: label, value and detail (the agent page, Despliegues).
+function MetricTilesSkeleton({
+  count,
+  className,
+}: {
+  count: number
+  className: string
+}) {
+  return (
+    <div className={`grid gap-4 sm:grid-cols-2 ${className}`}>
+      {Array.from({ length: count }, (_, i) => (
+        <Card key={i}>
+          <CardHeader>
+            <Skeleton className="h-3 w-32" />
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <Skeleton className="h-5 w-28 rounded-full" />
+            <Skeleton className="h-3 w-40" />
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  )
+}
 function Loading({
   label,
   children,
@@ -78,19 +101,7 @@ export function OperationsAgentSkeleton() {
         <BackRowSkeleton />
         <RecordHeaderSkeleton />
       </div>
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {[1, 2, 3].map((i) => (
-          <Card key={i}>
-            <CardHeader>
-              <Skeleton className="h-3 w-32" />
-            </CardHeader>
-            <CardContent className="space-y-2">
-              <Skeleton className="h-5 w-28 rounded-full" />
-              <Skeleton className="h-3 w-40" />
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+      <MetricTilesSkeleton count={3} className="lg:grid-cols-3" />
       <div className="flex gap-6 border-b pb-2">
         {[1, 2, 3].map((i) => (
           <Skeleton key={i} className="h-5 w-24" />
@@ -139,13 +150,17 @@ export function OperationsTeamSkeleton() {
     </div>
   )
 }
-/** Despliegues: the installations card (three or four facts per cell) and the eleven-column table. */
+/** Despliegues: the header with its Local (desarrollo) button, vm-agents-01's four tiles and the eleven-column table. */
 export function OperationsDeploymentsSkeleton() {
   return (
-    <Loading label="Cargando despliegues">
-      <PlaceGroupsCardSkeleton lines={3} />
+    <div aria-label="Cargando despliegues" role="status" className="space-y-6">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <PageHeaderSkeleton />
+        <Skeleton className="h-8 w-44" />
+      </div>
+      <MetricTilesSkeleton count={4} className="xl:grid-cols-4" />
       <TableSkeleton columns={11} />
-    </Loading>
+    </div>
   )
 }
 /** Costos: the provider card, the five-column daily table and the agents card. */
