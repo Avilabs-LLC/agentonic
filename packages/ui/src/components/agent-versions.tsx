@@ -12,7 +12,7 @@ import { StatusIndicator } from "@workspace/ui/components/status-badge"
 import {
   Absent,
   CellLink,
-  Count,
+  VersionNumber,
   sortableHeader,
 } from "@workspace/ui/components/table-cells"
 import { restingColumn } from "@workspace/ui/components/resting-column"
@@ -67,7 +67,7 @@ export function agentVersionColumns<T>(
     },
   })
   const version = (n: number | null) =>
-    n === null ? <Absent>Ninguna</Absent> : <Count value={n} />
+    n === null ? <Absent>Ninguna</Absent> : <VersionNumber value={n} />
   return [
     column(
       "live",

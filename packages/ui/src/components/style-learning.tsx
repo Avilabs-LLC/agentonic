@@ -3,6 +3,7 @@
 // person who connected it can have the knowledge worker read the mail they sent
 // and draft a writing-style guide, then review it before it joins Conocimiento.
 // Progress comes from the database's observed state, polled while it runs.
+import { formatUsd } from "@agentonic/contracts/format"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { Checkbox } from "@base-ui/react/checkbox"
 import {
@@ -75,12 +76,6 @@ async function styleCommand(
     )
   return result
 }
-const money = new Intl.NumberFormat("es-VE", {
-  style: "currency",
-  currency: "USD",
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-})
 const day = new Intl.DateTimeFormat("es-VE", { dateStyle: "medium" })
 const number = new Intl.NumberFormat("es-VE")
 
@@ -438,7 +433,7 @@ function Progress({
             Revisar guía
           </Button>
           <span className="text-xs text-muted-foreground">
-            Uso {money.format(guide.committedMicrousd / 1000000)}
+            Uso {formatUsd(guide.committedMicrousd / 1000000)}
             {guide.expiresAt &&
               ` · Si no decides, se elimina el ${day.format(new Date(guide.expiresAt))}`}
           </span>
@@ -532,8 +527,8 @@ function StartDialog({
           />
           <FieldDescription>
             Se cobra según el texto analizado y se detiene si alcanza este
-            límite. Entre {money.format(STYLE_BUDGET.min)} y{" "}
-            {money.format(STYLE_BUDGET.max)}.
+            límite. Entre {formatUsd(STYLE_BUDGET.min)} y{" "}
+            {formatUsd(STYLE_BUDGET.max)}.
           </FieldDescription>
         </Field>
         <ConsentCheckbox checked={consent} onCheckedChange={setConsent}>

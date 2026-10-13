@@ -1,13 +1,15 @@
 "use client"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
-import { ArrowLeftIcon, LoaderCircleIcon, CheckIcon } from "lucide-react"
+import { LoaderCircleIcon, CheckIcon } from "lucide-react"
 import {
   batchPassed,
   batchModelGroups,
   batchRunning,
+  type EvaluationBatch,
   type ReviewPreparation,
 } from "@agentonic/contracts/review-flow"
+import { formatUsd } from "@agentonic/contracts/format"
 import {
   evaluationModels,
   selectableModels,
@@ -27,6 +29,7 @@ import {
 } from "@workspace/ui/components/dialog"
 import { Button } from "@workspace/ui/components/button"
 import { Input } from "@workspace/ui/components/input"
+import { useEdgeFade } from "@workspace/ui/components/tabs"
 import { Checkbox } from "@base-ui/react/checkbox"
 import {
   Field,
@@ -60,8 +63,58 @@ export function modelResultsLabel(record: ReviewPreparation) {
     return `Evaluando · ${batchModelGroups(batch).filter((m) => !["queued", "running"].includes(m.status)).length}/${batchModelGroups(batch).length}`
   return `${batchPassed(batch)}/${batchModelGroups(batch).length} modelos al 100 %`
 }
-const usd = (n: number) =>
-  `US$${n.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 4 })}`
+/** One model and level's result in the summary: passed only when it ran
+ * every situation and passed them all. */
+function configurationOutcome(m: EvaluationBatch["models"][number]): {
+  outcome: "passed" | "failed" | "pending" | "attention"
+  label: string
+} {
+  if (m.status === "running") return { outcome: "pending", label: "Evaluando" }
+  if (["queued", "awaiting_consent"].includes(m.status))
+    return { outcome: "pending", label: "En cola" }
+  if (m.status === "passed" && m.total > 0 && m.passed === m.total)
+    return { outcome: "passed", label: "100 %" }
+  if (["error", "cancelled"].includes(m.status))
+    return { outcome: "attention", label: "Interrumpida" }
+  return { outcome: "failed", label: "Con fallos" }
+}
+
+/** The evaluated models as chips in one row that scrolls sideways. */
+function ModelChips({
+  models,
+  selected,
+  onSelect,
+}: {
+  models: string[]
+  selected: string
+  onSelect: (model: string) => void
+}) {
+  const ref = useRef<HTMLDivElement>(null)
+  const fade = useEdgeFade(ref)
+  return (
+    <div ref={ref} className="min-w-0 flex-1 overflow-x-auto" style={fade}>
+      <div
+        role="group"
+        aria-label="Modelos evaluados"
+        className="flex w-max gap-2 py-0.5"
+      >
+        {models.map((id) => (
+          <Button
+            key={id}
+            size="sm"
+            variant={id === selected ? "secondary" : "outline"}
+            aria-pressed={id === selected}
+            className="rounded-full"
+            onClick={() => onSelect(id)}
+          >
+            {modelConfigurationLabel({ model: id, reasoning: null })}
+          </Button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export function ModelResultsDialog({
   record,
   open,
@@ -147,13 +200,13 @@ export function ModelResultsDialog({
                   {completed}/{total} pruebas completadas
                 </span>
                 <span className="text-muted-foreground">
-                  {usd(
+                  {formatUsd(
                     batch.models.reduce(
                       (sum, m) => sum + m.committedMicrousd,
                       0
                     ) / 1000000
                   )}{" "}
-                  de {usd(batch.budgetUsd)}
+                  de {formatUsd(batch.budgetUsd)}
                 </span>
               </div>
               <progress
@@ -165,20 +218,34 @@ export function ModelResultsDialog({
             </div>
             {model ? (
               <div className="space-y-4">
-                <Button variant="ghost" onClick={() => setSelectedModel(null)}>
-                  <ArrowLeftIcon /> Todos los modelos
-                </Button>
+                <div className="flex items-center gap-2">
+                  <ModelChips
+                    models={batchModelGroups(batch).map((m) => m.model)}
+                    selected={model.model}
+                    onSelect={setSelectedModel}
+                  />
+                  <Button
+                    className="shrink-0"
+                    onClick={() => setSelectedModel(null)}
+                  >
+                    Ir al resumen
+                  </Button>
+                </div>
                 {model.configurations.map((configuration) => (
-                  <section key={configuration.id} className="space-y-4">
-                    <h3 className="font-medium">
-                      {modelConfigurationLabel(configuration)} ·{" "}
+                  <section key={configuration.id} className="space-y-3">
+                    <p className="text-sm text-muted-foreground">
+                      {configuration.reasoning
+                        ? `${reasoningLabels[configuration.reasoning as keyof typeof reasoningLabels] ?? configuration.reasoning} · `
+                        : ""}
                       {configuration.passed}/{configuration.total} superadas
-                    </h3>
+                    </p>
                     {configuration.errorCode && (
                       <p className="text-sm text-destructive">
                         {configuration.errorCode === "budget_exhausted"
                           ? "Se alcanzó el límite de esta ejecución: cada llamada reserva su costo máximo antes de empezar, así que el límite puede alcanzarse antes que el consumo. Repite la evaluación con un límite mayor."
-                          : "La evaluación de este modelo se interrumpió."}{" "}
+                          : configuration.errorCode === "provider_unavailable"
+                            ? "El proveedor de IA rechazó o no respondió una llamada, así que la evaluación de este nivel se detuvo."
+                            : "La evaluación de este modelo se interrumpió."}{" "}
                         Se conserva el consumo realizado.
                       </p>
                     )}
@@ -196,6 +263,8 @@ export function ModelResultsDialog({
                 ))}
               </div>
             ) : (
+              // One row per model and level, on one line (owner direction,
+              // 13 October 2026): each level has its own situations and result.
               <Table aria-label="Resultados por modelo">
                 <TableHeader>
                   <TableRow>
@@ -205,56 +274,31 @@ export function ModelResultsDialog({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {batchModelGroups(batch).map((m) => (
-                    <TableRow key={m.model}>
-                      <TableCell className="whitespace-normal">
-                        <Button
-                          variant="link"
-                          className="h-auto flex-col items-start gap-1 p-0 text-left whitespace-normal text-foreground underline underline-offset-4"
-                          onClick={() => setSelectedModel(m.model)}
-                        >
-                          {modelConfigurationLabel({
-                            model: m.model,
-                            reasoning: null,
-                          })}
-                          <span className="text-xs text-muted-foreground">
-                            {" "}
-                            · {m.configurations.length}{" "}
-                            {m.configurations.length === 1
-                              ? "nivel"
-                              : "niveles"}
-                          </span>
-                        </Button>
-                      </TableCell>
-                      <TableCell>
-                        {m.passed}/{m.total} superadas
-                      </TableCell>
-                      <TableCell>
-                        <ReviewResultStatus
-                          outcome={
-                            m.status === "passed"
-                              ? "passed"
-                              : m.status === "failed"
-                                ? "failed"
-                                : ["queued", "running"].includes(m.status)
-                                  ? "pending"
-                                  : "attention"
-                          }
-                          label={
-                            m.status === "passed"
-                              ? "100 %"
-                              : m.status === "queued"
-                                ? "En cola"
-                                : m.status === "running"
-                                  ? "Evaluando"
-                                  : m.status === "failed"
-                                    ? "Con fallos"
-                                    : "Interrumpida"
-                          }
-                        />
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {batch.models.map((m) => {
+                    const outcome = configurationOutcome(m)
+                    return (
+                      <TableRow key={m.id}>
+                        <TableCell>
+                          <Button
+                            variant="link"
+                            className="h-auto p-0 text-left text-foreground underline underline-offset-4"
+                            onClick={() => setSelectedModel(m.model)}
+                          >
+                            {modelConfigurationLabel(m)}
+                          </Button>
+                        </TableCell>
+                        <TableCell className="tabular-nums">
+                          {m.passed}/{m.total} superadas
+                        </TableCell>
+                        <TableCell>
+                          <ReviewResultStatus
+                            outcome={outcome.outcome}
+                            label={outcome.label}
+                          />
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
                 </TableBody>
               </Table>
             )}
@@ -263,7 +307,7 @@ export function ModelResultsDialog({
         {record.committedMicrousd !== undefined && (
           <p className="text-xs text-muted-foreground">
             Consumo acumulado, incluida la preparación y reservas pendientes:{" "}
-            {usd(record.committedMicrousd / 1000000)}.
+            {formatUsd(record.committedMicrousd / 1000000)}.
           </p>
         )}
       </DialogContent>
@@ -430,8 +474,8 @@ export function RunModelEvaluationDialog({
           />
           <FieldDescription>
             Sugerido para esta selección:{" "}
-            {usd(suggestedEvaluationBudget(models))}. Cada llamada reserva su
-            costo máximo antes de empezar; solo se cobra lo consumido.
+            {formatUsd(suggestedEvaluationBudget(models))}. Cada llamada reserva
+            su costo máximo antes de empezar; solo se cobra lo consumido.
           </FieldDescription>
         </Field>
         <ConsentCheckbox
@@ -439,7 +483,7 @@ export function RunModelEvaluationDialog({
           onCheckedChange={(value) => setConsent(value === true)}
           disabled={pending}
         >
-          Autorizo esta ejecución hasta {usd(Number(budget) || 0)}. Cada
+          Autorizo esta ejecución hasta {formatUsd(Number(budget) || 0)}. Cada
           ejecución consume IA y puede generar cargos, incluso si hay fallos.
           Repetirla implica consumo adicional.
         </ConsentCheckbox>

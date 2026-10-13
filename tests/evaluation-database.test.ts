@@ -2446,6 +2446,7 @@ async function modelReview() {
     // Removes two named test agents; any other database is left as it was.
     "202610130072_remove_test_agents",
     "202610130073_turn_steps",
+    "202610130074_evidence_names",
   ])
     await db.exec(
       readFileSync(
@@ -4301,13 +4302,39 @@ it("model batches separate confirmation from paid runs, enforce scope and preser
   await actor()
   const state = await db.query<{
     result: {
-      preparations: { canRun: boolean; batches: { models: unknown[] }[] }[]
+      preparations: {
+        canRun: boolean
+        sources: Record<string, unknown>[]
+        batches: {
+          models: {
+            model: string
+            results: { sources: Record<string, unknown>[] }[]
+          }[]
+        }[]
+      }[]
     }
   }>("SELECT agentonic.review_flow_state($1) result", [a])
   expect(state.rows[0]!.result.preparations[0]).toMatchObject({ canRun: true })
   expect(
     state.rows[0]!.result.preparations[0]!.batches[0]!.models
   ).toHaveLength(2)
+  // Evidence names its documents and never carries the passage text (§76).
+  const named = [
+    ...state.rows[0]!.result.preparations[0]!.sources,
+    ...state.rows[0]!.result.preparations[0]!.batches[0]!.models.find(
+      (m) => m.model === "gpt-5.4"
+    )!.results[0]!.sources,
+  ]
+  expect(named.length).toBeGreaterThan(1)
+  for (const source of named) {
+    expect(Object.keys(source).sort()).toEqual([
+      "collection",
+      "documentId",
+      "id",
+      "title",
+    ])
+    expect(source.title).toEqual(expect.any(String))
+  }
   expect(await flow("run", { ...payload, requestId: id(991) })).toMatchObject({
     ok: true,
   })

@@ -1,6 +1,6 @@
 # Agentonic: current state
 
-**As of 13 October 2026 · platform v0.43.1 · nonproduction only.** A short summary of what runs where, what works and what doesn't exist yet. [The architecture record](agentonic-architecture.md) keeps the full, dated history. If the two disagree about the present, fix this page. Update it whenever a change alters what runs where.
+**As of 13 October 2026 · platform v0.44.0 · nonproduction only.** A short summary of what runs where, what works and what doesn't exist yet. [The architecture record](agentonic-architecture.md) keeps the full, dated history. If the two disagree about the present, fix this page. Update it whenever a change alters what runs where.
 
 ## What runs where
 
@@ -111,6 +111,8 @@ New versions use runtime 0.7.0. Google accepts `gmail.modify` for test users, an
 
 **A model's answer is read as it was meant (architecture §75), installed 13 October with staging broker `9dfa013a`, evaluator `ddbdd1cd` and `platform-0.43.1-9e55a9ba3796`.** GPT-5.4 writes progress notes as separate messages before its final answer, and GPT-5.4 mini sometimes marks an answer without citations as backed by the knowledge base. The frozen runtime refused both, so chats failed and evaluations stopped (the `leonardo@avilabs.tech` runs interrupted on 13 October). The broker now hands the runtime the final answer alone, with a consistent evidence flag. An evaluation fails only the case whose answer it can't read.
 
+**Evidence by name, results by level (architecture §76), platform v0.44.0 with migration 74.** Resultados and the criteria dialog list a situation's sources as document names, never their text. Resultados has one row per model and level and model chips, money shows at most two decimals in both apps, and versions read "v3". The draft's saves are "Edición N", so "Revisión" is only the review number.
+
 ## Operations
 
 - **Verification.** Hosts and evaluators stay trusted for 30 days (migration 52; it was 7 until 7 October). A launchd job on the Mac runs `pnpm staging:reverify --renew --publish` at 09:00 and 21:00. It checks the installed files and services over SSH, renews only what passes, and renews anything a week old or more, so the VM keeps working for 23 to 30 days with the Mac off. The GitHub alert for a silent Mac only fires once an expiry is within 5 days. Run `pnpm staging:reverify` (read-only) for live expiry dates and what each environment runs: its worker release and each runtime's version and source commit. The local deployment host has been expired since 26 September on purpose; run `install-staging --local` before using local staging chats.
@@ -186,5 +188,6 @@ The ordered plan is architecture §37; the owner's audit brief tracks progress. 
 | A turn survives what the model asks for                                | §73                  |
 | A turn shows its steps                                                 | §74                  |
 | A model's answer is read as it was meant                               | §75                  |
+| Evidence by name, results by level, money to the cent                  | §76                  |
 
-Presentation rules are in the [UI contract](ui/ui-contract.md). The [target schema](schema.dbml) describes 90 tables; 73 exist in the 73 checked-in migrations.
+Presentation rules are in the [UI contract](ui/ui-contract.md). The [target schema](schema.dbml) describes 90 tables; 73 exist in the 74 checked-in migrations.

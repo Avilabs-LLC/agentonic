@@ -23,6 +23,7 @@ import {
   CellButton,
   CellLink,
   Count,
+  VersionNumber,
   Deadline,
   sortableHeader,
   timeKey,
@@ -242,7 +243,7 @@ function ProposalsTable({
     {
       accessorKey: "versionNumber",
       header: header("Versión"),
-      cell: ({ row }) => <Count value={row.original.versionNumber} />,
+      cell: ({ row }) => <VersionNumber value={row.original.versionNumber} />,
     },
     {
       accessorKey: "number",

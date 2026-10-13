@@ -85,6 +85,12 @@ export function Count({ value }: { value: number }) {
   return <span className="tabular-nums">{formatCount(value)}</span>
 }
 
+/** An agent's version number, as every table shows it: "v3" (owner
+ * direction, 13 October 2026; a bare number didn't read as a version). */
+export function VersionNumber({ value }: { value: number }) {
+  return <span className="tabular-nums">v{value}</span>
+}
+
 /** Monospaced identifiers: commits, artifacts, workers, record ids. */
 export function Code({ children }: { children: React.ReactNode }) {
   return <span className="font-mono">{children}</span>

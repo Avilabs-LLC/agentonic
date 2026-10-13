@@ -15,7 +15,7 @@ import {
 import {
   Absent,
   Code,
-  Count,
+  VersionNumber,
   sortableHeader,
   timeKey,
   When,
@@ -52,7 +52,7 @@ export function deploymentColumns<T extends DeploymentRow>({
               return n === undefined ? (
                 <Absent>No disponible</Absent>
               ) : (
-                <Count value={n} />
+                <VersionNumber value={n} />
               )
             },
           } satisfies ColumnDef<T>,

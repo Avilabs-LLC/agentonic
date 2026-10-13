@@ -5,6 +5,7 @@ import {
   modelCatalog,
   type ModelConfiguration,
 } from "@agentonic/contracts/models"
+import { formatUsd } from "@agentonic/contracts/format"
 import { ModelPicker } from "@workspace/ui/components/model-picker"
 import { ChatComposer } from "@workspace/ui/components/chat-composer"
 import { AgentAnswer } from "@workspace/ui/components/agent-answer"
@@ -226,9 +227,7 @@ export function AgentPreview({
         <div className="flex flex-wrap items-end justify-between gap-3">
           {previewId ? (
             <p className="self-center text-sm text-muted-foreground">
-              Máximo US$
-              {(state?.budgetUsd ?? budgetUsd).toFixed(2).replace(".", ",")} por
-              prueba
+              Máximo {formatUsd(state?.budgetUsd ?? budgetUsd)} por prueba
             </p>
           ) : (
             <Field className="w-full sm:w-56">

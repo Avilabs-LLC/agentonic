@@ -1,5 +1,10 @@
 export const VERSION_HISTORY = [
   {
+    "version": "0.44.0",
+    "date": "2026-10-13",
+    "summary": "Resultados name each situation's sources instead of quoting them, show models as chips with one summary row per level, money to the cent everywhere, and versions as v3 (§76)."
+  },
+  {
     "version": "0.43.1",
     "date": "2026-10-13",
     "summary": "GPT-5.4's progress notes and an uncited answer marked as knowledge-backed no longer fail a turn or stop an evaluation: the broker hands the runtime the final answer alone with a consistent evidence flag, streaming skips the notes, and an unreadable answer fails only its own case"
