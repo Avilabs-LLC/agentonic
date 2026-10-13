@@ -14,6 +14,7 @@ import {
   modelConfigurationKey,
   modelConfigurationLabel,
   reasoningLabels,
+  suggestedEvaluationBudget,
   type ModelConfiguration,
 } from "@agentonic/contracts/models"
 import type { FormResult } from "@agentonic/contracts/authoring"
@@ -27,7 +28,11 @@ import {
 import { Button } from "@workspace/ui/components/button"
 import { Input } from "@workspace/ui/components/input"
 import { Checkbox } from "@base-ui/react/checkbox"
-import { Field, FieldLabel } from "@workspace/ui/components/field"
+import {
+  Field,
+  FieldDescription,
+  FieldLabel,
+} from "@workspace/ui/components/field"
 import { ConsentCheckbox } from "@workspace/ui/components/consent-checkbox"
 import {
   Table,
@@ -172,7 +177,7 @@ export function ModelResultsDialog({
                     {configuration.errorCode && (
                       <p className="text-sm text-destructive">
                         {configuration.errorCode === "budget_exhausted"
-                          ? "Se alcanzó el límite de esta ejecución."
+                          ? "Se alcanzó el límite de esta ejecución: cada llamada reserva su costo máximo antes de empezar, así que el límite puede alcanzarse antes que el consumo. Repite la evaluación con un límite mayor."
                           : "La evaluación de este modelo se interrumpió."}{" "}
                         Se conserva el consumo realizado.
                       </p>
@@ -292,7 +297,11 @@ export function RunModelEvaluationDialog({
       }) ??
       selectableModels.map((m) => ({ model: m.id, reasoning: m.defaultLevel }))
   )
-  const [budget, setBudget] = useState("3")
+  // The limit follows the selected models until the person edits it (§70).
+  const [budget, setBudget] = useState(() =>
+    String(suggestedEvaluationBudget(models))
+  )
+  const [budgetEdited, setBudgetEdited] = useState(false)
   const [consent, setConsent] = useState(false)
   const [pending, setPending] = useState(false)
   const [error, setError] = useState("")
@@ -304,16 +313,16 @@ export function RunModelEvaluationDialog({
   }
   function toggle(configuration: ModelConfiguration) {
     changed()
-    setModels((items) =>
-      items.some(
-        (m) => modelConfigurationKey(m) === modelConfigurationKey(configuration)
-      )
-        ? items.filter(
-            (m) =>
-              modelConfigurationKey(m) !== modelConfigurationKey(configuration)
-          )
-        : [...items, configuration]
+    const next = models.some(
+      (m) => modelConfigurationKey(m) === modelConfigurationKey(configuration)
     )
+      ? models.filter(
+          (m) =>
+            modelConfigurationKey(m) !== modelConfigurationKey(configuration)
+        )
+      : [...models, configuration]
+    setModels(next)
+    if (!budgetEdited) setBudget(String(suggestedEvaluationBudget(next)))
   }
   async function run() {
     if (pending || !consent || !evaluationModels.safeParse(models).success)
@@ -415,9 +424,15 @@ export function RunModelEvaluationDialog({
             disabled={pending}
             onChange={(e) => {
               setBudget(e.target.value)
+              setBudgetEdited(true)
               changed()
             }}
           />
+          <FieldDescription>
+            Sugerido para esta selección:{" "}
+            {usd(suggestedEvaluationBudget(models))}. Cada llamada reserva su
+            costo máximo antes de empezar; solo se cobra lo consumido.
+          </FieldDescription>
         </Field>
         <ConsentCheckbox
           checked={consent}
