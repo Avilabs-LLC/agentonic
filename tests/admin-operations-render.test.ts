@@ -337,7 +337,7 @@ describe("Admin operations screens", () => {
     expect(days).toContain("19 operaciones")
   })
   it("names what each server runs, and renders workspaces and releases", () => {
-    const servers = html(ui.OperationsInstallationsCard, {
+    const servers = {
       hosts: [
         {
           environment: "azure_staging",
@@ -356,7 +356,7 @@ describe("Admin operations screens", () => {
           state: "valid",
           heartbeatAt: null,
           current: "76c3155d",
-          workers: ["76c3155d", "ec30c590"],
+          workers: ["ec30c590", "76c3155d"],
           runtimes: [{ version: "0.6.0-preview-4b9f84b0", commit: null }],
         },
       ],
@@ -369,34 +369,53 @@ describe("Admin operations screens", () => {
           runtimes: [],
         },
       ],
+    }
+    // vm-agents-01 as four metric tiles; nothing from Local (desarrollo).
+    const vm = html(ui.OperationsServerTiles, {
+      ...servers,
+      environment: "azure_staging",
     })
-    // One row per kind, named once, with a column per place.
-    for (const [text, times] of [
-      [">Agentes</h3>", 1],
-      [">Evaluaciones</h3>", 1],
-      ["lucide-bot", 1],
-      ["lucide-flask-conical", 1],
-      [">vm-agents-01<", 3],
-      [">Local (desarrollo)<", 3],
-    ] as const)
-      expect(servers.split(text).length - 1, text).toBe(times)
     for (const text of [
-      ">Trabajador f7deae1f<",
-      ">En servicio: 76c3155d, ec30c590<",
+      ">Servidor de agentes<",
+      ">Trabajador<",
+      ">Servidor de evaluaciones<",
+      ">Evaluador<",
+      // Registration states as toned text, never a badge.
+      ">Vigente<",
+      ">Vence pronto<",
+      ">f7deae1f<",
+      "Reportó el 6/10/2026, 12:00 p. m. UTC",
       // The newest runtime by number, not as text; the rest collapsed.
       ">Runtime 0.10.0</span>",
       'title="0.10.0-preview-649676c5"',
       "y 2 más",
-      ">Runtime 0.6.0</span>",
-      ">Sin reportes<",
-      ">Evaluador c0fdd72d<",
+      ">c0fdd72d<",
       ">Sin runtimes<",
       ">Sin pruebas de herramientas<",
-      ">Sin registrar<",
-      "Vence pronto",
     ])
-      expect(servers).toContain(text)
-    expect(servers).not.toContain("·")
+      expect(vm, text).toContain(text)
+    for (const text of ["76c3155d", "ec30c590", 'data-slot="badge"', "·"])
+      expect(vm, text).not.toContain(text)
+    // Local keeps the same tiles: two workers in service, no evaluator.
+    const local = html(ui.OperationsServerTiles, {
+      ...servers,
+      environment: "local",
+      compact: true,
+    })
+    for (const text of [
+      ">76c3155d <button",
+      "y 1 más",
+      ">Sin reportes<",
+      ">Runtime 0.6.0</span>",
+      ">Sin registrar<",
+    ])
+      expect(local, text).toContain(text)
+    expect(local).not.toContain("f7deae1f")
+    expect(local).not.toContain("xl:grid-cols-4")
+    // Local (desarrollo) opens from the page header.
+    expect(html(ui.OperationsLocalServers, servers)).toContain(
+      "Local (desarrollo)"
+    )
     // Vencimientos: the deadline and the verification on their own lines.
     const registrations = html(expiryOverview.RegistrationsCard, {
       now,
