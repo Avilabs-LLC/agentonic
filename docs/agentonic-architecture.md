@@ -1086,7 +1086,7 @@ Owner selected public website search and reading. **Acceso web** belongs in **He
 
 ### 39.1 Bounded research and recoverable reads — 2026-09-18
 
-Migration 32 preserves immutable registry limits while newly published runtimes opt into eight research calls with `webResearch: "1"`. Shared broker policy retains mandatory criteria, rejects unsupported matches and background-work promises. Recoverable read errors can lead to another source; live authorization and spending remain hard boundaries. Content-free failure diagnostics and a metered synthetic-model benchmark cover constrained comparison, failed reads and follow-up context. See [web research acceptance](web-access.md#research-quality-and-recovery--migration-32) for execution, evidence and limits.
+Migration 32 preserves immutable registry limits while newly published runtimes opt into eight research calls with `webResearch: "1"`. Shared broker policy retains mandatory criteria, rejects unsupported matches and background-work promises. Recoverable read errors can lead to another source; live authorization and spending remain hard boundaries. A failed read keeps its reservation open, and activated chats still record the turn's answer (§66). Content-free failure diagnostics and a metered synthetic-model benchmark cover constrained comparison, failed reads and follow-up context. See [web research acceptance](web-access.md#research-quality-and-recovery--migration-32) for execution, evidence and limits.
 
 ### 39.2 Versioned VM staging release — 2026-09-18
 
@@ -2314,3 +2314,23 @@ Owner report on the hosted Admin. Three paths misled:
 **Tests.** `tests/back-target.test.ts`: no API, nothing behind, entries of the same page skipped, counting after going back. The agent page's review cell in `tests/admin-operations-render.test.ts`.
 
 **Rollout, 9 October 2026.** No migration. `platform-0.37.1-b32c66da4d5a` installed with `pnpm platform:install --azure` after 0.37.0, replacing `platform-0.37.0-1bfecda33711`. Admin, the customer app and the knowledge worker each passed their health gate, and `hosted:check` passed. The owner has not yet retried the three paths in a browser.
+
+## 66. An activated chat keeps its answer when a reservation stays open — 13 October 2026
+
+**Found 13 October.** A NicolAI-Mail turn in Chats failed after 76 s and showed "No se pudo completar la respuesta." It had made 9 model calls, 3 Gmail calls, 4 web searches and 1 web read. The final call returned a normal answer, and the turn was recorded as failed (`runtime_mismatch`) 0.4 s later.
+
+- The web read had met an HTTP 302. Reads never follow redirects (§39.1), and a failed read keeps its Browserbase reservation unsettled on purpose: uncertain usage is never refunded, and the model moves on to another source.
+- The database's staging `answer` step refused any answer while one of the turn's reservations was still open. The broker reports a database refusal as `runtime_mismatch`, which the chat shows with the generic text.
+- Previews never had that rule, so the same failed read in Probar answered normally. The runtime's own fallback has the same gap in activated chats: after a research request with an unknown outcome, it answers from the evidence it has, and that request's OpenAI reservation stays open.
+
+**Change (migration 69).** `staging_worker` is migration 56's definition with one condition removed. An answer is now refused only when the deployment is over its budget, as in previews. An open reservation stays in the deployment's committed spend, is never refunded, and counts as unknown cost after an hour (§50). `select-matches` still requires the rerank reservation to be settled. Evaluations keep their rule that outstanding reservations block finalization (§34). Scheduled runs are staging turns, so they are covered too. No worker or runtime change.
+
+**Why the turn searched the web.** The request asked the agent to process the last 10 emails, classify and summarize them, prepare replies as drafts, and list tasks, appointments and alerts.
+
+- A turn allows 3 Gmail calls, draft proposals included. That limit dates from the first Gmail slice (18 September) and is enforced by the runtime, the broker and, for writes, the database. The agent used one search (10 messages as excerpts) and two reads, and the runtime then stopped offering every Gmail tool.
+- Web tools were granted, so the turn had an 8-call research allowance. The model spent the remaining 5 calls on the web, and nothing records what it searched for.
+- A draft proposal ends the turn with the fixed proposal answer, so one turn can't carry several drafts and a summary.
+
+The owner decided to fix the recorded answer now and to plan the Gmail turn limits separately (outstanding B9).
+
+**Tests.** `tests/evaluation-database.test.ts`, "open reservations in activated chats (§66)", on the later-migrations fixture (now including migration 69). A turn's answer is recorded while a failed web read's reservation stays open, the reservation keeps its status, and an over-budget deployment is still refused. Without migration 69 the test fails.

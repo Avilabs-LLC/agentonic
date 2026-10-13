@@ -2439,6 +2439,7 @@ async function modelReview() {
     "202610080063_ongoing_deployments",
     "202610090064_careful_grading",
     "202610090066_single_authorization",
+    "202610130069_staging_open_reservations",
   ])
     await db.exec(
       readFileSync(
@@ -3640,6 +3641,88 @@ describe("ongoing deployments (§59)", () => {
         )
       ).rows
     ).toEqual([{ query: "", scrubbed: true }])
+  })
+})
+
+describe("open reservations in activated chats (§66)", () => {
+  it("records the answer while a failed web read keeps its reservation; only the budget refuses it", async () => {
+    const p = await modelReview()
+    await actor()
+    await flow("run", {
+      preparationId: p.preparationId,
+      revision: 1,
+      models: [{ model: "gpt-5.4-mini", reasoning: "medium" }],
+      budgetUsd: 3,
+      consent: true,
+      requestId: id(1301),
+    })
+    await finishFlow((await evalClaim())!, "passed", true, "gpt-5.4-mini")
+    await sql(
+      "WITH h AS (INSERT INTO agentonic.runtime_hosts(environment,database_role,broker_sha256,verified_at,heartbeat_at) VALUES('local','agentonic_deployer_local',repeat('f',64),clock_timestamp(),clock_timestamp()) RETURNING id), b AS (INSERT INTO agentonic.runtime_host_brokers(host_id,broker_sha256) SELECT id,repeat('f',64) FROM h) INSERT INTO agentonic.runtime_host_artifacts(host_id,runtime_sha256) SELECT id,repeat('b',64) FROM h"
+    )
+    await actor()
+    const d = await lifecycleCall("deployment_command", "authorize", {
+      submissionId: p.submissionId,
+      environment: "local",
+      budgetUsd: 5,
+      consent: true,
+      requestId: id(1302),
+    })
+    const deploymentId = String(d.id)
+    await readyStaging({ ...p, deploymentId })
+    await actor()
+    const conversation = await chat("start", {
+      deploymentId,
+      title: "Synthetic redirect",
+    })
+    await chat("turn", {
+      conversationId: conversation.id,
+      requestId: id(1303),
+      query: "Read a page that redirects",
+      model: "gpt-5.4-mini",
+      reasoning: "medium",
+    })
+    const job = (await stagingWork(deploymentId, "claim")) as unknown as Job
+    // A redirected web read: reserved and charged, never settled or refunded.
+    await sql(
+      "INSERT INTO agentonic.retrieval_provider_operations(id,job_id,workspace_id,provider,model,reserved_microusd,agent_id,deployment_id,conversation_id) VALUES($1,$2,$3,'browserbase','web.read',4000,$4,$5,$6)",
+      [id(1304), job.id, w, a, deploymentId, conversation.id]
+    )
+    const answer = {
+      text: "The page redirected, so its content is unverified.",
+      citations: [],
+      insufficientEvidence: true,
+      model: "gpt-5.4-mini",
+    }
+    await sql(
+      "UPDATE agentonic.deployments SET committed_microusd=budget_usd*1000000+1 WHERE id=$1",
+      [deploymentId]
+    )
+    await expect(
+      stagingWork(deploymentId, "answer", job, answer)
+    ).rejects.toMatchObject({ code: "42501" })
+    await sql(
+      "UPDATE agentonic.deployments SET committed_microusd=4000 WHERE id=$1",
+      [deploymentId]
+    )
+    expect(await stagingWork(deploymentId, "answer", job, answer)).toEqual({
+      ok: true,
+    })
+    expect(
+      (
+        await sql(
+          "SELECT status FROM agentonic.retrieval_provider_operations WHERE id=$1",
+          [id(1304)]
+        )
+      ).rows
+    ).toEqual([{ status: "reserved" }])
+    await actor()
+    expect(
+      await chat("state", { conversationId: conversation.id })
+    ).toMatchObject({
+      ok: true,
+      turns: [{ answer: answer.text, status: "succeeded" }],
+    })
   })
 })
 
