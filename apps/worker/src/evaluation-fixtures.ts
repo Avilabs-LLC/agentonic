@@ -37,7 +37,62 @@ function matching<T>(records: T[], query: string, text: (r: T) => string) {
     return terms.some((t) => haystack.includes(t))
   })
 }
-const headers = (m: NonNullable<EvaluationFixtures["mailbox"]>[number]) => [
+type FixtureMessage = NonNullable<EvaluationFixtures["mailbox"]>[number]
+// Gmail search operators (§69). A fixture mailbox is one inbox, listed newest
+// first. from:, to: and subject: match their header (any of several values,
+// all words of one); sent, drafts, trash and spam hold nothing; every other
+// operator, such as in:inbox, is:unread or newer_than:7d, describes the whole
+// fixture. Plain words match as before; -word excludes.
+const HEADERS = ["from", "to", "subject"] as const
+type Header = (typeof HEADERS)[number]
+const EMPTY_FOLDERS = new Set(["sent", "draft", "drafts", "trash", "spam"])
+const OPERATORS = new Set<string>([
+  ...HEADERS,
+  ...["in", "is", "label", "category", "has", "list", "filename"],
+  ...["newer_than", "older_than", "newer", "older", "after", "before"],
+  ...["larger", "smaller", "cc", "bcc", "deliveredto", "rfc822msgid"],
+])
+const isHeader = (name: string): name is Header =>
+  (HEADERS as readonly string[]).includes(name)
+/** The messages a Gmail query finds in a fixture mailbox, in its order. */
+function searchMailbox(mailbox: FixtureMessage[], query: string) {
+  const header: Record<Header, string[][]> = { from: [], to: [], subject: [] }
+  const text: string[] = [],
+    excluded: string[] = []
+  for (const token of query.match(/-?[\w.]+:"[^"]*"|-?"[^"]*"|\S+/g) ?? []) {
+    const negated = token.startsWith("-")
+    const bare = (negated ? token.slice(1) : token).replace(/[(){}]/g, "")
+    const colon = bare.indexOf(":")
+    const name = colon > 0 ? bare.slice(0, colon).toLowerCase() : ""
+    if (!OPERATORS.has(name)) {
+      if (bare !== "OR" && bare !== "AND")
+        (negated ? excluded : text).push(bare)
+      continue
+    }
+    // A negated operator (-in:sent, -category:promotions) narrows nothing here.
+    if (negated) continue
+    const value = bare
+      .slice(colon + 1)
+      .replace(/"/g, "")
+      .toLowerCase()
+    if (["in", "is", "label"].includes(name) && EMPTY_FOLDERS.has(value))
+      return []
+    if (isHeader(name)) header[name].push(words(value))
+  }
+  const without = words(excluded.join(" "))
+  const all = (m: FixtureMessage) => `${m.from} ${m.to} ${m.subject} ${m.text}`
+  return matching(mailbox, text.join(" "), all).filter(
+    (m) =>
+      HEADERS.every(
+        (name) =>
+          !header[name].length ||
+          header[name].some((value) =>
+            value.every((t) => m[name].toLowerCase().includes(t))
+          )
+      ) && !without.some((t) => all(m).toLowerCase().includes(t))
+  )
+}
+const headers = (m: FixtureMessage) => [
   { name: "From", value: m.from },
   { name: "To", value: m.to },
   { name: "Subject", value: m.subject },
@@ -126,11 +181,10 @@ export function fixtureProviders(
       calls.push({ tool: call.operation, arguments: call.arguments })
       const a = call.arguments as Record<string, unknown>
       if (call.operation === "gmail.search") {
-        const found = matching(
-          mailbox,
-          String(a.query),
-          (m) => `${m.from} ${m.to} ${m.subject} ${m.text}`
-        ).slice(0, Number(a.limit))
+        const found = searchMailbox(mailbox, String(a.query)).slice(
+          0,
+          Number(a.limit)
+        )
         // As in a chat, a search expands its results only with the read grant.
         return {
           messages: grant.operations.includes("gmail.read")
