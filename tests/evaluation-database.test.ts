@@ -2443,6 +2443,8 @@ async function modelReview() {
     "202610130069_staging_open_reservations",
     "202610130070_mailbox_batch_turns",
     "202610130071_mailbox_followups",
+    // Removes two named test agents; any other database is left as it was.
+    "202610130072_remove_test_agents",
   ])
     await db.exec(
       readFileSync(
