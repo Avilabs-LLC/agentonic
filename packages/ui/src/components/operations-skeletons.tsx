@@ -2,6 +2,7 @@ import { Skeleton } from "@workspace/ui/components/skeleton"
 import { Card, CardContent, CardHeader } from "@workspace/ui/components/card"
 import {
   BackRowSkeleton,
+  MetricGroupsSkeleton,
   MetricTilesSkeleton,
   PageHeaderSkeleton,
   PageHeaderWithActionSkeleton,
@@ -125,12 +126,12 @@ export function OperationsTeamSkeleton() {
     </div>
   )
 }
-/** Despliegues: the header with its Local (desarrollo) button, vm-agents-01's four tiles and the eleven-column table. */
+/** Despliegues: the header with its Local (desarrollo) button, vm-agents-01's two cards and the eleven-column table. */
 export function OperationsDeploymentsSkeleton() {
   return (
     <div aria-label="Cargando despliegues" role="status" className="space-y-6">
       <PageHeaderWithActionSkeleton action="w-44" />
-      <MetricTilesSkeleton count={4} className="xl:grid-cols-4" />
+      <MetricGroupsSkeleton />
       <TableSkeleton columns={11} />
     </div>
   )

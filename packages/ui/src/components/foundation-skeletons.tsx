@@ -114,8 +114,7 @@ export function DashboardSkeleton({
     </div>
   )
 }
-/** Metric tiles: label, value and detail (the agent page, Despliegues,
- * Vencimientos). */
+/** Metric tiles: label, value and detail (the agent page). */
 export function MetricTilesSkeleton({
   count,
   className,
@@ -139,6 +138,34 @@ export function MetricTilesSkeleton({
     </div>
   )
 }
+/** Server cards (Despliegues, Vencimientos): an icon and a name, then two
+ * metrics side by side, each a label, value and detail. */
+export function MetricGroupsSkeleton() {
+  return (
+    <div className="grid gap-4 xl:grid-cols-2">
+      {Array.from({ length: 2 }, (_, i) => (
+        <Card key={i}>
+          <CardHeader className="flex items-center gap-2">
+            <Skeleton className="size-4 rounded-sm" />
+            <Skeleton className="h-4 w-24" />
+          </CardHeader>
+          <CardContent className="grid divide-y sm:auto-cols-fr sm:grid-flow-col sm:divide-x sm:divide-y-0">
+            {Array.from({ length: 2 }, (_, j) => (
+              <div
+                key={j}
+                className="space-y-2 py-3 first:pt-0 last:pb-0 sm:px-4 sm:py-0 sm:first:pl-0 sm:last:pr-0"
+              >
+                <Skeleton className="h-3 w-20" />
+                <Skeleton className="h-5 w-28 rounded-full" />
+                <Skeleton className="h-3 w-36" />
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  )
+}
 /** A page header with one action at its right end (Equipo, Despliegues,
  * Vencimientos). */
 export function PageHeaderWithActionSkeleton({ action }: { action: string }) {
@@ -150,12 +177,12 @@ export function PageHeaderWithActionSkeleton({ action }: { action: string }) {
   )
 }
 // Vencimientos: the header with its Local (desarrollo) button, vm-agents-01's
-// four tiles and the ten-column deadlines table.
+// two cards and the ten-column deadlines table.
 export function ExpirySkeleton() {
   return (
     <div aria-label="Cargando vencimientos" role="status" className="space-y-6">
       <PageHeaderWithActionSkeleton action="w-44" />
-      <MetricTilesSkeleton count={4} className="xl:grid-cols-4" />
+      <MetricGroupsSkeleton />
       <TableSkeleton columns={10} />
     </div>
   )

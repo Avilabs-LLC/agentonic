@@ -1,6 +1,6 @@
 "use client"
 import type { ReactNode } from "react"
-import { LaptopIcon } from "lucide-react"
+import { BotIcon, FlaskConicalIcon, LaptopIcon } from "lucide-react"
 import { environmentLabels } from "@agentonic/contracts/lifecycle"
 import { statusDescriptor } from "@workspace/ui/lib/badge-status"
 import { cn } from "@workspace/ui/lib/utils"
@@ -16,11 +16,17 @@ import {
   DialogTrigger,
 } from "@workspace/ui/components/dialog"
 
-// Servers as metric tiles (Despliegues, Vencimientos; UI contract §9): the
-// page shows vm-agents-01 in one row, and Local (desarrollo) opens in a dialog
-// from the page header with the same tiles, so each fact keeps one rendering.
+// Servers as metric cards (Despliegues, Vencimientos; UI contract §9): one
+// card per kind, headed by its icon, with two metrics side by side. The page
+// shows vm-agents-01 in one row, and Local (desarrollo) opens in a dialog from
+// the page header with the same cards, so each fact keeps one rendering.
 
 export type Environment = "local" | "azure_staging"
+/** Each kind's card heading, as the server grid named it. */
+export const serverKinds = {
+  agents: { title: "Agentes", icon: BotIcon },
+  evaluations: { title: "Evaluaciones", icon: FlaskConicalIcon },
+} as const
 export const unregistered = {
   value: "Sin registrar",
   tone: "text-muted-foreground",
@@ -32,7 +38,8 @@ export function registrationValue(state: string | undefined) {
   const descriptor = statusDescriptor("registration", state)
   return { value: descriptor.label, tone: iconTones[descriptor.variant] }
 }
-/** One row of four tiles on the page; two per row in the Local dialog. */
+/** Both cards in one row on the page from xl; one per row in the Local
+ * dialog. */
 export function ServerTilesGrid({
   compact,
   children,
@@ -41,9 +48,7 @@ export function ServerTilesGrid({
   children: ReactNode
 }) {
   return (
-    <div
-      className={cn("grid gap-4 sm:grid-cols-2", !compact && "xl:grid-cols-4")}
-    >
+    <div className={cn("grid gap-4", !compact && "xl:grid-cols-2")}>
       {children}
     </div>
   )

@@ -1,5 +1,10 @@
 export const VERSION_HISTORY = [
   {
+    "version": "0.43.0",
+    "date": "2026-10-13",
+    "summary": "Despliegues and Vencimientos show vm-agents-01 as two cards, Agentes and Evaluaciones, with their icons back and each card's two metrics side by side"
+  },
+  {
     "version": "0.42.1",
     "date": "2026-10-13",
     "summary": "A chat turn may offer every tool its version grants, so an agent with all Gmail permissions and the web on runtime 0.7.0 no longer fails before answering; protocol limits follow the tool catalogs, evaluations offer the same tools as chats, and a refused message names the field it broke"
