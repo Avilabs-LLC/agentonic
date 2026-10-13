@@ -40,6 +40,7 @@ import type { Providers } from "../apps/worker/src/providers"
 import { runPreview, verifyRuntime } from "../apps/worker/src/runtime"
 import type { Execute, Lease } from "../apps/worker/src/pipeline"
 import { keyring } from "../packages/connectors/src/secrets"
+import { GoogleError } from "../packages/connectors/src/google"
 import { directProviders } from "../apps/worker/src/providers"
 // @ts-expect-error untyped build script
 import { buildRuntimeArtifact } from "../scripts/runtime-artifact.mjs"
@@ -934,6 +935,122 @@ describe("mailbox batch turns (§67)", () => {
     expect(MAX_TOOL_OFFERS).toBe(16)
   })
 
+  it("keeps the first five calls of a response, drops the rest and goes on (§73)", async () => {
+    // NicolAI-Mail's turn 4 on 13 October: GPT-6 Astra asked for more calls
+    // in one response than a turn takes, and the broker failed the turn.
+    let models = 0
+    const fetch = vi.fn(async () => {
+      models++
+      if (models === 1)
+        return json(
+          calls(
+            ...Array.from(
+              { length: 7 },
+              (_, n) =>
+                ["gmail_read", { id: `b0${n + 1}` }] as [string, unknown]
+            )
+          )
+        )
+      return json(
+        answer({ text: "Leídos.", citations: [], insufficientEvidence: true })
+      )
+    })
+    vi.stubGlobal("fetch", fetch)
+    const gmailTool = vi.fn()
+    const recorded = await turnInProcess(
+      batchSpec(),
+      vi.fn<Execute>().mockResolvedValue({ ok: true }),
+      { providers: mailbox(gmailTool), gmail: grant, batch: true },
+      env()
+    )
+    expect(recorded?.text).toBe("Leídos.")
+    expect(gmailTool.mock.calls.map((c) => c[1])).toEqual(
+      ["b01", "b02", "b03", "b04", "b05"].map((id) => ({ id }))
+    )
+    // The dropped calls are never resent: five calls, five outputs.
+    const second = bodies(fetch)[1].input as { type?: string }[]
+    expect(second.filter((x) => x.type === "function_call")).toHaveLength(5)
+    expect(
+      second.filter((x) => x.type === "function_call_output")
+    ).toHaveLength(5)
+  })
+
+  it("returns refused arguments to the model instead of failing the turn (§73)", async () => {
+    let models = 0
+    const fetch = vi.fn(async () => {
+      models++
+      if (models === 1)
+        return json(calls(["gmail_search", { query: "in:inbox", limit: 50 }]))
+      return json(
+        answer({
+          text: "Corregido.",
+          citations: [],
+          insufficientEvidence: true,
+        })
+      )
+    })
+    vi.stubGlobal("fetch", fetch)
+    const gmailTool = vi.fn()
+    const recorded = await turnInProcess(
+      batchSpec(),
+      vi.fn<Execute>().mockResolvedValue({ ok: true }),
+      { providers: mailbox(gmailTool), gmail: grant, batch: true },
+      env()
+    )
+    expect(recorded?.text).toBe("Corregido.")
+    expect(gmailTool).not.toHaveBeenCalled()
+    expect(JSON.stringify(bodies(fetch)[1].input)).toContain(
+      "invalid_arguments"
+    )
+  })
+
+  it("gives a refused read or proposal back to the model, but stops for a reconnect (§73)", async () => {
+    const run = async (failure: unknown) => {
+      let models = 0
+      const fetch = vi.fn(async () => {
+        models++
+        if (models === 1)
+          return json(
+            calls(
+              ["gmail_read", { id: "b99" }],
+              ["gmail_drafts_create", draft("b01")]
+            )
+          )
+        return json(
+          answer({ text: "Sigo.", citations: [], insufficientEvidence: true })
+        )
+      })
+      vi.stubGlobal("fetch", fetch)
+      const gmailTool = vi.fn(async () => {
+        throw failure
+      })
+      const recorded = await turnInProcess(
+        batchSpec(),
+        vi.fn<Execute>().mockResolvedValue({ ok: true }),
+        {
+          providers: { ...providers, gmailTool } as Providers,
+          gmail: grant,
+          batch: true,
+        },
+        env()
+      )
+      return { recorded, second: JSON.stringify(bodies(fetch)[1]?.input) }
+    }
+    // A message the model named wrongly (Gmail 404) and a proposal the
+    // database refused: both go back to the model, and the turn answers.
+    const notFound = await run(new GoogleError("rejected", "gmail_http_404"))
+    expect(notFound.recorded?.text).toBe("Sigo.")
+    expect(notFound.second).toContain("not_found")
+    const refused = await run(
+      Object.assign(new Error("refused"), { code: "42501" })
+    )
+    expect(refused.second).toContain('\\"refused\\"')
+    // Only the owner can fix a connection that must be reconnected.
+    await expect(run(new GoogleError("reconnect"))).rejects.toMatchObject({
+      code: "reconnect",
+    })
+  })
+
   it("shows the agent what its earlier proposals became (B8)", async () => {
     const fetch = vi
       .fn()
@@ -1108,21 +1225,24 @@ describe("mailbox batch turns (§67)", () => {
       web: false,
       passageIds: [],
     })
-    await expect(
-      legacy.handle({
-        type: "model",
-        id: 1,
-        input: [{ role: "user", content: "Synthetic" }],
-        tools: [{ name: "gmail_search", description: "x" }],
-        toolChoice: "auto",
-        format: {
-          type: "json_schema",
-          name: "agent_preview_answer",
-          strict: true,
-          schema: { type: "object" },
-        },
-      })
-    ).rejects.toMatchObject({ diagnostic: "calls_per_response" })
+    // One call per response for earlier runtimes: a second is dropped, never
+    // run, and the turn goes on (§73).
+    const reply = (await legacy.handle({
+      type: "model",
+      id: 1,
+      input: [{ role: "user", content: "Synthetic" }],
+      tools: [{ name: "gmail_search", description: "x" }],
+      toolChoice: "auto",
+      format: {
+        type: "json_schema",
+        name: "agent_preview_answer",
+        strict: true,
+        schema: { type: "object" },
+      },
+    })) as { items: { item: { type: string; arguments?: string } }[] }
+    const kept = reply.items.filter((x) => x.item.type === "function_call")
+    expect(kept).toHaveLength(1)
+    expect(kept[0]!.item.arguments).toContain('"a"')
     const create = { kind: "gmail", operation: "gmail.drafts.create" } as const
     expect(JSON.stringify(toolParameters(create))).not.toContain("replyTo")
     expect(toolParameters(create, true)).toMatchObject({

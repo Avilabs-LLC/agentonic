@@ -1,5 +1,10 @@
 export const VERSION_HISTORY = [
   {
+    "version": "0.42.2",
+    "date": "2026-10-13",
+    "summary": "A chat turn goes on when the model asks for too much at once: extra tool calls in one response are dropped, refused arguments, failed reads and refused proposals go back to the model, and only a needed reconnect still ends the turn"
+  },
+  {
     "version": "0.42.1",
     "date": "2026-10-13",
     "summary": "A chat turn may offer every tool its version grants, so an agent with all Gmail permissions and the web on runtime 0.7.0 no longer fails before answering; protocol limits follow the tool catalogs, evaluations offer the same tools as chats, and a refused message names the field it broke"

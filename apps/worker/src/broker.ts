@@ -114,14 +114,47 @@ function messageInvalid(error: { issues: { path: PropertyKey[] }[] }) {
     : "message_invalid"
 }
 /** Argument schemas always come from the shared contracts, never the child. */
+const argumentSchema = (op: Operation, batch: boolean) =>
+  op.kind === "gmail"
+    ? offeredGmailArguments(op.operation, batch)
+    : op.kind === "drive"
+      ? driveArguments[op.operation]
+      : webArguments[op.operation]
 export const toolParameters = (op: Operation, batch = false) =>
-  z.toJSONSchema(
-    op.kind === "gmail"
-      ? offeredGmailArguments(op.operation, batch)
-      : op.kind === "drive"
-        ? driveArguments[op.operation]
-        : webArguments[op.operation]
+  z.toJSONSchema(argumentSchema(op, batch))
+/**
+ * A failure the model can work around goes back to it as a tool error (§73):
+ * Google refusing or failing one read, or the database refusing one call or
+ * proposal. Nothing ran or was released. A connection that must be reconnected,
+ * or a write whose outcome is unknown, still ends the turn.
+ */
+function recoverable(error: unknown) {
+  if (
+    error instanceof GoogleError &&
+    (error.code === "unavailable" || error.code === "rejected")
   )
+    return {
+      ok: false,
+      error: /_http_404$/.test(error.reason ?? "")
+        ? "not_found"
+        : "unavailable",
+      untrusted: true,
+    }
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    String(error.code) === "42501"
+  )
+    return { ok: false, error: "refused", untrusted: true }
+  return undefined
+}
+/** What a call with arguments the contract refuses gets back; nothing runs (§73). */
+const INVALID_ARGUMENTS = {
+  ok: false,
+  error: "invalid_arguments",
+  untrusted: true,
+} as const
 
 /**
  * Broker side of protocol 2. The runtime decides what to ask; this class
@@ -293,9 +326,25 @@ export class TurnBroker {
     const calls = items.filter((x) => x.item.type === "function_call")
     if (calls.length && request.toolChoice === "none")
       throw mismatch("call_after_final")
-    if (calls.length > (batch ? (turn.limits.callsPerResponse ?? 1) : 1))
-      throw mismatch("calls_per_response")
-    return { type: "model", id: request.id, ok: true, items }
+    // A model may ask for more calls in one response than a turn takes at once
+    // (§73). The first ones are kept and the rest are dropped before the runtime
+    // sees them: never executed, never resent, so the model can ask again.
+    const perResponse = batch ? (turn.limits.callsPerResponse ?? 1) : 1
+    const dropped = new Set(calls.slice(perResponse).map((x) => x.ref))
+    for (const ref of dropped) {
+      const view = this.items.get(ref)?.view
+      if (view?.type === "function_call") {
+        this.calls.delete(view.callId)
+        this.latestCalls.delete(view.callId)
+      }
+      this.items.delete(ref)
+    }
+    return {
+      type: "model",
+      id: request.id,
+      ok: true,
+      items: items.filter((x) => !dropped.has(x.ref)),
+    }
   }
 
   private view(item: Record<string, unknown>): ProviderItem | undefined {
@@ -346,12 +395,16 @@ export class TurnBroker {
     const op = this.operation(call.name)
     if (!op) throw mismatch("call_not_offered")
     if (++this.toolCalls > turn.limits.toolCalls) throw mismatch("tool_calls")
+    // Arguments the contract refuses go back to the model as a tool error, so
+    // it can correct them; nothing runs and the turn continues (§73).
     let args: unknown
     try {
       args = JSON.parse(call.arguments)
     } catch {
-      throw mismatch("arguments_json")
+      return { type: "tool", id: request.id, output: INVALID_ARGUMENTS }
     }
+    if (!argumentSchema(op, this.o.batch === true).safeParse(args).success)
+      return { type: "tool", id: request.id, output: INVALID_ARGUMENTS }
     if (op.kind === "web") {
       const result = await this.o.providers.webTool(
         op.operation,
@@ -372,14 +425,21 @@ export class TurnBroker {
     if (op.kind === "drive") {
       if (++this.driveCalls > (turn.limits.driveCalls ?? 0))
         throw mismatch("drive_calls")
-      const result = await this.o.providers.driveTool(
-        op.operation,
-        args,
-        this.o.drive!,
-        job,
-        execute,
-        signal
-      )
+      let result: unknown
+      try {
+        result = await this.o.providers.driveTool(
+          op.operation,
+          args,
+          this.o.drive!,
+          job,
+          execute,
+          signal
+        )
+      } catch (error) {
+        const output = recoverable(error)
+        if (!output) throw error
+        return { type: "tool", id: request.id, output }
+      }
       // A proposal ends the turn, except in batch turns, where it returns to
       // the model; a refused write (an unknown file) goes back like a read.
       if (
@@ -411,14 +471,21 @@ export class TurnBroker {
         : ++this.gmailCalls > turn.limits.gmailCalls
     )
       throw mismatch("gmail_calls")
-    const result = await this.o.providers.gmailTool(
-      op.operation,
-      args,
-      this.o.gmail!,
-      job,
-      execute,
-      { batch: this.o.batch === true }
-    )
+    let result: unknown
+    try {
+      result = await this.o.providers.gmailTool(
+        op.operation,
+        args,
+        this.o.gmail!,
+        job,
+        execute,
+        { batch: this.o.batch === true }
+      )
+    } catch (error) {
+      const output = recoverable(error)
+      if (!output) throw error
+      return { type: "tool", id: request.id, output }
+    }
     if (!read) {
       if (this.continues(result)) {
         this.proposals++
