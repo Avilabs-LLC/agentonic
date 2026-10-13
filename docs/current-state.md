@@ -1,6 +1,6 @@
 # Agentonic: current state
 
-**As of 13 October 2026 · platform v0.40.1 · nonproduction only.** A short summary of what runs where, what works and what doesn't exist yet. [The architecture record](agentonic-architecture.md) keeps the full, dated history. If the two disagree about the present, fix this page. Update it whenever a change alters what runs where.
+**As of 13 October 2026 · platform v0.40.2 · nonproduction only.** A short summary of what runs where, what works and what doesn't exist yet. [The architecture record](agentonic-architecture.md) keeps the full, dated history. If the two disagree about the present, fix this page. Update it whenever a change alters what runs where.
 
 ## What runs where
 
@@ -99,6 +99,8 @@ New versions use runtime 0.7.0. Labels wait for the owner to confirm `gmail.modi
 
 **The batch case's mailbox reads Gmail search operators (architecture §69), installed 13 October with evaluator `7c84bad6` (platform v0.40.1).** The 10-email case's synthetic mailbox ignored operators, so `in:inbox` found nothing and NicolAI-Mail's first 0.7.0 version failed that case on both models. Only the evaluator changed; it serves runtimes 0.3.0–0.7.0, and the version is evaluated again.
 
+**An evaluation's limit follows the selected models (architecture §70), in platform v0.40.2; not yet installed.** Runtime 0.7.0 reserves a call's full output ceiling, so GPT-5.4 and Astra no longer fit the old US$3.00 default together. "Evaluar modelos" suggests US$1 for GPT-5.4 mini, US$2 for GPT-5.4 and US$5 for Astra per configuration, and explains a run that stops on its limit.
+
 ## Operations
 
 - **Verification.** Hosts and evaluators stay trusted for 30 days (migration 52; it was 7 until 7 October). A launchd job on the Mac runs `pnpm staging:reverify --renew --publish` at 09:00 and 21:00. It checks the installed files and services over SSH, renews only what passes, and renews anything a week old or more, so the VM keeps working for 23 to 30 days with the Mac off. The GitHub alert for a silent Mac only fires once an expiry is within 5 days. Run `pnpm staging:reverify` (read-only) for live expiry dates and what each environment runs: its worker release and each runtime's version and source commit. The local deployment host has been expired since 26 September on purpose; run `install-staging --local` before using local staging chats.
@@ -168,5 +170,6 @@ The ordered plan is architecture §37; the owner's audit brief tracks progress. 
 | Mailbox batch turns: allowances, drafts as replies, longer turns       | §67                  |
 | Threads, labels, answers as they are written, the style guide          | §68                  |
 | The batch case's mailbox reads Gmail search operators                  | §69                  |
+| An evaluation's limit follows the selected models                      | §70                  |
 
 Presentation rules are in the [UI contract](ui/ui-contract.md). The [target schema](schema.dbml) describes 90 tables; 73 exist in the 71 checked-in migrations.

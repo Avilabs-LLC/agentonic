@@ -25,6 +25,7 @@ export const modelCatalog = [
     defaultLevel: "medium",
     inputRate: 0.75,
     outputRate: 4.5,
+    evaluationUsd: 1,
   },
   {
     id: "gpt-5.4",
@@ -33,6 +34,7 @@ export const modelCatalog = [
     defaultLevel: "medium",
     inputRate: 2.5,
     outputRate: 15,
+    evaluationUsd: 2,
   },
   {
     id: "gpt-6-astra",
@@ -41,6 +43,7 @@ export const modelCatalog = [
     defaultLevel: "low",
     inputRate: 10,
     outputRate: 50,
+    evaluationUsd: 5,
   },
   {
     id: "gpt-4.1-mini-2025-04-14",
@@ -49,6 +52,7 @@ export const modelCatalog = [
     defaultLevel: null,
     inputRate: 0.4,
     outputRate: 1.6,
+    evaluationUsd: 1,
     // Kept for history: earlier turns, results and approvals name it. It fell
     // for hidden instructions in tool cases, so it is no longer offered (§56).
     retired: true,
@@ -60,6 +64,14 @@ export const modelCatalog = [
   defaultLevel: z.infer<typeof reasoningLevel> | null
   inputRate: number
   outputRate: number
+  /**
+   * What one evaluation run of this model needs (§70): its spend plus room for
+   * one call's reservation, since each call reserves its full output ceiling
+   * before it starts. Measured 13 Oct on runtime 0.7.0 with ten cases: GPT-5.4
+   * spent about US$0.55 and reserved up to US$0.40 a call; GPT-6 Astra about
+   * US$2 and up to US$1.50.
+   */
+  evaluationUsd: number
   retired?: true
 }[]
 /** Models that new evaluations and test chats may choose. */
@@ -92,6 +104,19 @@ export const evaluationModels = z
       new Set(models.map(modelConfigurationKey)).size === models.length,
     "No repitas el mismo modelo y nivel."
   )
+/**
+ * The suggested limit for one evaluation of these configurations (§70). Runs of
+ * one evaluation share its limit, so each configuration adds its model's
+ * allowance, doubled from high reasoning up, within the US$50 maximum.
+ */
+export function suggestedEvaluationBudget(models: ModelConfiguration[]) {
+  const total = models.reduce((sum, m) => {
+    const profile = modelCatalog.find((p) => p.id === m.model)!
+    const deep = ["high", "xhigh", "max"].includes(m.reasoning ?? "")
+    return sum + profile.evaluationUsd * (deep ? 2 : 1)
+  }, 0)
+  return Math.min(50, Math.max(1, total))
+}
 export const DEFAULT_MODEL_CONFIGURATION: ModelConfiguration = {
   model: "gpt-5.4-mini",
   reasoning: "medium",

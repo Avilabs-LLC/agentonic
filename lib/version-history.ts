@@ -1,5 +1,10 @@
 export const VERSION_HISTORY = [
   {
+    "version": "0.40.2",
+    "date": "2026-10-13",
+    "summary": "Evaluar modelos suggests a limit that fits the selected models, since each call reserves its maximum cost first, and explains a run that stops on its limit"
+  },
+  {
     "version": "0.40.1",
     "date": "2026-10-13",
     "summary": "Evaluations: the 10-email case's synthetic mailbox understands Gmail search operators such as in:inbox, so agents searching it the way they search Gmail find its emails"

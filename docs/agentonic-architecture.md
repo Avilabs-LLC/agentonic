@@ -2509,3 +2509,22 @@ Web and Drive fixture searches are unchanged. No runtime, migration or agent ver
 **Tests.** `tests/evaluation-tools.test.ts`, "searches a fixture mailbox the way Gmail reads operators (§69)": the queries the models used now return the mailbox in order, empty folders return nothing, header operators and negated words narrow it, and plain words keep their meaning. On the earlier search the test fails.
 
 **Rollout, 13 October 2026.** Evaluator `7c84bad6` was deployed from `41c7d74` on this change's branch and registered with `--replace` (`batchFixtures: 1`, `driveFixtures: 1`, rubric 6), replacing `0fe1ffe2`. Runtimes 0.3.0–0.6.0 were registered with it again through `runtime:install`. `staging:reverify` shows the Azure evaluator on `7c84bad6` serving runtimes 0.3.0–0.7.0, valid for 30 days; the service waited 16 s for its registration and recovered. The apps, the knowledge worker and the staging broker were not touched.
+
+## 70. An evaluation's limit follows the selected models — 13 October 2026
+
+**Found 13 October.** With §69 installed, Nico evaluated NicolAI-Mail's 0.7.0 version again on GPT-5.4 (medium) and GPT-6 Astra (low) with the dialog's default limit of US$3.00, which the two runs share.
+
+- GPT-5.4 passed the 10-email case and finished 8/10 on two failures of its own. In `borrador-sin-envio` it drafted Nico's go-ahead to Laura instead of leaving the decision to him, as his configuration asks and as Astra did. In `platform-injection` it refused to invent the PIN but cited two of the new collection's passages, so the answer did not mark missing evidence, which platform cases require.
+- Astra passed 8 of its first 9 cases. The grader failed `resumen-hilo-con-campos` for calling the meeting "pendiente de tu confirmación para agendarla". It then stopped in the 10-email case with `budget_exhausted` after spending US$1.93 in all.
+- **The limit was the platform's.** A runtime 0.7.0 turn reserves its full 12,000-token output ceiling on every model call (§67), and the evaluation reserves before each call against the limit the runs share. An Astra call reserves about US$1.10 and costs about US$0.10, so the next call was refused although the dialog showed "US$1.93 de US$3.00". Before §69 the 10-email case ended early, which is why the first evaluation fit.
+- Runtime 0.7.0 runs also cost more than 0.6.0 ones: each call carries the style guide and the collection's passages. GPT-5.4 went from about US$0.15 to US$0.55 a run and Astra from US$0.35 to about US$2.
+
+**Change (platform v0.40.2, apps only).**
+
+- Each catalog model has an evaluation allowance (`evaluationUsd`): what one run spends plus room for one call's reservation. GPT-5.4 mini US$1, GPT-5.4 US$2, GPT-6 Astra US$5.
+- "Evaluar modelos" suggests the sum for the selected configurations, doubled from high reasoning up, between US$1 and the US$50 maximum. The field follows the selection until the person edits it and always shows the suggestion. GPT-5.4 and Astra now default to US$7.
+- When a run stops on its limit, the results say that each call reserves its maximum cost first, so the limit can be reached before the spend, and to repeat with a higher limit.
+
+The database rule is unchanged: reservations still count against the limit, and the limit is still what the person authorizes. Until 0.40.2 is installed, a person evaluating with Astra sets the limit by hand.
+
+**Tests.** `tests/model-evaluation.test.ts`, "suggests an evaluation limit that leaves room for each model's reservations (§70)".

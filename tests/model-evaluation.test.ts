@@ -2,6 +2,7 @@ import { expect, it } from "vitest"
 import {
   evaluationModels,
   modelConfiguration,
+  suggestedEvaluationBudget,
 } from "../packages/contracts/src/models"
 import {
   batchModelGroups,
@@ -99,4 +100,41 @@ it("no longer offers GPT-4.1 mini for new evaluations or test chats, but still n
     }).success
   expect(turn(retired.model)).toBe(false)
   expect(turn("gpt-5.4-mini")).toBe(true)
+})
+
+it("suggests an evaluation limit that leaves room for each model's reservations (§70)", () => {
+  const suggest = (models: { model: string; reasoning: string | null }[]) =>
+    suggestedEvaluationBudget(models.map((m) => modelConfiguration.parse(m)))
+  // Nico's evaluation on 13 October: GPT-5.4 and Astra shared US$3.00, and
+  // Astra's 10-email case was refused a US$1.10 reservation at US$1.93 spent.
+  expect(
+    suggest([
+      { model: "gpt-5.4", reasoning: "medium" },
+      { model: "gpt-6-astra", reasoning: "low" },
+    ])
+  ).toBe(7)
+  expect(suggest([{ model: "gpt-5.4-mini", reasoning: "medium" }])).toBe(1)
+  // From high reasoning up a run writes more, so its allowance doubles.
+  expect(suggest([{ model: "gpt-6-astra", reasoning: "high" }])).toBe(10)
+  // Never below US$1 or above the US$50 maximum.
+  expect(suggest([])).toBe(1)
+  expect(
+    suggest(
+      ["low", "medium", "high", "xhigh", "max"].map((reasoning) => ({
+        model: "gpt-6-astra",
+        reasoning,
+      }))
+    )
+  ).toBe(40)
+  expect(
+    suggest(
+      ["low", "medium", "high", "xhigh", "max"].flatMap((reasoning) => [
+        { model: "gpt-6-astra", reasoning },
+        {
+          model: "gpt-5.4",
+          reasoning: reasoning === "max" ? "none" : reasoning,
+        },
+      ])
+    )
+  ).toBe(50)
 })
