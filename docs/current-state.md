@@ -181,4 +181,4 @@ The ordered plan is architecture §37; the owner's audit brief tracks progress. 
 | A request may offer every granted tool                                 | §72                  |
 | A turn survives what the model asks for                                | §73                  |
 
-Presentation rules are in the [UI contract](ui/ui-contract.md). The [target schema](schema.dbml) describes 90 tables; 73 exist in the 71 checked-in migrations.
+Presentation rules are in the [UI contract](ui/ui-contract.md). The [target schema](schema.dbml) describes 90 tables; 73 exist in the 72 checked-in migrations.
