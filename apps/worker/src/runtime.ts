@@ -1,4 +1,8 @@
-import { modelConfiguration, modelCatalog } from "@agentonic/contracts/models"
+import {
+  LEGACY_RUNTIME_MODELS,
+  modelConfiguration,
+  modelCatalog,
+} from "@agentonic/contracts/models"
 import {
   WEB_RESEARCH_POLICY,
   WEB_RESEARCH_CALLS,
@@ -56,6 +60,8 @@ const runtimeSchema = z
         driveContract: z.literal("1").optional(),
         // Runtime 0.7.0 and later run mailbox batch turns (§67).
         mailboxBatch: z.literal("1").optional(),
+        // Runtime 0.8.0 and later accept any model the broker offers (§77).
+        openModels: z.literal("1").optional(),
         webContract: z.literal("1").optional(),
         webResearch: z.literal("1").optional(),
         brokerProtocol: z.literal(BROKER_PROTOCOL).optional(),
@@ -133,6 +139,7 @@ export function verifyRuntime(value: unknown, root: string) {
     installed.gmailContract !== runtime.manifest.gmailContract ||
     installed.driveContract !== runtime.manifest.driveContract ||
     installed.mailboxBatch !== runtime.manifest.mailboxBatch ||
+    installed.openModels !== runtime.manifest.openModels ||
     installed.webContract !== runtime.manifest.webContract ||
     installed.webResearch !== runtime.manifest.webResearch ||
     installed.brokerProtocol !== runtime.manifest.brokerProtocol ||
@@ -487,6 +494,13 @@ export async function runPreview(
         ? modelCatalog.find((m) => m.id === model)!.defaultLevel
         : (reasoningLevel as string | null)
     const configuration = modelConfiguration.parse({ model, reasoning })
+    // Earlier runtimes' frozen turn schemas name the models they accept (§77);
+    // the database already keeps other models from their jobs.
+    if (
+      manifest.openModels !== "1" &&
+      !LEGACY_RUNTIME_MODELS.includes(configuration.model)
+    )
+      throw new Error("runtime_mismatch")
     const toolCalls = web ? (manifest.webResearch === "1" ? 8 : 3) : 3
     // Drive keys go only to runtimes that declare Drive, and batch limits only
     // to runtimes that declare mailboxBatch (§67): earlier runtimes' strict

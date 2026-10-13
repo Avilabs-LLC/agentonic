@@ -58,6 +58,7 @@ function existing(revision = 2) {
     hash: "hash",
     codeReleaseId: code,
     canPreview: true,
+    openModels: true,
     canSubmit: true,
   })
 }

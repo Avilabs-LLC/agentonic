@@ -12,18 +12,19 @@
 ## Next up
 
 1. **N22** — the owner tops up OpenAI credit; until then no model call succeeds (found 13 October).
-2. **N19** — answers kept in Chats (§66): installed 13 October (migration 69, 0.38.0); Nico resends his request.
-3. **N15** — Google Drive (§62): installed 9 October (migration 65, platform 0.35.3, runtime 0.6.0, broker `ec30c590`, evaluator `7fb7104a`); run the live acceptance in [drive-connection.md](drive-connection.md) with a test account.
-4. **N14** — careful grading (§61): installed 9 October (migration 64, evaluator `7dee5f53`, 0.33.0); the next evaluation of a mail agent should show the version 6 grader.
-5. **N11** — scheduled jobs: installed 8 October (0.29.0, broker `76c3155d`); run one live.
-6. **D6** — ongoing authorization (§59): installed 9 October (0.30.0); watch one live renewal and a conversation carry across a new version.
-7. **C13** — the owner's live password reset and Admin authenticator sign-in; the invitation passed on 8 October.
-8. **C2** — the 250-agent load test, deferred by the owner until other items are sorted.
-9. **N16** — Admin review polish (§63): installed 9 October (migration 67, 0.36.0); the owner checks Revisiones (Reemplazadas, Ver usuario, Cambiar estado), Despliegues, Vencimientos and an agent page.
-10. **N17** — Equipo in Admin (§64): installed 9 October (migration 68, 0.37.0); the owner pastes the invitation template again, then invites a second address as Soporte and tries role changes and deactivation.
-11. **N18** — Volver atrás (§65): installed 9 October (0.37.1); the owner retries the three paths from the report.
-12. **B9** — mailbox batch turns and follow-ups (§§67–68): installed 13 October (migrations 70–71, platform 0.40.0, broker `cc9e991d`, runtime 0.7.0; evaluator `7c84bad6` since §69); closes when a 0.7.0 version passes the batch case (N20).
-13. **N20** — NicolAI-Mail on runtime 0.7.0: passed on GPT-6 Astra (10/10, 13 Oct), approved and activated; Nico's first chat turn failed because the broker refused requests over 10 tools (§72, v0.42.1, installed 13 Oct with broker `dc6c65b4`); turn 4 failed when Astra asked for 10 reads in one response (§73, v0.42.2, installed 13 Oct with broker `b5844821`). Since §74 (broker `9a036fa1`) his chat also shows each step as it runs. Nico sends his request again. His US$5.00 budget covers about four such Astra turns; authorizing more is his decision.
+2. **N23** — the Codex models (§77, v0.45.0, migration 75, runtime 0.8.0): once merged and with credit, install the platform, migrate, register runtime 0.8.0, then the broker and the evaluator; then `leonardo@avilabs.tech` prepares a version on 0.8.0 and evaluates it.
+3. **N19** — answers kept in Chats (§66): installed 13 October (migration 69, 0.38.0); Nico resends his request.
+4. **N15** — Google Drive (§62): installed 9 October (migration 65, platform 0.35.3, runtime 0.6.0, broker `ec30c590`, evaluator `7fb7104a`); run the live acceptance in [drive-connection.md](drive-connection.md) with a test account.
+5. **N14** — careful grading (§61): installed 9 October (migration 64, evaluator `7dee5f53`, 0.33.0); the next evaluation of a mail agent should show the version 6 grader.
+6. **N11** — scheduled jobs: installed 8 October (0.29.0, broker `76c3155d`); run one live.
+7. **D6** — ongoing authorization (§59): installed 9 October (0.30.0); watch one live renewal and a conversation carry across a new version.
+8. **C13** — the owner's live password reset and Admin authenticator sign-in; the invitation passed on 8 October.
+9. **C2** — the 250-agent load test, deferred by the owner until other items are sorted.
+10. **N16** — Admin review polish (§63): installed 9 October (migration 67, 0.36.0); the owner checks Revisiones (Reemplazadas, Ver usuario, Cambiar estado), Despliegues, Vencimientos and an agent page.
+11. **N17** — Equipo in Admin (§64): installed 9 October (migration 68, 0.37.0); the owner pastes the invitation template again, then invites a second address as Soporte and tries role changes and deactivation.
+12. **N18** — Volver atrás (§65): installed 9 October (0.37.1); the owner retries the three paths from the report.
+13. **B9** — mailbox batch turns and follow-ups (§§67–68): installed 13 October (migrations 70–71, platform 0.40.0, broker `cc9e991d`, runtime 0.7.0; evaluator `7c84bad6` since §69); closes when a 0.7.0 version passes the batch case (N20).
+14. **N20** — NicolAI-Mail on runtime 0.7.0: passed on GPT-6 Astra (10/10, 13 Oct), approved and activated; Nico's first chat turn failed because the broker refused requests over 10 tools (§72, v0.42.1, installed 13 Oct with broker `dc6c65b4`); turn 4 failed when Astra asked for 10 reads in one response (§73, v0.42.2, installed 13 Oct with broker `b5844821`). Since §74 (broker `9a036fa1`) his chat also shows each step as it runs. Nico sends his request again. His US$5.00 budget covers about four such Astra turns; authorizing more is his decision.
 
 ## Follow-ups from recent work
 

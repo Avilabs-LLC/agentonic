@@ -2726,3 +2726,55 @@ About US$0.40 on the development key, outside the platform's ledger.
 **Rollout order.** Install the platform before applying migration 74. The new pages read sources with or without names, but pages served before the migration expect the passage text.
 
 **Tests.** `tests/evaluation-database.test.ts`, "model batches separate confirmation from paid runs…": a preparation's sources and a model's result sources carry exactly `id`, `documentId`, `title` and `collection`.
+
+## 77. Agents use the Codex models — 13 October 2026
+
+**Owner decision, 13 October.** GPT-5.4 kept causing trouble: progress notes that frozen runtimes couldn't read (§75), and commitments the agent had no authority to make in `leonardo@avilabs.tech`'s drafts. Agents now get the models the Codex app offers, in its order: GPT-6.1 Sol, GPT-6 Astra, GPT-6 Sol, GPT-6 Luna, GPT-5.6 Sol, GPT-5.6 Terra and GPT-5.6 Luna. Rates and reasoning levels come from developers.openai.com, checked 13 October. GPT-5.4 and GPT-5.4 mini join GPT-4.1 mini in retirement. GPT-5.4 mini stays the platform's own model: it drafts criteria, grades with rubric 6 (§61) and writes style guides (§57).
+
+**Replay before the change.** Version 3's four business situations ran with prompt v5 against each model at its default level (GPT-6 Astra at low). The runtime loop ran from source with this broker and the real rubric 6 grader, without tools, as business cases run. The OpenAI account ran out of credit partway through. Round 1 covered 26 of 28 situations, and the planned second round did not run:
+
+| Model | Passed | Cost per turn |
+|---|---|---|
+| GPT-6.1 Sol | 4/4 | US$0.016 |
+| GPT-6 Astra (low) | 4/4 | US$0.073 |
+| GPT-6 Sol | 3/4 | US$0.016 |
+| GPT-6 Luna | 4/4 | US$0.001 |
+| GPT-5.6 Sol | 2/4 | US$0.033 |
+| GPT-5.6 Terra | 3/4 | US$0.016 |
+| GPT-5.6 Luna | 2/2 | US$0.002 |
+
+The failures promised what Leonardo hadn't stated ("I'll send it shortly"), as GPT-5.4's had. The replay ran on the development key, outside the platform's ledger.
+
+**Runtime 0.8.0.** Runtimes up to 0.7.0 bundle the turn spec's list of model names (`turnSpec.model` was the `modelId` enum), so they refuse any model added later. From 0.8.0 the turn spec takes a bounded model name (`modelName`). Its manifest declares `openModels: "1"`, and the broker alone decides which models a turn may use, against the catalog as before. A later model then needs a catalog, broker and database change, not a new runtime. Nothing else in the runtime changed. The broker refuses a model an earlier runtime doesn't name (`runtime_mismatch`), although the database already keeps such models from its jobs.
+
+**What each version may use.**
+- Only versions frozen on runtime 0.8.0 run the new models. A version on an earlier runtime runs the four models its runtime names. Of those, only GPT-6 Astra is still offered.
+- Evaluar modelos and Probar agente list the models the version's runtime can run. Each version's `openModels` comes from its code release's manifest. A version on an earlier runtime explains that it can use only GPT-6 Astra and that a new version unlocks the rest.
+- New versions are frozen on the newest registered runtime, so preparing a version again after 0.8.0 is registered moves an agent to it. This works even with no draft changes, because the code release differs.
+- Chats keep the configurations a version was approved with, retired or not. Earlier results and approvals keep naming their models.
+
+**Migration 75.**
+- `valid_model_configuration` accepts the new models and their levels. Every configuration valid before stays valid, so existing rows keep satisfying the CHECKs that call it.
+- `runtime_runs_model(code_release, model)` is true for the four names earlier runtimes accept, and for any model on a code release that declares `openModels`.
+- The retirement triggers of migration 60 now refuse GPT-5.4 and GPT-5.4 mini too, and refuse any model the version's runtime can't run. This covers new evaluation batches and test-chat turns.
+- A test-chat turn that names no model gets GPT-6.1 Sol at medium, or GPT-6 Astra at low on earlier runtimes, instead of GPT-5.4 mini. The apps always name one.
+
+**Defaults and limits.**
+- New test chats start on GPT-6.1 Sol at medium.
+- Probar agente's note about the US$3.00 limit now covers every model whose output costs US$20 per million tokens or more, so GPT-5.6 Sol as well as GPT-6 Astra.
+- Previews keep their US$1.00 per-call ceiling (US$3.00 for Astra). Chats and evaluations keep US$5.00 per call.
+
+**Tests.**
+- `tests/runtime-engine.test.ts`: the built artifact declares `openModels` and runs GPT-6 Luna through the credential-free child process.
+- `tests/evaluation-database.test.ts`: retired models are refused for new evaluations. A version on a runtime without `openModels` is refused GPT-6 Luna and allowed GPT-6 Astra. Database tests that used GPT-5.4 as an agent's model now use GPT-6 Luna or GPT-6 Sol on a fixture runtime that declares `openModels`.
+- `tests/web-database.test.ts`: retired and unsupported models are refused for test-chat turns, and a turn without a model gets the runtime's default.
+- `tests/model-evaluation.test.ts`: the catalog's order, the list for earlier runtimes, and the retired models' labels.
+
+**Rollout.** With no evaluation, preview or chat turn running:
+1. The platform release from CI, installed with `pnpm platform:install --azure`. Until runtime 0.8.0 is registered, every version offers GPT-6 Astra alone, so the old database refuses nothing the new pages offer. §76 also needs the platform first.
+2. `pnpm db:migrate` (migrations 74 and 75).
+3. Runtime 0.8.0: `pnpm package:runtime`, `pnpm setup:preview`, then `pnpm runtime:install --azure`.
+4. The staging broker with `install-staging --azure`, which moves running deployments to it.
+5. The evaluator with `deploy-evaluation-staging --deploy --replace` and `register-evaluation --replace`. Then each earlier runtime is registered with it again.
+
+The OpenAI account must have credit first (N22).

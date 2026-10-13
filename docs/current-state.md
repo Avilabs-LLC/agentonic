@@ -1,6 +1,6 @@
 # Agentonic: current state
 
-**As of 13 October 2026 · platform v0.44.0 · nonproduction only.** A short summary of what runs where, what works and what doesn't exist yet. [The architecture record](agentonic-architecture.md) keeps the full, dated history. If the two disagree about the present, fix this page. Update it whenever a change alters what runs where.
+**As of 13 October 2026 · platform v0.45.0 · nonproduction only.** A short summary of what runs where, what works and what doesn't exist yet. [The architecture record](agentonic-architecture.md) keeps the full, dated history. If the two disagree about the present, fix this page. Update it whenever a change alters what runs where.
 
 ## What runs where
 
@@ -113,6 +113,8 @@ New versions use runtime 0.7.0. Google accepts `gmail.modify` for test users, an
 
 **Evidence by name, results by level (architecture §76), platform v0.44.0 with migration 74.** Resultados and the criteria dialog list a situation's sources as document names, never their text. Resultados has one row per model and level and model chips, money shows at most two decimals in both apps, and versions read "v3". The draft's saves are "Edición N", so "Revisión" is only the review number.
 
+**Agents use the Codex models (architecture §77), platform v0.45.0 with migration 75 and runtime 0.8.0, not yet rolled out.** Evaluations and test chats offer GPT-6.1 Sol, GPT-6 Astra, GPT-6 Sol, GPT-6 Luna, GPT-5.6 Sol, GPT-5.6 Terra and GPT-5.6 Luna, in the Codex app's order. GPT-5.4 and GPT-5.4 mini are retired for agents; GPT-5.4 mini still drafts criteria, grades and writes style guides. Only versions frozen on runtime 0.8.0 can use the new models. A version on an earlier runtime offers GPT-6 Astra alone, and says why.
+
 ## Operations
 
 - **Verification.** Hosts and evaluators stay trusted for 30 days (migration 52; it was 7 until 7 October). A launchd job on the Mac runs `pnpm staging:reverify --renew --publish` at 09:00 and 21:00. It checks the installed files and services over SSH, renews only what passes, and renews anything a week old or more, so the VM keeps working for 23 to 30 days with the Mac off. The GitHub alert for a silent Mac only fires once an expiry is within 5 days. Run `pnpm staging:reverify` (read-only) for live expiry dates and what each environment runs: its worker release and each runtime's version and source commit. The local deployment host has been expired since 26 September on purpose; run `install-staging --local` before using local staging chats.
@@ -189,5 +191,6 @@ The ordered plan is architecture §37; the owner's audit brief tracks progress. 
 | A turn shows its steps                                                 | §74                  |
 | A model's answer is read as it was meant                               | §75                  |
 | Evidence by name, results by level, money to the cent                  | §76                  |
+| Agents use the Codex models                                            | §77                  |
 
-Presentation rules are in the [UI contract](ui/ui-contract.md). The [target schema](schema.dbml) describes 90 tables; 73 exist in the 74 checked-in migrations.
+Presentation rules are in the [UI contract](ui/ui-contract.md). The [target schema](schema.dbml) describes 90 tables; 73 exist in the 75 checked-in migrations.

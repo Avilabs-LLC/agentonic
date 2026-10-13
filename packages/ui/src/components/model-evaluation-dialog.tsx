@@ -12,7 +12,8 @@ import {
 import { formatUsd } from "@agentonic/contracts/format"
 import {
   evaluationModels,
-  selectableModels,
+  OLD_RUNTIME_MODELS_NOTE,
+  selectableModelsFor,
   modelConfigurationKey,
   modelConfigurationLabel,
   reasoningLabels,
@@ -317,30 +318,40 @@ export function ModelResultsDialog({
 
 export function RunModelEvaluationDialog({
   record,
+  openModels = false,
   action,
   onClose,
   onStarted,
 }: {
   record: ReviewPreparation
+  /** The version's runtime accepts any offered model (0.8.0, §77). */
+  openModels?: boolean
   action: (input: unknown) => Promise<FormResult>
   onClose: () => void
   onStarted: () => void
 }) {
   const router = useRouter()
-  const [models, setModels] = useState<ModelConfiguration[]>(
-    () =>
-      (record.batches[0]?.id !== record.evaluationId
+  const offered = selectableModelsFor(openModels)
+  const [models, setModels] = useState<ModelConfiguration[]>(() => {
+    // The previous run's choices that are still offered for this version,
+    // or every offered model at its default level.
+    const previous = (
+      record.batches[0]?.id !== record.evaluationId
         ? record.batches[0]?.models
         : undefined
-      )?.flatMap((m) => {
-        const value = evaluationModels.element.safeParse({
-          model: m.model,
-          reasoning: m.reasoning,
-        })
-        return value.success ? [value.data] : []
-      }) ??
-      selectableModels.map((m) => ({ model: m.id, reasoning: m.defaultLevel }))
-  )
+    )?.flatMap((m) => {
+      const value = evaluationModels.element.safeParse({
+        model: m.model,
+        reasoning: m.reasoning,
+      })
+      return value.success && offered.some((o) => o.id === value.data.model)
+        ? [value.data]
+        : []
+    })
+    return previous?.length
+      ? previous
+      : offered.map((m) => ({ model: m.id, reasoning: m.defaultLevel }))
+  })
   // The limit follows the selected models until the person edits it (§70).
   const [budget, setBudget] = useState(() =>
     String(suggestedEvaluationBudget(models))
@@ -414,10 +425,15 @@ export function RunModelEvaluationDialog({
             confirmados. Cada combinación ejecuta todas las situaciones.
           </DialogDescription>
         </DialogHeader>
+        {!openModels && (
+          <p className="text-sm text-muted-foreground">
+            {OLD_RUNTIME_MODELS_NOTE}
+          </p>
+        )}
         {/* Compact: levels in three columns of short rows (owner direction,
             2026-10-08), so each model takes one or two rows. */}
         <div className="space-y-3">
-          {selectableModels.map((m) => (
+          {offered.map((m) => (
             <fieldset key={m.id} disabled={pending} className="border-b pb-3">
               <legend className="mb-1 text-sm font-medium">{m.name}</legend>
               <div className="grid grid-cols-2 gap-x-4 sm:grid-cols-3">

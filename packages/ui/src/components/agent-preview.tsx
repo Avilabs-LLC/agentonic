@@ -1,8 +1,10 @@
 "use client"
 import {
   DEFAULT_MODEL_CONFIGURATION,
-  isSelectableModel,
   modelCatalog,
+  modelConfigurationKey,
+  OLD_RUNTIME_MODELS_NOTE,
+  selectableConfigurationsFor,
   type ModelConfiguration,
 } from "@agentonic/contracts/models"
 import { formatUsd } from "@agentonic/contracts/format"
@@ -37,29 +39,46 @@ import {
   previewModelName,
   type PreviewModel,
 } from "@agentonic/contracts/preview-models"
-const astraNote = "Astra puede necesitar el límite de US$3,00"
-const astraNoteRestart = "Puedes elegirlo al iniciar otra prueba"
+// Models whose output costs US$20 per million tokens or more (GPT-6 Astra,
+// GPT-5.6 Sol) can reserve more than US$0,25 on one long call (§77).
+const needsLargerLimit = (id: string) =>
+  (modelCatalog.find((m) => m.id === id)?.outputRate ?? 0) >= 20
+const largerLimitNote = (id: string) =>
+  `${modelCatalog.find((m) => m.id === id)?.name ?? id} puede necesitar el límite de US$3,00`
+const largerLimitRestart = "Puedes elegirlo al iniciar otra prueba"
 export function AgentPreview({
   workspaceId,
   agentId,
   candidateId,
+  openModels = false,
   initialState = null,
 }: {
   workspaceId: string
   agentId: string
   candidateId?: string
+  /** The version's runtime accepts any offered model (0.8.0, §77). */
+  openModels?: boolean
   initialState?: PreviewState | null
 }) {
+  const options = selectableConfigurationsFor(openModels)
+  const offered = (c: ModelConfiguration) =>
+    options.some((o) => modelConfigurationKey(o) === modelConfigurationKey(c))
   const [previewId, setPreviewId] = useState<string | null>(
     initialState?.id ?? null
   )
   const [state, setState] = useState<PreviewState | null>(initialState)
-  // A model that is no longer offered falls back to the default.
+  // A model no longer offered, or that the version's runtime can't run,
+  // falls back to the default, or to the first model it can run.
   const lastOffered = initialState?.turns
-    .filter((turn) => isSelectableModel(turn.model))
+    .filter((turn) =>
+      offered({ model: turn.model, reasoning: turn.reasoning ?? null })
+    )
     .at(-1)
   const [model, setModel] = useState<PreviewModel>(
-    lastOffered?.model ?? DEFAULT_MODEL_CONFIGURATION.model
+    lastOffered?.model ??
+      (offered(DEFAULT_MODEL_CONFIGURATION)
+        ? DEFAULT_MODEL_CONFIGURATION.model
+        : (options[0]?.model ?? DEFAULT_MODEL_CONFIGURATION.model))
   )
   const [reasoning, setReasoning] = useState<ModelConfiguration["reasoning"]>(
     lastOffered?.reasoning ??
@@ -405,6 +424,8 @@ export function AgentPreview({
             model={
               <ModelPicker
                 value={{ model, reasoning }}
+                options={options}
+                note={openModels ? undefined : OLD_RUNTIME_MODELS_NOTE}
                 disabled={busy || waiting}
                 onChange={(choice) => {
                   setModel(choice.model)
@@ -420,12 +441,12 @@ export function AgentPreview({
                   </span>
                   <span className="tabular-nums">{query.length}/1000</span>
                 </p>
-                {model === "gpt-6-astra" &&
+                {needsLargerLimit(model) &&
                   (state?.budgetUsd ?? budgetUsd) < 3 && (
                     <p className="mt-1">
                       {previewId
-                        ? `${astraNote}. ${astraNoteRestart}.`
-                        : `${astraNote}.`}
+                        ? `${largerLimitNote(model)}. ${largerLimitRestart}.`
+                        : `${largerLimitNote(model)}.`}
                     </p>
                   )}
               </>

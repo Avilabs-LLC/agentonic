@@ -52,6 +52,7 @@ export default async function Page({
         workspaceId={selected.id}
         agentId={id}
         candidateId={candidate?.id}
+        openModels={candidate?.openModels ?? false}
         initialState={initialState}
       />
     </div>

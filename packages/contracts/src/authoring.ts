@@ -234,6 +234,8 @@ export const agentView = z.object({
       codeReleaseId: uuid.nullable().default(null),
       canSubmit: z.boolean().default(false),
       canPreview: z.boolean().default(false),
+      // Its runtime accepts any model the broker offers (0.8.0, §77).
+      openModels: z.boolean().default(false),
       previewExpiresAt: z.string().nullable().optional(),
       number: z.number().int().positive().optional(),
       createdAt: z.string().optional(),

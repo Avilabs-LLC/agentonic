@@ -27,6 +27,7 @@ const candidate: AgentView["candidates"][number] = {
   codeReleaseId: code,
   canSubmit: true,
   canPreview: false,
+  openModels: true,
 }
 function state(
   overrides: Partial<Parameters<typeof workflowRequirements>[0]> = {}

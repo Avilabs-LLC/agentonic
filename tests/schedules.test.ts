@@ -142,7 +142,7 @@ it("validates a schedule form and describes its cadence in Spanish", () => {
     weekday: 6,
     everyHours: null,
     timezone: "Europe/Madrid",
-    model: "gpt-5.4-mini",
+    model: "gpt-6-luna",
     reasoning: "medium",
     autonomy: [],
     consent: false,
