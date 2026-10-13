@@ -2605,3 +2605,11 @@ The harness spent about US$5.20 on the development key, outside the platform's l
 **Budget.** A full Astra turn on mail like this costs US$0.3–0.9 and reserves up to about US$2.1 per call before it starts, since a reservation counts the whole request at the output ceiling. With US$5.00 for 30 days, Nico's deployment can run about four such turns before a reservation no longer fits and the turn ends with the budget answer. Authorizing more (up to US$20 per period) is his decision.
 
 **Tests.** `tests/runtime-engine.test.ts`: "keeps the first five calls of a response, drops the rest and goes on (§73)", "returns refused arguments to the model instead of failing the turn (§73)" and "gives a refused read or proposal back to the model, but stops for a reconnect (§73)". All three fail on the previous broker. Earlier runtimes keep one call per response; the extra one is now dropped instead of failing the turn.
+
+**Rollout, 13 October 2026.** From `babe328` on `main`, with no chat turn, evaluation or job running:
+
+1. Staging broker `b5844821` installed with `install-staging --azure`; the controller moved both running deployments (NicolAI-Mail and Garantías Ferretería Ejemplo) to it.
+2. Evaluator `6bea27a6` deployed and registered with `--replace`, replacing `02f5920e`; runtimes 0.3.0–0.6.0 registered with it again through `runtime:install`.
+3. `platform-0.42.2-babe3286d13f` installed (release `baa07daa`): the apps and the knowledge worker restarted healthy and `hosted:check` passed.
+
+`staging:reverify` shows the host on `b5844821` and the evaluator on `6bea27a6`, both serving runtimes 0.3.0–0.7.0.
