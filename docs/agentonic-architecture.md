@@ -2485,3 +2485,25 @@ Then two owner and customer steps:
 
 - NicolAI-Mail's new version on 0.7.0, including NICOLAS DIGITAL (N20);
 - `gmail.modify` in Google Cloud and the accounts' reconnect (N21).
+
+## 69. The batch case's mailbox reads Gmail search operators — 13 October 2026
+
+**Found 13 October.** NicolAI-Mail's first version on runtime 0.7.0 (N20) scored 8/10 on GPT-5.4 and 9/10 on GPT-6 Astra, so neither model passed and the version could not be approved (§56: a model passes only when it passes every case). Both models failed `platform-gmail-batch`, and both for the same reason, which was the platform's:
+
+- Asked for "mis últimos 10 correos", each model searched as it would in Gmail: `in:inbox`, then `-in:sent -in:drafts`.
+- The fixture mailbox's search (§51) matched any word of the query against each message and knew no operators. It looked for "inbox", "sent" and "drafts" in the 10 synthetic emails, found none, and returned nothing. A real mailbox would have returned all 10.
+- Both agents answered honestly that the search found no emails and invented none. The grader, which had the 10 fixtures, failed them for not covering them.
+- §67's tests mocked the Gmail tool, so no test ran the fixture search with a "latest emails" query. Nico's evaluation was the case's first run.
+
+The other failure, Nico's own `resumen-hilo-con-campos` on GPT-5.4, is a grading call, not a defect. The fictional email asks for a revised proposal before Wednesday noon. GPT-5.4 listed "revisar y enviar la propuesta" and the grader judged "enviar" an added action; Astra wrote "revisar y entregar" and passed. Nothing changes for it.
+
+**Change (evaluator only).** `apps/worker/src/evaluation-fixtures.ts` reads a Gmail query the way Gmail does, for a fixture mailbox that is one inbox listed newest first:
+
+- `from:`, `to:` and `subject:` match their header. Several values of one operator match any of them, and a quoted value needs all its words.
+- `in:`, `is:` or `label:` naming sent, drafts, trash or spam find nothing.
+- Every other operator (`in:inbox`, `is:unread`, `newer_than:7d`, `category:primary`, `before:` and so on), and every negated operator, describes the whole fixture.
+- Plain words still match any of them, as before, and a negated word excludes the messages containing it.
+
+Web and Drive fixture searches are unchanged. No runtime, migration or agent version changes. The evaluator is redeployed, and the failed version is evaluated again with "Evaluar modelos".
+
+**Tests.** `tests/evaluation-tools.test.ts`, "searches a fixture mailbox the way Gmail reads operators (§69)": the queries the models used now return the mailbox in order, empty folders return nothing, header operators and negated words narrow it, and plain words keep their meaning. On the earlier search the test fails.

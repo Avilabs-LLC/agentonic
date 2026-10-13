@@ -1,5 +1,10 @@
 export const VERSION_HISTORY = [
   {
+    "version": "0.40.1",
+    "date": "2026-10-13",
+    "summary": "Evaluations: the 10-email case's synthetic mailbox understands Gmail search operators such as in:inbox, so agents searching it the way they search Gmail find its emails"
+  },
+  {
     "version": "0.40.0",
     "date": "2026-10-13",
     "summary": "Mailbox follow-ups for runtime 0.7.0: whole threads, Gmail labels confirmed as one batch with subjects checked (gmail.modify, reconnect keeps tools), answers that appear as they are written in Chats and Probar, and the owner's style guide on every turn"
