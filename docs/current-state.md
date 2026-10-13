@@ -97,7 +97,7 @@ Both were installed together on 13 October:
 
 New versions use runtime 0.7.0. Labels wait for the owner to confirm `gmail.modify` in Google Cloud and for each account to reconnect (N21).
 
-**The batch case's mailbox reads Gmail search operators (architecture §69), in platform v0.40.1; the evaluator is not yet redeployed.** The 10-email case's synthetic mailbox ignored operators, so `in:inbox` found nothing and NicolAI-Mail's first 0.7.0 version failed that case on both models. Only the evaluator changes.
+**The batch case's mailbox reads Gmail search operators (architecture §69), installed 13 October with evaluator `7c84bad6` (platform v0.40.1).** The 10-email case's synthetic mailbox ignored operators, so `in:inbox` found nothing and NicolAI-Mail's first 0.7.0 version failed that case on both models. Only the evaluator changed; it serves runtimes 0.3.0–0.7.0, and the version is evaluated again.
 
 ## Operations
 

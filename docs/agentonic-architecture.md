@@ -2507,3 +2507,5 @@ The other failure, Nico's own `resumen-hilo-con-campos` on GPT-5.4, is a grading
 Web and Drive fixture searches are unchanged. No runtime, migration or agent version changes. The evaluator is redeployed, and the failed version is evaluated again with "Evaluar modelos".
 
 **Tests.** `tests/evaluation-tools.test.ts`, "searches a fixture mailbox the way Gmail reads operators (§69)": the queries the models used now return the mailbox in order, empty folders return nothing, header operators and negated words narrow it, and plain words keep their meaning. On the earlier search the test fails.
+
+**Rollout, 13 October 2026.** Evaluator `7c84bad6` was deployed from `41c7d74` on this change's branch and registered with `--replace` (`batchFixtures: 1`, `driveFixtures: 1`, rubric 6), replacing `0fe1ffe2`. Runtimes 0.3.0–0.6.0 were registered with it again through `runtime:install`. `staging:reverify` shows the Azure evaluator on `7c84bad6` serving runtimes 0.3.0–0.7.0, valid for 30 days; the service waited 16 s for its registration and recovered. The apps, the knowledge worker and the staging broker were not touched.
