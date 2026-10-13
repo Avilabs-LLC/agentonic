@@ -2568,3 +2568,11 @@ The database rule is unchanged: reservations still count against the limit, and 
 The runtime is unchanged: runtimes never validated their own requests against these limits, so no version needs re-freezing. The broker, the evaluator and the preview worker carry the contract, so all three are reinstalled.
 
 **Tests.** `tests/runtime-engine.test.ts`: "offers all nine Gmail permissions, thread reads and the web in one request (§72)" (fails with `runtime_mismatch` on the old limit), "fits every tool a version can be granted in one turn and one request (§72)" and "names the field a refused message broke, never its content (§72)". `tests/evaluation-tools.test.ts`: "offers every granted tool in a fixture case, as a chat does (§72)". `tests/drive.test.ts`: a case without Drive fixtures offers Drive and finds nothing, and never reaches the live Drive.
+
+**Rollout, 13 October 2026.** From `63bd594` on `main`, with no chat turn, evaluation or job running:
+
+1. Staging broker `dc6c65b4` installed with `install-staging --azure`; the controller moved both running deployments (NicolAI-Mail and Garantías Ferretería Ejemplo) to it.
+2. Evaluator `02f5920e` deployed and registered with `--replace` (`batchFixtures: 1`, `driveFixtures: 1`, rubric 6), replacing `607e4a2d`; runtimes 0.3.0–0.6.0 registered with it again through `runtime:install`.
+3. `platform-0.42.1-63bd5949875b` installed (release `846d14de`): the apps and the knowledge worker restarted healthy and `hosted:check` passed.
+
+`staging:reverify` shows the host on `dc6c65b4` and the evaluator on `02f5920e`, both serving runtimes 0.3.0–0.7.0 and valid for 30 days.
