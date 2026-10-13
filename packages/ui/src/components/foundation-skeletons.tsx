@@ -114,59 +114,48 @@ export function DashboardSkeleton({
     </div>
   )
 }
-/** A servers card laid out like PlaceGroups: a row per kind (Agentes,
- * Evaluaciones) and a column per place, each cell with `lines` facts. */
-export function PlaceGroupsCardSkeleton({ lines }: { lines: number }) {
-  const grid = "md:grid-cols-[10rem_minmax(0,1fr)_minmax(0,1fr)]"
+/** Metric tiles: label, value and detail (the agent page, Despliegues,
+ * Vencimientos). */
+export function MetricTilesSkeleton({
+  count,
+  className,
+}: {
+  count: number
+  className: string
+}) {
   return (
-    <Card>
-      <CardHeader className="space-y-2">
-        <Skeleton className="h-5 w-48" />
-        <Skeleton className="h-4 w-full max-w-2xl" />
-      </CardHeader>
-      <CardContent>
-        <div className={`hidden gap-x-6 border-b pb-2 md:grid ${grid}`}>
-          <span />
-          <Skeleton className="h-3 w-24" />
-          <Skeleton className="h-3 w-24" />
-        </div>
-        <div className="divide-y">
-          {[1, 2].map((row) => (
-            <div
-              key={row}
-              className={`grid gap-x-6 gap-y-3 py-4 first:pt-0 last:pb-0 md:first:pt-4 ${grid}`}
-            >
-              <Skeleton className="h-4 w-28" />
-              {[1, 2].map((cell) => (
-                <div
-                  key={cell}
-                  className="flex items-start justify-between gap-3"
-                >
-                  <div className="w-full max-w-56 space-y-1.5">
-                    {Array.from({ length: lines }, (_, i) => (
-                      <Skeleton
-                        key={i}
-                        className={i % 2 ? "h-4 w-4/5" : "h-4 w-full"}
-                      />
-                    ))}
-                  </div>
-                  <Skeleton className="h-5 w-20 shrink-0 rounded-full" />
-                </div>
-              ))}
-            </div>
-          ))}
-        </div>
-      </CardContent>
-    </Card>
+    <div className={`grid gap-4 sm:grid-cols-2 ${className}`}>
+      {Array.from({ length: count }, (_, i) => (
+        <Card key={i}>
+          <CardHeader>
+            <Skeleton className="h-3 w-32" />
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <Skeleton className="h-5 w-28 rounded-full" />
+            <Skeleton className="h-3 w-40" />
+          </CardContent>
+        </Card>
+      ))}
+    </div>
   )
 }
-// Vencimientos: header, servers-and-evaluators card (a deadline and a
-// verification per cell) and the ten-column deadlines table.
+/** A page header with one action at its right end (Equipo, Despliegues,
+ * Vencimientos). */
+export function PageHeaderWithActionSkeleton({ action }: { action: string }) {
+  return (
+    <div className="flex flex-wrap items-start justify-between gap-4">
+      <PageHeaderSkeleton />
+      <Skeleton className={`h-8 ${action}`} />
+    </div>
+  )
+}
+// Vencimientos: the header with its Local (desarrollo) button, vm-agents-01's
+// four tiles and the ten-column deadlines table.
 export function ExpirySkeleton() {
   return (
     <div aria-label="Cargando vencimientos" role="status" className="space-y-6">
-      <PageHeaderSkeleton />
-      <PlaceGroupsCardSkeleton lines={2} />
+      <PageHeaderWithActionSkeleton action="w-44" />
+      <MetricTilesSkeleton count={4} className="xl:grid-cols-4" />
       <TableSkeleton columns={10} />
     </div>
   )

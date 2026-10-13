@@ -4,7 +4,8 @@ import { loadExpiryOverview } from "@agentonic/server/expiry"
 import { PageHeader } from "@workspace/ui/components/page-header"
 import {
   ExpiryTable,
-  RegistrationsCard,
+  LocalRegistrations,
+  RegistrationTiles,
 } from "@workspace/ui/components/expiry-overview"
 import { expirations } from "@/lib/navigation"
 export default async function Page() {
@@ -16,12 +17,19 @@ export default async function Page() {
     <>
       <PageHeader
         title={expirations.title}
-        description="Plazos de aprobación, uso autorizado por el cliente y verificación de servidores, con quién debe actuar en cada caso."
+        description="Plazos de aprobación, uso autorizado por el cliente y verificación de servidores, que dura 30 días, con quién debe actuar en cada caso."
         count={overview.rows.length}
+        actions={
+          <LocalRegistrations
+            registrations={overview.registrations}
+            now={overview.now}
+          />
+        }
       />
-      <RegistrationsCard
+      <RegistrationTiles
         registrations={overview.registrations}
         now={overview.now}
+        environment="azure_staging"
       />
       <ExpiryTable rows={overview.rows} now={overview.now} />
     </>
