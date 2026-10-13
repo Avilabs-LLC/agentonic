@@ -1,5 +1,10 @@
 export const VERSION_HISTORY = [
   {
+    "version": "0.42.4",
+    "date": "2026-10-13",
+    "summary": "The Recursos column in both agent lists sits tighter: the small counts get two-digit slots and 8px gaps, and the characters count keeps its five-digit slot and wider gap"
+  },
+  {
     "version": "0.42.3",
     "date": "2026-10-13",
     "summary": "The usage tray under the Chats and Probar agente composer hangs from its bottom edge instead of tucking beneath it, so it no longer shows through the translucent composer in dark mode"
