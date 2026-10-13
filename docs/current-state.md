@@ -1,6 +1,6 @@
 # Agentonic: current state
 
-**As of 13 October 2026 · platform v0.39.0 · nonproduction only.** A short summary of what runs where, what works and what doesn't exist yet. [The architecture record](agentonic-architecture.md) keeps the full, dated history. If the two disagree about the present, fix this page. Update it whenever a change alters what runs where.
+**As of 13 October 2026 · platform v0.40.0 · nonproduction only.** A short summary of what runs where, what works and what doesn't exist yet. [The architecture record](agentonic-architecture.md) keeps the full, dated history. If the two disagree about the present, fix this page. Update it whenever a change alters what runs where.
 
 ## What runs where
 
@@ -71,7 +71,7 @@ Staff accounts no longer need the Mac's bootstrap script. The invitation email n
 
 **Answers kept in Chats (architecture §66), installed 13 October with platform v0.38.0 and migration 69.** A turn in Chats or a scheduled run records its answer even when a failed web read or an interrupted model call left a reservation open, as previews already did. Before this, such a turn showed "No se pudo completar la respuesta." (NicolAI-Mail, 13 October). The open reservation stays charged and counts as unknown cost.
 
-**Mailbox batch turns (architecture §67), in platform v0.39.0 with migration 70 and runtime 0.7.0; not yet applied or installed.** On a runtime 0.7.0 version, one turn can work through a batch of emails. The [audit](mailbox-batch-audit.md) explains why, after NicolAI-Mail's request on 13 October.
+**Mailbox batch turns (architecture §67), merged with migration 70 and runtime 0.7.0; not yet applied or installed.** On a runtime 0.7.0 version, one turn can work through a batch of emails. The [audit](mailbox-batch-audit.md) explains why, after NicolAI-Mail's request on 13 October.
 
 - It makes 6 Gmail reads and proposes up to 10 drafts, each confirmed on its own card, as replies in their thread.
 - It runs up to about 4 minutes and answers in up to 30,000 characters.
@@ -79,6 +79,15 @@ Staff accounts no longer need the Mac's bootstrap script. The invitation email n
 - Mail agents on that runtime are evaluated with a 10-email case.
 
 Failures name their cause in the job log. Earlier versions keep their limits until their agent moves to a new version.
+
+**Mailbox follow-ups (architecture §68), in platform v0.40.0 with migration 71, for runtime 0.7.0; not yet applied or installed.**
+
+- The agent reads whole threads.
+- It proposes Gmail labels for a batch, confirmed on one card after the subjects are checked. This needs `gmail.modify`; older accounts show "Volver a conectar", which keeps their tools.
+- Answers appear as they are written in Chats and Probar.
+- An accepted Aprender mi estilo guide in the version's knowledge reaches every turn.
+
+These ship with §67's rollout.
 
 ## Operations
 
@@ -147,5 +156,6 @@ The ordered plan is architecture §37; the owner's audit brief tracks progress. 
 | Volver atrás, breadcrumbs and opening reviews from the agent page      | §65                  |
 | Answers kept when a reservation stays open; Gmail limits per turn      | §66                  |
 | Mailbox batch turns: allowances, drafts as replies, longer turns       | §67                  |
+| Threads, labels, answers as they are written, the style guide          | §68                  |
 
-Presentation rules are in the [UI contract](ui/ui-contract.md). The [target schema](schema.dbml) describes 90 tables; 73 exist in the 70 checked-in migrations.
+Presentation rules are in the [UI contract](ui/ui-contract.md). The [target schema](schema.dbml) describes 90 tables; 73 exist in the 71 checked-in migrations.

@@ -63,6 +63,29 @@ function Details({ item }: { item: GmailInvocation }) {
           <dd>{String(args.id)}</dd>
         </div>
       )}
+      {/* One labels proposal covers a batch of messages (§68). */}
+      {Array.isArray(args.labels) && (
+        <div>
+          <dt className="text-muted-foreground">Etiquetas</dt>
+          <dd>
+            <ul className="space-y-1">
+              {(args.labels as { subject: string; label: string }[]).map(
+                (l, n) => (
+                  <li key={n} className="break-words">
+                    {l.subject || "(Sin asunto)"}
+                    <span className="text-muted-foreground"> → </span>
+                    <span className="font-medium">{l.label}</span>
+                  </li>
+                )
+              )}
+            </ul>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Antes de aplicarlas se comprueba que cada asunto coincide. Las
+              etiquetas que falten se crean.
+            </p>
+          </dd>
+        </div>
+      )}
       {/* A reply goes in the thread of the message it answers (§67). */}
       {typeof m.replyTo === "string" && (
         <div>

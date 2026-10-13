@@ -66,6 +66,8 @@ export const previewState = z.object({
         model: previewModel.default(DEFAULT_PREVIEW_MODEL),
         reasoning: reasoningLevel.nullable().optional(),
         query: z.string().nullable(),
+        /** The answer as it is being written, while the turn runs (§68). */
+        partial: z.string().nullable().optional(),
       })
     )
     .max(10),

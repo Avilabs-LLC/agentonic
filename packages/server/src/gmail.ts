@@ -76,7 +76,12 @@ export async function loadGmail(workspace: string, agentId: string) {
   }
   return { ...state, available }
 }
-export async function startGmail(workspace: string, agentId: string) {
+/** Starts Google's consent; `reconnect` refreshes an existing connection (§68). */
+export async function startGmail(
+  workspace: string,
+  agentId: string,
+  reconnect?: string
+) {
   uuid.parse(agentId)
   const config = googleConfig()
   const state = randomBytes(32).toString("hex"),
@@ -85,6 +90,7 @@ export async function startGmail(workspace: string, agentId: string) {
   await command(workspace, "oauth.start", {
     agentId,
     connectionId,
+    ...(reconnect ? { reconnect: uuid.parse(reconnect) } : {}),
     state: digest(state),
     verifier: seal(verifier, `oauth:${digest(state)}`, config.keys),
   })
@@ -164,6 +170,8 @@ export async function finishGmail(url: URL) {
     await command(stored.workspace, "oauth.finish", {
       state: digest(state),
       account,
+      // exchange() refused any consent without every scope, gmail.modify included.
+      canLabel: true,
       credential: seal(
         { refreshToken: tokens.refresh_token },
         `gmail:${pending.connectionId}`,

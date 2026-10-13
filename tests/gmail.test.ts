@@ -424,3 +424,118 @@ it("shows batch searches longer excerpts with their thread; earlier runtimes kee
   expect(legacy.excerpt).toHaveLength(500)
   expect(legacy).not.toHaveProperty("threadId")
 })
+
+// §68: whole threads, and labels confirmed as one batch.
+it("reads a whole thread, its latest 10 messages each within 4,000 characters", async () => {
+  const messages = Array.from({ length: 12 }, (_, i) => ({
+    id: `m${i}`,
+    threadId: "t1",
+    payload: {
+      mimeType: "text/plain",
+      headers: [{ name: "Subject", value: "Hilo" }],
+      body: {
+        data: Buffer.from((i === 11 ? "y" : "x").repeat(5000)).toString(
+          "base64url"
+        ),
+      },
+    },
+  }))
+  const fetch = vi.fn().mockResolvedValue(Response.json({ id: "t1", messages }))
+  vi.stubGlobal("fetch", fetch)
+  const thread = (await gmail(
+    "synthetic",
+    "gmail.threads.read",
+    { id: "t1" },
+    "sender@example.invalid",
+    id
+  )) as {
+    threadId: string
+    earlierMessages: number
+    messages: { id: string; text: string; truncated?: boolean }[]
+  }
+  expect(String(fetch.mock.calls[0]![0])).toContain("threads/t1?format=full")
+  expect(thread.threadId).toBe("t1")
+  expect(thread.earlierMessages).toBe(2)
+  expect(thread.messages.map((m) => m.id)).toEqual(
+    Array.from({ length: 10 }, (_, i) => `m${i + 2}`)
+  )
+  expect(thread.messages.at(-1)).toMatchObject({
+    text: "y".repeat(4000),
+    truncated: true,
+  })
+})
+it("applies a labels batch only after every subject matches, creating missing user labels", async () => {
+  const labels = {
+    labels: [
+      { messageId: "a1", subject: "Factura  pendiente", label: "[URGENTE]" },
+      { messageId: "a2", subject: "Boletín", label: "[INFORMATIVO]" },
+      { messageId: "a3", subject: "Reunión", label: "[URGENTE]" },
+    ],
+  }
+  const meta = (subject: string) =>
+    Response.json({
+      payload: { headers: [{ name: "Subject", value: subject }] },
+    })
+  // A subject that doesn't match stops everything before any change.
+  const refused = vi
+    .fn()
+    .mockResolvedValueOnce(meta("Factura pendiente"))
+    .mockResolvedValueOnce(meta("Otra cosa"))
+  vi.stubGlobal("fetch", refused)
+  await expect(
+    gmail("synthetic", "gmail.labels.apply", labels, "s@example.invalid", id)
+  ).rejects.toMatchObject({
+    code: "rejected",
+    reason: "gmail_subject_mismatch",
+  })
+  expect(refused).toHaveBeenCalledTimes(2)
+  expect(
+    refused.mock.calls.every(([, init]) => (init?.method ?? "GET") === "GET")
+  ).toBe(true)
+  const fetch = vi
+    .fn()
+    .mockResolvedValueOnce(meta("Factura pendiente"))
+    .mockResolvedValueOnce(meta("Boletín"))
+    .mockResolvedValueOnce(meta("Reunión"))
+    .mockResolvedValueOnce(
+      Response.json({
+        labels: [
+          { id: "INBOX", name: "INBOX", type: "system" },
+          { id: "L1", name: "[informativo]", type: "user" },
+        ],
+      })
+    )
+    .mockResolvedValueOnce(Response.json({ id: "L2" }))
+    .mockResolvedValue(new Response(null, { status: 204 }))
+  vi.stubGlobal("fetch", fetch)
+  expect(
+    await gmail(
+      "synthetic",
+      "gmail.labels.apply",
+      labels,
+      "s@example.invalid",
+      id
+    )
+  ).toEqual({ labeled: 3, created: 1 })
+  const writes = fetch.mock.calls
+    .filter(([, init]) => init?.method === "POST")
+    .map(([url, init]) => [String(url).split("/me/")[1], JSON.parse(init.body)])
+  expect(writes).toEqual([
+    [
+      "labels",
+      {
+        name: "[URGENTE]",
+        labelListVisibility: "labelShow",
+        messageListVisibility: "show",
+      },
+    ],
+    ["messages/batchModify", { ids: ["a1", "a3"], addLabelIds: ["L2"] }],
+    ["messages/batchModify", { ids: ["a2"], addLabelIds: ["L1"] }],
+  ])
+  // Gmail's own labels are never applied.
+  expect(() =>
+    parseGmailCall("gmail.labels.apply", {
+      labels: [{ messageId: "a1", subject: "x", label: "SPAM" }],
+    })
+  ).toThrow()
+})

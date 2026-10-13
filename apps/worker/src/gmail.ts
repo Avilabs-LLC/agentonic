@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto"
 import { z } from "zod"
 import {
   gmailGrant,
+  gmailGrantFor,
   gmailReads,
   parseGmailCall,
 } from "@agentonic/contracts/gmail"
@@ -27,8 +28,11 @@ export async function executeGmail(
   const batch = options.batch === true
   const g = gmailGrant.parse(grant),
     call = parseGmailCall(name, args)
-  if (!g.operations.includes(call.operation)) throw new Error("gmail_denied")
-  const payload = { connectionId: g.connectionId, operation: call.operation }
+  // A thread is read under the read grant (§68); the database checks that grant.
+  const granted = gmailGrantFor(call.operation)
+  if (!g.operations.some((op) => op === granted))
+    throw new Error("gmail_denied")
+  const payload = { connectionId: g.connectionId, operation: granted }
   if (gmailReads.some((op) => op === call.operation)) {
     const credential = await execute("gmail-read", job, payload)
     const secret = z

@@ -150,6 +150,12 @@ The customer app must distinguish an editable draft, a frozen submission awaitin
 
 **Gmail confirmations in batch turns (owner decision, 2026-10-13).** One turn may leave up to 10 Gmail cards. Each is still confirmed on its own, and none is confirmed in bulk. A reply's card adds a "Hilo" row reading "Responde en el hilo del correo original" as plain text. The answer above the cards ends with the platform's count of actions awaiting confirmation (architecture §67).
 
+**Labels, reconnecting and answers as they are written (owner decisions, 2026-10-13).**
+
+- **Labels card.** A labels proposal is one card listing each subject → label, with a muted note that subjects are checked and missing labels created.
+- **Reconnecting.** A Gmail account connected before labels shows "Volver a conectar" beside Desconectar, and a plain note that reconnecting keeps its tools. Its "Aplicar etiquetas" checkbox is disabled with a one-line hint. The connect dialog names the archiving the scope would allow and says Agentonic only adds labels.
+- **Answers as they are written.** In Chats and Probar, a running turn shows its answer so far with a small spinner and "Escribiendo…". It is followed every second until the turn ends (architecture §68).
+
 **Connect buttons (owner direction, 2026-10-09).** The buttons that connect a Google account show a plus icon, then the service's coloured mark and its name alone ("Gmail", "Google Drive"), with no "Conectar". Their accessible names still say "Conectar Gmail" and "Conectar Google Drive". The dialogs they open keep those titles. Google's Picker keeps the page where it was while it is open, and returns focus to "Elegir archivos". In Brave, Safari and every iPhone or iPad browser, "Elegir archivos" opens Google's own page to choose the files, then returns. A muted line under the button says so. Back in Agentonic, one notification reports how many files were added and how many were refused.
 
 **Programaciones (owner direction, 2026-10-08).** The agent page has a fourth tab, Programaciones, for members who can use the agent: a card with "Nueva programación" and a table. Nombre opens the form, Última (the last run's outcome, inline) opens the run history, Estado is the row's one badge (Activa or En pausa), and Próxima shows its time in the schedule's own timezone. Automatic actions sit in a separate dashed section of the form that names what runs without confirmation, once per run and to any recipient. Choosing any of them requires a consent box that repeats them (architecture §58).

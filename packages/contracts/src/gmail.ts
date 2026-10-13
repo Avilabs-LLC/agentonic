@@ -9,19 +9,34 @@ export const gmailOperation = z.enum([
   "gmail.drafts.update",
   "gmail.drafts.delete",
   "gmail.send",
+  // Runtime 0.7.0 and later (§68); needs the gmail.modify scope.
+  "gmail.labels.apply",
+])
+/**
+ * What a model may call: the grantable operations, plus reading a whole
+ * thread, which the read grant covers (§68).
+ */
+export const gmailToolOperation = z.enum([
+  ...gmailOperation.options,
+  "gmail.threads.read",
 ])
 export const gmailReads = [
   "gmail.search",
   "gmail.read",
   "gmail.drafts.list",
   "gmail.drafts.read",
+  "gmail.threads.read",
 ] as const
 export const gmailWrites = [
   "gmail.drafts.create",
   "gmail.drafts.update",
   "gmail.drafts.delete",
   "gmail.send",
+  "gmail.labels.apply",
 ] as const
+/** The grant a tool needs: a thread is read under the read grant. */
+export const gmailGrantFor = (operation: string) =>
+  operation === "gmail.threads.read" ? "gmail.read" : operation
 export const gmailLabels: Record<string, string> = {
   "gmail.search": "Buscar correos",
   "gmail.read": "Leer correos",
@@ -31,11 +46,13 @@ export const gmailLabels: Record<string, string> = {
   "gmail.drafts.update": "Editar borrador",
   "gmail.drafts.delete": "Eliminar borrador",
   "gmail.send": "Enviar correo",
+  "gmail.labels.apply": "Aplicar etiquetas",
+  "gmail.threads.read": "Leer hilos",
 }
 export const gmailGrant = z
   .object({
     connectionId: z.uuid(),
-    operations: z.array(gmailOperation).min(1).max(8),
+    operations: z.array(gmailOperation).min(1).max(9),
   })
   .strict()
   .refine((v) => new Set(v.operations).size === v.operations.length)
@@ -43,6 +60,9 @@ const id = z.string().regex(/^[a-zA-Z0-9_-]{1,128}$/)
 // A draft has its own ID and wraps a message with another; the model was seen
 // editing a draft by its message ID, which Gmail rejects (B2, 8 October).
 const messageId = id.describe("Gmail message ID: an id from gmail_search.")
+const threadId = id.describe(
+  "Gmail thread ID: a threadId from gmail_search or gmail_read."
+)
 const draftId = id.describe(
   "Gmail draft ID: a draftId from gmail_drafts_list or gmail_drafts_read. Never a messageId."
 )
@@ -73,6 +93,29 @@ export const gmailMessage = z
   .object({ ...messageShape, replyTo: replyTo.nullable().optional() })
   .strict()
   .refine(recipients)
+// Gmail's own labels, which would move or flag mail, are never applied (§68).
+const systemLabels =
+  /^(inbox|spam|trash|unread|starred|important|sent|draft|chat|category_.*)$/i
+const labelName = z
+  .string()
+  .min(1)
+  .max(100)
+  .refine((s) => !/[\r\n]/.test(s) && s.trim() === s && !systemLabels.test(s))
+  .describe("The label's name, created if the mailbox lacks it.")
+/** One proposal labels a batch; each item names the subject the agent read, checked before applying. */
+const labelItem = z
+  .object({
+    messageId,
+    subject: z
+      .string()
+      .max(200)
+      .refine((s) => !/[\r\n]/.test(s))
+      .describe(
+        "The message's subject exactly as read; the platform checks it."
+      ),
+    label: labelName,
+  })
+  .strict()
 export const gmailArguments = {
   "gmail.search": z
     .object({
@@ -91,6 +134,10 @@ export const gmailArguments = {
     .strict(),
   "gmail.drafts.delete": z.object({ id: draftId }).strict(),
   "gmail.send": gmailMessage,
+  "gmail.threads.read": z.object({ id: threadId }).strict(),
+  "gmail.labels.apply": z
+    .object({ labels: z.array(labelItem).min(1).max(10) })
+    .strict(),
 } as const
 /**
  * The argument schema offered to a model. Strict function schemas need every
@@ -119,7 +166,7 @@ export function gmailWriteMessage(operation: string, args: unknown) {
   return operation === "gmail.drafts.update" ? a?.message : args
 }
 export function parseGmailCall(operation: string, args: unknown) {
-  const op = gmailOperation.parse(operation)
+  const op = gmailToolOperation.parse(operation)
   return { operation: op, arguments: gmailArguments[op].parse(args) }
 }
 export const gmailConnection = z.object({
@@ -127,6 +174,8 @@ export const gmailConnection = z.object({
   account: z.string(),
   status: z.enum(["connected", "reconnect", "disconnected"]),
   operations: z.array(gmailOperation),
+  /** Connected with gmail.modify, so labels can be applied (§68). */
+  canLabel: z.boolean().default(false),
 })
 export const gmailState = z.object({
   connections: z.array(gmailConnection),

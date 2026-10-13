@@ -96,11 +96,13 @@ Runtime 0.7.0 declares `mailboxBatch`, and only its turns change:
 8. **The batch evaluation case.** `platform-gmail-batch`: 10 synthetic emails, 3 needing a reply. It is required of mail agents on a batch runtime.
 9. **Diagnostics in the job log**, and a clear chat message for `runtime_mismatch`.
 
-Still open:
+Built next, in §68:
 
-- thread reading (a thread operation);
-- Gmail labels;
-- a style guide for NicolAI-Mail, which needs a collection;
-- streaming a long answer as it is written.
+- reading a whole thread;
+- Gmail labels in one confirmed batch, with the subjects checked;
+- answers that appear as they are written, in Chats and Probar;
+- the style guide on every turn.
 
-NicolAI-Mail needs a new version on runtime 0.7.0 (outstanding N20).
+Still open: a thread-level view of drafts, and labels for scheduled runs.
+
+NicolAI-Mail needs a new version on runtime 0.7.0 that includes its style guide's collection (outstanding N20).

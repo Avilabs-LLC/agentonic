@@ -428,7 +428,9 @@ export async function runPreview(
   root: string,
   providers: Providers,
   signal: AbortSignal,
-  allowTools = true
+  allowTools = true,
+  /** Chats and previews stream the answer; evaluations do not (§68). */
+  stream = false
 ) {
   const entry = verifyRuntime(value, root)
   const {
@@ -495,7 +497,13 @@ export async function runPreview(
       model,
       reasoning: configuration.reasoning,
       tools: {
-        gmail: grant?.operations ?? [],
+        // Batch runtimes may also read whole threads under the read grant (§68).
+        gmail: [
+          ...(grant?.operations ?? []),
+          ...(batch && grant?.operations.includes("gmail.read")
+            ? (["gmail.threads.read"] as const)
+            : []),
+        ],
         web,
         ...(driveRuntime ? { drive: drive?.operations ?? [] } : {}),
       },
@@ -526,6 +534,7 @@ export async function runPreview(
       drive,
       web,
       batch,
+      stream,
       passageIds: z
         .array(z.object({ id: z.uuid() }))
         .max(8)

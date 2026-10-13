@@ -8,6 +8,9 @@ import type { Keyring } from "./secrets"
 export const GOOGLE_SCOPES = [
   "https://www.googleapis.com/auth/gmail.readonly",
   "https://www.googleapis.com/auth/gmail.compose",
+  // Labels (§68). It would also allow archiving and trashing; the platform's
+  // only modify tool adds user labels.
+  "https://www.googleapis.com/auth/gmail.modify",
 ]
 export type GoogleConfig = {
   clientId: string
@@ -264,6 +267,116 @@ function message(
     untrusted: true,
   }
 }
+const GMAIL = "https://gmail.googleapis.com/gmail/v1/users/me/"
+/** One Gmail request made by a labels proposal; `write` decides what a failure means. */
+async function gmailCall(
+  access: string,
+  path: string,
+  write: boolean,
+  init: { method?: string; body?: unknown } = {}
+) {
+  let response: Response
+  try {
+    response = await fetch(GMAIL + path, {
+      method: init.method ?? "GET",
+      headers: {
+        Authorization: `Bearer ${access}`,
+        "Content-Type": "application/json",
+      },
+      body: init.body ? JSON.stringify(init.body) : undefined,
+      signal: AbortSignal.timeout(15000),
+    })
+  } catch {
+    throw new GoogleError(write ? "uncertain" : "unavailable")
+  }
+  // A token without gmail.modify (connected before §68) gets a 403: refused.
+  if (!response.ok)
+    throw new GoogleError(
+      response.status === 401
+        ? "reconnect"
+        : write && response.status >= 500
+          ? "uncertain"
+          : "rejected",
+      `gmail_http_${response.status}`
+    )
+  return response.status === 204 ? null : json(response)
+}
+const sameSubject = (a: string, b: string) =>
+  a.replace(/\s+/g, " ").trim() === b.replace(/\s+/g, " ").trim()
+/**
+ * Applies a confirmed labels proposal (§68). First, with nothing changed,
+ * every message's subject must match the one the card showed, and missing
+ * labels are found. Then the missing user labels are created and each label is
+ * added to its messages. Gmail's own labels are never touched.
+ */
+async function applyLabels(
+  access: string,
+  items: { messageId: string; subject: string; label: string }[]
+) {
+  for (const item of items) {
+    const m = z
+      .object({
+        payload: z
+          .object({
+            headers: z
+              .array(z.object({ name: z.string(), value: z.string() }))
+              .optional(),
+          })
+          .optional(),
+      })
+      .parse(
+        await gmailCall(
+          access,
+          `messages/${encodeURIComponent(item.messageId)}?format=metadata&metadataHeaders=Subject`,
+          false
+        )
+      )
+    const subject =
+      m.payload?.headers?.find((h) => h.name.toLowerCase() === "subject")
+        ?.value ?? ""
+    if (!sameSubject(subject, item.subject))
+      throw new GoogleError("rejected", "gmail_subject_mismatch")
+  }
+  const existing = z
+    .object({
+      labels: z
+        .array(z.object({ id: z.string(), name: z.string(), type: z.string() }))
+        .optional(),
+    })
+    .parse(await gmailCall(access, "labels", false))
+  const ids = new Map<string, string>()
+  for (const l of existing.labels ?? [])
+    if (l.type === "user") ids.set(l.name.toLowerCase(), l.id)
+  let created = 0
+  const byLabel = new Map<string, string[]>()
+  for (const item of items) {
+    const key = item.label.toLowerCase()
+    if (!ids.has(key)) {
+      const label = z.object({ id: z.string() }).parse(
+        await gmailCall(access, "labels", true, {
+          method: "POST",
+          body: {
+            name: item.label,
+            labelListVisibility: "labelShow",
+            messageListVisibility: "show",
+          },
+        })
+      )
+      ids.set(key, label.id)
+      created++
+    }
+    byLabel.set(key, [...(byLabel.get(key) ?? []), item.messageId])
+  }
+  for (const [key, messageIds] of byLabel)
+    await gmailCall(access, "messages/batchModify", true, {
+      method: "POST",
+      body: { ids: messageIds, addLabelIds: [ids.get(key)] },
+    })
+  return { labeled: items.length, created }
+}
+/** A whole thread, most recent 10 messages, each cut to 4,000 characters (§68). */
+const THREAD_MESSAGES = 10
+const THREAD_TEXT = 4000
 export async function gmail(
   access: string,
   operation: string,
@@ -273,12 +386,18 @@ export async function gmail(
 ) {
   const call = parseGmailCall(operation, args),
     a = call.arguments as Record<string, unknown>
+  if (operation === "gmail.labels.apply")
+    return applyLabels(
+      access,
+      a.labels as { messageId: string; subject: string; label: string }[]
+    )
   let path = "",
     method = "GET",
     body: unknown
   if (operation === "gmail.search")
     path = `messages?${new URLSearchParams({ q: String(a.query), maxResults: String(a.limit) })}`
   if (operation === "gmail.read") path = `messages/${a.id}?format=full`
+  if (operation === "gmail.threads.read") path = `threads/${a.id}?format=full`
   if (operation === "gmail.drafts.list") path = `drafts?maxResults=${a.limit}`
   if (operation === "gmail.drafts.read") path = `drafts/${a.id}?format=full`
   // A reply goes in the thread of the message it answers (§67).
@@ -349,6 +468,27 @@ export async function gmail(
     throw new GoogleError(write ? "uncertain" : "unavailable")
   }
   if (operation === "gmail.read") return message(data)
+  if (operation === "gmail.threads.read") {
+    const thread = z
+      .object({ id: z.string(), messages: z.array(z.unknown()).optional() })
+      .parse(data)
+    const all = thread.messages ?? []
+    return {
+      threadId: thread.id,
+      messages: all.slice(-THREAD_MESSAGES).map((m) => {
+        const read = message(m)
+        return {
+          ...read,
+          text: read.text.slice(0, THREAD_TEXT),
+          ...(read.text.length > THREAD_TEXT ? { truncated: true } : {}),
+        }
+      }),
+      ...(all.length > THREAD_MESSAGES
+        ? { earlierMessages: all.length - THREAD_MESSAGES }
+        : {}),
+      untrusted: true,
+    }
+  }
   // Drafts name both IDs so the model edits by draftId, never the message's.
   if (operation === "gmail.drafts.read") {
     const draft = z.object({ id: z.string(), message: z.unknown() }).parse(data)

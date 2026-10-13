@@ -86,8 +86,9 @@ export const displayNameSchema = z.object({
 })
 export type DisplayNameInput = z.infer<typeof displayNameSchema>
 /** Whether this person still has to choose a name before using the customer app. */
-export const nameRequired = (user: { displayName: string } | null | undefined) =>
-  user?.displayName === PLACEHOLDER_NAME
+export const nameRequired = (
+  user: { displayName: string } | null | undefined
+) => user?.displayName === PLACEHOLDER_NAME
 /** Only a path on this app; anything else falls back. */
 export function safeNext(next: unknown, fallback = "/") {
   if (

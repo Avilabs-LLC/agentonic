@@ -52,7 +52,8 @@ export function StagingChats({
 }) {
   const fieldId = useId(),
     lock = useRef(false),
-    epoch = useRef(0)
+    epoch = useRef(0),
+    live = useRef(false)
   const [listing, setListing] = useState(initial),
     [selected, setSelected] = useState<string | null>(
       initial.conversations.some((c) => c.id === initialConversation)
@@ -119,6 +120,11 @@ export function StagingChats({
             await command("state", { conversationId: selected })
           )
           if (!stopped && current === epoch.current) setState(next)
+          // A turn in progress is followed every second, so its answer
+          // appears as it is written (§68).
+          live.current = next.turns.some(
+            (t) => t.status === "running" || t.status === "queued"
+          )
         }
         const nextList = chatList.parse(await command("list"))
         if (!stopped && current === epoch.current) setListing(nextList)
@@ -136,11 +142,15 @@ export function StagingChats({
         inFlight = false
       }
     }
-    void refresh()
-    const timer = setInterval(() => void refresh(), 3000)
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const loop = async () => {
+      await refresh()
+      if (!stopped) timer = setTimeout(loop, live.current ? 1000 : 3000)
+    }
+    void loop()
     return () => {
       stopped = true
-      clearInterval(timer)
+      clearTimeout(timer)
     }
   }, [selected, command])
   async function run(operation: "start" | "turn" | "close") {
@@ -385,6 +395,14 @@ export function StagingChats({
                           {lifecycleErrors[t.errorCode ?? ""] ??
                             "No se pudo completar la respuesta."}
                         </p>
+                      ) : t.partial ? (
+                        <>
+                          <AgentAnswer text={t.partial} />
+                          <p className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+                            <Loader2Icon className="size-3 animate-spin" />
+                            Escribiendo…
+                          </p>
+                        </>
                       ) : (
                         <p className="flex items-center gap-2 text-sm text-muted-foreground">
                           <Loader2Icon className="size-4 animate-spin" />
