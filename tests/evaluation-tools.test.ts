@@ -169,6 +169,55 @@ it("answers Gmail and web tools from fixtures with the real tools' shapes, and r
     "web.search",
     "web.read",
   ])
+  // The grader sees calls, not results: only the proposed write says it was
+  // never executed (§71). Before this, a grader read a proposed label batch
+  // and three drafts as applied.
+  expect(calls.map((c) => c.pendingApproval ?? false)).toEqual([
+    false,
+    false,
+    false,
+    true,
+    false,
+    false,
+  ])
+})
+
+it("searches a fixture mailbox the way Gmail reads operators (§69)", async () => {
+  const providers = fixtureProviders(base, fixtures, [])
+  const search = async (query: string, limit = 10) =>
+    (
+      (await providers.gmailTool(
+        "gmail.search",
+        { query, limit },
+        { connectionId: id(500), operations: ["gmail.search", "gmail.read"] },
+        job,
+        vi.fn<Execute>()
+      )) as { messages: { id: string }[] }
+    ).messages.map((m) => m.id)
+  // "My latest emails": before §69 each of these found nothing, because
+  // inbox, sent, drafts, newer and than were searched for as words.
+  for (const query of [
+    "in:inbox",
+    "-in:sent -in:drafts",
+    "label:inbox newer_than:7d category:primary",
+    "is:unread OR is:read",
+    "(in:inbox)",
+  ])
+    expect(await search(query)).toEqual(["m1", "m2"])
+  expect(await search("in:inbox", 1)).toEqual(["m1"])
+  // The fixture is an inbox: other folders hold nothing.
+  for (const query of ["in:sent", "is:draft", "in:trash newer_than:1d"])
+    expect(await search(query)).toEqual([])
+  // Header operators match their header: any value, all words of one.
+  expect(await search("from:marta")).toEqual(["m1"])
+  expect(await search("from:marta OR from:noticias")).toEqual(["m1", "m2"])
+  expect(await search('subject:"Entrega del pedido"')).toEqual(["m1"])
+  expect(await search('subject:"Entrega novedades"')).toEqual([])
+  expect(await search("from:marta novedades")).toEqual([])
+  // Plain words still match any of them; a negated word excludes.
+  expect(await search("pedido")).toEqual(["m1"])
+  expect(await search("pedido ofertas")).toEqual(["m1", "m2"])
+  expect(await search("in:inbox -ofertas")).toEqual(["m1"])
 })
 
 it("runs a fixture case with the version's own tools and shows the grader what it did", async () => {

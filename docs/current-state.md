@@ -4,12 +4,12 @@
 
 ## What runs where
 
-| Where                                | What                                                                                                                                                                                                                                                                                                                                                                                                                                | Notes                                                                                                                                                                                                                                                 |
-| ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Owner's Mac                          | Development copies only: the apps under `pnpm dev`, and the twice-daily renewal job                                                                                                                                                                                                                                                                                                                                                 | Nothing on the Mac serves the platform. Local development apps use the VM's knowledge worker, since they share the database; run `pnpm dev:worker` only while changing worker code. The renewal job still runs here (C19).                            |
-| `vm-agents-01` (Azure, Ubuntu 24.04) | Customer app on `https://app.agentonic.avilabs.tech` and Admin on `https://admin.agentonic.avilabs.tech`, behind Caddy with Let's Encrypt; the knowledge and preview worker; evaluator service; staging deployment controller; one gateway holding the database connections and provider keys; one service per activated agent, resting while idle and without network or keys; runtimes 0.3.0, 0.4.0, 0.5.0 and 0.6.0 side by side | Platform release `platform-0.38.0-cc3101be70d4` installed with `pnpm platform:install` (architecture §53). Open to the internet on 80 and 443 only; SSH from the owner's address only. Live Corby runs on a separate VM and is not part of Agentonic. |
-| Supabase (Frankfurt)                 | Postgres, Auth, Storage                                                                                                                                                                                                                                                                                                                                                                                                             | One nonproduction project shared by the Mac, local staging and Azure staging. Free plan, Nano compute: no database backups, and inactive projects are paused.                                                                                         |
-| External providers                   | OpenAI (answers, criteria, grading), Voyage (embeddings, reranking), Browserbase (web search and reading), Google (Gmail and Drive OAuth in Testing mode; Drive uses `drive.file` with the Picker)                                                                                                                                                                                                                                  | Development caps: OpenAI US$25, Voyage US$10, Browserbase US$1 in total. Accumulated use is never reset.                                                                                                                                              |
+| Where                                | What                                                                                                                                                                                                                                                                                                                                                                                                                 | Notes                                                                                                                                                                                                                                                 |
+| ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Owner's Mac                          | Development copies only: the apps under `pnpm dev`, and the twice-daily renewal job                                                                                                                                                                                                                                                                                                                                  | Nothing on the Mac serves the platform. Local development apps use the VM's knowledge worker, since they share the database; run `pnpm dev:worker` only while changing worker code. The renewal job still runs here (C19).                            |
+| `vm-agents-01` (Azure, Ubuntu 24.04) | Customer app on `https://app.agentonic.avilabs.tech` and Admin on `https://admin.agentonic.avilabs.tech`, behind Caddy with Let's Encrypt; the knowledge and preview worker; evaluator service; staging deployment controller; one gateway holding the database connections and provider keys; one service per activated agent, resting while idle and without network or keys; runtimes 0.3.0 to 0.7.0 side by side | Platform release `platform-0.40.0-e08c79afab99` installed with `pnpm platform:install` (architecture §53). Open to the internet on 80 and 443 only; SSH from the owner's address only. Live Corby runs on a separate VM and is not part of Agentonic. |
+| Supabase (Frankfurt)                 | Postgres, Auth, Storage                                                                                                                                                                                                                                                                                                                                                                                              | One nonproduction project shared by the Mac, local staging and Azure staging. Free plan, Nano compute: no database backups, and inactive projects are paused.                                                                                         |
+| External providers                   | OpenAI (answers, criteria, grading), Voyage (embeddings, reranking), Browserbase (web search and reading), Google (Gmail and Drive OAuth in Testing mode; Drive uses `drive.file` with the Picker)                                                                                                                                                                                                                   | Development caps: OpenAI US$25, Voyage US$10, Browserbase US$1 in total. Accumulated use is never reset.                                                                                                                                              |
 
 On 5 October the nonproduction data was reset: no agents, documents or deployments exist. User accounts, staff, workspaces, the audit log, the runtime catalog and the spend ledger were kept.
 
@@ -71,7 +71,7 @@ Staff accounts no longer need the Mac's bootstrap script. The invitation email n
 
 **Answers kept in Chats (architecture §66), installed 13 October with platform v0.38.0 and migration 69.** A turn in Chats or a scheduled run records its answer even when a failed web read or an interrupted model call left a reservation open, as previews already did. Before this, such a turn showed "No se pudo completar la respuesta." (NicolAI-Mail, 13 October). The open reservation stays charged and counts as unknown cost.
 
-**Mailbox batch turns (architecture §67), merged with migration 70 and runtime 0.7.0; not yet applied or installed.** On a runtime 0.7.0 version, one turn can work through a batch of emails. The [audit](mailbox-batch-audit.md) explains why, after NicolAI-Mail's request on 13 October.
+**Mailbox batch turns (architecture §67), installed 13 October with migration 70 and runtime 0.7.0.** On a runtime 0.7.0 version, one turn can work through a batch of emails. The [audit](mailbox-batch-audit.md) explains why, after NicolAI-Mail's request on 13 October.
 
 - It makes 6 Gmail reads and proposes up to 10 drafts, each confirmed on its own card, as replies in their thread.
 - It runs up to about 4 minutes and answers in up to 30,000 characters.
@@ -80,14 +80,28 @@ Staff accounts no longer need the Mac's bootstrap script. The invitation email n
 
 Failures name their cause in the job log. Earlier versions keep their limits until their agent moves to a new version.
 
-**Mailbox follow-ups (architecture §68), in platform v0.40.0 with migration 71, for runtime 0.7.0; not yet applied or installed.**
+**Mailbox follow-ups (architecture §68), installed 13 October with platform v0.40.0, migration 71 and runtime 0.7.0.**
 
 - The agent reads whole threads.
 - It proposes Gmail labels for a batch, confirmed on one card after the subjects are checked. This needs `gmail.modify`; older accounts show "Volver a conectar", which keeps their tools.
 - Answers appear as they are written in Chats and Probar.
 - An accepted Aprender mi estilo guide in the version's knowledge reaches every turn.
 
-These ship with §67's rollout.
+Both were installed together on 13 October:
+
+- migrations 70 and 71;
+- evaluator `0fe1ffe2`, with batch fixtures;
+- staging broker `cc9e991d`, which both running deployments moved to;
+- `platform-0.40.0-e08c79afab99`;
+- runtime `0.7.0-preview-e08c79af`.
+
+New versions use runtime 0.7.0. Labels wait for the owner to confirm `gmail.modify` in Google Cloud and for each account to reconnect (N21).
+
+**The batch case's mailbox reads Gmail search operators (architecture §69), installed 13 October with evaluator `7c84bad6` (platform v0.40.1).** The 10-email case's synthetic mailbox ignored operators, so `in:inbox` found nothing and NicolAI-Mail's first 0.7.0 version failed that case on both models. Only the evaluator changed; it serves runtimes 0.3.0–0.7.0, and the version is evaluated again.
+
+**An evaluation's limit follows the selected models (architecture §70), installed 13 October with `platform-0.40.2-2277987ddbea`.** Runtime 0.7.0 reserves a call's full output ceiling, so GPT-5.4 and Astra no longer fit the old US$3.00 default together. "Evaluar modelos" suggests US$1 for GPT-5.4 mini, US$2 for GPT-5.4 and US$5 for Astra per configuration, and explains a run that stops on its limit.
+
+**The grader sees that a write was only proposed (architecture §71), in platform v0.40.3; the evaluator is not yet redeployed.** Fixture calls that were proposed for confirmation say so, so an answer that correctly says nothing was applied is not failed against them.
 
 ## Operations
 
@@ -157,5 +171,8 @@ The ordered plan is architecture §37; the owner's audit brief tracks progress. 
 | Answers kept when a reservation stays open; Gmail limits per turn      | §66                  |
 | Mailbox batch turns: allowances, drafts as replies, longer turns       | §67                  |
 | Threads, labels, answers as they are written, the style guide          | §68                  |
+| The batch case's mailbox reads Gmail search operators                  | §69                  |
+| An evaluation's limit follows the selected models                      | §70                  |
+| The grader sees that a write was only proposed                         | §71                  |
 
 Presentation rules are in the [UI contract](ui/ui-contract.md). The [target schema](schema.dbml) describes 90 tables; 73 exist in the 71 checked-in migrations.

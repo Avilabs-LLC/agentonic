@@ -42,5 +42,12 @@ export const evaluationFixtures = z
   .strict()
   .refine((f) => !!f.mailbox || !!f.web || !!f.drive)
 export type EvaluationFixtures = z.infer<typeof evaluationFixtures>
-/** One tool call an evaluated agent made, shown to the grader. */
-export type FixtureCall = { tool: string; arguments: unknown }
+/**
+ * One tool call an evaluated agent made, shown to the grader. A write carries
+ * `pendingApproval: true`: it was proposed for confirmation, not executed (§71).
+ */
+export type FixtureCall = {
+  tool: string
+  arguments: unknown
+  pendingApproval?: true
+}
