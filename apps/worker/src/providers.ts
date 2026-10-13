@@ -29,6 +29,7 @@ import { executeWeb } from "./web"
 import { executeGmail } from "./gmail"
 import { executeDrive } from "./drive"
 import { PreviewFailure } from "./failure"
+import { partialAnswerText, readResponseStream } from "./stream"
 import {
   INVALID,
   jobCall,
@@ -56,6 +57,8 @@ export type ModelCall = {
   parallelToolCalls?: boolean
   /** Mailbox batch turns: a larger output ceiling for the final answer. */
   maxOutputTokens?: number
+  /** Chats and previews of batch runtimes: show the answer as it is written (§68). */
+  stream?: boolean
   timeoutMs: number
 }
 /** Options a mailbox batch turn passes to Gmail tools (§67). */
@@ -164,6 +167,7 @@ export async function respond(
           max_output_tokens: maxOutput,
           include: ["reasoning.encrypted_content"],
         }),
+    ...(call.stream ? { stream: true } : {}),
     ...(call.tools?.length
       ? {
           tools: call.tools,
@@ -209,11 +213,50 @@ export async function respond(
     return { kind: "uncertain" }
   }
   if (!response.ok) throw new Error("provider_unavailable")
-  const output = (await response.json()) as {
+  let output: {
     status?: string
     usage?: { input_tokens: number; output_tokens: number }
     output?: Record<string, unknown>[]
   }
+  if (call.stream && response.body) {
+    // The answer so far reaches the person at most once a second, best
+    // effort; a write still running is skipped, never queued.
+    let shown = 0,
+      last = 0,
+      writing = false
+    const show = (text: string) => {
+      const partial = partialAnswerText(text)
+      if (
+        partial === undefined ||
+        partial.length <= shown ||
+        writing ||
+        Date.now() - last < 1000
+      )
+        return
+      shown = partial.length
+      last = Date.now()
+      writing = true
+      void execute("partial", job, {
+        text: partial.slice(0, batchCeilings.answerChars),
+      })
+        .catch(() => {})
+        .finally(() => {
+          writing = false
+        })
+    }
+    let final: Record<string, unknown> | undefined
+    try {
+      final = await readResponseStream(response.body, show)
+    } catch (error) {
+      if (signal.aborted) throw new Error("lease_lost")
+      if (error instanceof Error && error.message === "provider_unavailable")
+        throw error
+      // A stream cut short may have been billed: its reservation stays.
+      return { kind: "uncertain" }
+    }
+    if (!final) return { kind: "uncertain" }
+    output = final as typeof output
+  } else output = (await response.json()) as typeof output
   const usage = output.usage
   if (
     !usage ||
@@ -343,6 +386,7 @@ const modelCall = z
     // Batch turns only (§67); copies on earlier brokers never send these.
     parallelToolCalls: z.boolean().optional(),
     maxOutputTokens: z.number().int().min(1).max(16384).optional(),
+    stream: z.boolean().optional(),
     timeoutMs: z.number().int().positive(),
   })
   .strict()

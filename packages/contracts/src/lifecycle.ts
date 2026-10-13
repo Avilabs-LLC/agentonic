@@ -253,6 +253,8 @@ export const chatState = z.object({
       reasoning: reasoningLevel.nullable().optional(),
       query: z.string(),
       answer: z.string().nullable(),
+      /** The answer as it is being written, while the turn runs (§68). */
+      partial: z.string().nullable().optional(),
       citations: z.array(z.uuid()),
       status: z.enum(["queued", "running", "succeeded", "failed", "cancelled"]),
       errorCode: z.string().nullable(),

@@ -1,8 +1,13 @@
 export const VERSION_HISTORY = [
   {
-    "version": "0.40.0",
+    "version": "0.41.0",
     "date": "2026-10-13",
     "summary": "Despliegues shows vm-agents-01 as four metric tiles instead of the server grid; Local (desarrollo) opens in a dialog from the page header"
+  },
+  {
+    "version": "0.40.0",
+    "date": "2026-10-13",
+    "summary": "Mailbox follow-ups for runtime 0.7.0: whole threads, Gmail labels confirmed as one batch with subjects checked (gmail.modify, reconnect keeps tools), answers that appear as they are written in Chats and Probar, and the owner's style guide on every turn"
   },
   {
     "version": "0.39.0",

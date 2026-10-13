@@ -113,7 +113,7 @@ export function GmailTools({
   disabled,
   onPermission,
 }: {
-  connections: { id: string; account: string }[]
+  connections: { id: string; account: string; canLabel?: boolean }[]
   grant: Grant | undefined
   disabled: boolean
   onPermission: (
@@ -185,6 +185,8 @@ export function GmailTools({
                     className="flex cursor-pointer items-start gap-3 rounded-lg border p-3 text-sm"
                   >
                     <Checkbox.Root
+                      // Labels need the account reconnected with gmail.modify (§68).
+                      disabled={op === "gmail.labels.apply" && !c.canLabel}
                       checked={
                         grant?.connectionId === c.id &&
                         grant.operations.includes(op)
@@ -198,7 +200,14 @@ export function GmailTools({
                         <CheckIcon className="size-3" />
                       </Checkbox.Indicator>
                     </Checkbox.Root>
-                    <span>{gmailLabels[op]}</span>
+                    <span>
+                      {gmailLabels[op]}
+                      {op === "gmail.labels.apply" && !c.canLabel && (
+                        <span className="block text-xs text-muted-foreground">
+                          Vuelve a conectar la cuenta en Conexiones para usarla.
+                        </span>
+                      )}
+                    </span>
                   </label>
                 ))}
               </fieldset>
@@ -235,6 +244,11 @@ export function GmailConnection({
   const router = useRouter(),
     [busy, setBusy] = useState(false),
     [connecting, setConnecting] = useState(false),
+    // The connection a reconnect refreshes, keeping its tools (§68).
+    [reconnect, setReconnect] = useState<{
+      id: string
+      account: string
+    } | null>(null),
     [connectingDrive, setConnectingDrive] = useState(false),
     [remove, setRemove] = useState<string | null>(null),
     [removeDrive, setRemoveDrive] = useState<string | null>(null)
@@ -321,15 +335,37 @@ export function GmailConnection({
                 <div key={c.id} className="space-y-4 rounded-lg border p-4">
                   <div className="flex flex-wrap items-center justify-between gap-4">
                     <GmailAccount account={c.account} status={c.status} />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      disabled={disabled || busy}
-                      onClick={() => setRemove(c.id)}
-                    >
-                      Desconectar
-                    </Button>
+                    <div className="flex flex-wrap gap-2">
+                      {(c.status !== "connected" || !c.canLabel) && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          disabled={
+                            disabled || busy || state.available === false
+                          }
+                          onClick={() =>
+                            setReconnect({ id: c.id, account: c.account })
+                          }
+                        >
+                          Volver a conectar
+                        </Button>
+                      )}
+                      <Button
+                        type="button"
+                        variant="outline"
+                        disabled={disabled || busy}
+                        onClick={() => setRemove(c.id)}
+                      >
+                        Desconectar
+                      </Button>
+                    </div>
                   </div>
+                  {c.status === "connected" && !c.canLabel && (
+                    <p className="text-sm text-muted-foreground">
+                      Vuelve a conectar esta cuenta para que el agente pueda
+                      aplicar etiquetas. Sus herramientas se conservan.
+                    </p>
+                  )}
                   {c.status === "connected" && (
                     <StyleLearning
                       workspaceId={workspaceId}
@@ -496,25 +532,40 @@ export function GmailConnection({
           router.refresh()
         }}
       />
-      <Dialog open={connecting} onOpenChange={setConnecting}>
+      <Dialog
+        open={connecting || !!reconnect}
+        onOpenChange={(open) => {
+          if (!open) {
+            setConnecting(false)
+            setReconnect(null)
+          }
+        }}
+      >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Conectar Gmail</DialogTitle>
+            <DialogTitle>
+              {reconnect ? "Volver a conectar Gmail" : "Conectar Gmail"}
+            </DialogTitle>
             <DialogDescription>
-              Google te pedirá permiso para leer correos y administrar
-              borradores. Su permiso de borradores también permite enviar;
-              Agentonic exigirá una confirmación por cada cambio.
+              Google te pedirá permiso para leer correos, administrar borradores
+              y organizar el buzón. Su permiso de borradores también permite
+              enviar, y el de organizar permite archivar; Agentonic solo agrega
+              etiquetas y exigirá una confirmación por cada cambio.
             </DialogDescription>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
-            Después elegirás las herramientas de este agente. Los adjuntos y la
-            importación del buzón no están incluidos.
+            {reconnect
+              ? `Elige la misma cuenta, ${reconnect.account}.`
+              : "Después elegirás las herramientas de este agente. Los adjuntos y la importación del buzón no están incluidos."}
           </p>
           <div className="flex justify-end gap-3">
             <Button
               type="button"
               variant="outline"
-              onClick={() => setConnecting(false)}
+              onClick={() => {
+                setConnecting(false)
+                setReconnect(null)
+              }}
             >
               Cancelar
             </Button>
@@ -523,7 +574,7 @@ export function GmailConnection({
               onClick={() => {
                 const form = document.createElement("form")
                 form.method = "POST"
-                form.action = `/api/connections/google/start?workspace=${workspaceId}&agent=${agentId}`
+                form.action = `/api/connections/google/start?workspace=${workspaceId}&agent=${agentId}${reconnect ? `&connection=${reconnect.id}` : ""}`
                 document.body.appendChild(form)
                 form.submit()
               }}

@@ -574,6 +574,7 @@ async function serviceLoop() {
         {
           runtimeRoot,
           rerankEnabled: env.AGENTONIC_RERANK_ENABLED === "true",
+          stream: true,
           providers,
         },
         controller.signal

@@ -9,7 +9,12 @@ import { ModelPicker } from "@workspace/ui/components/model-picker"
 import { ChatComposer } from "@workspace/ui/components/chat-composer"
 import { AgentAnswer } from "@workspace/ui/components/agent-answer"
 import { useCallback, useEffect, useRef, useState } from "react"
-import { PlayIcon, SquareIcon, MessageSquareIcon } from "lucide-react"
+import {
+  Loader2Icon,
+  PlayIcon,
+  SquareIcon,
+  MessageSquareIcon,
+} from "lucide-react"
 import {
   previewState,
   previewErrors,
@@ -70,6 +75,7 @@ export function AgentPreview({
   } | null>(null)
   const locked = useRef(false)
   const generation = useRef(0)
+  const live = useRef(false)
   const bottom = useRef<HTMLDivElement>(null)
   const command = useCallback(
     async (operation: string, payload: Record<string, unknown>) => {
@@ -106,6 +112,9 @@ export function AgentPreview({
         if (!stopped && generation.current === current) {
           setState(next)
           setError("")
+          live.current = next.turns.some(
+            (t) => t.status === "running" || t.status === "queued"
+          )
         }
       } catch (reason) {
         if (!stopped && generation.current === current) {
@@ -121,11 +130,17 @@ export function AgentPreview({
         pending = false
       }
     }
-    void refresh()
-    const timer = setInterval(() => void refresh(), 2000)
+    // A turn in progress is followed every second, so its answer appears
+    // as it is written (§68).
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const loop = async () => {
+      await refresh()
+      if (!stopped) timer = setTimeout(loop, live.current ? 1000 : 2000)
+    }
+    void loop()
     return () => {
       stopped = true
-      clearInterval(timer)
+      clearTimeout(timer)
     }
   }, [previewId, command])
   const last = state?.turns.at(-1),
@@ -336,6 +351,14 @@ export function AgentPreview({
                         </div>
                       </details>
                     )}
+                  </>
+                ) : turn.status === "running" && turn.partial ? (
+                  <>
+                    <AgentAnswer text={turn.partial} />
+                    <p className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+                      <Loader2Icon className="size-3 animate-spin" />
+                      Escribiendo…
+                    </p>
                   </>
                 ) : (
                   <p className="text-sm text-muted-foreground">

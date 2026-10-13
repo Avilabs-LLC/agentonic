@@ -5,7 +5,11 @@
 // same shape as the real tools' (gmail.ts, drive.ts, web.ts), so the frozen runtime sees
 // what it would see in a chat.
 import { randomUUID } from "node:crypto"
-import { gmailReads, parseGmailCall } from "@agentonic/contracts/gmail"
+import {
+  gmailGrantFor,
+  gmailReads,
+  parseGmailCall,
+} from "@agentonic/contracts/gmail"
 import { webArguments } from "@agentonic/contracts/web"
 import {
   GOOGLE_DOC,
@@ -117,7 +121,7 @@ export function fixtureProviders(
     },
     async gmailTool(operation, args, grant, _job, _execute, options) {
       const call = parseGmailCall(operation, args)
-      if (!grant.operations.includes(call.operation))
+      if (!grant.operations.some((op) => op === gmailGrantFor(call.operation)))
         throw new Error("runtime_mismatch")
       calls.push({ tool: call.operation, arguments: call.arguments })
       const a = call.arguments as Record<string, unknown>
@@ -151,6 +155,19 @@ export function fixtureProviders(
               threadId: m.id,
               headers: headers(m),
               text: m.text,
+              untrusted: true,
+            }
+          : { error: "not_found", untrusted: true }
+      }
+      // A fixture message is its own thread.
+      if (call.operation === "gmail.threads.read") {
+        const m = mailbox.find((x) => x.id === a.id)
+        return m
+          ? {
+              threadId: m.id,
+              messages: [
+                { id: m.id, threadId: m.id, headers: headers(m), text: m.text },
+              ],
               untrusted: true,
             }
           : { error: "not_found", untrusted: true }
