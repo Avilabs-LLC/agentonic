@@ -1,5 +1,10 @@
 export const VERSION_HISTORY = [
   {
+    "version": "0.41.0",
+    "date": "2026-10-13",
+    "summary": "Despliegues shows vm-agents-01 as four metric tiles instead of the server grid; Local (desarrollo) opens in a dialog from the page header"
+  },
+  {
     "version": "0.40.3",
     "date": "2026-10-13",
     "summary": "Evaluations show the grader which tool calls were only proposed, so an agent that correctly says nothing was applied is not failed for it"

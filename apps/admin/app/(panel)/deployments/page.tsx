@@ -1,10 +1,12 @@
 import { notFound } from "next/navigation"
 import { requireIdentity } from "@agentonic/server/auth"
 import { loadOperationsDeployments } from "@agentonic/server/operations"
+import { environmentLabels } from "@agentonic/contracts/lifecycle"
 import { PageHeader } from "@workspace/ui/components/page-header"
 import {
   OperationsDeploymentsTable,
-  OperationsInstallationsCard,
+  OperationsLocalServers,
+  OperationsServerTiles,
 } from "@workspace/ui/components/operations"
 import { operations } from "@/lib/navigation"
 export default async function Page() {
@@ -16,12 +18,19 @@ export default async function Page() {
     <>
       <PageHeader
         title={operations.deployments.title}
-        description="Qué ejecuta cada servidor y cada despliegue de pruebas, con su uso autorizado y su gasto."
+        description={`Qué ejecuta ${environmentLabels.azure_staging}, según su verificación dos veces al día, y cada despliegue de pruebas con su uso autorizado y su gasto.`}
         count={overview.deployments.length}
+        actions={
+          <OperationsLocalServers
+            hosts={overview.hosts}
+            evaluators={overview.evaluators}
+          />
+        }
       />
-      <OperationsInstallationsCard
+      <OperationsServerTiles
         hosts={overview.hosts}
         evaluators={overview.evaluators}
+        environment="azure_staging"
       />
       <OperationsDeploymentsTable deployments={overview.deployments} />
     </>
