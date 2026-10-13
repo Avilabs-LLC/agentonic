@@ -2530,3 +2530,15 @@ The database rule is unchanged: reservations still count against the limit, and 
 **Tests.** `tests/model-evaluation.test.ts`, "suggests an evaluation limit that leaves room for each model's reservations (§70)".
 
 **Rollout, 13 October 2026.** `platform-0.40.2-2277987ddbea` installed on `vm-agents-01` at about 11:40 UTC: the customer and Admin apps and the knowledge worker run release `889550b7`, all healthy, and `hosted:check` passed. The evaluator, broker and runtimes were not touched.
+
+## 71. The grader sees that a write was only proposed — 13 October 2026
+
+**Found 13 October.** Nico's third evaluation of NicolAI-Mail's 0.7.0 version (limit US$7.00) passed on GPT-5.4: 10/10, US$0.60. That run is the version's evidence and the version awaits staff review. GPT-6 Astra passed 9 cases and failed only `platform-gmail-batch`, with a correct answer:
+
+- It covered the 10 emails, proposed 3 reply drafts and a label batch, and said that nothing was applied, saved or sent until Nico confirms. In an evaluation, as in a chat, those writes are proposals.
+- The grader judged the closing line contradicted by the calls: "dice que no se han aplicado etiquetas, guardado borradores…, aunque sí aparecen `gmail.labels.apply` y `gmail.drafts.create`".
+- **The cause was the platform's.** The grader receives each call's tool and arguments but not its result, so a proposed write looked executed. The rubric says proposed sends and drafts stay pending, but it does not name labels (§68), and nothing on the call said "proposed".
+
+**Change (evaluator only).** In `apps/worker/src/evaluation-fixtures.ts` a write answered with `pendingApproval` (Gmail sends, drafts and labels, Drive Docs) marks its recorded call `pendingApproval: true`, the same flag the agent receives. The rubric text and version do not change. The evaluator is redeployed; results recorded so far keep their grades.
+
+**Tests.** `tests/evaluation-tools.test.ts`: in the fixture-tools test only the proposed send carries `pendingApproval: true`.

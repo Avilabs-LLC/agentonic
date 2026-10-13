@@ -169,6 +169,17 @@ it("answers Gmail and web tools from fixtures with the real tools' shapes, and r
     "web.search",
     "web.read",
   ])
+  // The grader sees calls, not results: only the proposed write says it was
+  // never executed (§71). Before this, a grader read a proposed label batch
+  // and three drafts as applied.
+  expect(calls.map((c) => c.pendingApproval ?? false)).toEqual([
+    false,
+    false,
+    false,
+    true,
+    false,
+    false,
+  ])
 })
 
 it("searches a fixture mailbox the way Gmail reads operators (§69)", async () => {
