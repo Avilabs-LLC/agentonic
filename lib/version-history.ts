@@ -1,5 +1,10 @@
 export const VERSION_HISTORY = [
   {
+    "version": "0.42.0",
+    "date": "2026-10-13",
+    "summary": "Vencimientos shows vm-agents-01 as four metric tiles like Despliegues; Local (desarrollo) opens in a dialog from the page header"
+  },
+  {
     "version": "0.41.0",
     "date": "2026-10-13",
     "summary": "Despliegues shows vm-agents-01 as four metric tiles instead of the server grid; Local (desarrollo) opens in a dialog from the page header"

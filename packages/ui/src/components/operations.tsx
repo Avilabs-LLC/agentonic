@@ -3,7 +3,6 @@
 // deployments, costs and runtime releases. Metadata only; one badge per row
 // for the record's primary state, nested states inline (UI contract §9).
 import type { ColumnDef } from "@tanstack/react-table"
-import { LaptopIcon } from "lucide-react"
 import {
   formatCount,
   formatMoney,
@@ -26,10 +25,7 @@ import {
   type OperationsWorkspace,
 } from "@agentonic/contracts/operations"
 import { statusDescriptor } from "@workspace/ui/lib/badge-status"
-import {
-  iconTones,
-  StatusIndicator,
-} from "@workspace/ui/components/status-badge"
+import { StatusIndicator } from "@workspace/ui/components/status-badge"
 import { WorkspaceName } from "@workspace/ui/components/workspace-name"
 import { deploymentColumns } from "@workspace/ui/components/deployment-columns"
 import {
@@ -55,7 +51,13 @@ import {
 } from "@workspace/ui/components/agent-versions"
 import { CardEmptyState } from "@workspace/ui/components/card-empty-state"
 import { MetricTile } from "@workspace/ui/components/metric-tile"
-import { Button } from "@workspace/ui/components/button"
+import {
+  LocalServersDialog,
+  registrationValue,
+  ServerTilesGrid,
+  unregistered,
+  type Environment,
+} from "@workspace/ui/components/server-tiles"
 import { cn } from "@workspace/ui/lib/utils"
 import { ResourceCounts } from "@workspace/ui/components/resource-counts"
 import { DataTable } from "@workspace/ui/components/data-table"
@@ -418,7 +420,6 @@ function RuntimesLine({
     </>
   )
 }
-type Environment = "local" | "azure_staging"
 type ServerHost = {
   environment: Environment
   state: string
@@ -435,14 +436,6 @@ type ServerEvaluator = {
   runtimes: Runtime[]
 }
 type Servers = { hosts: ServerHost[]; evaluators: ServerEvaluator[] }
-// A registration as a tile's value: its label in its state's colour, never a
-// badge (UI contract §9); a missing server reads "Sin registrar".
-function registration(state: string | undefined) {
-  if (state === undefined)
-    return { value: "Sin registrar", tone: "text-muted-foreground" }
-  const descriptor = statusDescriptor("registration", state)
-  return { value: descriptor.label, tone: iconTones[descriptor.variant] }
-}
 // What one place runs, as four tiles: each kind's registration, then its
 // release with the newest runtime. Despliegues shows vm-agents-01; Local
 // (desarrollo) opens from the page header.
@@ -463,12 +456,10 @@ export function OperationsServerTiles({
     ? [host.current, ...host.workers.filter((w) => w !== host.current)]
     : []
   return (
-    <div
-      className={cn("grid gap-4 sm:grid-cols-2", !compact && "xl:grid-cols-4")}
-    >
+    <ServerTilesGrid compact={compact}>
       <MetricTile
         label="Servidor de agentes"
-        {...registration(host?.state)}
+        {...registrationValue(host?.state)}
         detail={
           host
             ? host.heartbeatAt
@@ -497,10 +488,10 @@ export function OperationsServerTiles({
               )}
             </>
           ) : (
-            "Sin registrar"
+            unregistered.value
           )
         }
-        tone={host ? undefined : "text-muted-foreground"}
+        tone={host ? undefined : unregistered.tone}
         detail={
           host && (
             <RuntimesLine
@@ -512,7 +503,7 @@ export function OperationsServerTiles({
       />
       <MetricTile
         label="Servidor de evaluaciones"
-        {...registration(evaluator?.state)}
+        {...registrationValue(evaluator?.state)}
         detail={
           evaluator
             ? evaluator.toolFixtures
@@ -523,8 +514,8 @@ export function OperationsServerTiles({
       />
       <MetricTile
         label="Evaluador"
-        value={evaluator?.current ?? "Sin registrar"}
-        tone={evaluator ? undefined : "text-muted-foreground"}
+        value={evaluator?.current ?? unregistered.value}
+        tone={evaluator ? undefined : unregistered.tone}
         detail={
           evaluator && (
             <RuntimesLine
@@ -534,44 +525,25 @@ export function OperationsServerTiles({
           )
         }
       />
-    </div>
+    </ServerTilesGrid>
   )
 }
-// Local (desarrollo) behind a button at the end of Despliegues' header: the
-// same tiles, so each fact keeps one rendering.
+// Local (desarrollo) behind a button at the end of Despliegues' header.
 export function OperationsLocalServers({ hosts, evaluators }: Servers) {
   const local = (s: { environment: Environment }) => s.environment === "local"
   const registered = hosts.some(local) || evaluators.some(local)
   return (
-    <Dialog>
-      <DialogTrigger render={<Button variant="outline" />}>
-        <LaptopIcon aria-hidden="true" />
-        {environmentLabels.local}
-      </DialogTrigger>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>{environmentLabels.local}</DialogTitle>
-          <DialogDescription>
-            Qué ejecuta el entorno local, como lo informa su última
-            verificación. Instalar una versión nueva se hace desde el Mac con
-            los scripts de instalación.
-          </DialogDescription>
-        </DialogHeader>
-        {registered ? (
-          <OperationsServerTiles
-            hosts={hosts}
-            evaluators={evaluators}
-            environment="local"
-            compact
-          />
-        ) : (
-          <CardEmptyState title="Sin servidores registrados">
-            Instala y registra un servidor local para probar agentes o evaluar
-            versiones.
-          </CardEmptyState>
-        )}
-      </DialogContent>
-    </Dialog>
+    <LocalServersDialog
+      registered={registered}
+      description="Qué ejecuta el entorno local, como lo informa su última verificación. Instalar una versión nueva se hace desde el Mac con los scripts de instalación."
+    >
+      <OperationsServerTiles
+        hosts={hosts}
+        evaluators={evaluators}
+        environment="local"
+        compact
+      />
+    </LocalServersDialog>
   )
 }
 export function OperationsDeploymentsTable({
