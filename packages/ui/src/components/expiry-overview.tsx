@@ -1,6 +1,7 @@
 "use client"
+import { Fragment } from "react"
 import type { ColumnDef } from "@tanstack/react-table"
-import { formatUtcMinute as utc } from "@agentonic/contracts/format"
+import { formatUtcParts } from "@agentonic/contracts/format"
 import {
   expiryActorLabels,
   type ExpiryRow,
@@ -9,7 +10,10 @@ import {
 } from "@agentonic/contracts/expiry"
 import { environmentLabels } from "@agentonic/contracts/lifecycle"
 import { statusDescriptor } from "@workspace/ui/lib/badge-status"
-import { StatusIndicator } from "@workspace/ui/components/status-badge"
+import {
+  iconTones,
+  StatusIndicator,
+} from "@workspace/ui/components/status-badge"
 import {
   Absent,
   CellLink,
@@ -18,78 +22,94 @@ import {
   sortableHeader,
 } from "@workspace/ui/components/table-cells"
 import { AgentLink } from "@workspace/ui/components/agent-versions"
+import { MetricTile } from "@workspace/ui/components/metric-tile"
 import {
-  PlaceGroups,
-  type PlaceItem,
-} from "@workspace/ui/components/place-groups"
+  LocalServersDialog,
+  registrationValue,
+  ServerTilesGrid,
+  unregistered,
+  type Environment,
+} from "@workspace/ui/components/server-tiles"
 import { WorkspaceName } from "@workspace/ui/components/workspace-name"
-import { CardEmptyState } from "@workspace/ui/components/card-empty-state"
 import { DataTable } from "@workspace/ui/components/data-table"
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@workspace/ui/components/card"
 
 const past = (value: string, now: string) =>
   Date.parse(value) <= Date.parse(now)
 
-export function RegistrationsCard({
+// The deadline as the table's Deadline cell shows it: the date, in warning
+// once it has passed, then the time. Revoked and retired verifications have
+// none.
+function deadline(r: Registration | undefined, now: string) {
+  if (!r) return { ...unregistered, detail: null }
+  if (["revoked", "retired"].includes(r.state))
+    return { value: "No aplica", tone: unregistered.tone, detail: null }
+  const { date, time } = formatUtcParts(r.expiresAt)
+  return past(r.expiresAt, now)
+    ? { value: `Venció el ${date}`, tone: iconTones.warning, detail: time }
+    : { value: date, detail: time }
+}
+// One place's verifications as four tiles: each kind's state with its last
+// verification, then its deadline. Vencimientos shows vm-agents-01; Local
+// (desarrollo) opens from the page header.
+export function RegistrationTiles({
+  registrations,
+  now,
+  environment,
+  compact = false,
+}: {
+  registrations: RuntimeRegistrations
+  now: string
+  environment: Environment
+  /** Two columns, for the Local (desarrollo) dialog. */
+  compact?: boolean
+}) {
+  const kinds = [
+    { name: "agentes", r: registrations.hosts },
+    { name: "evaluaciones", r: registrations.evaluators },
+  ].map(({ name, r }) => ({
+    name,
+    r: r.find((x) => x.environment === environment),
+  }))
+  return (
+    <ServerTilesGrid compact={compact}>
+      {kinds.map(({ name, r }) => (
+        <Fragment key={name}>
+          <MetricTile
+            label={`Servidor de ${name}`}
+            {...registrationValue(r?.state)}
+            detail={
+              r ? `Verificada el ${formatUtcParts(r.verifiedAt).date}` : null
+            }
+          />
+          <MetricTile label={`Vencimiento de ${name}`} {...deadline(r, now)} />
+        </Fragment>
+      ))}
+    </ServerTilesGrid>
+  )
+}
+// Local (desarrollo) behind a button at the end of Vencimientos' header.
+export function LocalRegistrations({
   registrations,
   now,
 }: {
   registrations: RuntimeRegistrations
   now: string
 }) {
-  // One fact per line: the deadline, then the last verification.
-  const lines = (r: Registration) => [
-    ...(["revoked", "retired"].includes(r.state)
-      ? []
-      : [
-          `${past(r.expiresAt, now) ? "Venció" : "Vence"} el ${utc(r.expiresAt)}`,
-        ]),
-    `Verificada el ${utc(r.verifiedAt)}`,
-  ]
-  const items: PlaceItem[] = [
-    ...registrations.hosts.map((r) => ({ kind: "agents" as const, r })),
-    ...registrations.evaluators.map((r) => ({
-      kind: "evaluations" as const,
-      r,
-    })),
-  ].map(({ kind, r }) => ({
-    environment: r.environment,
-    kind,
-    lines: lines(r),
-    action: (
-      <StatusIndicator
-        appearance="badge"
-        state={statusDescriptor("registration", r.state)}
-      />
-    ),
-  }))
+  const local = (r: Registration) => r.environment === "local"
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Servidores y evaluadores</CardTitle>
-        <CardDescription>
-          Cada verificación dura 30 días y el equipo de Agentonic la renueva
-          cada semana tras comprobar la instalación. Sin una verificación
-          vigente, los agentes o las evaluaciones de ese lugar se detienen.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        {items.length === 0 ? (
-          <CardEmptyState title="Sin servidores registrados">
-            Instala y registra un servidor para activar agentes o evaluar
-            versiones.
-          </CardEmptyState>
-        ) : (
-          <PlaceGroups items={items} />
-        )}
-      </CardContent>
-    </Card>
+    <LocalServersDialog
+      registered={
+        registrations.hosts.some(local) || registrations.evaluators.some(local)
+      }
+      description="Verificación del entorno local. Cada una dura 30 días; sin una vigente, los agentes o las evaluaciones de este entorno se detienen."
+    >
+      <RegistrationTiles
+        registrations={registrations}
+        now={now}
+        environment="local"
+        compact
+      />
+    </LocalServersDialog>
   )
 }
 

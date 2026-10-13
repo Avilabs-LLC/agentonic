@@ -416,43 +416,71 @@ describe("Admin operations screens", () => {
     expect(html(ui.OperationsLocalServers, servers)).toContain(
       "Local (desarrollo)"
     )
-    // Vencimientos: the deadline and the verification on their own lines.
-    const registrations = html(expiryOverview.RegistrationsCard, {
+    // Vencimientos: vm-agents-01 as four tiles, each kind's state with its
+    // last verification, then its deadline (in warning once it has passed).
+    const registrations = {
+      hosts: [
+        {
+          environment: "azure_staging",
+          state: "valid",
+          expiresAt: "2026-11-01T00:00:00.000Z",
+          verifiedAt: "2026-10-02T00:00:00.000Z",
+        },
+        {
+          environment: "local",
+          state: "retired",
+          expiresAt: "2026-10-01T00:00:00.000Z",
+          verifiedAt: "2026-09-01T00:00:00.000Z",
+        },
+      ],
+      evaluators: [
+        {
+          environment: "azure_staging",
+          state: "expired",
+          expiresAt: "2026-10-05T00:00:00.000Z",
+          verifiedAt: "2026-09-05T00:00:00.000Z",
+        },
+      ],
+    }
+    const vmRegistrations = html(expiryOverview.RegistrationTiles, {
       now,
-      registrations: {
-        hosts: [
-          {
-            environment: "azure_staging",
-            state: "valid",
-            expiresAt: "2026-11-01T00:00:00.000Z",
-            verifiedAt: "2026-10-02T00:00:00.000Z",
-          },
-          {
-            environment: "local",
-            state: "retired",
-            expiresAt: "2026-10-01T00:00:00.000Z",
-            verifiedAt: "2026-09-01T00:00:00.000Z",
-          },
-        ],
-        evaluators: [
-          {
-            environment: "azure_staging",
-            state: "expired",
-            expiresAt: "2026-10-05T00:00:00.000Z",
-            verifiedAt: "2026-09-05T00:00:00.000Z",
-          },
-        ],
-      },
+      registrations,
+      environment: "azure_staging",
     })
     for (const text of [
-      ">Vence el 1/11/2026, 12:00 a. m. UTC<",
-      ">Verificada el 2/10/2026, 12:00 a. m. UTC<",
-      ">Venció el 5/10/2026, 12:00 a. m. UTC<",
-      ">Verificada el 1/9/2026, 12:00 a. m. UTC<",
+      ">Servidor de agentes<",
+      ">Vencimiento de agentes<",
+      ">Servidor de evaluaciones<",
+      ">Vencimiento de evaluaciones<",
+      ">Vigente<",
+      ">Verificada el 2/10/2026<",
+      ">1/11/2026<",
+      ">Vencida<",
+      ">Venció el 5/10/2026<",
+      ">Verificada el 5/9/2026<",
+      ">12:00 a. m. UTC<",
     ])
-      expect(registrations).toContain(text)
-    expect(registrations).not.toContain("Vence el 1/10/2026")
-    expect(registrations).not.toContain("·")
+      expect(vmRegistrations, text).toContain(text)
+    for (const text of ["1/9/2026", 'data-slot="badge"', "·"])
+      expect(vmRegistrations, text).not.toContain(text)
+    // Local: a retired verification has no deadline; no evaluator there.
+    const localRegistrations = html(expiryOverview.RegistrationTiles, {
+      now,
+      registrations,
+      environment: "local",
+      compact: true,
+    })
+    for (const text of [
+      ">Retirada<",
+      ">Verificada el 1/9/2026<",
+      ">No aplica<",
+      ">Sin registrar<",
+    ])
+      expect(localRegistrations, text).toContain(text)
+    expect(localRegistrations).not.toContain("1/10/2026")
+    expect(
+      html(expiryOverview.LocalRegistrations, { now, registrations })
+    ).toContain("Local (desarrollo)")
     const workspaces = html(ui.OperationsWorkspacesTable, {
       workspaces: [
         {

@@ -2,7 +2,9 @@ import { Skeleton } from "@workspace/ui/components/skeleton"
 import { Card, CardContent, CardHeader } from "@workspace/ui/components/card"
 import {
   BackRowSkeleton,
+  MetricTilesSkeleton,
   PageHeaderSkeleton,
+  PageHeaderWithActionSkeleton,
   RecordHeaderSkeleton,
   TableSkeleton,
 } from "@workspace/ui/components/foundation-skeletons"
@@ -42,30 +44,6 @@ function StatsSkeleton({ count }: { count: number }) {
             <Skeleton className="h-3 w-32" />
             <Skeleton className="h-7 w-12" />
           </CardHeader>
-        </Card>
-      ))}
-    </div>
-  )
-}
-// Metric tiles: label, value and detail (the agent page, Despliegues).
-function MetricTilesSkeleton({
-  count,
-  className,
-}: {
-  count: number
-  className: string
-}) {
-  return (
-    <div className={`grid gap-4 sm:grid-cols-2 ${className}`}>
-      {Array.from({ length: count }, (_, i) => (
-        <Card key={i}>
-          <CardHeader>
-            <Skeleton className="h-3 w-32" />
-          </CardHeader>
-          <CardContent className="space-y-2">
-            <Skeleton className="h-5 w-28 rounded-full" />
-            <Skeleton className="h-3 w-40" />
-          </CardContent>
         </Card>
       ))}
     </div>
@@ -132,10 +110,7 @@ export function OperationsWorkspacesSkeleton() {
 export function OperationsTeamSkeleton() {
   return (
     <div aria-label="Cargando equipo" role="status" className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <PageHeaderSkeleton />
-        <Skeleton className="h-8 w-40" />
-      </div>
+      <PageHeaderWithActionSkeleton action="w-40" />
       {[6, 5].map((columns) => (
         <Card key={columns}>
           <CardHeader className="space-y-2">
@@ -154,10 +129,7 @@ export function OperationsTeamSkeleton() {
 export function OperationsDeploymentsSkeleton() {
   return (
     <div aria-label="Cargando despliegues" role="status" className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <PageHeaderSkeleton />
-        <Skeleton className="h-8 w-44" />
-      </div>
+      <PageHeaderWithActionSkeleton action="w-44" />
       <MetricTilesSkeleton count={4} className="xl:grid-cols-4" />
       <TableSkeleton columns={11} />
     </div>
