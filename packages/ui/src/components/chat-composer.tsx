@@ -8,7 +8,9 @@ import { Textarea } from "@workspace/ui/components/textarea"
  * Message composer after the Codex composer: the text box on top; below it the
  * attachments button (not available yet), the model control and a round send
  * button. Enter sends and Shift+Enter adds a line. An optional tray under the
- * composer holds the conversation's limits and notes.
+ * composer holds the conversation's limits and notes. It hangs from the
+ * composer's straight bottom edge rather than tucking under it: the composer
+ * is translucent in dark mode, so anything beneath it would show through.
  */
 export function ChatComposer({
   id,
@@ -41,7 +43,7 @@ export function ChatComposer({
           event.preventDefault()
           if (canSubmit) onSubmit()
         }}
-        className="relative z-1 rounded-3xl border bg-background shadow-sm transition-colors focus-within:border-ring/60 dark:bg-input/30"
+        className="rounded-3xl border bg-background shadow-sm transition-colors focus-within:border-ring/60 dark:bg-input/30"
       >
         <Textarea
           id={id}
@@ -90,7 +92,7 @@ export function ChatComposer({
         </div>
       </form>
       {tray && (
-        <div className="mx-4 -mt-4 rounded-b-2xl bg-muted/60 px-4 pt-6 pb-2.5 text-xs text-muted-foreground">
+        <div className="mx-6 rounded-b-2xl bg-muted/60 px-4 pt-2 pb-2.5 text-xs text-muted-foreground">
           {tray}
         </div>
       )}

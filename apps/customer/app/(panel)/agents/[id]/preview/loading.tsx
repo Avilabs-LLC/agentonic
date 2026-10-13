@@ -24,7 +24,7 @@ export default function Loading() {
         </div>
         <div className="border-t p-4 sm:p-6">
           {/* Composer: text box, then attachments, model and send controls. */}
-          <div className="relative z-1 space-y-3 rounded-3xl border p-3">
+          <div className="space-y-3 rounded-3xl border p-3">
             <Skeleton className="h-8 w-full" />
             <div className="flex items-center justify-between gap-2">
               <Skeleton className="size-8 rounded-full" />
@@ -34,7 +34,7 @@ export default function Loading() {
               </div>
             </div>
           </div>
-          <div className="mx-4 -mt-4 rounded-b-2xl bg-muted/60 px-4 pt-6 pb-2.5">
+          <div className="mx-6 rounded-b-2xl bg-muted/60 px-4 pt-2 pb-2.5">
             <Skeleton className="h-3 w-32" />
           </div>
         </div>
