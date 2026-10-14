@@ -43,7 +43,7 @@ export function ReceiptTextFrame({
         tone ? tones[tone].frame : "bg-muted/20"
       )}
     >
-      <h3 className="flex items-center gap-2 text-sm font-medium">
+      <h3 className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
         {tone && (
           <span
             className={cn("size-2 shrink-0 rounded-full", tones[tone].dot)}

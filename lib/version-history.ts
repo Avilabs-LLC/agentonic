@@ -1,5 +1,10 @@
 export const VERSION_HISTORY = [
   {
+    "version": "0.45.2",
+    "date": "2026-10-14",
+    "summary": "Resultados show one chip per model and level, each with only its own situations; situation frame titles in muted text."
+  },
+  {
     "version": "0.45.1",
     "date": "2026-10-14",
     "summary": "OpenAI's platform cap raised to US$100; calls OpenAI refuses release their reservation; clearer budget and provider messages (§78)."
