@@ -80,26 +80,33 @@ function configurationOutcome(m: EvaluationBatch["models"][number]): {
   return { outcome: "failed", label: "Con fallos" }
 }
 
-/** The evaluated models as chips in one row that scrolls sideways. */
-function ModelChips({
-  models,
+/** Each evaluated model and level as a chip in one row that scrolls
+ * sideways; the pressed chip scrolls into view, so a level opened from the
+ * summary is never hidden past the edge. */
+export function ConfigurationChips({
+  configurations,
   selected,
   onSelect,
 }: {
-  models: string[]
+  configurations: Array<{ id: string; label: string }>
   selected: string
-  onSelect: (model: string) => void
+  onSelect: (id: string) => void
 }) {
   const ref = useRef<HTMLDivElement>(null)
   const fade = useEdgeFade(ref)
+  useEffect(() => {
+    ref.current
+      ?.querySelector('[aria-pressed="true"]')
+      ?.scrollIntoView({ block: "nearest", inline: "nearest" })
+  }, [selected])
   return (
     <div ref={ref} className="min-w-0 flex-1 overflow-x-auto" style={fade}>
       <div
         role="group"
-        aria-label="Modelos evaluados"
+        aria-label="Modelos y niveles evaluados"
         className="flex w-max gap-2 py-0.5"
       >
-        {models.map((id) => (
+        {configurations.map(({ id, label }) => (
           <Button
             key={id}
             size="sm"
@@ -108,7 +115,7 @@ function ModelChips({
             className="rounded-full"
             onClick={() => onSelect(id)}
           >
-            {modelConfigurationLabel({ model: id, reasoning: null })}
+            {label}
           </Button>
         ))}
       </div>
@@ -135,11 +142,14 @@ export function ModelResultsDialog({
   const [selectedBatch, setSelectedBatch] = useState<string | null>(
     initialBatchId ?? null
   )
-  const [selectedModel, setSelectedModel] = useState<string | null>(null)
+  const [selectedConfiguration, setSelectedConfiguration] = useState<
+    string | null
+  >(null)
   const batch =
     record.batches.find((b) => b.id === selectedBatch) ?? record.batches[0]
-  const model =
-    batch && batchModelGroups(batch).find((m) => m.model === selectedModel)
+  const configuration = batch?.models.find(
+    (m) => m.id === selectedConfiguration
+  )
   const completed = batch?.models.reduce((sum, m) => sum + m.completed, 0) ?? 0
   const total = batch?.models.reduce((sum, m) => sum + m.total, 0) ?? 0
   return (
@@ -170,10 +180,10 @@ export function ModelResultsDialog({
                   label: `Ejecución ${record.batches.length - i}${i === 0 ? " · Más reciente" : ""}`,
                 }))}
                 onValueChange={(value) => {
-                  // Pressing the run already shown keeps the chosen model.
+                  // Pressing the run already shown keeps the chosen level.
                   if (value === batch.id) return
                   setSelectedBatch(value)
-                  setSelectedModel(null)
+                  setSelectedConfiguration(null)
                 }}
               >
                 <SelectTrigger
@@ -217,51 +227,51 @@ export function ModelResultsDialog({
                 aria-label="Progreso de evaluación"
               />
             </div>
-            {model ? (
+            {configuration ? (
+              // One model and level per chip, each with its own situations
+              // (owner direction, 14 October 2026).
               <div className="space-y-4">
                 <div className="flex items-center gap-2">
-                  <ModelChips
-                    models={batchModelGroups(batch).map((m) => m.model)}
-                    selected={model.model}
-                    onSelect={setSelectedModel}
+                  <ConfigurationChips
+                    configurations={batch.models.map((m) => ({
+                      id: m.id,
+                      label: modelConfigurationLabel(m),
+                    }))}
+                    selected={configuration.id}
+                    onSelect={setSelectedConfiguration}
                   />
                   <Button
                     className="shrink-0"
-                    onClick={() => setSelectedModel(null)}
+                    onClick={() => setSelectedConfiguration(null)}
                   >
                     Ir al resumen
                   </Button>
                 </div>
-                {model.configurations.map((configuration) => (
-                  <section key={configuration.id} className="space-y-3">
+                <section className="space-y-3">
+                  <p className="text-sm text-muted-foreground">
+                    {configuration.passed}/{configuration.total} superadas
+                  </p>
+                  {configuration.errorCode && (
+                    <p className="text-sm text-destructive">
+                      {configuration.errorCode === "budget_exhausted"
+                        ? "Se alcanzó el límite de esta ejecución: cada llamada reserva su costo máximo antes de empezar, así que el límite puede alcanzarse antes que el consumo. Repite la evaluación con un límite mayor."
+                        : configuration.errorCode === "provider_unavailable"
+                          ? "El proveedor de IA rechazó o no respondió una llamada, así que la evaluación de este nivel se detuvo."
+                          : "La evaluación de este modelo se interrumpió."}{" "}
+                      Se conserva el consumo realizado.
+                    </p>
+                  )}
+                  {configuration.results.length ? (
+                    <ReceiptResults results={configuration.results} />
+                  ) : (
                     <p className="text-sm text-muted-foreground">
-                      {configuration.reasoning
-                        ? `${reasoningLabels[configuration.reasoning as keyof typeof reasoningLabels] ?? configuration.reasoning} · `
-                        : ""}
-                      {configuration.passed}/{configuration.total} superadas
+                      Sin respuestas disponibles todavía.
                     </p>
-                    {configuration.errorCode && (
-                      <p className="text-sm text-destructive">
-                        {configuration.errorCode === "budget_exhausted"
-                          ? "Se alcanzó el límite de esta ejecución: cada llamada reserva su costo máximo antes de empezar, así que el límite puede alcanzarse antes que el consumo. Repite la evaluación con un límite mayor."
-                          : configuration.errorCode === "provider_unavailable"
-                            ? "El proveedor de IA rechazó o no respondió una llamada, así que la evaluación de este nivel se detuvo."
-                            : "La evaluación de este modelo se interrumpió."}{" "}
-                        Se conserva el consumo realizado.
-                      </p>
-                    )}
-                    {configuration.results.length ? (
-                      <ReceiptResults results={configuration.results} />
-                    ) : (
-                      <p className="text-sm text-muted-foreground">
-                        Sin respuestas disponibles todavía.
-                      </p>
-                    )}
-                    <p className="text-xs text-muted-foreground">
-                      Evaluador: {configuration.grader ?? "No registrado"}
-                    </p>
-                  </section>
-                ))}
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    Evaluador: {configuration.grader ?? "No registrado"}
+                  </p>
+                </section>
               </div>
             ) : (
               // One row per model and level, on one line (owner direction,
@@ -283,7 +293,7 @@ export function ModelResultsDialog({
                           <Button
                             variant="link"
                             className="h-auto p-0 text-left text-foreground underline underline-offset-4"
-                            onClick={() => setSelectedModel(m.model)}
+                            onClick={() => setSelectedConfiguration(m.id)}
                           >
                             {modelConfigurationLabel(m)}
                           </Button>
