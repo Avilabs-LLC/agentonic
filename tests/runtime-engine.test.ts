@@ -1360,6 +1360,17 @@ describe("mailbox batch turns (§67)", () => {
     expect(toolParameters(create, true)).toMatchObject({
       required: expect.arrayContaining(["replyTo"]),
     })
+    // A note for the owner only for runtimes that declare draftNotes (§81).
+    expect(JSON.stringify(toolParameters(create, true))).not.toContain("note")
+    expect(toolParameters(create, true, true)).toMatchObject({
+      required: expect.arrayContaining(["replyTo", "note"]),
+    })
+    const update = { kind: "gmail", operation: "gmail.drafts.update" } as const
+    expect(toolParameters(update, true, true)).toMatchObject({
+      properties: {
+        message: { required: expect.arrayContaining(["note"]) },
+      },
+    })
   })
 })
 
@@ -1388,6 +1399,8 @@ describe("packaged runtime artifact", () => {
       mailboxBatch: "1",
       // Runtime 0.8.0 (§77): any model the broker offers.
       openModels: "1",
+      // Runtime 0.9.0 (§81): proposed messages carry a note for the owner.
+      draftNotes: "1",
     })
     const root = join(first.directory, "..")
     expect(

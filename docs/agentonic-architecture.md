@@ -2860,3 +2860,32 @@ After rollout, saving US$20 again in Ajustar renovación raises NicolAI-Mail's c
 **Tests.** `tests/evaluation-database.test.ts`, "lets the customer turn renewal off, change the period budget and renew by hand near the end": a raise lifts the ceiling to the new budget, and a later reduction leaves it in place.
 
 **Rollout, 14 October 2026.** From `2c807dd` on `main`, with nothing running, migration 76 was applied with `pnpm db:migrate` and `platform-0.46.0-2c807ddf8141` installed (release `ea0b3cdb`). The apps and the knowledge worker restarted healthy and `hosted:check` passed. The live `deployment_command` carries the new statement. NicolAI-Mail keeps its US$5.00 ceiling until Nico saves its period budget again.
+
+## 81. A draft's card shows its conversation — 14 October 2026
+
+**Owner request, 14 October.** NicolAI-Mail's request finally ran end to end and proposed its reply drafts. The owner asked for four changes:
+- the action card carries Gmail's coloured logo;
+- its dialog has tabs: one with the email being answered, the whole thread when there is one, and one with the draft as it is shown now. A third tab could hold caveats;
+- the agent's chat answer stops restating the drafts and the emails they answer. It says what it did and how it went;
+- answers render Markdown instead of showing it raw.
+
+**Change (platform v0.47.0, runtime 0.9.0, no migration).**
+- **The card.** Gmail's logo leads each Gmail action card, and a draft or email shows its subject under the action's name, so several drafts can be told apart.
+- **The dialog.** A reply shows three tabs:
+  - **Conversación**, open first: the thread of the message the draft answers. It is read from Gmail when the card opens and shows the latest 10 messages, oldest first, as plain text. The answered message opens expanded and earlier ones fold to their sender, date and first line.
+  - **Borrador**, or **Correo** for a send: the action as before.
+  - **Notas**, only when the agent left a note.
+
+  A new message with a note shows Borrador and Notas. A new message without a note, labels and deletions show as before, without tabs. Consent and the buttons stay below the tabs.
+- **How the conversation is read.** `gmailThread` (`packages/server/src/gmail.ts`) first runs `gmail_command`'s existing `inspect`. It changes nothing; it checks that the proposal is the caller's own, still pending and unchanged. Then the app refreshes the connection's token and reads the thread with `replyThread` (`packages/connectors/src/google.ts`). It reads the answered message's thread ID from its metadata, then the thread. It keeps only From, To, CC, Subject, Date and the text/plain bodies; HTML, images and attachments are never loaded. Nothing is stored or logged. The owner of the proposal is the mailbox's owner, so this reads their own mail under the account's consent; the agent's grants are not involved. A failed refresh is left to confirmation, which records a reconnect.
+- **Notes (runtime 0.9.0).** The manifest declares `draftNotes: "1"`. Brokers then offer a `note` in drafts and emails: up to 500 characters, required and nullable, for what the owner should check before confirming. The note is part of the confirmed arguments and their hash, and it is never sent: the message is built from its recipients, subject and body alone.
+- **Short answers (runtime 0.9.0).** The batch mailbox policy now tells the model that each card shows the draft, its recipients, the message it answers and its note. After proposing, the model answers in a few sentences: what it did and how it went, naming the messages that have a draft by sender or subject. It never repeats a draft, its note or the original. It still gives anything else the request asks for, such as a summary, tasks, dates or alerts. The count of actions awaiting confirmation is still the broker's (§67).
+- **Markdown answers.** Chats and Probar agente render the agent's answer with the shared `Markdown`, which never renders raw HTML and shows images only as their alt text. Single line breaks stay as before. An answer can echo links from the mail or pages the agent read, so each link shows the site it opens after its text, and only web links can be followed.
+
+**Why a new runtime.** Tool schemas and proposal results come from the host, so the note and the new instruction could have reached existing versions without one. But §67 keeps approved runtimes' schemas and texts byte for byte, because approval binds them. Runtimes 0.7.0 and 0.8.0 are unchanged, and an agent gets notes and short answers with a new version on 0.9.0, evaluated as usual. The card, its tabs and the Markdown answers reach every version at once.
+
+**Tests.**
+- `tests/gmail.test.ts`, "shows a reply's card the conversation it answers as plain text": the thread is found from the answered message, HTML and other headers are dropped, and the answered message is named.
+- `tests/runtime-engine.test.ts`: the note is offered only to runtimes that declare `draftNotes`, and the artifact declares it.
+- `tests/chat-render.test.ts`: Markdown answers keep their line breaks; links name their site; other schemes and raw HTML are not rendered. A reply shows its three tabs, and a new message without a note has none.
+

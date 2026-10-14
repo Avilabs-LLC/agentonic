@@ -8,6 +8,8 @@ import {
   gmailState,
   gmailArguments,
   gmailInvocation,
+  gmailThreadView,
+  gmailWriteMessage,
   parseGmailCall,
 } from "@agentonic/contracts/gmail"
 import { uuid } from "@agentonic/contracts/identity"
@@ -23,6 +25,7 @@ import {
   profile,
   revoke,
   gmail,
+  replyThread,
   GOOGLE_SCOPES,
   GoogleError,
   type GoogleConfig,
@@ -260,6 +263,41 @@ export async function gmailInvocations(
 }
 export async function cancelGmail(workspace: string, id: string) {
   return command(workspace, "cancel", { id: uuid.parse(id) })
+}
+/**
+ * The conversation a pending reply answers, for its owner's review (§81).
+ * `inspect` checks that the proposal is the caller's, still pending and
+ * unchanged; it changes nothing. The thread is read from Gmail as the card
+ * opens and is never stored. A new message has no thread.
+ */
+export async function gmailThread(workspace: string, id: string, hash: string) {
+  uuid.parse(id)
+  if (!/^[a-f0-9]{64}$/.test(hash)) throw new Error("invalid")
+  const config = googleConfig()
+  const inspected = await command(workspace, "inspect", { id, hash })
+  const call = parseGmailCall(
+    String(inspected.operation),
+    unseal(
+      String(inspected.argumentsCiphertext),
+      `invocation:${id}`,
+      config.keys
+    )
+  )
+  const replyTo = (
+    gmailWriteMessage(call.operation, call.arguments) as {
+      replyTo?: string | null
+    } | null
+  )?.replyTo
+  if (!replyTo)
+    return gmailThreadView.parse({ messages: [], earlierMessages: 0 })
+  const secret = unseal(
+    String(inspected.credential),
+    `gmail:${inspected.connectionId}`,
+    config.keys
+  ) as { refreshToken: string }
+  // A failed refresh is left to confirmation, which records a reconnect.
+  const access = await refresh(config, secret.refreshToken)
+  return gmailThreadView.parse(await replyThread(access, replyTo))
 }
 export async function confirmGmail(
   workspace: string,

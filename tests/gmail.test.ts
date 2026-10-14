@@ -3,6 +3,7 @@ import { gmailMessage, parseGmailCall } from "../packages/contracts/src/gmail"
 import {
   gmail,
   rawMessage,
+  replyThread,
   exchange,
   GOOGLE_SCOPES,
 } from "../packages/connectors/src/google"
@@ -463,6 +464,65 @@ it("reads a whole thread, its latest 10 messages each within 4,000 characters", 
     text: "y".repeat(4000),
     truncated: true,
   })
+})
+it("shows a reply's card the conversation it answers as plain text, naming the answered message (§81)", async () => {
+  const part = (id: string, from: string, text: string) => ({
+    id,
+    threadId: "t1",
+    payload: {
+      mimeType: "multipart/alternative",
+      headers: [
+        { name: "From", value: from },
+        { name: "To", value: "owner@example.invalid" },
+        { name: "Subject", value: "Cotización" },
+        { name: "Date", value: "Tue, 14 Oct 2026 09:00:00 +0000" },
+        { name: "X-Secret", value: "never shown" },
+      ],
+      parts: [
+        {
+          mimeType: "text/html",
+          body: { data: Buffer.from("<b>html</b>").toString("base64url") },
+        },
+        {
+          mimeType: "text/plain",
+          body: { data: Buffer.from(text).toString("base64url") },
+        },
+      ],
+    },
+  })
+  const fetch = vi
+    .fn()
+    .mockResolvedValueOnce(
+      Response.json({ id: "m2", threadId: "t1", payload: { headers: [] } })
+    )
+    .mockResolvedValueOnce(
+      Response.json({
+        id: "t1",
+        messages: [
+          part("m1", "owner@example.invalid", "Primera"),
+          part("m2", "client@example.invalid", "Segunda"),
+        ],
+      })
+    )
+  vi.stubGlobal("fetch", fetch)
+  const thread = await replyThread("synthetic", "m2")
+  expect(String(fetch.mock.calls[0]![0])).toContain(
+    "messages/m2?format=metadata"
+  )
+  expect(String(fetch.mock.calls[1]![0])).toContain("threads/t1?format=full")
+  expect(thread.earlierMessages).toBe(0)
+  expect(thread.messages).toEqual([
+    expect.objectContaining({ id: "m1", text: "Primera", answered: false }),
+    expect.objectContaining({
+      id: "m2",
+      from: "client@example.invalid",
+      to: "owner@example.invalid",
+      subject: "Cotización",
+      text: "Segunda",
+      answered: true,
+    }),
+  ])
+  expect(JSON.stringify(thread)).not.toMatch(/html|never shown/)
 })
 it("applies a labels batch only after every subject matches, creating missing user labels", async () => {
   const labels = {

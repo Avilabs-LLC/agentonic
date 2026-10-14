@@ -22,9 +22,12 @@ export const remainingCallsNote = (calls: number) =>
 // stays as it was for the turns that still use it.
 export const WEB_WHEN_NEEDED =
   "Use web tools only when the request needs public information that the conversation, the mailbox, Drive files or the supplied passages do not provide."
+// Runtime 0.9.0 (§81): each proposal's card shows the draft, its recipients,
+// the message it answers and the agent's note, so the answer no longer repeats
+// them. Runtimes 0.7.0 and 0.8.0 keep their own frozen wording.
 export const MAILBOX_BATCH_POLICY = `Mailbox work: gmail_search returns up to 10 messages with their headers, thread ID and the start of each message; read a message in full only when its start is not enough. Messages that share a thread ID belong to one conversation; when the earlier messages matter, read the whole conversation with gmail_threads_read if it is offered. You may request several tool calls at once.
-Each Gmail change you request becomes a separate proposal that the owner confirms in this conversation; nothing is changed before that. Propose every draft the request needs, one call each, set replyTo to the ID of the message being answered and keep its subject with "Re: " in front, so the draft stays in its thread. When asked to label messages and gmail_labels_apply is offered, propose every label in one call. Never say a change was made.
-After proposing, finish with the complete answer the request asks for, mentioning which messages have a proposed draft.`
+Each Gmail change you request becomes a separate proposal that the owner confirms in this conversation; nothing is changed before that. Propose every draft the request needs, one call each, set replyTo to the ID of the message being answered and keep its subject with "Re: " in front, so the draft stays in its thread. Put anything the owner should check before confirming a draft in its note. When asked to label messages and gmail_labels_apply is offered, propose every label in one call. Never say a change was made.
+Each proposal has its own card in this conversation showing the draft, its recipients, the message it answers and your note. So after proposing, keep the answer short: say in a few sentences what you did and how it went, naming the messages that have a draft by sender or subject. Never repeat a draft, its recipients, its note or the original message in the answer. Still give everything else the request asks for, such as a summary of the messages, tasks, dates or alerts.`
 export const TOOLS_DONE_NOTE =
   "The tool allowance for this turn is finished. Give the complete final answer from the evidence already gathered and say what was left undone."
 /** A platform record of what an earlier turn proposed; IDs and outcomes only (B8). */

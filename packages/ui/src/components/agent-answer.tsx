@@ -1,3 +1,5 @@
+import { Markdown } from "@workspace/ui/components/markdown"
+
 export function AgentAnswer({ text }: { text: string }) {
   const marker = "\n\nFuentes web:\n"
   const split = text.lastIndexOf(marker)
@@ -21,9 +23,7 @@ export function AgentAnswer({ text }: { text: string }) {
     })
   return (
     <div className="space-y-3">
-      <p className="text-sm break-words whitespace-pre-wrap">
-        {valid ? text.slice(0, split) : text}
-      </p>
+      <Markdown answer>{valid ? text.slice(0, split) : text}</Markdown>
       {valid && (
         <div className="space-y-2 border-t pt-3">
           <p className="text-xs font-medium text-muted-foreground">

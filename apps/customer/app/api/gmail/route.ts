@@ -2,6 +2,7 @@ import {
   gmailInvocations,
   confirmGmail,
   cancelGmail,
+  gmailThread,
   gmailPermissions,
   disconnectGmail,
 } from "@agentonic/server/gmail"
@@ -41,6 +42,8 @@ export async function POST(request: Request) {
       }
     else if (data.operation === "confirm")
       result = await confirmGmail(workspace, String(p.id), String(p.hash))
+    else if (data.operation === "thread")
+      result = await gmailThread(workspace, String(p.id), String(p.hash))
     else if (data.operation === "cancel")
       result = await cancelGmail(workspace, String(p.id))
     else if (data.operation === "permissions") {
