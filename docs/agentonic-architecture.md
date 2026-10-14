@@ -2723,7 +2723,7 @@ About US$0.40 on the development key, outside the platform's ledger.
 - `VersionNumber` renders "v3" in both agent lists, the deployment tables, Revisiones, Vencimientos and Admin's agent page. The scrolling fade of `TabsBar` became `useEdgeFade`, which the model chips share.
 - An evaluation stopped by `provider_unavailable` now says that the AI provider refused or didn't answer a call. Version 3's GPT-6 Astra · Medio run stopped that way: the OpenAI account had run out of credit (`insufficient_quota`).
 
-**Rollout order.** Install the platform before applying migration 74. The new pages read sources with or without names, but pages served before the migration expect the passage text.
+**Rollout order.** `platform:install` refuses a release whose migrations aren't applied, so migration 74 went first. The pages served until the install finished, a few minutes later, expected the passage text. Nothing was running, and it was installed with §77 on 14 October.
 
 **Tests.** `tests/evaluation-database.test.ts`, "model batches separate confirmation from paid runs…": a preparation's sources and a model's result sources carry exactly `id`, `documentId`, `title` and `collection`.
 
@@ -2770,11 +2770,12 @@ The failures promised what Leonardo hadn't stated ("I'll send it shortly"), as G
 - `tests/web-database.test.ts`: retired and unsupported models are refused for test-chat turns, and a turn without a model gets the runtime's default.
 - `tests/model-evaluation.test.ts`: the catalog's order, the list for earlier runtimes, and the retired models' labels.
 
-**Rollout.** With no evaluation, preview or chat turn running:
-1. The platform release from CI, installed with `pnpm platform:install --azure`. Until runtime 0.8.0 is registered, every version offers GPT-6 Astra alone, so the old database refuses nothing the new pages offer. §76 also needs the platform first.
-2. `pnpm db:migrate` (migrations 74 and 75).
-3. Runtime 0.8.0: `pnpm package:runtime`, `pnpm setup:preview`, then `pnpm runtime:install --azure`.
-4. The staging broker with `install-staging --azure`, which moves running deployments to it.
-5. The evaluator with `deploy-evaluation-staging --deploy --replace` and `register-evaluation --replace`. Then each earlier runtime is registered with it again.
+**Rollout, 14 October 2026.** From `ae4ac5b` on `main` (§76 and §77 together), with no chat turn, preview, job or evaluation running:
 
-The OpenAI account must have credit first (N22).
+1. Migrations 74 and 75 applied with `pnpm db:migrate`. `platform:install` refuses a release whose migrations aren't applied.
+2. `platform-0.45.0-ae4ac5b6da2d` installed (release `720d5c88`). The apps and the knowledge worker restarted healthy.
+3. Runtime 0.8.0 packaged (artifact `95ad9607`), registered as `0.8.0-preview-ae4ac5b6` with `setup:preview`, and installed with `runtime:install --azure`. The broker installer checks that its runtime is already on the host, so this comes before the broker.
+4. Staging broker `26d06296` installed with `install-staging --azure`. The controller moved NicolAI-Mail's deployment to it.
+5. Evaluator `413426cc` deployed and registered with `--replace`, replacing `ddbdd1cd`. Runtimes 0.3.0–0.7.0 were registered with it again through `runtime:install`.
+
+`hosted:check` passed. `staging:reverify` shows the host on `26d06296` and the evaluator on `413426cc`, both serving runtimes 0.3.0–0.8.0, with every registration valid. In the database, runtime 0.8.0 runs GPT-6.1 Sol and 0.7.0 does not. Live turns on the new models wait for OpenAI credit (N22). The account still returned `insufficient_quota` after the rollout, and NicolAI-Mail's turn at 07:03 UTC failed on it with `provider_unavailable`.
