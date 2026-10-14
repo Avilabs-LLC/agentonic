@@ -133,6 +133,56 @@ export type Providers = Capabilities & {
 }
 
 const OPENAI_RESPONSES = "https://api.openai.com/v1/responses"
+const OPENAI_INPUT_TOKENS = "https://api.openai.com/v1/responses/input_tokens"
+/** Requests longer than this have their input counted before reserving (§79). */
+const COUNT_ABOVE_BYTES = 16_384
+
+/**
+ * A request's input tokens as OpenAI counts them, at no charge (§79). Holding
+ * one token per byte overstated a mail turn's input about four times, so its
+ * last call could be refused a budget it would barely use. Undefined when the
+ * count fails or is implausible: the byte bound then applies, as before. It
+ * runs where the key is, so an agent copy can't lower its own reservation.
+ */
+async function countInputTokens(
+  request: Record<string, unknown>,
+  bytes: number,
+  key: string,
+  signal: AbortSignal
+) {
+  // The counting endpoint takes the input and what shapes it, nothing else.
+  const countable = { ...request }
+  for (const field of [
+    "store",
+    "include",
+    "stream",
+    "temperature",
+    "max_output_tokens",
+  ])
+    delete countable[field]
+  try {
+    const response = await fetch(OPENAI_INPUT_TOKENS, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${key}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(countable),
+      signal: AbortSignal.any([signal, AbortSignal.timeout(5000)]),
+    })
+    if (!response.ok) return undefined
+    const tokens = ((await response.json()) as { input_tokens?: unknown })
+      .input_tokens
+    return typeof tokens === "number" &&
+      Number.isSafeInteger(tokens) &&
+      tokens > 0 &&
+      tokens <= bytes
+      ? tokens
+      : undefined
+  } catch {
+    return undefined
+  }
+}
 
 /** The only OpenAI request path: reserve, report, send once, settle. */
 export async function respond(
@@ -153,7 +203,7 @@ export async function respond(
     16384,
     Math.max(profile.maxOutput, call.maxOutputTokens ?? 0)
   )
-  const body = JSON.stringify({
+  const request: Record<string, unknown> = {
     model,
     store: false,
     ...(call.instructions === undefined
@@ -176,9 +226,14 @@ export async function respond(
           tool_choice: call.toolChoice ?? "auto",
         }
       : {}),
-  })
-  if (Buffer.byteLength(body) > turnCeilings.requestBytes)
-    throw new Error("runtime_mismatch")
+  }
+  const body = JSON.stringify(request)
+  const bytes = Buffer.byteLength(body)
+  if (bytes > turnCeilings.requestBytes) throw new Error("runtime_mismatch")
+  const inputTokens =
+    model !== DEFAULT_PREVIEW_MODEL && bytes > COUNT_ABOVE_BYTES
+      ? await countInputTokens(request, bytes, key, signal)
+      : undefined
   const id = randomUUID()
   const reserved = await execute("reserve", job, {
     id,
@@ -188,7 +243,8 @@ export async function respond(
       model,
       body,
       reasoning,
-      model === DEFAULT_PREVIEW_MODEL ? undefined : maxOutput
+      model === DEFAULT_PREVIEW_MODEL ? undefined : maxOutput,
+      inputTokens
     ),
   })
   if (!reserved.ok) return { kind: "budget" }

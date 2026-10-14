@@ -27,12 +27,21 @@ export function previewReservation(
   body: string,
   reasoning?: string | null,
   /** The output ceiling actually requested, when larger than the profile's (§67). */
-  maxOutput?: number
+  maxOutput?: number,
+  /**
+   * The input's tokens as OpenAI counted them (§79), held with a 5 % and
+   * 256-token margin. Without a count, every byte of the request is held as a
+   * token, the bound that can't be exceeded.
+   */
+  inputTokens?: number
 ) {
   const p = previewModelProfile(model, reasoning)
+  const input =
+    inputTokens === undefined
+      ? Buffer.byteLength(body) + 4096
+      : Math.ceil(inputTokens * 1.05) + 256
   return Math.ceil(
-    (Buffer.byteLength(body) + 4096) * p.inputRate +
-      (maxOutput ?? p.maxOutput) * p.outputRate
+    input * p.inputRate + (maxOutput ?? p.maxOutput) * p.outputRate
   )
 }
 export function previewCost(

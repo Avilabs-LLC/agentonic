@@ -2806,3 +2806,26 @@ Two of those reservations, US$1.10 (Nico, 07:03 UTC) and US$0.95 (`leonardo@avil
 4. Evaluator `02742183` deployed and registered with `--replace`, replacing `413426cc`. Runtimes 0.3.0–0.7.0 were registered with it again.
 
 `hosted:check` passed. `staging:reverify` shows the host on `786dfcd8` and the evaluator on `02742183`, both serving runtimes 0.3.0–0.8.0, with every registration valid.
+
+## 79. Reservations hold counted input tokens — 14 October 2026
+
+**Found 14 October.** NicolAI-Mail's turn at 09:38 UTC, on GPT-6 Astra · Bajo, searched and read the inbox, proposed 7 drafts and labels for 10 emails, and then lost its summary to the budget stop. This time the cap was the deployment's own US$5.00 period, not the platform's (§78). It had US$2.09 actually spent, US$1.10 held by the refused 07:03 call, and US$1.81 left. The summary call needed about US$1.90 reserved.
+
+The reservation was the problem. Each call reserves the most it could cost, and the input was held at one token per byte of the request. For this mail that is about 3.8 times the tokens OpenAI counted: 118 KB held for 31,404 tokens. On top of that come the output ceiling, here 12,000 tokens at US$50 per million. The turn's four calls cost US$0.98 in all, while each reserved US$1.1–1.8. On Astra a US$5.00 period bought about US$3 of use.
+
+**Change (worker; no migration; platform v0.45.3).**
+- Before a request longer than 16 KB, `respond` asks OpenAI's `POST /v1/responses/input_tokens` for its input tokens. The count is free and takes about half a second.
+- The reservation then holds the counted tokens plus 5 % and 256 tokens, instead of the request's bytes plus 4,096.
+- The count runs where the key is: at the host's gateway for agent copies, and in the evaluator and the knowledge worker for their own calls. An agent copy therefore can't lower its own reservation.
+- The count sends only what shapes the input (model, instructions, input, reasoning, format and tools), since the endpoint refuses `store`, `include`, `stream`, `temperature` and `max_output_tokens`.
+- If counting fails, or answers more tokens than the request has bytes, the byte bound applies as before.
+- The output ceiling is unchanged.
+- For the 09:38 turn's last call, the reservation would have been about US$0.93 instead of US$1.78.
+
+The grader (`review-ai.ts`) still holds its input byte for byte. Its requests are shorter, and its reservations come from the evaluation's own limit.
+
+**Tests.** `tests/provider-gateway.test.ts`, "reserves a long request's input at its counted tokens, at the host (§79)": the count uses the host's key and leaves out the generation-only fields, the reservation follows the count, and a failed or implausible count falls back to the byte bound.
+
+**Not done here.** Releasing the US$1.10 held by the 07:03 call, which OpenAI refused for lack of credit, needs a migration that edits the usage ledger. The owner approved it, but the session's permission check refused writing that migration. It waits for the owner.
+
+**Rollout.** The platform release, the staging broker (whose gateway runs `respond` for agent copies), and the evaluator, followed by re-registering the earlier runtimes.

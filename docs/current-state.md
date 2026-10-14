@@ -1,6 +1,6 @@
 # Agentonic: current state
 
-**As of 14 October 2026 · platform v0.45.2 · nonproduction only.** A short summary of what runs where, what works and what doesn't exist yet. [The architecture record](agentonic-architecture.md) keeps the full, dated history. If the two disagree about the present, fix this page. Update it whenever a change alters what runs where.
+**As of 14 October 2026 · platform v0.45.3 · nonproduction only.** A short summary of what runs where, what works and what doesn't exist yet. [The architecture record](agentonic-architecture.md) keeps the full, dated history. If the two disagree about the present, fix this page. Update it whenever a change alters what runs where.
 
 ## What runs where
 
@@ -117,6 +117,8 @@ New versions use runtime 0.7.0. Google accepts `gmail.modify` for test users, an
 
 **The OpenAI cap, refused calls and clearer stops (architecture §78), installed 14 October with staging broker `786dfcd8`, evaluator `02742183` and `platform-0.45.1-e0211aaef48b`.** The platform's total OpenAI cap is US$100. A call OpenAI refuses with a 4xx response (no credit, a rate limit) releases its reservation at zero. A turn stopped by a spending limit, or by the provider, now says so in plain words in Chats and Probar agente.
 
+**Reservations hold counted input tokens (architecture §79), v0.45.3.** Before a request longer than 16 KB, the host asks OpenAI to count its input tokens, which is free, and reserves those plus 5 % instead of one token per byte. A mail turn's last call reserved about four times its input's real cost, so NicolAI-Mail's summaries were refused for budget with money left.
+
 ## Operations
 
 - **Verification.** Hosts and evaluators stay trusted for 30 days (migration 52; it was 7 until 7 October). A launchd job on the Mac runs `pnpm staging:reverify --renew --publish` at 09:00 and 21:00. It checks the installed files and services over SSH, renews only what passes, and renews anything a week old or more, so the VM keeps working for 23 to 30 days with the Mac off. The GitHub alert for a silent Mac only fires once an expiry is within 5 days. Run `pnpm staging:reverify` (read-only) for live expiry dates and what each environment runs: its worker release and each runtime's version and source commit. The local deployment host has been expired since 26 September on purpose; run `install-staging --local` before using local staging chats.
@@ -195,5 +197,6 @@ The ordered plan is architecture §37; the owner's audit brief tracks progress. 
 | Evidence by name, results by level, money to the cent                  | §76                  |
 | Agents use the Codex models                                            | §77                  |
 | The OpenAI cap, refused calls and clearer stops                        | §78                  |
+| Reservations hold counted input tokens                                 | §79                  |
 
 Presentation rules are in the [UI contract](ui/ui-contract.md). The [target schema](schema.dbml) describes 90 tables; 73 exist in the 75 checked-in migrations.
