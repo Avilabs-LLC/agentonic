@@ -11,7 +11,7 @@
 
 ## Next up
 
-1. **N22** — the owner tops up OpenAI credit; until then no model call succeeds (found 13 October).
+1. **N22** — OpenAI credit topped up by the owner on 14 October; the platform's OpenAI cap raised to US$100 (§78, v0.45.1). Closes once installed and NicolAI-Mail's resent request completes.
 2. **N23** — the Codex models (§77): installed 14 October (migrations 74–75, platform 0.45.0, runtime 0.8.0, broker `26d06296`, evaluator `413426cc`). Once there is credit, `leonardo@avilabs.tech` prepares a version on 0.8.0 and evaluates it, and NicolAI-Mail resends the request that failed at 07:03 UTC.
 3. **N19** — answers kept in Chats (§66): installed 13 October (migration 69, 0.38.0); Nico resends his request.
 4. **N15** — Google Drive (§62): installed 9 October (migration 65, platform 0.35.3, runtime 0.6.0, broker `ec30c590`, evaluator `7fb7104a`); run the live acceptance in [drive-connection.md](drive-connection.md) with a test account.

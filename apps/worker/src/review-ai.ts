@@ -3,6 +3,7 @@ import { z } from "zod"
 import { modelCatalog } from "@agentonic/contracts/models"
 import { reviewCriteria } from "@agentonic/contracts/review-flow"
 import type { Execute, Lease } from "./pipeline"
+import { releaseRefused } from "./refusal"
 /**
  * The model that writes criteria or grades. A run's grader snapshot binds its
  * rubric version to one of these, and the database meters only that model.
@@ -174,7 +175,10 @@ export async function structured(
     body,
     signal: AbortSignal.any([signal, AbortSignal.timeout(90000)]),
   })
-  if (!response.ok) throw new Error("provider_unavailable")
+  if (!response.ok) {
+    await releaseRefused(response, id, job, execute)
+    throw new Error("provider_unavailable")
+  }
   const result = (await response.json()) as {
     status?: string
     usage?: { input_tokens: number; output_tokens: number }

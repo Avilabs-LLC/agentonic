@@ -1,5 +1,10 @@
 export const VERSION_HISTORY = [
   {
+    "version": "0.45.1",
+    "date": "2026-10-14",
+    "summary": "OpenAI's platform cap raised to US$100; calls OpenAI refuses release their reservation; clearer budget and provider messages (§78)."
+  },
+  {
     "version": "0.45.0",
     "date": "2026-10-13",
     "summary": "Agents use the Codex models: GPT-6.1 Sol, GPT-6 Astra, GPT-6 Sol, GPT-6 Luna, GPT-5.6 Sol, GPT-5.6 Terra and GPT-5.6 Luna on runtime 0.8.0; GPT-5.4 and GPT-5.4 mini retired for agents (§77)."

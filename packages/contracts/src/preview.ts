@@ -90,7 +90,7 @@ export const previewErrors: Record<string, string> = {
   budget_exhausted:
     "Se alcanzó el presupuesto de esta prueba o el límite de desarrollo.",
   provider_unavailable:
-    "No se pudo completar la respuesta. No se reintentará automáticamente.",
+    "El proveedor de IA rechazó o no respondió la solicitud, así que no se pudo completar la respuesta. No se reintentará automáticamente.",
   configuration_required: "El servicio de pruebas aún no está configurado.",
   lease_lost: "La respuesta se interrumpió o perdió su autorización.",
 }

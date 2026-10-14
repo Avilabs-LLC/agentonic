@@ -282,7 +282,7 @@ export const lifecycleErrors: Record<string, string> = {
   budget_exhausted:
     "Se alcanzó el límite autorizado. El consumo registrado se conserva.",
   provider_unavailable:
-    "No se pudo completar la respuesta. El consumo o la reserva pendiente se conserva.",
+    "El proveedor de IA rechazó o no respondió la solicitud, así que no se pudo completar la respuesta. Inténtalo de nuevo en unos minutos; si se repite, avisa al equipo de Agentonic.",
   lease_lost: "La respuesta se interrumpió. Puedes enviar un nuevo mensaje.",
   runtime_mismatch:
     "No se pudo completar la respuesta por un problema de nuestro lado. Puedes enviar un nuevo mensaje.",

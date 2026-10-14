@@ -2779,3 +2779,23 @@ The failures promised what Leonardo hadn't stated ("I'll send it shortly"), as G
 5. Evaluator `413426cc` deployed and registered with `--replace`, replacing `ddbdd1cd`. Runtimes 0.3.0–0.7.0 were registered with it again through `runtime:install`.
 
 `hosted:check` passed. `staging:reverify` shows the host on `26d06296` and the evaluator on `413426cc`, both serving runtimes 0.3.0–0.8.0, with every registration valid. In the database, runtime 0.8.0 runs GPT-6.1 Sol and 0.7.0 does not. Live turns on the new models wait for OpenAI credit (N22). The account still returned `insufficient_quota` after the rollout, and NicolAI-Mail's turn at 07:03 UTC failed on it with `provider_unavailable`.
+
+## 78. The OpenAI cap, refused calls and clearer stops — 14 October 2026
+
+**Found 14 October.** NicolAI-Mail's turn at 07:56 UTC, on GPT-6 Astra, searched 10 emails, read 2 threads and 3 messages, and proposed labels. Then its fourth model call, the one that writes the summary, was refused. Nico got the broker's fixed budget text instead of his summary.
+
+The deployment had used US$2.20 of its US$5.00 period. The refusal came from the platform's total OpenAI cap (`retrieval_provider_budgets`). That cap was set to US$25 as a development allowance in September and never resets. It stood at US$23.43 committed: US$21.18 spent and US$2.25 held in open reservations, against a reservation of about US$1.9 for the call.
+
+Two of those reservations, US$1.10 (Nico, 07:03 UTC) and US$0.95 (`leonardo@avilabs.tech`'s GPT-6 Astra · Medio run, 13 October), were calls OpenAI refused with HTTP 429 `insufficient_quota` while the account had no credit. They billed nothing, but the worker keeps every failed call's reservation as possibly billed. The account was topped up on 14 October.
+
+**Owner decision, 14 October.** The cap becomes US$100 in total.
+
+**Change (worker, broker and setup script; no migration; platform v0.45.1).**
+- `setup:rag --budget` accepts an OpenAI cap of up to US$100. Voyage keeps its US$25 ceiling. The cap is still read from `AGENTONIC_OPENAI_RAG_SPEND_CAP_USD`, and accumulated use is kept.
+- When OpenAI answers a call with a 4xx (no credit, a rate limit, an invalid request), the worker settles its reservation at zero before failing the turn. This covers the shared `respond` path used by turns and criteria, and the grader. A 5xx or a dropped connection may have been billed, so its reservation stays as before. The two refused calls above stay reserved: they predate the change, and accumulated usage is never rewritten.
+- The broker's budget stop now says the turn couldn't finish because a spending limit, the agent's or the platform's, was reached before the answer. The old text spoke of a search and criteria.
+- Chats and Probar agente say the AI provider refused or didn't answer, instead of only "No se pudo completar la respuesta".
+
+**Tests.** `tests/provider-gateway.test.ts`: a 500 keeps its reservation, and a 429 settles it at zero.
+
+**Rollout.** `setup:rag --budget` with the cap at US$100 in `apps/worker/.env.local`, the platform release, then the staging broker and the evaluator, which carry the worker change.

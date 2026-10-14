@@ -30,6 +30,7 @@ import { executeGmail } from "./gmail"
 import { executeDrive } from "./drive"
 import { PreviewFailure } from "./failure"
 import { partialAnswerText, readResponseStream } from "./stream"
+import { releaseRefused } from "./refusal"
 import {
   INVALID,
   jobCall,
@@ -212,7 +213,10 @@ export async function respond(
     if (signal.aborted) throw new Error("lease_lost")
     return { kind: "uncertain" }
   }
-  if (!response.ok) throw new Error("provider_unavailable")
+  if (!response.ok) {
+    await releaseRefused(response, id, job, execute)
+    throw new Error("provider_unavailable")
+  }
   let output: {
     status?: string
     usage?: { input_tokens: number; output_tokens: number }

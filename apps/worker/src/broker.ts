@@ -37,7 +37,7 @@ import { StepLog } from "./turn-steps"
 // Fixed outcomes the broker records itself: they describe platform state
 // (spend limits, pending confirmations), so no runtime can reword them.
 export const BUDGET_STOP_ANSWER =
-  "La búsqueda alcanzó el presupuesto disponible antes de completar la respuesta. No pude terminar la verificación de todos tus criterios. La búsqueda se ha detenido; no continuará en segundo plano."
+  "No pude terminar la respuesta: se alcanzó el límite de gasto disponible, el de este agente o el de la plataforma, antes de redactarla. No continuará en segundo plano y el consumo registrado se conserva. Si se repite, avisa al equipo de Agentonic."
 export const PROPOSAL_ANSWER =
   "He preparado una acción de Gmail. Revisa la cuenta, los destinatarios y el contenido en la tarjeta de confirmación. Todavía no se ha realizado ningún cambio."
 /** A write the run's schedule pre-authorized (§58): the platform executes it. */

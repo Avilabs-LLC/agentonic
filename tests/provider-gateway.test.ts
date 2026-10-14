@@ -214,7 +214,7 @@ describe("agent copies call providers through the gateway", () => {
     const fetch = vi.fn()
     vi.stubGlobal("fetch", fetch)
     let reserve: unknown = { ok: false }
-    const { copy } = await host(
+    const { copy, sql } = await host(
       directProviders({ openaiKey: HOST_KEY }),
       ({ values }) => {
         if (values[0] !== "reserve") return { ok: true }
@@ -222,6 +222,10 @@ describe("agent copies call providers through the gateway", () => {
         return reserve
       }
     )
+    const settled = () =>
+      sql
+        .filter(({ values }) => values[0] === "settle")
+        .map(({ values }) => JSON.parse(String(values.at(-1))))
     const signal = new AbortController().signal
     expect(await copy.respond(call, job, unused, signal)).toEqual({
       kind: "budget",
@@ -236,6 +240,18 @@ describe("agent copies call providers through the gateway", () => {
     await expect(copy.respond(call, job, unused, signal)).rejects.toThrow(
       "provider_unavailable"
     )
+    // A server error may have been billed: its reservation stays (§66).
+    expect(settled()).toEqual([])
+    // A refusal (no credit, a rate limit) billed nothing: released at zero (§78).
+    fetch.mockResolvedValueOnce(
+      new Response('{"error":{"code":"insufficient_quota"}}', { status: 429 })
+    )
+    await expect(copy.respond(call, job, unused, signal)).rejects.toThrow(
+      "provider_unavailable"
+    )
+    expect(settled()).toMatchObject([
+      { microusd: 0, tokens: 0, outputTokens: 0 },
+    ])
     // An expired secret or lost lease is the database's answer, as before.
     reserve = Object.assign(new Error("permission denied"), { code: "42501" })
     const refused = await copy
