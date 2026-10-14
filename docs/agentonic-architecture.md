@@ -2798,4 +2798,11 @@ Two of those reservations, US$1.10 (Nico, 07:03 UTC) and US$0.95 (`leonardo@avil
 
 **Tests.** `tests/provider-gateway.test.ts`: a 500 keeps its reservation, and a 429 settles it at zero.
 
-**Rollout.** `setup:rag --budget` with the cap at US$100 in `apps/worker/.env.local`, the platform release, then the staging broker and the evaluator, which carry the worker change.
+**Rollout, 14 October 2026.** From `e0211aa` on `main`, with no chat turn, preview, job or evaluation running:
+
+1. `AGENTONIC_OPENAI_RAG_SPEND_CAP_USD` set to 100 in `apps/worker/.env.local`, then `setup:rag --budget`. OpenAI's cap reads US$100 with US$23.43 committed, as before; Voyage is unchanged.
+2. `platform-0.45.1-e0211aaef48b` installed (release `fb3c04ca`), once CI had attached the release's files. The apps and the knowledge worker restarted healthy.
+3. Staging broker `786dfcd8` installed with `install-staging --azure`. The controller moved NicolAI-Mail's deployment to it.
+4. Evaluator `02742183` deployed and registered with `--replace`, replacing `413426cc`. Runtimes 0.3.0–0.7.0 were registered with it again.
+
+`hosted:check` passed. `staging:reverify` shows the host on `786dfcd8` and the evaluator on `02742183`, both serving runtimes 0.3.0–0.8.0, with every registration valid.
