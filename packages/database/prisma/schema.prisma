@@ -846,6 +846,7 @@ model RetrievalProviderOperation {
   workspace        Workspace               @relation(fields: [workspaceId], references: [id], onDelete: Restrict, onUpdate: NoAction)
   budget           RetrievalProviderBudget @relation(fields: [provider], references: [provider], onDelete: Restrict, onUpdate: NoAction)
 
+  @@index([jobId], map: "retrieval_provider_operations_job")
   @@map("retrieval_provider_operations")
   @@schema("agentonic")
 }

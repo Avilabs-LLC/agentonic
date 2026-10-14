@@ -261,6 +261,9 @@ export const chatState = z.object({
       citations: z.array(z.uuid()),
       status: z.enum(["queued", "running", "succeeded", "failed", "cancelled"]),
       errorCode: z.string().nullable(),
+      /** What the turn's paid calls cost, and what still holds unsettled (§82). */
+      spentMicrousd: z.number().optional(),
+      heldMicrousd: z.number().optional(),
     })
   ),
 })

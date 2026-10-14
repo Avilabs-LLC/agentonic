@@ -35,6 +35,7 @@ import {
 } from "@workspace/ui/components/select"
 import { GmailApprovals } from "@workspace/ui/components/gmail-approvals"
 import { DriveApprovals } from "@workspace/ui/components/drive-approvals"
+import { TurnCost, runningSpend } from "@workspace/ui/components/turn-cost"
 import {
   previewModelName,
   type PreviewModel,
@@ -235,6 +236,8 @@ export function AgentPreview({
       setBusy(false)
     }
   }
+  // What the conversation had cost when each turn ended (§82).
+  const totals = runningSpend(state?.turns ?? [])
   return (
     <div className="space-y-6">
       <div className="space-y-4 rounded-lg border bg-card p-4 sm:p-6">
@@ -327,7 +330,7 @@ export function AgentPreview({
               </p>
             </div>
           )}
-          {state?.turns.map((turn) => (
+          {state?.turns.map((turn, n) => (
             <div key={turn.id} className="space-y-4">
               <div className="ml-auto max-w-[90%] rounded-lg border bg-muted/40 px-4 py-3">
                 <p className="mb-1 text-xs font-medium text-muted-foreground">
@@ -400,6 +403,14 @@ export function AgentPreview({
                         : (previewErrors[turn.error ?? ""] ??
                           "No se pudo completar esta respuesta.")}
                   </p>
+                )}
+                {/* What the turn cost, once it has ended (§82); the model is named above. */}
+                {turn.status !== "queued" && turn.status !== "running" && (
+                  <TurnCost
+                    spentMicrousd={turn.spentMicrousd}
+                    heldMicrousd={turn.heldMicrousd}
+                    totalMicrousd={totals[n]!}
+                  />
                 )}
               </div>
             </div>

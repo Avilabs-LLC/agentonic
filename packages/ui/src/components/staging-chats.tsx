@@ -10,6 +10,7 @@ import { AgentAnswer } from "@workspace/ui/components/agent-answer"
 import { TurnSteps, thinking } from "@workspace/ui/components/turn-steps"
 import { GmailApprovals } from "@workspace/ui/components/gmail-approvals"
 import { DriveApprovals } from "@workspace/ui/components/drive-approvals"
+import { TurnCost, runningSpend } from "@workspace/ui/components/turn-cost"
 import { formatUsd, formatUtcMinute } from "@agentonic/contracts/format"
 import {
   customerEnvironmentLabels,
@@ -217,6 +218,8 @@ export function StagingChats({
   const term = search.toLocaleLowerCase("es-VE"),
     last = state?.turns.at(-1),
     waiting = last?.status === "queued" || last?.status === "running"
+  // What the conversation had cost when each turn ended (§82).
+  const totals = runningSpend(state?.turns ?? [])
   return (
     <div className="mx-auto w-full max-w-6xl space-y-6">
       <RecordHeader
@@ -431,6 +434,23 @@ export function StagingChats({
                             : "referencias autorizadas"}
                           .
                         </p>
+                      )}
+                      {/* What the turn cost, once it has ended (§82). */}
+                      {t.status !== "queued" && t.status !== "running" && (
+                        <TurnCost
+                          spentMicrousd={t.spentMicrousd}
+                          heldMicrousd={t.heldMicrousd}
+                          totalMicrousd={totals[n]!}
+                          model={
+                            t.model
+                              ? {
+                                  model: t.model,
+                                  reasoning: t.reasoning ?? null,
+                                }
+                              : undefined
+                          }
+                          className="mt-3"
+                        />
                       )}
                     </div>
                   </div>

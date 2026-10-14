@@ -71,6 +71,9 @@ export const previewState = z.object({
         partial: z.string().nullable().optional(),
         /** What the turn did, step by step (§74); a malformed list shows no steps. */
         steps: turnSteps.nullable().optional().catch(null),
+        /** What the turn's paid calls cost, and what still holds unsettled (§82). */
+        spentMicrousd: z.number().optional(),
+        heldMicrousd: z.number().optional(),
       })
     )
     .max(10),

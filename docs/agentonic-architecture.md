@@ -2889,3 +2889,23 @@ After rollout, saving US$20 again in Ajustar renovación raises NicolAI-Mail's c
 - `tests/runtime-engine.test.ts`: the note is offered only to runtimes that declare `draftNotes`, and the artifact declares it.
 - `tests/chat-render.test.ts`: Markdown answers keep their line breaks; links name their site; other schemes and raw HTML are not rendered. A reply shows its three tabs, and a new message without a note has none.
 
+## 82. Each turn shows what it cost — 14 October 2026
+
+**Owner request, 14 October.** Chats and Probar agente should show what each turn cost and what the whole conversation has cost, as Corby does in Slack, so people can see what they spend and keep it under control. Corby ends each reply with "$0.22 este turno · $1.38 en este hilo · model", and adds the thread's figure only once earlier turns cost something.
+
+**Change (migration 77, platform v0.48.0).**
+- **Where the figures come from.** Every paid call of a turn is metered in `retrieval_provider_operations` under the turn's job: model calls, reranking, web searches and reads. A chat turn's job is its `staging_turns` row and a Probar turn's is its `background_jobs` row. `agentonic.turn_spend(job, workspace)` adds up a turn's settled calls (`actual_microusd`). It reports apart what calls still hold without a settled amount (`reserved_microusd`), since their cost is unknown up to that hold (§50, §66). A call the provider refused settles at zero (§78).
+- **How it reaches the chats.** `staging_chat` and `preview_command` keep their live definitions, renamed `staging_chat_v76` and `preview_command_v76`. New wrappers of the same names add `spentMicrousd` and `heldMicrousd` to each turn in `state`. Only the customer role may call the wrappers, as before. A new index on `job_id` keeps the polled state cheap; the ledger had 1,833 rows and no such index.
+- **What the chats show.** When a turn ends, a muted line under its answer shows, in this order:
+  - what the turn cost;
+  - "más hasta US$X sin confirmar" when a call still holds;
+  - the conversation's total through that turn, once earlier turns cost something;
+  - in Chats, the model and level, since Probar already names them above the answer.
+
+  Amounts follow §76: to the cent, and "menos de US$0,01" below that. Failed turns show their cost too. The composer's tray still shows the deployment's spend against its limit.
+
+**Tests.**
+- `tests/evaluation-database.test.ts`, "records the answer while a failed web read keeps its reservation" (§66): the chat turn reports its settled model call and the open read's hold.
+- `tests/web-database.test.ts`, "reserves conservative web usage…": a Probar turn reports a settled search and an open read.
+- `tests/turn-cost.test.ts`: the line's wording, the conversation total only after earlier spend, the held amount and the running total.
+
