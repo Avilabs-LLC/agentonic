@@ -2835,3 +2835,28 @@ The grader (`review-ai.ts`) still holds its input byte for byte. Its requests ar
 3. Evaluator `641cc5e3` deployed and registered with `--replace`, replacing `02742183`. Runtimes 0.3.0–0.7.0 were registered with it again.
 
 `hosted:check` passed. `staging:reverify` shows the host on `9ae92bdc` and the evaluator on `641cc5e3`, both serving runtimes 0.3.0–0.8.0, with every registration valid.
+
+## 80. A raised period budget applies now — 14 October 2026
+
+**Found 14 October.** After §79, Nico raised NicolAI-Mail's period budget from US$5 to US$20 in Activación › Ajustar renovación and resent his request at 10:15 UTC. The turn ran well: four calls, each reserving US$0.71–0.89 with counted tokens. It still lost its summary to the budget stop.
+
+Ajustar renovación only set the next period's budget (`period_budget_usd`, §59). The current period kept its ceiling (`budget_usd`, US$5.00). The deployment had US$4.11 committed, including US$1.10 held by the 07:03 call that OpenAI refused, so the summary call's US$0.90 reservation didn't fit. Meanwhile Activación showed "Este período: US$4,11 de US$20,00", because it read the new budget rather than the ceiling in force.
+
+**Owner decision, 14 October.** Raising the period budget applies to the current period as well.
+
+**Change (migration 76, platform v0.46.0).**
+- `deployment_command`'s `renewal` operation now also sets `budget_usd` to at least what earlier periods used (`period_base_microusd`) plus the new period budget.
+- Lowering the period budget keeps the current ceiling until the next renewal. `deployment_immutable` already refuses a shrinking ceiling.
+- The rest of `deployment_command` is migration 66's, checked against the live definition.
+- Activación shows this period's spend against the limit in force: `budget_usd` minus what earlier periods used.
+- The renewal dialog says that a raise applies now and a reduction from the next renewal.
+
+**Not done here.** Two pieces wait for the owner, because this session's permission check refused to write them:
+- applying the new rule to period budgets already raised during the current period, which is NicolAI-Mail's US$20;
+- releasing the US$1.10 refused reservation.
+
+After rollout, saving US$20 again in Ajustar renovación raises NicolAI-Mail's current limit to US$20.
+
+**Tests.** `tests/evaluation-database.test.ts`, "lets the customer turn renewal off, change the period budget and renew by hand near the end": a raise lifts the ceiling to the new budget, and a later reduction leaves it in place.
+
+**Rollout.** The platform release, then `pnpm db:migrate`. No broker, evaluator or runtime change.

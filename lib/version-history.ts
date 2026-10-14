@@ -1,5 +1,10 @@
 export const VERSION_HISTORY = [
   {
+    "version": "0.46.0",
+    "date": "2026-10-14",
+    "summary": "Raising an agent's period budget applies to the current period too, and Activación shows the limit actually in force (§80)."
+  },
+  {
     "version": "0.45.3",
     "date": "2026-10-14",
     "summary": "A long request's reservation holds its counted input tokens instead of one token per byte, so a mail turn's last call fits the budget it will really use (§79)."
