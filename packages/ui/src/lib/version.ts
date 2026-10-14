@@ -1,2 +1,2 @@
 export const APP_NAME = "Agentonic"
-export const APP_VERSION_LABEL = "v0.45.3"
+export const APP_VERSION_LABEL = "v0.46.0"

@@ -301,8 +301,10 @@ export function AgentLifecycle({
                         {customerAvailability(d, state, new Date(now))}
                       </p>
                       <p className="text-xs text-muted-foreground">
+                        {/* The limit in force this period, which can differ
+                            from the budget set for the next one (§80). */}
                         {d.periodBudgetUsd != null
-                          ? `Este período: ${formatUsd(d.periodCommittedMicrousd / 1e6)} de ${formatUsd(d.periodBudgetUsd)}.`
+                          ? `Este período: ${formatUsd(d.periodCommittedMicrousd / 1e6)} de ${formatUsd(d.budgetUsd - (d.committedMicrousd - d.periodCommittedMicrousd) / 1e6)}.`
                           : `Consumo: ${formatUsd(d.committedMicrousd / 1e6)} de ${formatUsd(d.budgetUsd)} autorizados.`}
                       </p>
                       <RenewalLine deployment={d} />
@@ -555,7 +557,9 @@ export function AgentLifecycle({
             <DialogTitle>Renovación</DialogTitle>
             <DialogDescription>
               Mientras nada cambie, la autorización se renueva sola 3 días antes
-              de terminar, por 30 días más y con este presupuesto.
+              de terminar, por 30 días más y con este presupuesto. Si lo
+              aumentas, el nuevo presupuesto se aplica también al período
+              actual; si lo reduces, desde la próxima renovación.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-5">

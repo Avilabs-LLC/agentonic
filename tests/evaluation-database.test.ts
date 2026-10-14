@@ -2448,6 +2448,7 @@ async function modelReview() {
     "202610130073_turn_steps",
     "202610130074_evidence_names",
     "202610130075_codex_models",
+    "202610140076_period_budget_now",
   ])
     await db.exec(
       readFileSync(
@@ -3595,9 +3596,24 @@ describe("ongoing deployments (§59)", () => {
         budgetUsd: 8,
       })
     ).toMatchObject({ ok: true })
+    // Raising the period budget raises the current period's ceiling too (§80).
     expect(await deployment(p.deploymentId)).toMatchObject({
       auto_renew: false,
       budget: 8,
+      ceiling: 8,
+    })
+    // Lowering it waits for the next renewal: a running ceiling never shrinks.
+    await actor()
+    expect(
+      await lifecycleCall("deployment_command", "renewal", {
+        deploymentId: p.deploymentId,
+        autoRenew: false,
+        budgetUsd: 2,
+      })
+    ).toMatchObject({ ok: true })
+    expect(await deployment(p.deploymentId)).toMatchObject({
+      budget: 2,
+      ceiling: 8,
     })
     await endsIn(p.deploymentId, "2 days")
     expect(await renewalTick()).toEqual({ renewed: 0, blocked: 0 })
