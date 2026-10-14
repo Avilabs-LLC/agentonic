@@ -1,5 +1,10 @@
 export const VERSION_HISTORY = [
   {
+    "version": "0.45.3",
+    "date": "2026-10-14",
+    "summary": "A long request's reservation holds its counted input tokens instead of one token per byte, so a mail turn's last call fits the budget it will really use (§79)."
+  },
+  {
     "version": "0.45.2",
     "date": "2026-10-14",
     "summary": "Resultados show one chip per model and level, each with only its own situations; situation frame titles in muted text."
