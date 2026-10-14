@@ -56,7 +56,11 @@ import {
 import { actionsMenuClassName } from "@workspace/ui/lib/menus"
 import { notify } from "@workspace/ui/lib/toast"
 import { ProposalStatusBadge } from "@workspace/ui/components/status-badge"
-import { CellButton } from "@workspace/ui/components/table-cells"
+import {
+  Absent,
+  CellButton,
+  VersionNumber,
+} from "@workspace/ui/components/table-cells"
 import { Button } from "@workspace/ui/components/button"
 import {
   Table,
@@ -201,15 +205,20 @@ function ProposalRow({
             </DropdownMenuContent>
           </DropdownMenu>
         </TableCell>
-        <TableCell className="tabular-nums">{versionNumber ?? "—"}</TableCell>
+        {/* The version alone (owner direction, 13 October 2026): it matches
+            the review number unless a version is sent again, and the
+            proposal's details still show both. */}
         <TableCell>
-          <CellButton
-            className="tabular-nums"
-            aria-label={`Ver detalle de ${descriptor.toLowerCase()}`}
-            onClick={() => setView("details")}
-          >
-            {submission.number}
-          </CellButton>
+          {versionNumber == null ? (
+            <Absent>No disponible</Absent>
+          ) : (
+            <CellButton
+              aria-label={`Ver detalle de ${descriptor.toLowerCase()}`}
+              onClick={() => setView("details")}
+            >
+              <VersionNumber value={versionNumber} />
+            </CellButton>
+          )}
         </TableCell>
         <TableCell>
           <ProposalStatusBadge status={status} />
@@ -395,7 +404,6 @@ export function AgentProposals(props: ProposalProps) {
                 <span className="sr-only">Acciones</span>
               </TableHead>
               <TableHead>Versión</TableHead>
-              <TableHead>Revisión</TableHead>
               <TableHead>Estado</TableHead>
               <TableHead>Criterios</TableHead>
               <TableHead>Resultados</TableHead>

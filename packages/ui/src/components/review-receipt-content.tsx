@@ -1,5 +1,6 @@
-import { ChevronDownIcon } from "lucide-react"
+import { ChevronDownIcon, FileTextIcon } from "lucide-react"
 import type { ReviewReceipt } from "@agentonic/contracts/review-receipt"
+import type { EvidenceSource } from "@agentonic/contracts/review-flow"
 import {
   CriterionStatus,
   DomainStatus,
@@ -57,6 +58,60 @@ export function ReceiptTextFrame({
     </div>
   )
 }
+/**
+ * The documents a result or situation rests on, one line each like a file
+ * index (§76): the document's name and its collection, never the passage
+ * text. Several passages of one document make one line.
+ */
+export function SourceIndex({
+  sources,
+  title = "Fuentes consultadas",
+}: {
+  sources: EvidenceSource[]
+  title?: string
+}) {
+  const documents = new Map<
+    string,
+    { title: string; collection?: string; passages: number }
+  >()
+  for (const source of sources) {
+    const key = source.documentId ?? source.id
+    const known = documents.get(key)
+    if (known) known.passages += 1
+    else
+      documents.set(key, {
+        title: source.title ?? "Documento sin nombre",
+        collection: source.collection,
+        passages: 1,
+      })
+  }
+  if (!documents.size) return null
+  return (
+    <section className="space-y-2 text-sm">
+      <h3 className="font-medium">{title}</h3>
+      <ul className="divide-y rounded-lg border">
+        {[...documents].map(([key, document]) => (
+          <li key={key} className="flex items-center gap-2 px-3 py-2">
+            <FileTextIcon
+              className="size-4 shrink-0 text-muted-foreground"
+              aria-hidden="true"
+            />
+            <span className="min-w-0 truncate">{document.title}</span>
+            <span className="ml-auto shrink-0 text-xs text-muted-foreground">
+              {[
+                document.collection,
+                document.passages > 1 && `${document.passages} fragmentos`,
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  )
+}
+
 export function ReceiptCriteria({
   criteria,
   confirmed = true,
@@ -116,7 +171,7 @@ export function ReceiptResults({
 }: {
   results: Array<
     ReviewReceipt["results"][number] & {
-      sources?: Array<{ id: string; text: string }>
+      sources?: EvidenceSource[]
     }
   >
 }) {
@@ -161,21 +216,7 @@ export function ReceiptResults({
               <ReceiptTextFrame title="Observación" text={result.suggestion} />
             )}
             {!!result.sources?.length && (
-              <details className="border-t pt-4 text-sm">
-                <summary className="cursor-pointer font-medium">
-                  Consultar evidencia
-                </summary>
-                <div className="mt-4 space-y-3">
-                  {result.sources.map((source) => (
-                    <blockquote
-                      key={source.id}
-                      className="border-l-2 pl-3 leading-relaxed break-words whitespace-pre-wrap text-muted-foreground"
-                    >
-                      {source.text}
-                    </blockquote>
-                  ))}
-                </div>
-              </details>
+              <SourceIndex sources={result.sources} />
             )}
           </div>
         </details>

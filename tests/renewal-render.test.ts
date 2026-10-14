@@ -29,7 +29,7 @@ const base = {
 describe("renewal line", () => {
   it("says when an unchanged deployment renews and with what budget", () => {
     expect(html(base)).toContain("Se renovará automáticamente el 4/11/2026")
-    expect(html(base)).toContain("USD 5.00 por período")
+    expect(html(base)).toContain("US$5,00 por período")
   })
   it("says when it will not renew, and why something changed", () => {
     expect(html({ ...base, autoRenew: false, renewsAt: null })).toContain(

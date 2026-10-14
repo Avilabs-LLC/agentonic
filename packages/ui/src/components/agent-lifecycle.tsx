@@ -1,5 +1,9 @@
 "use client"
-import { formatUtcDateTime, formatUtcMinute } from "@agentonic/contracts/format"
+import {
+  formatUsd,
+  formatUtcDateTime,
+  formatUtcMinute,
+} from "@agentonic/contracts/format"
 import {
   customerAvailability,
   customerEnvironmentLabels,
@@ -298,17 +302,16 @@ export function AgentLifecycle({
                       </p>
                       <p className="text-xs text-muted-foreground">
                         {d.periodBudgetUsd != null
-                          ? `Este período: USD ${(d.periodCommittedMicrousd / 1e6).toFixed(4)} de USD ${d.periodBudgetUsd.toFixed(2)}.`
-                          : `Consumo: USD ${(d.committedMicrousd / 1e6).toFixed(4)} de USD ${d.budgetUsd.toFixed(2)} autorizados.`}
+                          ? `Este período: ${formatUsd(d.periodCommittedMicrousd / 1e6)} de ${formatUsd(d.periodBudgetUsd)}.`
+                          : `Consumo: ${formatUsd(d.committedMicrousd / 1e6)} de ${formatUsd(d.budgetUsd)} autorizados.`}
                       </p>
                       <RenewalLine deployment={d} />
                     </div>
                   ) : (
                     <div className="space-y-1">
                       <p className="text-xs text-muted-foreground">
-                        Uso y reservas: USD{" "}
-                        {(d.committedMicrousd / 1e6).toFixed(4)} de USD{" "}
-                        {d.budgetUsd.toFixed(2)} · Hasta{" "}
+                        Uso y reservas: {formatUsd(d.committedMicrousd / 1e6)}{" "}
+                        de {formatUsd(d.budgetUsd)} · Hasta{" "}
                         {formatUtcDateTime(d.expiresAt)} UTC.
                       </p>
                       <RenewalLine deployment={d} />
@@ -642,7 +645,7 @@ export function RenewalLine({
   return (
     <p className="text-xs text-muted-foreground">
       {d.autoRenew && d.renewsAt
-        ? `Se renovará automáticamente el ${formatUtcDateTime(d.renewsAt)} UTC por 30 días más${d.periodBudgetUsd != null ? `, con USD ${d.periodBudgetUsd.toFixed(2)} por período` : ""}.`
+        ? `Se renovará automáticamente el ${formatUtcDateTime(d.renewsAt)} UTC por 30 días más${d.periodBudgetUsd != null ? `, con ${formatUsd(d.periodBudgetUsd)} por período` : ""}.`
         : d.autoRenew
           ? "Se renovará automáticamente cada 30 días mientras nada cambie."
           : `No se renovará automáticamente; termina el ${formatUtcDateTime(d.expiresAt)} UTC.`}

@@ -10,7 +10,7 @@ import { AgentAnswer } from "@workspace/ui/components/agent-answer"
 import { TurnSteps, thinking } from "@workspace/ui/components/turn-steps"
 import { GmailApprovals } from "@workspace/ui/components/gmail-approvals"
 import { DriveApprovals } from "@workspace/ui/components/drive-approvals"
-import { formatUtcMinute } from "@agentonic/contracts/format"
+import { formatUsd, formatUtcMinute } from "@agentonic/contracts/format"
 import {
   customerEnvironmentLabels,
   unavailableOnOurSide,
@@ -477,8 +477,8 @@ export function StagingChats({
                   }
                   tray={
                     <p>
-                      Consumo: USD {(state.committedMicrousd / 1e6).toFixed(4)}{" "}
-                      de USD {state.budgetUsd.toFixed(2)} autorizados. Esta
+                      Consumo: {formatUsd(state.committedMicrousd / 1e6)} de{" "}
+                      {formatUsd(state.budgetUsd)} autorizados. Esta
                       conversación se conserva hasta el{" "}
                       {formatUtcMinute(state.expiresAt)}, 30 días después del
                       último mensaje.

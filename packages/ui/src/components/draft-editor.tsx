@@ -307,7 +307,7 @@ export function DraftEditor({
         >
           <div className="min-w-0 flex-1">
             <p className="text-sm font-medium">
-              Borrador · Revisión {draft.revision}
+              Borrador · Edición {draft.revision}
             </p>
             <p className="mt-1 text-sm text-muted-foreground">
               {isDirty ? "Cambios sin guardar." : "Sin cambios pendientes."}{" "}

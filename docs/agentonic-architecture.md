@@ -2702,3 +2702,27 @@ About US$0.40 on the development key, outside the platform's ledger.
 3. `platform-0.43.1-9e55a9ba3796` installed (release `c74e7af7`): the apps and the knowledge worker restarted healthy and `hosted:check` passed.
 
 `staging:reverify` shows the host on `9dfa013a` and the evaluator on `ddbdd1cd`, both serving runtimes 0.3.0–0.7.0, and every registration valid.
+
+## 76. Evidence by name, results by level, money to the cent — 13 October 2026
+
+**Owner directions, 13 October**, after `leonardo@avilabs.tech`'s version 3 evaluation:
+
+- **Evidence.** Every situation in Resultados quoted the whole "Guía de estilo de escritura" under "Consultar evidencia". A situation's evidence is the passages retrieval offered the agent for it. This agent's only collection holds the style guide, so the guide's passages came back for every situation. The owner asked to cite sources by name, like a file index, never their content.
+- **What evidence is.** Evidence is only knowledge: passages from the collections the version may read. The instructions are what is being evaluated, not a source. The grader receives them with every situation as the authority for the agent's own behavior (§56), and a situation that rests only on them has no sources.
+- **Resultados.** The summary shows one row per model and level on one line, so "GPT-6 Astra · Bajo" and "GPT-6 Astra · Medio" each have their own situations and result instead of a wrapped "· 2 niveles". A model's detail shows the evaluated models as chips in a row that scrolls sideways, and a default "Ir al resumen" button instead of "← Todos los modelos". Each level's "Bajo · 9/9 superadas" sits in muted text above its first situation.
+- **Money** has at most two decimals anywhere in either app. "US$2,3617 de US$10,00" claimed a precision the reservations behind it don't have.
+- **Versions** in tables read "v3".
+
+**Propuestas' Versión and Revisión.** Revisión is the review number: the agent's Nth submission, as Admin lists it in Revisiones. It matched Versión because each version was sent once. They differ only when a version is withdrawn and sent again. Configuración's "Revisión 5" was a third counter, the draft's saves. The version frame showed the edit it was frozen from. Propuestas now shows only Versión, as "v3", which opens the proposal, whose details still give the review number. The draft's saves are "Edición N" in Configuración, matching "Criterios, edición N", so "Revisión" means only the review number.
+
+**Change (migration 74, platform v0.44.0; no runtime, broker or evaluator change).**
+
+- `agentonic.evidence_sources(workspace, items)` names the passages a result or a set of criteria rests on. For each passage still current (same id and hash, as before), it returns its document's id and title and its collection's name. `evaluation_model_state` and `review_flow_state` call it in place of the passage text, which no longer leaves the database through these reads. Both were copied verbatim from migrations 35 and 60 after a check against the live definitions.
+- `SourceIndex` lists one line per document with its collection and number of passages. It is used in Resultados, in receipts and in the criteria dialog's Evidencia tab.
+- `formatUsd` gives "US$2,36" to the cent, and a positive amount under half a cent reads "menos de US$0,01". `formatMoney` uses it. It replaces the four- and six-decimal amounts in Resultados, receipts, Activación, Chats and the legacy evaluation panel.
+- `VersionNumber` renders "v3" in both agent lists, the deployment tables, Revisiones, Vencimientos and Admin's agent page. The scrolling fade of `TabsBar` became `useEdgeFade`, which the model chips share.
+- An evaluation stopped by `provider_unavailable` now says that the AI provider refused or didn't answer a call. Version 3's GPT-6 Astra · Medio run stopped that way: the OpenAI account had run out of credit (`insufficient_quota`).
+
+**Rollout order.** Install the platform before applying migration 74. The new pages read sources with or without names, but pages served before the migration expect the passage text.
+
+**Tests.** `tests/evaluation-database.test.ts`, "model batches separate confirmation from paid runs…": a preparation's sources and a model's result sources carry exactly `id`, `documentId`, `title` and `collection`.

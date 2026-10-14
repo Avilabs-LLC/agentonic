@@ -60,17 +60,18 @@ const edgeFade = (left: boolean, right: boolean) =>
     : undefined
 
 /**
- * A line tab row under a header. When its tabs outgrow a narrow screen it
- * scrolls sideways inside the page instead of widening it, fades the edge
- * that has more tabs, and starts scrolled to the selected tab.
+ * A row that scrolls sideways inside the page instead of widening it: fades
+ * the edge that has more past it and starts scrolled to its `[data-active]`
+ * (or `[aria-pressed=true]`) item. Returns the mask style for the row.
  */
-function TabsBar({ className, ...props }: TabsPrimitive.List.Props) {
-  const ref = React.useRef<HTMLDivElement>(null)
+function useEdgeFade(ref: React.RefObject<HTMLElement | null>) {
   const [more, setMore] = React.useState({ left: false, right: false })
   React.useEffect(() => {
     const row = ref.current
     if (!row) return
-    const active = row.querySelector<HTMLElement>("[data-active]")
+    const active = row.querySelector<HTMLElement>(
+      "[data-active],[aria-pressed=true]"
+    )
     // Clear of the fade too: 40px is its 2.5rem; the browser stops at the end.
     if (active && active.offsetLeft + active.offsetWidth > row.clientWidth)
       row.scrollLeft =
@@ -88,14 +89,21 @@ function TabsBar({ className, ...props }: TabsPrimitive.List.Props) {
       row.removeEventListener("scroll", update)
       resize.disconnect()
     }
-  }, [])
+  }, [ref])
   const mask = edgeFade(more.left, more.right)
+  return { maskImage: mask, WebkitMaskImage: mask }
+}
+
+/**
+ * A line tab row under a header. When its tabs outgrow a narrow screen it
+ * scrolls sideways inside the page instead of widening it, fades the edge
+ * that has more tabs, and starts scrolled to the selected tab.
+ */
+function TabsBar({ className, ...props }: TabsPrimitive.List.Props) {
+  const ref = React.useRef<HTMLDivElement>(null)
+  const fade = useEdgeFade(ref)
   return (
-    <div
-      ref={ref}
-      className="relative overflow-x-auto"
-      style={{ maskImage: mask, WebkitMaskImage: mask }}
-    >
+    <div ref={ref} className="relative overflow-x-auto" style={fade}>
       <TabsList
         variant="line"
         className={cn("w-max min-w-full justify-start border-b", className)}
@@ -131,4 +139,12 @@ function TabsContent({ className, ...props }: TabsPrimitive.Panel.Props) {
   )
 }
 
-export { Tabs, TabsList, TabsBar, TabsTrigger, TabsContent, tabsListVariants }
+export {
+  Tabs,
+  TabsList,
+  TabsBar,
+  TabsTrigger,
+  TabsContent,
+  tabsListVariants,
+  useEdgeFade,
+}

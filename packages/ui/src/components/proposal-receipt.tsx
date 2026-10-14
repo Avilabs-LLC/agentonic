@@ -1,4 +1,5 @@
 import { ClipboardCheckIcon, ListChecksIcon } from "lucide-react"
+import { formatUsd } from "@agentonic/contracts/format"
 import { type ReviewPreparation } from "@agentonic/contracts/review-flow"
 import { AgentSettingsCard } from "@workspace/ui/components/agent-settings-card"
 import { EvaluationSummary } from "@workspace/ui/components/review-result-status"
@@ -7,9 +8,6 @@ import {
   ReceiptCriteria,
   ReceiptResults,
 } from "@workspace/ui/components/review-receipt-content"
-
-const usd = (value: number) =>
-  `USD ${value.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 4 })}`
 
 export function ProposalReceipt({ record }: { record: ReviewPreparation }) {
   const confirmed = Boolean(record.evaluationId)
@@ -20,14 +18,14 @@ export function ProposalReceipt({ record }: { record: ReviewPreparation }) {
         <dl className="grid gap-4 sm:grid-cols-2">
           <div>
             <dt className="text-muted-foreground">Límite autorizado</dt>
-            <dd className="font-medium">{usd(record.budgetUsd)}</dd>
+            <dd className="font-medium">{formatUsd(record.budgetUsd)}</dd>
           </div>
           <div>
             <dt className="text-muted-foreground">
               Consumo y reservas pendientes
             </dt>
             <dd className="font-medium">
-              {usd(record.committedMicrousd / 1000000)}
+              {formatUsd(record.committedMicrousd / 1000000)}
             </dd>
           </div>
         </dl>
