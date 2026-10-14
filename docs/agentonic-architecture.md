@@ -2828,4 +2828,10 @@ The grader (`review-ai.ts`) still holds its input byte for byte. Its requests ar
 
 **Not done here.** Releasing the US$1.10 held by the 07:03 call, which OpenAI refused for lack of credit, needs a migration that edits the usage ledger. The owner approved it, but the session's permission check refused writing that migration. It waits for the owner.
 
-**Rollout.** The platform release, the staging broker (whose gateway runs `respond` for agent copies), and the evaluator, followed by re-registering the earlier runtimes.
+**Rollout, 14 October 2026.** From `7d8c6b1` on `main`, with no chat turn, preview, job or evaluation running:
+
+1. `platform-0.45.3-7d8c6b1e8680` installed (release `1a4234d8`), replacing 0.45.2.
+2. Staging broker `9ae92bdc` installed with `install-staging --azure`. The controller moved NicolAI-Mail's deployment to it.
+3. Evaluator `641cc5e3` deployed and registered with `--replace`, replacing `02742183`. Runtimes 0.3.0–0.7.0 were registered with it again.
+
+`hosted:check` passed. `staging:reverify` shows the host on `9ae92bdc` and the evaluator on `641cc5e3`, both serving runtimes 0.3.0–0.8.0, with every registration valid.
