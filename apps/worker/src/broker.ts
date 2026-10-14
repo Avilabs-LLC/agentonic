@@ -83,6 +83,8 @@ type Options = {
   passageIds: string[]
   /** The runtime declares mailboxBatch (§67): the turn spec carries its limits. */
   batch?: boolean
+  /** The runtime declares draftNotes (§81): proposed messages carry a note. */
+  notes?: boolean
   /** A chat or preview of a batch runtime shows its answer as it is written (§68). */
   stream?: boolean
   /** A chat or preview shows the turn's tool calls as they run (§74). */
@@ -117,14 +119,14 @@ function messageInvalid(error: { issues: { path: PropertyKey[] }[] }) {
     : "message_invalid"
 }
 /** Argument schemas always come from the shared contracts, never the child. */
-const argumentSchema = (op: Operation, batch: boolean) =>
+const argumentSchema = (op: Operation, batch: boolean, notes = false) =>
   op.kind === "gmail"
-    ? offeredGmailArguments(op.operation, batch)
+    ? offeredGmailArguments(op.operation, batch, notes)
     : op.kind === "drive"
       ? driveArguments[op.operation]
       : webArguments[op.operation]
-export const toolParameters = (op: Operation, batch = false) =>
-  z.toJSONSchema(argumentSchema(op, batch))
+export const toolParameters = (op: Operation, batch = false, notes = false) =>
+  z.toJSONSchema(argumentSchema(op, batch, notes))
 /**
  * A failure the model can work around goes back to it as a tool error (§73):
  * Google refusing or failing one read, or the database refusing one call or
@@ -238,7 +240,7 @@ export class TurnBroker {
   }
 
   private async model(request: ModelRequest): Promise<BrokerReply | undefined> {
-    const { job, execute, signal, turn, batch } = this.o
+    const { job, execute, signal, turn, batch, notes } = this.o
     if (++this.modelCalls > turn.limits.modelCalls)
       throw mismatch("model_calls")
     // After an unknown provider outcome only a final answer from a research
@@ -257,7 +259,7 @@ export class TurnBroker {
         type: "function",
         name: offer.name,
         description: offer.description,
-        parameters: toolParameters(op, batch),
+        parameters: toolParameters(op, batch, notes),
         strict: true,
       }
     })
@@ -466,7 +468,13 @@ export class TurnBroker {
     } catch {
       return { type: "tool", id: request.id, output: INVALID_ARGUMENTS }
     }
-    if (!argumentSchema(op, this.o.batch === true).safeParse(args).success)
+    if (
+      !argumentSchema(
+        op,
+        this.o.batch === true,
+        this.o.notes === true
+      ).safeParse(args).success
+    )
       return { type: "tool", id: request.id, output: INVALID_ARGUMENTS }
     const step = this.stepLog?.start(op, args) ?? -1
     const shown = (output: unknown) => {

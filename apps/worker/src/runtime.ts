@@ -62,6 +62,8 @@ const runtimeSchema = z
         mailboxBatch: z.literal("1").optional(),
         // Runtime 0.8.0 and later accept any model the broker offers (§77).
         openModels: z.literal("1").optional(),
+        // Runtime 0.9.0 and later give each proposed message a note (§81).
+        draftNotes: z.literal("1").optional(),
         webContract: z.literal("1").optional(),
         webResearch: z.literal("1").optional(),
         brokerProtocol: z.literal(BROKER_PROTOCOL).optional(),
@@ -140,6 +142,7 @@ export function verifyRuntime(value: unknown, root: string) {
     installed.driveContract !== runtime.manifest.driveContract ||
     installed.mailboxBatch !== runtime.manifest.mailboxBatch ||
     installed.openModels !== runtime.manifest.openModels ||
+    installed.draftNotes !== runtime.manifest.draftNotes ||
     installed.webContract !== runtime.manifest.webContract ||
     installed.webResearch !== runtime.manifest.webResearch ||
     installed.brokerProtocol !== runtime.manifest.brokerProtocol ||
@@ -548,6 +551,8 @@ export async function runPreview(
       drive,
       web,
       batch,
+      // Only runtimes that declare draftNotes are offered the note (§81).
+      notes: batch && manifest.draftNotes === "1",
       stream,
       // Chats and previews show their tool calls as they run (§74).
       steps: stream,

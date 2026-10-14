@@ -1,5 +1,10 @@
 export const VERSION_HISTORY = [
   {
+    "version": "0.47.0",
+    "date": "2026-10-14",
+    "summary": "A Gmail action's card shows Gmail's logo and the draft's subject; a reply's review has Conversación, Borrador and Notas tabs; answers render Markdown; runtime 0.9.0 adds draft notes and short answers (§81)"
+  },
+  {
     "version": "0.46.0",
     "date": "2026-10-14",
     "summary": "Raising an agent's period budget applies to the current period too, and Activación shows the limit actually in force (§80)."
