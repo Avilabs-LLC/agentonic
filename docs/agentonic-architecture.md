@@ -2859,4 +2859,4 @@ After rollout, saving US$20 again in Ajustar renovación raises NicolAI-Mail's c
 
 **Tests.** `tests/evaluation-database.test.ts`, "lets the customer turn renewal off, change the period budget and renew by hand near the end": a raise lifts the ceiling to the new budget, and a later reduction leaves it in place.
 
-**Rollout.** The platform release, then `pnpm db:migrate`. No broker, evaluator or runtime change.
+**Rollout, 14 October 2026.** From `2c807dd` on `main`, with nothing running, migration 76 was applied with `pnpm db:migrate` and `platform-0.46.0-2c807ddf8141` installed (release `ea0b3cdb`). The apps and the knowledge worker restarted healthy and `hosted:check` passed. The live `deployment_command` carries the new statement. NicolAI-Mail keeps its US$5.00 ceiling until Nico saves its period budget again.
