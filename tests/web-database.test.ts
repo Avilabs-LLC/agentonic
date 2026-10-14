@@ -335,28 +335,36 @@ it("pins preview model per turn, meters the actual model and preserves retry ide
       }),
     ])
   ).rejects.toThrow()
-  // GPT-4.1 mini is retired for new test-chat turns (§56).
-  await expect(
-    rpc("preview_command", [
-      "turn",
-      JSON.stringify({
-        ...payload,
-        requestKey: id(753),
-        model: "gpt-4.1-mini-2025-04-14",
-      }),
-    ])
-  ).rejects.toThrow()
+  // GPT-4.1 mini (§56), GPT-5.4 and GPT-5.4 mini (§77) are retired for new
+  // test-chat turns, and this runtime predates the Codex models (§77).
+  for (const [n, model] of [
+    [753, "gpt-4.1-mini-2025-04-14"],
+    [755, "gpt-5.4-mini"],
+    [756, "gpt-5.4"],
+    [757, "gpt-6-luna"],
+  ] as const)
+    await expect(
+      rpc("preview_command", [
+        "turn",
+        JSON.stringify({ ...payload, requestKey: id(n), model }),
+      ])
+    ).rejects.toThrow()
+  // A turn that names no model gets the one this runtime can run.
   await rpc("preview_command", [
     "turn",
     JSON.stringify({
-      ...payload,
+      agentId: payload.agentId,
+      previewId: payload.previewId,
+      query: payload.query,
       requestKey: id(754),
-      model: "gpt-5.4-mini",
     }),
   ])
   const next = await f.claim()
   await f.worker(next, "empty-search")
-  expect((await f.worker(next, "context")).previewModel).toBe("gpt-5.4-mini")
+  expect(await f.worker(next, "context")).toMatchObject({
+    previewModel: "gpt-6-astra",
+    reasoningLevel: "low",
+  })
   expect((await f.worker(next, "context")).history).toMatchObject([
     { answer: "No match." },
   ])

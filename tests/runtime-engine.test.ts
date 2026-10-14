@@ -1386,6 +1386,8 @@ describe("packaged runtime artifact", () => {
       webResearch: "1",
       // Runtime 0.7.0 (§67): brokers send it batch limits.
       mailboxBatch: "1",
+      // Runtime 0.8.0 (§77): any model the broker offers.
+      openModels: "1",
     })
     const root = join(first.directory, "..")
     expect(
@@ -1491,6 +1493,57 @@ describe("packaged runtime artifact", () => {
         citations: [passage],
         insufficientEvidence: false,
         model: "gpt-4.1-mini-2025-04-14",
+      },
+    ])
+  })
+  it("runs a model its frozen code never named (§77)", async () => {
+    const built = await artifact()
+    const fetch = vi.fn().mockResolvedValue(
+      json(
+        answer({
+          text: "Three years.",
+          citations: [passage],
+          insufficientEvidence: false,
+        })
+      )
+    )
+    vi.stubGlobal("fetch", fetch)
+    const env = envelope(WEB)
+    const execute = vi
+      .fn<Execute>()
+      .mockImplementation(async (op) =>
+        op === "context"
+          ? { ...env, previewModel: "gpt-6-luna", reasoningLevel: "low" }
+          : { ok: true }
+      )
+    await runPreview(
+      job,
+      execute,
+      {
+        manifest: built.manifest,
+        artifactSha256: built.artifactSha256,
+        gitCommit: built.gitCommit,
+      },
+      join(built.directory, ".."),
+      directProviders({
+        openaiKey: "synthetic-openai",
+        browserbaseKey: "synthetic-browserbase",
+      }),
+      new AbortController().signal,
+      false
+    )
+    expect(bodies(fetch)[0]).toMatchObject({
+      model: "gpt-6-luna",
+      reasoning: { effort: "low" },
+    })
+    expect(execute.mock.calls.at(-1)).toEqual([
+      "answer",
+      job,
+      {
+        text: "Three years.",
+        citations: [passage],
+        insufficientEvidence: false,
+        model: "gpt-6-luna",
       },
     ])
   })

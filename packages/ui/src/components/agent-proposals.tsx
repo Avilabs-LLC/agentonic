@@ -309,6 +309,7 @@ function ProposalRow({
       {record && view === "run" && (
         <RunModelEvaluationDialog
           record={record}
+          openModels={candidate?.openModels ?? false}
           action={action}
           onClose={() => setView(null)}
           onStarted={() => setView("results")}
