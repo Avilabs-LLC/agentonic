@@ -1,6 +1,6 @@
 # Agentonic: current state
 
-**As of 14 October 2026 · platform v0.47.0 · nonproduction only.** A short summary of what runs where, what works and what doesn't exist yet. [The architecture record](agentonic-architecture.md) keeps the full, dated history. If the two disagree about the present, fix this page. Update it whenever a change alters what runs where.
+**As of 14 October 2026 · platform v0.48.0 · nonproduction only.** A short summary of what runs where, what works and what doesn't exist yet. [The architecture record](agentonic-architecture.md) keeps the full, dated history. If the two disagree about the present, fix this page. Update it whenever a change alters what runs where.
 
 ## What runs where
 
@@ -125,6 +125,8 @@ New versions use runtime 0.7.0. Google accepts `gmail.modify` for test users, an
 
 **A draft's card shows its conversation (architecture §81), built 14 October, not yet installed.** Gmail action cards show Gmail's logo and the draft's subject. A reply's dialog has the tabs Conversación (the thread it answers, read from Gmail as the card opens and never stored), Borrador and Notas. Chat answers render Markdown. On runtime 0.9.0, the agent leaves a note on each draft and keeps its answer short instead of restating the drafts. Earlier runtimes keep their wording.
 
+**Each turn shows what it cost (architecture §82), built 14 October with migration 77, not yet installed.** Under each answer in Chats and Probar agente, a muted line shows what the turn cost and, once earlier turns cost something, the conversation's total so far, as Corby does in Slack. A call that still holds a reservation is shown as "más hasta US$X sin confirmar". The figures come from the provider ledger.
+
 ## Operations
 
 - **Verification.** Hosts and evaluators stay trusted for 30 days (migration 52; it was 7 until 7 October). A launchd job on the Mac runs `pnpm staging:reverify --renew --publish` at 09:00 and 21:00. It checks the installed files and services over SSH, renews only what passes, and renews anything a week old or more, so the VM keeps working for 23 to 30 days with the Mac off. The GitHub alert for a silent Mac only fires once an expiry is within 5 days. Run `pnpm staging:reverify` (read-only) for live expiry dates and what each environment runs: its worker release and each runtime's version and source commit. The local deployment host has been expired since 26 September on purpose; run `install-staging --local` before using local staging chats.
@@ -206,5 +208,6 @@ The ordered plan is architecture §37; the owner's audit brief tracks progress. 
 | Reservations hold counted input tokens                                 | §79                  |
 | A raised period budget applies now                                     | §80                  |
 | A draft's card shows its conversation                                  | §81                  |
+| Each turn shows what it cost                                           | §82                  |
 
-Presentation rules are in the [UI contract](ui/ui-contract.md). The [target schema](schema.dbml) describes 90 tables; 73 exist in the 76 checked-in migrations.
+Presentation rules are in the [UI contract](ui/ui-contract.md). The [target schema](schema.dbml) describes 90 tables; 73 exist in the 77 checked-in migrations.

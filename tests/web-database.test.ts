@@ -153,6 +153,19 @@ it("reserves conservative web usage under both budgets and settles exactly once"
     [p.p.id]
   )
   expect(Number(r.rows[0]!.committed_microusd)).toBe(7000)
+  // Probar agente shows what the turn cost (§82): the settled search, and a
+  // read still holding its reservation, whose cost is unknown.
+  expect(
+    await p.web("web-reserve", { id: id(603), operation: "web.read" })
+  ).toEqual({ ok: true })
+  await f.actor()
+  const state = (await rpc("preview_command", [
+    "state",
+    JSON.stringify({ agentId: id(20), previewId: p.p.id }),
+  ])) as { turns: unknown[] }
+  expect(state.turns).toEqual([
+    expect.objectContaining({ spentMicrousd: 7000, heldMicrousd: 4000 }),
+  ])
   await f.sql(
     "UPDATE agentonic.agent_previews SET committed_microusd=249000 WHERE id=$1",
     [p.p.id]

@@ -2449,6 +2449,7 @@ async function modelReview() {
     "202610130074_evidence_names",
     "202610130075_codex_models",
     "202610140076_period_budget_now",
+    "202610140077_turn_costs",
   ])
     await db.exec(
       readFileSync(
@@ -3793,6 +3794,11 @@ describe("open reservations in activated chats (§66)", () => {
       "INSERT INTO agentonic.retrieval_provider_operations(id,job_id,workspace_id,provider,model,reserved_microusd,agent_id,deployment_id,conversation_id) VALUES($1,$2,$3,'browserbase','web.read',4000,$4,$5,$6)",
       [id(1304), job.id, w, a, deploymentId, conversation.id]
     )
+    // The model call that answered, settled (§82).
+    await sql(
+      "INSERT INTO agentonic.retrieval_provider_operations(id,job_id,workspace_id,provider,model,reserved_microusd,actual_microusd,status,agent_id,deployment_id,conversation_id) VALUES($1,$2,$3,'openai','gpt-6-luna',90000,31234,'settled',$4,$5,$6)",
+      [id(1305), job.id, w, a, deploymentId, conversation.id]
+    )
     const answer = {
       text: "The page redirected, so its content is unverified.",
       citations: [],
@@ -3826,7 +3832,16 @@ describe("open reservations in activated chats (§66)", () => {
       await chat("state", { conversationId: conversation.id })
     ).toMatchObject({
       ok: true,
-      turns: [{ answer: answer.text, status: "succeeded" }],
+      // Each turn carries what it cost: the settled call, and the open read's
+      // hold, whose cost is unknown (§82).
+      turns: [
+        {
+          answer: answer.text,
+          status: "succeeded",
+          spentMicrousd: 31234,
+          heldMicrousd: 4000,
+        },
+      ],
     })
   })
 })

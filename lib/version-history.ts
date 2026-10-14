@@ -1,5 +1,10 @@
 export const VERSION_HISTORY = [
   {
+    "version": "0.48.0",
+    "date": "2026-10-14",
+    "summary": "Each turn in Chats and Probar agente shows what it cost and the conversation's total so far, from the provider ledger (§82, migration 77)"
+  },
+  {
     "version": "0.47.0",
     "date": "2026-10-14",
     "summary": "A Gmail action's card shows Gmail's logo and the draft's subject; a reply's review has Conversación, Borrador and Notas tabs; answers render Markdown; runtime 0.9.0 adds draft notes and short answers (§81)"
