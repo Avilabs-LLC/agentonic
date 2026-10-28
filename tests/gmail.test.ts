@@ -50,19 +50,19 @@ it("rejects header injection, unknown tools, URLs as IDs and unsupported attachm
   expect(raw).toContain(`Message-ID: <${id}@agentonic.invalid>`)
   expect(raw).toContain("Content-Type: text/plain")
 })
-it("requires both scopes and offline refresh authority", async () => {
-  vi.stubGlobal(
-    "fetch",
-    vi.fn().mockResolvedValue(
-      Response.json({
-        access_token: "synthetic",
-        expires_in: 3600,
-        scope: GOOGLE_SCOPES[0],
-      })
+it("requires gmail.modify and offline refresh authority", async () => {
+  const consent = (grant: Record<string, unknown>) => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        Response.json({
+          access_token: "synthetic",
+          expires_in: 3600,
+          ...grant,
+        })
+      )
     )
-  )
-  await expect(
-    exchange(
+    return exchange(
       {
         clientId: "test",
         clientSecret: "test",
@@ -72,7 +72,24 @@ it("requires both scopes and offline refresh authority", async () => {
       "code",
       "verifier"
     )
+  }
+  expect(GOOGLE_SCOPES).toEqual([
+    "https://www.googleapis.com/auth/gmail.modify",
+  ])
+  await expect(consent({ scope: GOOGLE_SCOPES[0] })).rejects.toThrow(
+    "reconnect"
+  )
+  // A consent to the scopes asked before §68, without gmail.modify.
+  await expect(
+    consent({
+      refresh_token: "synthetic",
+      scope:
+        "https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.compose",
+    })
   ).rejects.toThrow("reconnect")
+  await expect(
+    consent({ refresh_token: "synthetic", scope: GOOGLE_SCOPES[0] })
+  ).resolves.toMatchObject({ refresh_token: "synthetic" })
 })
 it("never automatically retries a send with an unknown outcome", async () => {
   const fetch = vi.fn().mockRejectedValue(new Error("timeout"))

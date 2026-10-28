@@ -1,5 +1,10 @@
 export const VERSION_HISTORY = [
   {
+    "version": "0.48.1",
+    "date": "2026-10-28",
+    "summary": "Gmail asks Google for gmail.modify alone, ahead of the restricted-scope review; the connect dialog and Herramientas name a programación's unconfirmed sends and drafts (§83)."
+  },
+  {
     "version": "0.48.0",
     "date": "2026-10-14",
     "summary": "Each turn in Chats and Probar agente shows what it cost and the conversation's total so far, from the provider ledger (§82, migration 77)"
