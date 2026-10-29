@@ -173,7 +173,7 @@ export async function finishGmail(url: URL) {
     await command(stored.workspace, "oauth.finish", {
       state: digest(state),
       account,
-      // exchange() refused any consent without every scope, gmail.modify included.
+      // exchange() refused any consent without gmail.modify.
       canLabel: true,
       credential: seal(
         { refreshToken: tokens.refresh_token },

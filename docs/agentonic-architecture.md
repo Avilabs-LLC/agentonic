@@ -2918,3 +2918,20 @@ After rollout, saving US$20 again in Ajustar renovación raises NicolAI-Mail's c
 - `tests/turn-cost.test.ts`: the line's wording, the conversation total only after earlier spend, the held amount and the running total.
 
 **Rollout, 14 October 2026.** Migration 77 was applied with `pnpm db:migrate` before `platform-0.48.0-912f98fdbeae` was installed. The live database has `turn_spend`, `staging_chat_v76`, `preview_command_v76` and the `retrieval_provider_operations_job` index, and the wrappers keep the customer-only grants. Read from the live ledger beforehand, NicolAI-Mail's four successful GPT-6 Astra turns on 14 October cost US$0.54–1.18 each, and the 06:03 turn will show its US$1.10 hold.
+
+## 83. Gmail asks for gmail.modify alone — 28 October 2026
+
+**Owner decision, 28 October.** Google's Verification Center asks why each restricted scope is needed and why narrower ones aren't enough. The Gmail consent asked for `gmail.readonly`, `gmail.compose` and, since §68, `gmail.modify`. `gmail.modify` already allows everything the other two allow, so asking for all three invites a reviewer to call two of them redundant. The owner chose to ask for `gmail.modify` alone.
+
+**Why `gmail.modify` and nothing narrower.** Adding a label to a message (`messages.batchModify`, "Aplicar etiquetas", §68) needs it: `gmail.labels` only manages label definitions, and `gmail.readonly`, `gmail.compose` and `gmail.send` can't change a message's labels. It also covers search, reads, threads, drafts, sending, the thread a reply's card shows (§81) and Aprender mi estilo (§57). Full access (`https://mail.google.com/`) is still not requested: nothing permanently deletes mail except a confirmed draft deletion.
+
+**Change (platform v0.48.1, no migration).**
+
+- `GOOGLE_SCOPES` (`packages/connectors/src/google.ts`) is `gmail.modify` alone. `exchange()` still refuses a consent without it or without a refresh token, so every new connection can label (`can_label`).
+- Connected accounts keep their tokens. Those connected since §68 hold all three scopes; older ones keep reading and sending and reconnect to label, as before.
+- The connect dialog says Google asks for one permission that reads, writes, sends and organizes mail, and that Agentonic only adds labels. It and the Herramientas card now say that sends and drafts a programación authorizes run without confirmation (§58); before, they said every change needed it.
+- The justification for Google, in a full and a short version, is in step 6 of [google-restricted-scope-verification.md](google-restricted-scope-verification.md).
+
+**Rollout.** Install the release. Then, under Google Cloud's Data Access, keep `gmail.modify` and remove `gmail.readonly` and `gmail.compose`, and submit the justification. Connecting a test account then shows one Gmail permission on Google's consent screen (N26).
+
+**Tests.** `tests/gmail.test.ts`, "requires gmail.modify and offline refresh authority": the requested scopes are `gmail.modify` alone; a consent without a refresh token, or with only the scopes asked before §68, is refused; a consent to `gmail.modify` with a refresh token is accepted.
