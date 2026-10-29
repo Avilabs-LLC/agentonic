@@ -659,8 +659,11 @@ function databaseFailure(error: unknown, refused: string) {
 export function brokerFailure(error: unknown): PreviewFailure | TurnFailure {
   if (error instanceof PreviewFailure || error instanceof TurnFailure)
     return error
+  // An account Google asks to reconnect pauses the agent until it is (§84).
   if (error instanceof GoogleError)
-    return new TurnFailure("provider_unavailable", `google_${error.code}`)
+    return error.code === "reconnect"
+      ? new TurnFailure("google_reconnect", "google_reconnect")
+      : new TurnFailure("provider_unavailable", `google_${error.code}`)
   if (
     error instanceof Error &&
     [

@@ -21,6 +21,7 @@ import {
 } from "@agentonic/connectors/secrets"
 import {
   exchange,
+  grantExpiry,
   refresh,
   profile,
   revoke,
@@ -180,6 +181,7 @@ export async function finishGmail(url: URL) {
         `gmail:${pending.connectionId}`,
         config.keys
       ),
+      expiresAt: grantExpiry(tokens),
     })
   } catch {
     await revoke(tokens.refresh_token!).catch(() => false)

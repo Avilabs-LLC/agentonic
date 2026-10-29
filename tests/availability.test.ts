@@ -35,6 +35,7 @@ const deployment = (fields: Partial<Deployment> = {}): Deployment => ({
   status: "running",
   authorized: true,
   online: true,
+  waitingGoogle: false,
   models: [],
   expiresAt: day(4),
   budgetUsd: 0.25,
@@ -90,6 +91,22 @@ it("says an outage is on Agentonic's side and asks nothing of the customer", () 
       { hosts: [{ environment: "azure_staging", available: false }] }
     )
   ).toBe(unavailableOnOurSide)
+})
+
+it("says a running agent is paused until a Google account is reconnected, with no new authorization (§84)", () => {
+  expect(say({ waitingGoogle: true })).toBe(
+    "En pausa: la autorización de Google de una cuenta de sus herramientas venció. Quien la conectó debe volver a conectarla en Configuración → Herramientas; el agente retoma sin autorizar de nuevo. Su uso sigue autorizado hasta el 9/10/2026, 12:00 p. m. UTC."
+  )
+  expect(say({ waitingGoogle: true })).not.toMatch(jargon)
+  expect(
+    customerAgentAvailability({
+      deployments: [deployment({ waitingGoogle: true })],
+    })
+  ).toBe("En pausa hasta reconectar Google")
+  // An outage on our side still reads as one.
+  expect(say({ waitingGoogle: true, online: false })).toContain(
+    unavailableOnOurSide
+  )
 })
 
 it("asks for a new authorization when consent ended, and never guesses other reasons", () => {

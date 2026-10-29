@@ -25,6 +25,8 @@ export type FinishedJob = {
   limited?: string
   /** How long that provider asked the job to wait, when it said. */
   limitWaitMs?: number
+  /** The database refused to record the failure; the host's poll ends it (§84). */
+  recordRefused?: boolean
 }
 
 const iso = (ms: number) => new Date(ms).toISOString()
@@ -66,6 +68,7 @@ export function jobLine(entry: FinishedJob) {
   if (entry.limited && CODE.test(entry.limited)) set("limited", entry.limited)
   if (Number.isSafeInteger(entry.limitWaitMs) && entry.limitWaitMs! >= 0)
     set("limitWaitMs", entry.limitWaitMs)
+  if (failed && entry.recordRefused) set("record", "refused")
   return line
 }
 

@@ -49,6 +49,14 @@ describe("Configuración › Google Drive", () => {
         status: "reconnect",
       })
     ).toContain("Necesita volver a conectarse")
+    // While the Google app is in Testing, until when Google authorizes it (§84).
+    expect(
+      html(DriveAccount, {
+        account: "drive@example.invalid",
+        status: "connected",
+        expiresAt: "2099-01-01T12:00:00.000Z",
+      })
+    ).toContain("Autorización de Google hasta el 1/1/2099")
   })
 
   it("lists the agent's files with their type and who added them", () => {

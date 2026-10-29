@@ -9,6 +9,8 @@ const known = new Set([
   "storage_unavailable",
   "configuration_required",
   "lease_lost",
+  // Google refused the account's authorization (§84).
+  "google_reconnect",
 ])
 export class PreviewFailure extends Error {
   constructor(

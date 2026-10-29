@@ -96,4 +96,6 @@ export const previewErrors: Record<string, string> = {
     "El proveedor de IA rechazó o no respondió la solicitud, así que no se pudo completar la respuesta. No se reintentará automáticamente.",
   configuration_required: "El servicio de pruebas aún no está configurado.",
   lease_lost: "La respuesta se interrumpió o perdió su autorización.",
+  google_reconnect:
+    "La autorización de Google de esta cuenta venció. Vuelve a conectarla en Configuración → Herramientas y abre una nueva prueba.",
 }

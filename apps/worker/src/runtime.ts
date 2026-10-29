@@ -659,7 +659,9 @@ export async function runPreview(
           error instanceof PreviewFailure
             ? error
             : error instanceof GoogleError
-              ? "provider_unavailable"
+              ? error.code === "reconnect"
+                ? "google_reconnect"
+                : "provider_unavailable"
               : error instanceof Error &&
                   [
                     "budget_exhausted",

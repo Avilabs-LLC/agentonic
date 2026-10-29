@@ -27,6 +27,8 @@ export const deploymentLabels: Record<string, string> = {
   queued: "Activación en cola",
   preparing: "Preparando despliegue",
   running: "En funcionamiento",
+  // Running, but an account behind one of its Google tools must be reconnected (§84).
+  waiting_reconnect: "Esperando reconexión",
   offline: "Sin conexión",
   stopped: "Detenido",
   failed: "No se pudo activar",
@@ -73,6 +75,8 @@ export const lifecycleState = z.object({
       status: z.string(),
       authorized: z.boolean(),
       online: z.boolean(),
+      /** A Gmail or Drive account behind its tools must be reconnected (§84). */
+      waitingGoogle: z.boolean().default(false),
       models: z.array(modelConfiguration).default([]),
       expiresAt: z.string(),
       budgetUsd: z.number(),
@@ -289,6 +293,11 @@ export const lifecycleErrors: Record<string, string> = {
   lease_lost: "La respuesta se interrumpió. Puedes enviar un nuevo mensaje.",
   runtime_mismatch:
     "No se pudo completar la respuesta por un problema de nuestro lado. Puedes enviar un nuevo mensaje.",
+  // §84: Google refused an account behind the agent's tools, or its deployment stopped mid-turn.
+  google_reconnect:
+    "La autorización de Google de este agente venció. Quien conectó la cuenta debe volver a conectarla en Configuración → Herramientas; el agente retoma al reconectar, sin autorizar de nuevo.",
+  deployment_stopped:
+    "El agente se detuvo antes de terminar la respuesta. Puedes enviar un nuevo mensaje cuando vuelva a estar disponible.",
   too_early: "Puedes renovar a mano en los últimos 10 días de la autorización.",
   budget_required: "Elige un presupuesto por período antes de renovar.",
   ...renewalBlockedLabels,

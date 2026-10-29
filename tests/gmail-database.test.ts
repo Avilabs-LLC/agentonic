@@ -634,3 +634,53 @@ it("sweeps expired Gmail data for every workspace, sparing writes still in fligh
     oauthStates: 0,
   })
 })
+it("keeps an account's chosen actions when Google asks to reconnect, and clears them on disconnect (§84)", async () => {
+  const p = await privatePreview()
+  // The preview worker marks the reconnect when Google refuses the token.
+  await p.tool("gmail-reconnect", {
+    connectionId: id(501),
+    operation: "gmail.read",
+  })
+  const connection = async () =>
+    (
+      await f.sql(
+        "SELECT status,operations,credential_ciphertext FROM agentonic.gmail_connections WHERE id=$1",
+        [id(501)]
+      )
+    ).rows[0]
+  expect(await connection()).toEqual({
+    status: "reconnect",
+    operations: ["gmail.search", "gmail.read", "gmail.send"],
+    credential_ciphertext: null,
+  })
+  // Nothing reads the mailbox meanwhile.
+  await expect(
+    p.tool("gmail-read", { connectionId: id(501), operation: "gmail.read" })
+  ).rejects.toThrow()
+  await f.actor()
+  await command("disconnect", { connectionId: id(501) })
+  expect(await connection()).toMatchObject({
+    status: "disconnected",
+    operations: [],
+  })
+})
+it("records that Google refused the account when a preview fails on it (§84)", async () => {
+  const p = await privatePreview()
+  await f.db.exec("RESET ROLE; SET LOCAL ROLE agentonic_worker")
+  expect(
+    await rpc("rag_worker", [
+      "fail",
+      p.job.id,
+      p.job.token,
+      JSON.stringify({ code: "google_reconnect" }),
+    ])
+  ).toMatchObject({ ok: true })
+  expect(
+    (
+      await f.sql(
+        "SELECT status,error_code FROM agentonic.background_jobs WHERE id=$1",
+        [p.job.id]
+      )
+    ).rows
+  ).toEqual([{ status: "failed", error_code: "google_reconnect" }])
+})

@@ -106,6 +106,8 @@ describe("Drive tools", () => {
           status: "connected",
           operations: [],
           files: [],
+          // No expiry was sent with this consent (§84).
+          expiresAt: null,
         },
       ],
     })
@@ -269,9 +271,23 @@ describe("Drive tools", () => {
         )
       ).rows
     ).toEqual([{ name: "drive.files.read", connection: tools }])
+    // An account Google asks to reconnect still stands behind the version's
+    // grant, but nothing reaches Drive until it is reconnected (§84).
+    const authority = async () =>
+      (
+        await f.sql(
+          "SELECT agentonic.drive_deployment_scope(r,$2) scope,agentonic.drive_allowed(c,$2,r.agent_id,'drive.files.read') allowed FROM agentonic.configuration_releases r,agentonic.drive_connections c WHERE r.id=$1 AND c.id=$3",
+          [frozen.id, member, tools]
+        )
+      ).rows[0]
+    expect(await authority()).toEqual({ scope: true, allowed: true })
+    await f.actor()
+    await command("reconnect", { connectionId: tools })
+    expect(await authority()).toEqual({ scope: true, allowed: false })
     await f.actor()
     await command("disconnect", { connectionId: tools })
     expect((await draft(["drive.files.read"], 1)).ok).toBe(false)
+    expect(await authority()).toEqual({ scope: false, allowed: false })
   })
 
   async function preview(

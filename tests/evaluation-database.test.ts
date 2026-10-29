@@ -2433,13 +2433,27 @@ async function modelReview() {
     "202610060045_general_connections",
     "202610060046_usage_events",
     "202610060047_evaluation_tool_cases",
+    "202610060048_admin_operations",
+    "202610060049_invitation_signup",
+    "202610060050_agent_versions",
+    "202610060051_agent_version_label",
     "202610070052_registration_validity",
+    "202610070053_deployment_versions",
+    "202610070054_gmail_retention_sweep",
+    "202610070055_deployment_authorization_state",
+    "202610070056_job_queue_times",
+    "202610080057_member_emails",
+    "202610080058_admin_agent_resources",
+    "202610080059_display_names",
     "202610080060_evaluation_lessons",
     "202610080061_style_guides",
     "202610080062_agent_schedules",
     "202610080063_ongoing_deployments",
     "202610090064_careful_grading",
+    "202610090065_google_drive",
     "202610090066_single_authorization",
+    "202610090067_superseded_reviews",
+    "202610090068_staff_team",
     "202610130069_staging_open_reservations",
     "202610130070_mailbox_batch_turns",
     "202610130071_mailbox_followups",
@@ -2450,6 +2464,7 @@ async function modelReview() {
     "202610130075_codex_models",
     "202610140076_period_budget_now",
     "202610140077_turn_costs",
+    "202610290078_google_reconnect_pause",
   ])
     await db.exec(
       readFileSync(
@@ -3408,6 +3423,251 @@ describe("scheduled jobs (§58)", () => {
         )
       ).rows
     ).toEqual([{ status: "cancelled", arguments_ciphertext: null }])
+  })
+
+  describe("an expired Google authorization (§84)", () => {
+    const connection = id(770)
+    const deployment = async (dep: string) =>
+      (
+        await sql(
+          "SELECT d.status,d.error_code,agentonic.deployment_authorized(d) authorized,agentonic.deployment_waiting_google(d) waiting FROM agentonic.deployments d WHERE d.id=$1",
+          [dep]
+        )
+      ).rows[0]
+    const turns = async (conversation: unknown) =>
+      (
+        await sql(
+          "SELECT status,error_code FROM agentonic.staging_turns WHERE conversation_id=$1 ORDER BY number",
+          [conversation]
+        )
+      ).rows
+    const reconnect = async (state: string, expiresAt?: string) => {
+      await actor()
+      await gmailCommand("oauth.start", {
+        agentId: a,
+        connectionId: id(Number(state.slice(-4))),
+        reconnect: connection,
+        state,
+        verifier: "opaque",
+      })
+      await gmailCommand("oauth.consume", { state })
+      return gmailCommand("oauth.finish", {
+        state,
+        account: "synthetic@example.invalid",
+        credential: "opaque-new",
+        canLabel: true,
+        ...(expiresAt ? { expiresAt } : {}),
+      })
+    }
+
+    it("pauses the deployment, keeping its authority and chosen actions, and resumes on reconnect", async () => {
+      const p = await running(true)
+      const conversation = await chat("start", {
+        deploymentId: p.deploymentId,
+        title: "Correo",
+      })
+      // Google refused the token during a turn: the worker marks a reconnect.
+      await gmailCommand("reconnect", { connectionId: connection })
+      expect(
+        (
+          await sql(
+            "SELECT status,operations,credential_ciphertext FROM agentonic.gmail_connections WHERE id=$1",
+            [connection]
+          )
+        ).rows
+      ).toEqual([
+        {
+          status: "reconnect",
+          operations: ["gmail.read", "gmail.send"],
+          credential_ciphertext: null,
+        },
+      ])
+      expect(await deployment(p.deploymentId)).toMatchObject({
+        status: "running",
+        authorized: true,
+        waiting: true,
+      })
+      // The host's poll keeps it running.
+      await hostCall("poll")
+      expect(await deployment(p.deploymentId)).toMatchObject({
+        status: "running",
+        error_code: null,
+      })
+      // Its chats take no turn, and nothing is queued.
+      await actor()
+      expect(
+        await chat("turn", {
+          conversationId: conversation.id,
+          requestId: id(1601),
+          query: "Resume mi correo",
+        })
+      ).toEqual({ ok: false, code: "google_reconnect" })
+      expect(await turns(conversation.id)).toEqual([])
+      // The agent page shows it waiting.
+      await actor()
+      const life = (
+        await db.query<{
+          r: { deployments: Record<string, unknown>[] }
+        }>("SELECT agentonic.lifecycle_state($1) r", [a])
+      ).rows[0]!.r
+      expect(life.deployments[0]).toMatchObject({
+        status: "running",
+        authorized: true,
+        waitingGoogle: true,
+      })
+      // And so does Admin's Despliegues.
+      await actor(staff, w, "agentonic_admin")
+      expect(
+        (
+          await db.query<{
+            r: { deployments: { id: string; status: string }[] }
+          }>("SELECT agentonic.operations_deployments() r")
+        ).rows[0]!.r.deployments.find((d) => d.id === p.deploymentId)
+      ).toMatchObject({ status: "waiting_reconnect" })
+      // Reconnecting the same account resumes it, with its actions.
+      const expiresAt = new Date(Date.now() + 7 * 86400_000).toISOString()
+      await reconnect("d".repeat(60) + "1602", expiresAt)
+      expect(
+        (
+          (await gmailCommand("list", { agentId: a })).connections as Record<
+            string,
+            unknown
+          >[]
+        )[0]
+      ).toMatchObject({
+        status: "connected",
+        operations: ["gmail.read", "gmail.send"],
+      })
+      expect(await deployment(p.deploymentId)).toMatchObject({
+        status: "running",
+        authorized: true,
+        waiting: false,
+      })
+      await actor()
+      expect(
+        await chat("turn", {
+          conversationId: conversation.id,
+          requestId: id(1603),
+          query: "Resume mi correo",
+        })
+      ).toMatchObject({ ok: true })
+    })
+
+    it("records when Google's authorization ends and waits once that date passes", async () => {
+      const p = await running(true)
+      const expiresAt = new Date(Date.now() + 7 * 86400_000)
+      await reconnect("e".repeat(60) + "1611", expiresAt.toISOString())
+      const listed = (
+        (await gmailCommand("list", { agentId: a })).connections as {
+          expiresAt: string
+        }[]
+      )[0]!
+      expect(Date.parse(listed.expiresAt)).toBe(expiresAt.getTime())
+      expect(await deployment(p.deploymentId)).toMatchObject({ waiting: false })
+      await sql(
+        "UPDATE agentonic.connections SET credential_expires_at=clock_timestamp()-interval '1 second' WHERE id=$1",
+        [connection]
+      )
+      expect(await deployment(p.deploymentId)).toMatchObject({
+        status: "running",
+        authorized: true,
+        waiting: true,
+      })
+      // A date in the past, or too far ahead, is refused.
+      await expect(
+        reconnect(
+          "f".repeat(60) + "1612",
+          new Date(Date.now() - 1000).toISOString()
+        )
+      ).rejects.toThrow()
+      await expect(
+        reconnect(
+          "f".repeat(60) + "1613",
+          new Date(Date.now() + 500 * 86400_000).toISOString()
+        )
+      ).rejects.toThrow()
+    })
+
+    it("lets a copy record its turn's failure after authority is lost, and the poll ends the rest", async () => {
+      const p = await running(true)
+      const start = (title: string) =>
+        chat("start", { deploymentId: p.deploymentId, title })
+      const ask = (conversationId: unknown, n: number) =>
+        chat("turn", { conversationId, requestId: id(n), query: "Correo" })
+      const [first, second, third] = [
+        await start("Uno"),
+        await start("Dos"),
+        await start("Tres"),
+      ]
+      await ask(first.id, 1621)
+      const failing = (await stagingWork(
+        p.deploymentId,
+        "claim"
+      )) as unknown as Job
+      await actor()
+      await ask(second.id, 1622)
+      const leased = (await stagingWork(
+        p.deploymentId,
+        "claim"
+      )) as unknown as Job
+      await actor()
+      await ask(third.id, 1623)
+      // Disconnecting ends the deployment's authority at once.
+      await actor()
+      await gmailCommand("disconnect", { connectionId: connection })
+      expect(await deployment(p.deploymentId)).toMatchObject({
+        authorized: false,
+      })
+      await expect(stagingWork(p.deploymentId, "claim")).rejects.toThrow()
+      // The copy still records why its turn failed.
+      expect(
+        await stagingWork(p.deploymentId, "fail", failing, {
+          code: "google_reconnect",
+        })
+      ).toEqual({ ok: true })
+      expect(await turns(first.id)).toEqual([
+        { status: "failed", error_code: "google_reconnect" },
+      ])
+      // The poll stops the deployment and ends its queued turn.
+      await hostCall("poll")
+      expect(await deployment(p.deploymentId)).toMatchObject({
+        status: "stopped",
+        error_code: "authorization_changed",
+      })
+      expect(await turns(third.id)).toEqual([
+        { status: "failed", error_code: "deployment_stopped" },
+      ])
+      // A running turn ends once its lease has run out.
+      expect(await turns(second.id)).toEqual([
+        { status: "running", error_code: null },
+      ])
+      await expect(
+        stagingWork(p.deploymentId, "fail", leased, { code: "lease_lost" })
+      ).rejects.toThrow()
+      await sql(
+        "UPDATE agentonic.staging_turns SET lease_until=clock_timestamp()-interval '1 second' WHERE id=$1",
+        [leased.id]
+      )
+      await hostCall("poll")
+      expect(await turns(second.id)).toEqual([
+        { status: "failed", error_code: "deployment_stopped" },
+      ])
+    })
+
+    it("skips a scheduled run while the deployment waits for Google", async () => {
+      await running(true)
+      const made = await schedule("create", {
+        ...base,
+        agentId: a,
+        requestId: id(1631),
+      })
+      await gmailCommand("reconnect", { connectionId: connection })
+      await actor()
+      expect(await schedule("run", { id: made.id })).toMatchObject({
+        status: "skipped",
+        reason: "google_reconnect",
+      })
+    })
   })
 })
 

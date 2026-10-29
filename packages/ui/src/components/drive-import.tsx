@@ -1,5 +1,6 @@
 "use client"
 import { useState } from "react"
+import { googleGrantState } from "@agentonic/contracts/google-grant"
 import { useRouter } from "next/navigation"
 import {
   ExternalLinkIcon,
@@ -161,9 +162,13 @@ export function DriveImport({
             key={c.id}
             className="flex flex-wrap items-center justify-between gap-4 rounded-lg border p-4"
           >
-            <DriveAccount account={c.account} status={c.status} />
+            <DriveAccount
+              account={c.account}
+              status={c.status}
+              expiresAt={c.expiresAt}
+            />
             <div className="flex flex-wrap gap-2">
-              {c.status !== "connected" && (
+              {googleGrantState(c.status, c.expiresAt).kind !== "connected" && (
                 <Button
                   type="button"
                   variant="outline"

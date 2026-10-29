@@ -16,7 +16,7 @@ export const unavailableOnOurSide =
   "No está disponible por ahora por un problema de nuestro lado. No tienes que hacer nada."
 
 // The state a deployment shows: lost authorization and a silent service
-// override the stored status.
+// override the stored status, and a running one may wait for Google (§84).
 export function deploymentDisplayStatus(d: Deployment) {
   if (
     !d.authorized &&
@@ -24,6 +24,7 @@ export function deploymentDisplayStatus(d: Deployment) {
   )
     return "unauthorized"
   if (d.status === "running" && !d.online) return "offline"
+  if (d.status === "running" && d.waitingGoogle) return "waiting_reconnect"
   return d.status
 }
 
@@ -49,6 +50,8 @@ export function customerAvailability(
       return `Disponible para tus conversaciones hasta el ${at(d.expiresAt)}. Para seguir usándolo después, ${again}.`
     case "offline":
       return `${unavailableOnOurSide} Su uso sigue autorizado hasta el ${at(d.expiresAt)}.`
+    case "waiting_reconnect":
+      return `En pausa: la autorización de Google de una cuenta de sus herramientas venció. Quien la conectó debe volver a conectarla en Configuración → Herramientas; el agente retoma sin autorizar de nuevo. Su uso sigue autorizado hasta el ${at(d.expiresAt)}.`
     case "unauthorized":
       if (Date.parse(d.expiresAt) <= now.getTime())
         return `La autorización de uso terminó el ${at(d.expiresAt)}. Para seguir usándolo, ${again}.`
@@ -89,6 +92,8 @@ export function customerAgentAvailability(
     .map((s) => s.d.expiresAt)
     .sort((a, b) => Date.parse(a) - Date.parse(b))
   if (live.length) return `Disponible hasta el ${at(live.at(-1)!)}`
+  if (statuses.some((s) => s.status === "waiting_reconnect"))
+    return "En pausa hasta reconectar Google"
   if (
     statuses.some(
       (s) =>

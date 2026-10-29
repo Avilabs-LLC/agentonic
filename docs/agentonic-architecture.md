@@ -2939,3 +2939,39 @@ After rollout, saving US$20 again in Ajustar renovación raises NicolAI-Mail's c
 Next, under Google Cloud's Data Access, the owner keeps `gmail.modify`, removes `gmail.readonly` and `gmail.compose`, and submits the justification. Connecting a test account then shows one Gmail permission on Google's consent screen (N26).
 
 **Tests.** `tests/gmail.test.ts`, "requires gmail.modify and offline refresh authority": the requested scopes are `gmail.modify` alone; a consent without a refresh token, or with only the scopes asked before §68, is refused; a consent to `gmail.modify` with a refresh token is accepted.
+
+## 84. An expired Google authorization pauses the agent — 29 October 2026
+
+**What happened, 22 October.** The Google app is still in Testing, so every Gmail and Drive consent lasts 7 days. Nico reconnected Gmail on 13 October. At 07:03 on 22 October a NicolAI-Mail turn asked Google for a fresh token and was refused (`staging_turn_job_failed … google_reconnect`). Marking the reconnect cleared the account's chosen Gmail actions, so `deployment_authorized` turned false at once. The turn's own `fail` was then refused, and the worker swallowed that. The copy stopped (`copy_refused`), the next host poll stopped the deployment (`authorization_changed`), and the turn stayed `running`. The conversation answered every new message with `busy`, and getting the agent back meant choosing the actions again and authorizing the version again. The turn's reservations were settled; no budget was held.
+
+**Owner decisions, 29 October.** The app stays in Testing for now. While it does, show when Google's authorization ends. Drive gets the same treatment as Gmail. While an agent waits for a reconnect, new messages are refused with a reconnect message.
+
+**Change (migration 78, platform v0.50.0).**
+
+- **A refused token keeps the chosen actions.** A trigger on `gmail_connections` keeps `operations` when a connection is marked for reconnect, in all five places that mark it. Only disconnecting clears them; Drive already kept them.
+- **Waiting for a reconnect pauses instead of stopping.** `gmail_grant_standing` and `drive_grant_standing` accept an account in `reconnect` (same owner, same agent, the action still chosen), and the two deployment scopes use them. Mailbox and Drive access still go through `gmail_allowed` and `drive_allowed`, which need a credential, so nothing is read or written while the agent waits. Reconnecting the same account resumes the same deployment; `oauth.finish` already refuses another account.
+- **`deployment_waiting_google(d)`** is true while an account behind one of the version's frozen Gmail or Drive grants is in `reconnect`, or past its recorded expiry.
+  - `staging_chat` `turn` returns `google_reconnect` before a turn is created, so nothing is queued or spent.
+  - A scheduled run skips with reason `google_reconnect`.
+  - The agent page (`lifecycle_state` adds `waitingGoogle`), the agent lists and Admin's views show "Esperando reconexión", a new amber badge with the pause icon. All ten earlier tones were taken in the deployment family, so `amber` joins the shared palette (UI contract §3).
+- **A turn always ends.**
+  - The staging worker accepts `fail` for a turn its copy still holds, even after the deployment has lost authority. It only closes that lease, and `google_reconnect` is a recorded code.
+  - Every full host poll fails the turns still queued, or running with an expired lease, of the host's deployments that no longer run (`deployment_stopped`), including those the same poll has just stopped.
+  - The worker records `google_reconnect` instead of `provider_unavailable` when Google refuses an account, and logs `record: refused` when the database refuses to record a failure. Probar agente records the same reason.
+- **The expiry date.** While `GOOGLE_TESTING` is set (`packages/connectors/src/google.ts`), `grantExpiry` dates a consent 7 days ahead, or earlier when Google sends `refresh_token_expires_in`. Gmail's and Drive's `oauth.finish` store it as `connections.credential_expires_at`, and their lists return it. The account cards show "Autorización de Google hasta el …", warn in the last 24 hours, and ask for a reconnect once the date has passed. Connections made before this change have no date.
+- **Copy (es-VE):** `google_reconnect` and `deployment_stopped` in `lifecycleErrors`, `google_reconnect` in `previewErrors`, and the schedule reason "Google pide volver a conectar la cuenta".
+
+**Not changed.** NicolAI-Mail's deployment stopped under the old rule and its connection lost its actions before this change. Nico reconnects Gmail, chooses the actions again and authorizes the version once more (N27). Moving the Google app to In production ends the 7-day limit for later consents; set `GOOGLE_TESTING` to false in the same release (N26).
+
+**Rollout.** Apply migration 78 with `pnpm db:migrate`, then install platform 0.50.0. The worker change also ships in the staging broker, with the evaluator if its bundle includes it. The first full poll after rollout fails turn `d5bfac75` with `deployment_stopped`.
+
+**Tests.**
+- `tests/evaluation-database.test.ts`, "an expired Google authorization (§84)", now applied with every migration from 33 on:
+  - a reconnect keeps the deployment running and authorized with its actions, refuses chat turns without queueing one, shows `waitingGoogle` and Admin's `waiting_reconnect`, and the same account resumes it;
+  - the expiry is recorded and listed, a passed date pauses, and a past or far date is refused;
+  - after authority is lost a copy still records `google_reconnect`, and the poll ends the queued turn and, once its lease runs out, the running one with `deployment_stopped`;
+  - a scheduled run skips with `google_reconnect`.
+- `tests/gmail-database.test.ts`: the preview worker's reconnect keeps the actions and blocks reads, and disconnecting clears them; a preview records `google_reconnect`.
+- `tests/drive-database.test.ts`: a Drive account in `reconnect` keeps `drive_deployment_scope` while `drive_allowed` is false.
+- `tests/google-reconnect.test.ts`: the broker and worker failure codes, the log line, `grantExpiry` and `exchange`, and the card wording.
+- `tests/availability.test.ts`, `tests/drive-render.test.ts`, `tests/style-learning-render.test.ts`: the paused availability text and the cards' dates.

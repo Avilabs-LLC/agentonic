@@ -46,7 +46,26 @@ const token = z.object({
   refresh_token: z.string().optional(),
   scope: z.string().optional(),
   expires_in: z.number().positive(),
+  // Sent when the person granted access for a limited time.
+  refresh_token_expires_in: z.number().positive().optional(),
 })
+// While the Google app is in Testing (B5, N26), each consent lasts 7 days.
+// Set to false once the app is In production: later consents no longer expire.
+export const GOOGLE_TESTING = true
+const TESTING_GRANT_MS = 7 * 24 * 60 * 60 * 1000
+/** When a consent's authorization ends, if it does: Testing's 7 days or Google's own lifetime, whichever is earlier (§84). */
+export function grantExpiry(
+  tokens: { refresh_token_expires_in?: number },
+  now = Date.now()
+) {
+  const ends = [
+    ...(GOOGLE_TESTING ? [now + TESTING_GRANT_MS] : []),
+    ...(tokens.refresh_token_expires_in
+      ? [now + tokens.refresh_token_expires_in * 1000]
+      : []),
+  ]
+  return ends.length ? new Date(Math.min(...ends)).toISOString() : null
+}
 /** The authorization code's tokens; `scopes` are the ones the connection needs (Gmail's by default). */
 export async function exchange(
   config: GoogleConfig,
