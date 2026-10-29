@@ -2934,6 +2934,8 @@ After rollout, saving US$20 again in Ajustar renovación raises NicolAI-Mail's c
 - The connect dialog says Google asks for one permission that reads, writes, sends and organizes mail, and that Agentonic only adds labels. It and the Herramientas card now say that sends and drafts a programación authorizes run without confirmation (§58); before, they said every change needed it.
 - The justification for Google, in a full and a short version, is in step 6 of [google-restricted-scope-verification.md](google-restricted-scope-verification.md).
 
-**Rollout.** Install the release. Then, under Google Cloud's Data Access, keep `gmail.modify` and remove `gmail.readonly` and `gmail.compose`, and submit the justification. Connecting a test account then shows one Gmail permission on Google's consent screen (N26).
+**Rollout, 29 October 2026.** `platform-0.48.1-42bfec3acf8f` installed from `42bfec3` on `main` (release `f1c4fb0a`), with no migration. The apps and the knowledge worker restarted healthy and `hosted:check` passed. The installed bundle names `gmail.modify` and neither `gmail.readonly` nor `gmail.compose`. The only turn marked running had been stuck since 22 October on the staging broker, which this install doesn't restart.
+
+Next, under Google Cloud's Data Access, the owner keeps `gmail.modify`, removes `gmail.readonly` and `gmail.compose`, and submits the justification. Connecting a test account then shows one Gmail permission on Google's consent screen (N26).
 
 **Tests.** `tests/gmail.test.ts`, "requires gmail.modify and offline refresh authority": the requested scopes are `gmail.modify` alone; a consent without a refresh token, or with only the scopes asked before §68, is refused; a consent to `gmail.modify` with a refresh token is accepted.
