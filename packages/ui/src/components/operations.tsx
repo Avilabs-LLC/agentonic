@@ -50,10 +50,11 @@ import {
   agentVersionColumns,
 } from "@workspace/ui/components/agent-versions"
 import { CardEmptyState } from "@workspace/ui/components/card-empty-state"
-import { MetricTile } from "@workspace/ui/components/metric-tile"
+import { MetricGroup } from "@workspace/ui/components/metric-tile"
 import {
   LocalServersDialog,
   registrationValue,
+  serverKinds,
   ServerTilesGrid,
   unregistered,
   type Environment,
@@ -436,7 +437,7 @@ type ServerEvaluator = {
   runtimes: Runtime[]
 }
 type Servers = { hosts: ServerHost[]; evaluators: ServerEvaluator[] }
-// What one place runs, as four tiles: each kind's registration, then its
+// What one place runs, as two cards: each kind's registration, then its
 // release with the newest runtime. Despliegues shows vm-agents-01; Local
 // (desarrollo) opens from the page header.
 export function OperationsServerTiles({
@@ -446,7 +447,7 @@ export function OperationsServerTiles({
   compact = false,
 }: Servers & {
   environment: Environment
-  /** Two columns, for the Local (desarrollo) dialog. */
+  /** One card per row, for the Local (desarrollo) dialog. */
   compact?: boolean
 }) {
   const host = hosts.find((h) => h.environment === environment)
@@ -457,73 +458,73 @@ export function OperationsServerTiles({
     : []
   return (
     <ServerTilesGrid compact={compact}>
-      <MetricTile
-        label="Servidor de agentes"
-        {...registrationValue(host?.state)}
-        detail={
-          host
-            ? host.heartbeatAt
-              ? `Reportó el ${utc(host.heartbeatAt)}`
-              : "Sin reportes"
-            : null
-        }
+      <MetricGroup
+        {...serverKinds.agents}
+        metrics={[
+          {
+            label: "Servidor",
+            ...registrationValue(host?.state),
+            detail: host
+              ? host.heartbeatAt
+                ? `Reportó el ${utc(host.heartbeatAt)}`
+                : "Sin reportes"
+              : null,
+          },
+          {
+            label: "Trabajador",
+            value: host ? (
+              <>
+                {host.current}
+                {others.length > 1 && (
+                  <>
+                    {" "}
+                    <MoreList
+                      count={others.length - 1}
+                      title={`Trabajadores en servicio en ${place}`}
+                      description="Según la última verificación, empezando por el actual."
+                      items={others}
+                      className="text-sm"
+                    />
+                  </>
+                )}
+              </>
+            ) : (
+              unregistered.value
+            ),
+            tone: host ? undefined : unregistered.tone,
+            detail: host && (
+              <RuntimesLine
+                runtimes={host.runtimes}
+                place={`Agentes · ${place}`}
+              />
+            ),
+          },
+        ]}
       />
-      <MetricTile
-        label="Trabajador"
-        value={
-          host ? (
-            <>
-              {host.current}
-              {others.length > 1 && (
-                <>
-                  {" "}
-                  <MoreList
-                    count={others.length - 1}
-                    title={`Trabajadores en servicio en ${place}`}
-                    description="Según la última verificación, empezando por el actual."
-                    items={others}
-                    className="text-sm"
-                  />
-                </>
-              )}
-            </>
-          ) : (
-            unregistered.value
-          )
-        }
-        tone={host ? undefined : unregistered.tone}
-        detail={
-          host && (
-            <RuntimesLine
-              runtimes={host.runtimes}
-              place={`Agentes · ${place}`}
-            />
-          )
-        }
-      />
-      <MetricTile
-        label="Servidor de evaluaciones"
-        {...registrationValue(evaluator?.state)}
-        detail={
-          evaluator
-            ? evaluator.toolFixtures
-              ? "Con pruebas de herramientas"
-              : "Sin pruebas de herramientas"
-            : null
-        }
-      />
-      <MetricTile
-        label="Evaluador"
-        value={evaluator?.current ?? unregistered.value}
-        tone={evaluator ? undefined : unregistered.tone}
-        detail={
-          evaluator && (
-            <RuntimesLine
-              runtimes={evaluator.runtimes}
-              place={`Evaluaciones · ${place}`}
-            />
-          )
-        }
+      <MetricGroup
+        {...serverKinds.evaluations}
+        metrics={[
+          {
+            label: "Servidor",
+            ...registrationValue(evaluator?.state),
+            detail: evaluator
+              ? evaluator.toolFixtures
+                ? "Con pruebas de herramientas"
+                : "Sin pruebas de herramientas"
+              : null,
+          },
+          {
+            label: "Evaluador",
+            value: evaluator?.current ?? unregistered.value,
+            tone: evaluator ? undefined : unregistered.tone,
+            detail: evaluator && (
+              <RuntimesLine
+                runtimes={evaluator.runtimes}
+                place={`Evaluaciones · ${place}`}
+              />
+            ),
+          },
+        ]}
       />
     </ServerTilesGrid>
   )

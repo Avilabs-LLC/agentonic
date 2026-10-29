@@ -1,5 +1,4 @@
 "use client"
-import { Fragment } from "react"
 import type { ColumnDef } from "@tanstack/react-table"
 import { formatUtcParts } from "@agentonic/contracts/format"
 import {
@@ -22,10 +21,11 @@ import {
   sortableHeader,
 } from "@workspace/ui/components/table-cells"
 import { AgentLink } from "@workspace/ui/components/agent-versions"
-import { MetricTile } from "@workspace/ui/components/metric-tile"
+import { MetricGroup } from "@workspace/ui/components/metric-tile"
 import {
   LocalServersDialog,
   registrationValue,
+  serverKinds,
   ServerTilesGrid,
   unregistered,
   type Environment,
@@ -48,7 +48,7 @@ function deadline(r: Registration | undefined, now: string) {
     ? { value: `Venció el ${date}`, tone: iconTones.warning, detail: time }
     : { value: date, detail: time }
 }
-// One place's verifications as four tiles: each kind's state with its last
+// One place's verifications as two cards: each kind's state with its last
 // verification, then its deadline. Vencimientos shows vm-agents-01; Local
 // (desarrollo) opens from the page header.
 export function RegistrationTiles({
@@ -60,29 +60,33 @@ export function RegistrationTiles({
   registrations: RuntimeRegistrations
   now: string
   environment: Environment
-  /** Two columns, for the Local (desarrollo) dialog. */
+  /** One card per row, for the Local (desarrollo) dialog. */
   compact?: boolean
 }) {
   const kinds = [
-    { name: "agentes", r: registrations.hosts },
-    { name: "evaluaciones", r: registrations.evaluators },
-  ].map(({ name, r }) => ({
-    name,
+    { kind: serverKinds.agents, r: registrations.hosts },
+    { kind: serverKinds.evaluations, r: registrations.evaluators },
+  ].map(({ kind, r }) => ({
+    kind,
     r: r.find((x) => x.environment === environment),
   }))
   return (
     <ServerTilesGrid compact={compact}>
-      {kinds.map(({ name, r }) => (
-        <Fragment key={name}>
-          <MetricTile
-            label={`Servidor de ${name}`}
-            {...registrationValue(r?.state)}
-            detail={
-              r ? `Verificada el ${formatUtcParts(r.verifiedAt).date}` : null
-            }
-          />
-          <MetricTile label={`Vencimiento de ${name}`} {...deadline(r, now)} />
-        </Fragment>
+      {kinds.map(({ kind, r }) => (
+        <MetricGroup
+          key={kind.title}
+          {...kind}
+          metrics={[
+            {
+              label: "Servidor",
+              ...registrationValue(r?.state),
+              detail: r
+                ? `Verificada el ${formatUtcParts(r.verifiedAt).date}`
+                : null,
+            },
+            { label: "Vencimiento", ...deadline(r, now) },
+          ]}
+        />
       ))}
     </ServerTilesGrid>
   )

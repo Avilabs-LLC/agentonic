@@ -1,6 +1,6 @@
 # Agentonic: current state
 
-**As of 28 October 2026 · platform v0.48.1 · nonproduction only.** A short summary of what runs where, what works and what doesn't exist yet. [The architecture record](agentonic-architecture.md) keeps the full, dated history. If the two disagree about the present, fix this page. Update it whenever a change alters what runs where.
+**As of 29 October 2026 · platform v0.49.0 · nonproduction only.** A short summary of what runs where, what works and what doesn't exist yet. [The architecture record](agentonic-architecture.md) keeps the full, dated history. If the two disagree about the present, fix this page. Update it whenever a change alters what runs where.
 
 ## What runs where
 
@@ -56,7 +56,7 @@ The Admin app has **Revisiones** (submissions, receipts, renewal and activation)
 
 - Approving a version closes the open reviews of older versions of the same agent as "Reemplazada", the way a withdrawal does. Reviews already left behind are closed by the migration.
 - In Revisiones, **Ver usuario** shows who sent a review and where they belong. **Cambiar estado** offers only the changes the database allows, with a comment for the client.
-- Despliegues and Vencimientos showed servers as a grid. Since v0.41.0 (Despliegues) and v0.42.0 (Vencimientos), each shows only vm-agents-01, as four metric tiles, and Local (desarrollo) opens in a dialog from the page header.
+- Despliegues and Vencimientos showed servers as a grid. Since v0.41.0 (Despliegues) and v0.42.0 (Vencimientos), each shows only vm-agents-01, and Local (desarrollo) opens in a dialog from the page header. Since v0.49.0 they show two cards, Agentes and Evaluaciones, each with its icon and two metrics side by side.
 - The agent page shows the latest version's tools as Gmail's, Drive's and a web mark.
 
 **Agentonic's team (architecture §64), installed 9 October with platform v0.37.0 and migration 68.** Admin's **Equipo** page replaces the team card on Espacios de trabajo. Every staff member sees who is on the team. Administrators also see emails and invitations, and they can:

@@ -370,16 +370,21 @@ describe("Admin operations screens", () => {
         },
       ],
     }
-    // vm-agents-01 as four metric tiles; nothing from Local (desarrollo).
+    // vm-agents-01 as two cards, one per kind with its icon, each with two
+    // metrics; nothing from Local (desarrollo).
     const vm = html(ui.OperationsServerTiles, {
       ...servers,
       environment: "azure_staging",
     })
     for (const text of [
-      ">Servidor de agentes<",
+      "lucide-bot",
+      ">Agentes<",
+      "lucide-flask-conical",
+      ">Evaluaciones<",
+      ">Servidor<",
       ">Trabajador<",
-      ">Servidor de evaluaciones<",
       ">Evaluador<",
+      "xl:grid-cols-2",
       // Registration states as toned text, never a badge.
       ">Vigente<",
       ">Vence pronto<",
@@ -396,7 +401,7 @@ describe("Admin operations screens", () => {
       expect(vm, text).toContain(text)
     for (const text of ["76c3155d", "ec30c590", 'data-slot="badge"', "·"])
       expect(vm, text).not.toContain(text)
-    // Local keeps the same tiles: two workers in service, no evaluator.
+    // Local keeps the same cards: two workers in service, no evaluator.
     const local = html(ui.OperationsServerTiles, {
       ...servers,
       environment: "local",
@@ -411,13 +416,14 @@ describe("Admin operations screens", () => {
     ])
       expect(local, text).toContain(text)
     expect(local).not.toContain("f7deae1f")
-    expect(local).not.toContain("xl:grid-cols-4")
+    expect(local).not.toContain("xl:grid-cols-2")
     // Local (desarrollo) opens from the page header.
     expect(html(ui.OperationsLocalServers, servers)).toContain(
       "Local (desarrollo)"
     )
-    // Vencimientos: vm-agents-01 as four tiles, each kind's state with its
-    // last verification, then its deadline (in warning once it has passed).
+    // Vencimientos: vm-agents-01 as the same two cards, each kind's state with
+    // its last verification, then its deadline (in warning once it has
+    // passed).
     const registrations = {
       hosts: [
         {
@@ -448,10 +454,12 @@ describe("Admin operations screens", () => {
       environment: "azure_staging",
     })
     for (const text of [
-      ">Servidor de agentes<",
-      ">Vencimiento de agentes<",
-      ">Servidor de evaluaciones<",
-      ">Vencimiento de evaluaciones<",
+      "lucide-bot",
+      ">Agentes<",
+      "lucide-flask-conical",
+      ">Evaluaciones<",
+      ">Servidor<",
+      ">Vencimiento<",
       ">Vigente<",
       ">Verificada el 2/10/2026<",
       ">1/11/2026<",

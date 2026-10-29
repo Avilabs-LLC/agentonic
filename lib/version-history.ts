@@ -1,5 +1,10 @@
 export const VERSION_HISTORY = [
   {
+    "version": "0.49.0",
+    "date": "2026-10-29",
+    "summary": "Despliegues and Vencimientos show vm-agents-01 as two cards, Agentes and Evaluaciones, with their icons back and each card's two metrics side by side"
+  },
+  {
     "version": "0.48.1",
     "date": "2026-10-28",
     "summary": "Gmail asks Google for gmail.modify alone, ahead of the restricted-scope review; the connect dialog and Herramientas name a programación's unconfirmed sends and drafts (§83)."
