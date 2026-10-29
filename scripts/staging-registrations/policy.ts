@@ -805,6 +805,38 @@ export function backupNote(backup: VmBackup): string | null {
     : null
 }
 
+/** Why an SSH session to vm-agents-01 failed, read from ssh's exit status and error output. */
+export type SshFailure =
+  "timed_out" | "key_refused" | "sudo_password" | "unreachable"
+export function sshFailure(status: number | null, stderr: string): SshFailure {
+  if (/^sudo: a (password|terminal) is required/m.test(stderr))
+    return "sudo_password"
+  // ssh itself exits 255; any other status came from the remote side.
+  if (status !== 255) return "unreachable"
+  if (/port \d+: (Operation|Connection) timed out/.test(stderr))
+    return "timed_out"
+  if (/Permission denied \(/.test(stderr)) return "key_refused"
+  return "unreachable"
+}
+/**
+ * Content-free wording for a failed SSH session: never an address. `firewallExcludesMac`
+ * says whether the Azure SSH rule leaves out this Mac's address (null when unknown).
+ */
+export function sshDetail(
+  failure: SshFailure,
+  firewallExcludesMac: boolean | null
+): string {
+  if (failure === "timed_out")
+    return firewallExcludesMac
+      ? "the Azure firewall no longer allows SSH from this Mac's address; run `pnpm vm:allow-ssh --apply`"
+      : "SSH to vm-agents-01 timed out"
+  if (failure === "key_refused")
+    return "vm-agents-01 refused this Mac's SSH key"
+  if (failure === "sudo_password")
+    return "sudo on vm-agents-01 asked for a password"
+  return "could not reach vm-agents-01 with sudo"
+}
+
 /** Names of failed checks. Missing facts fail. */
 export function failedChecks(checks: Check[], facts: Facts) {
   return checks
@@ -1060,7 +1092,7 @@ export function issueBody(report: Report | null, found: string[], now: Date) {
     ...(report?.machine?.length
       ? ["**vm-agents-01**", ...report.machine.map((note) => `- ${note}`), ""]
       : []),
-    "**To fix**, on the Mac: `pnpm staging:reverify` shows the state; `pnpm staging:reverify --renew --publish` re-verifies and renews. A failed check means the installation no longer matches what was reviewed: investigate before reinstalling. For a waiting or failed service, read its journal on the VM (`journalctl -u <unit>`); every line names a category.",
+    "**To fix**, on the Mac: `pnpm staging:reverify` shows the state; `pnpm staging:reverify --renew --publish` re-verifies and renews. If SSH to the VM times out, `pnpm vm:allow-ssh` compares the address the Azure firewall allows with the Mac's, and `--apply` allows the Mac's. A failed check means the installation no longer matches what was reviewed: investigate before reinstalling. For a waiting or failed service, read its journal on the VM (`journalctl -u <unit>`); every line names a category.",
     "",
     `_Checked ${utc(now.toISOString())}. This issue closes itself once everything is valid again._`,
   ].join("\n")

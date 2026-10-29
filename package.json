@@ -47,6 +47,7 @@
     "dev:staging": "node scripts/start-staging.mjs",
     "staging:reverify": "node --import tsx scripts/staging-registrations/run.mjs",
     "staging:restart-window": "node scripts/install-restart-window.mjs",
+    "vm:allow-ssh": "node scripts/allow-ssh.mjs",
     "platform:install": "node scripts/install-platform.mjs",
     "platform:smoke": "node scripts/smoke-platform.mjs",
     "hosted:check": "node scripts/check-hosted.mjs",

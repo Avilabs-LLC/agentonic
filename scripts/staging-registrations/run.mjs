@@ -59,9 +59,12 @@ import {
   releaseNotes,
   planRenewal,
   problems,
+  sshDetail,
+  sshFailure,
   utc,
   validUntil,
 } from "./policy.ts"
+import { firewallExcludesMac } from "../vm-access.mjs"
 
 const REPO = "Avilabs-LLC/agentonic"
 const VARIABLE = "STAGING_REGISTRATIONS"
@@ -236,7 +239,10 @@ function checksFor(target, registration) {
   })
 }
 
-/** Runs a root script on the VM. Connection and sudo failures surface as `vm_unreachable`. */
+/**
+ * Runs a root script on the VM. Connection and sudo failures surface as `vm_unreachable`,
+ * with the reason (an `SshFailure`) as the error's cause.
+ */
 function ssh(script) {
   try {
     return execFileSync(
@@ -254,9 +260,20 @@ function ssh(script) {
       ],
       { input: script, stdio: ["pipe", "pipe", "pipe"], timeout: 180_000 }
     ).toString()
-  } catch {
-    throw new Error("vm_unreachable")
+  } catch (error) {
+    throw new Error("vm_unreachable", {
+      cause: sshFailure(error?.status ?? null, String(error?.stderr ?? "")),
+    })
   }
+}
+
+/** Whether the Azure firewall leaves out this Mac, checked once per run; undefined until checked. */
+let firewall
+/** Content-free explanation of a `vm_unreachable` error. */
+async function unreachable(error) {
+  if (error.cause === "timed_out" && firewall === undefined)
+    firewall = await firewallExcludesMac()
+  return sshDetail(error.cause ?? "unreachable", firewall ?? null)
 }
 
 function gatherLocal(checks) {
@@ -309,7 +326,7 @@ async function reverify(target, registration, current) {
       : gatherLocal(checks)
   } catch (error) {
     if (error?.message !== "vm_unreachable") throw error
-    return entry("failed", "could not reach vm-agents-01 with sudo")
+    return entry("failed", await unreachable(error))
   }
   const failed = failedChecks(checks, facts)
   if (failed.length) return entry("failed", summarize(failed))
@@ -470,20 +487,23 @@ async function renewEvaluator(target, registration, names, entry) {
  * Mac still holds every program and runtime the VM serves, so it could be rebuilt.
  * Adds findings to the entries; returns notes about the machine.
  */
-function health(registrations, entries, now) {
+async function health(registrations, entries, now) {
   const targets = ["azure-host", "azure-evaluator"].filter(
     (target) => registrations[target] && !standingEnded(registrations[target])
   )
   if (!targets.length) return []
   // The VM's backups are reported with the host.
   const backup = targets.includes("azure-host") ? vmBackup() : null
-  let facts = null
+  let facts = null,
+    unreached = "could not reach vm-agents-01 with sudo"
   try {
     facts = parseFacts(
       ssh(gatherScript(targets.flatMap((target) => healthProbes(target))))
     )
-  } catch {
-    /* Reported per target below. */
+  } catch (error) {
+    // Reported per target below.
+    if (error?.message === "vm_unreachable")
+      unreached = await unreachable(error)
   }
   for (const target of targets) {
     const window = restartWindowUnits()
@@ -492,7 +512,7 @@ function health(registrations, entries, now) {
           timerSha256: sha(window.timer),
           serviceSha256: sha(window.service),
         })
-      : ["could not reach vm-agents-01 with sudo"]
+      : [unreached]
     if (target === "azure-host") found.push(...backupFindings(backup, now))
     const missing = missingLocally(target, registrations[target])
     if (missing.length)
@@ -764,6 +784,13 @@ try {
     env.AGENTONIC_MIGRATION_DATABASE_URL,
     env.AGENTONIC_DATABASE_CA_FILE
   )
+  // A dropped connection (the Mac changing networks) fails the run instead of crashing it.
+  db.on("error", (error) => {
+    console.log(
+      `! Lost the database connection (${/^[A-Z0-9_]+$/.test(error?.code ?? "") ? error.code : "error"}).`
+    )
+    process.exitCode = 1
+  })
   const registrations = await load()
   const now = new Date()
   const entries = []
@@ -815,7 +842,7 @@ try {
     )
   }
   // Health is read last, after any renewal had its chance to bring services back.
-  const machine = health(registrations, entries, now)
+  const machine = await health(registrations, entries, now)
   const report = {
     version: 1,
     generatedAt: new Date().toISOString(),
