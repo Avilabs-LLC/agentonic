@@ -8,6 +8,8 @@ import { join } from "node:path"
 import * as units from "../scripts/staging-units.mjs"
 // @ts-expect-error -- plain ESM script without type declarations
 import * as platformUnits from "../scripts/platform-units.mjs"
+// @ts-expect-error -- plain ESM script without type declarations
+import * as vmAccess from "../scripts/vm-access.mjs"
 import { DROP_IN_BROKERS } from "../apps/worker/src/staging-controller"
 import {
   DAY,
@@ -30,6 +32,8 @@ import {
   parseFacts,
   planRenewal,
   problems,
+  sshDetail,
+  sshFailure,
   type Check,
   type Facts,
   type Registration,
@@ -37,6 +41,9 @@ import {
 } from "../scripts/staging-registrations/policy"
 const { platformServices } = platformUnits as {
   platformServices: Record<string, string>
+}
+const { allowsAddress } = vmAccess as {
+  allowsAddress: (sources: string[], address: string) => boolean
 }
 
 const now = new Date("2026-10-10T12:00:00Z")
@@ -813,6 +820,77 @@ describe("alerts", () => {
       )
     ).toContain("**vm-agents-01**\n- vm-agents-01 has been up since X.")
     expect(body).not.toMatch(/[a-f0-9]{64}/)
+    expect(body).toContain("`pnpm vm:allow-ssh`")
+  })
+})
+
+describe("reaching the VM over SSH", () => {
+  it("tells a firewall timeout from a refused key, a sudo prompt and other failures", () => {
+    expect(
+      sshFailure(
+        255,
+        "ssh: connect to host 203.0.113.10 port 22: Operation timed out\n"
+      )
+    ).toBe("timed_out")
+    expect(
+      sshFailure(255, "ssh: connect to host h port 22: Connection timed out\n")
+    ).toBe("timed_out")
+    expect(sshFailure(255, "ldbx@h: Permission denied (publickey).\n")).toBe(
+      "key_refused"
+    )
+    expect(sshFailure(1, "sudo: a password is required\n")).toBe(
+      "sudo_password"
+    )
+    // A refused connection is not the firewall: Azure drops blocked packets.
+    expect(
+      sshFailure(255, "ssh: connect to host h port 22: Connection refused\n")
+    ).toBe("unreachable")
+    // Only ssh's own status counts; a remote script's error output does not.
+    expect(sshFailure(1, "Permission denied (publickey)")).toBe("unreachable")
+    expect(sshFailure(null, "")).toBe("unreachable")
+  })
+  it("names the fix without naming an address", () => {
+    const blocked = sshDetail("timed_out", true)
+    expect(blocked).toContain("`pnpm vm:allow-ssh --apply`")
+    expect(blocked).not.toMatch(/\d+\.\d+\.\d+\.\d+/)
+    expect(sshDetail("timed_out", false)).toBe("SSH to vm-agents-01 timed out")
+    expect(sshDetail("timed_out", null)).toBe("SSH to vm-agents-01 timed out")
+    expect(sshDetail("key_refused", null)).toContain("SSH key")
+    expect(sshDetail("unreachable", null)).toBe(
+      "could not reach vm-agents-01 with sudo"
+    )
+    const found = problems(
+      {
+        version: 1,
+        generatedAt: now.toISOString(),
+        registrations: [
+          {
+            name: "azure-host",
+            validUntil: new Date(now.getTime() + 20 * DAY).toISOString(),
+            outcome: "failed",
+            detail: blocked,
+            health: [blocked],
+          },
+        ],
+      },
+      now
+    )
+    expect(found).toEqual([
+      `azure-host: verification failed (${blocked}). It was not renewed.`,
+      `azure-host: ${blocked}.`,
+    ])
+  })
+  it("checks this Mac's address against the rule's addresses and ranges", () => {
+    expect(allowsAddress(["198.51.100.7"], "203.0.113.25")).toBe(false)
+    expect(allowsAddress(["203.0.113.25"], "203.0.113.25")).toBe(true)
+    expect(allowsAddress(["203.0.113.25/32"], "203.0.113.25")).toBe(true)
+    expect(allowsAddress(["203.0.0.0/16"], "203.0.113.25")).toBe(true)
+    expect(allowsAddress(["198.51.0.0/16"], "203.0.113.25")).toBe(false)
+    expect(allowsAddress(["*"], "203.0.113.25")).toBe(true)
+    expect(allowsAddress(["VirtualNetwork", "10.0.0.0/40"], "10.0.0.1")).toBe(
+      false
+    )
+    expect(allowsAddress([], "203.0.113.25")).toBe(false)
   })
 })
 
