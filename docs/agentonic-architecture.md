@@ -2963,7 +2963,14 @@ Next, under Google Cloud's Data Access, the owner keeps `gmail.modify`, removes 
 
 **Not changed.** NicolAI-Mail's deployment stopped under the old rule and its connection lost its actions before this change. Nico reconnects Gmail, chooses the actions again and authorizes the version once more (N27). Moving the Google app to In production ends the 7-day limit for later consents; set `GOOGLE_TESTING` to false in the same release (N26).
 
-**Rollout.** Apply migration 78 with `pnpm db:migrate`, then install platform 0.50.0. The worker change also ships in the staging broker, with the evaluator if its bundle includes it. The first full poll after rollout fails turn `d5bfac75` with `deployment_stopped`.
+**Rollout, 29 October 2026.** From `5e5f9a9` on `main`, with nothing running except turn `d5bfac75`:
+
+1. Migration 78 applied with `pnpm db:migrate`.
+2. `platform-0.50.0-5e5f9a971892` installed (release `28ebb221`). The apps and the knowledge worker restarted healthy.
+3. Staging broker `e3b50e3d` installed with `install-staging --azure` and runtime 0.9.0. No deployment was running, so none moved.
+4. The evaluator stays on `8338d80e`. Its bundle includes the changed worker files, but evaluations run on fixtures and never reach Google, so nothing it does changes. It picks the change up with the next evaluator release.
+
+`hosted:check` and `staging:reverify` passed: the host runs `e3b50e3d` with runtimes 0.3.0–0.9.0, and every registration is valid. The first host poll failed turn `d5bfac75` with `deployment_stopped`, in its general run too, and no turn is queued or running. NicolAI-Mail's deployment stays stopped until Nico reconnects Gmail and authorizes it again (N27).
 
 **Tests.**
 - `tests/evaluation-database.test.ts`, "an expired Google authorization (§84)", now applied with every migration from 33 on:
