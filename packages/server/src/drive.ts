@@ -20,6 +20,7 @@ import { uuid } from "@agentonic/contracts/identity"
 import { digest, seal, unseal } from "@agentonic/connectors/secrets"
 import {
   exchange,
+  grantExpiry,
   refresh,
   revoke,
   GoogleError,
@@ -286,6 +287,7 @@ export async function finishDrive(url: URL) {
       `drive:${target}`,
       config.keys
     ),
+    expiresAt: grantExpiry(tokens),
   })
   destination.searchParams.set("drive", "connected")
   // Files picked on Google's consent page are checked and kept exactly as

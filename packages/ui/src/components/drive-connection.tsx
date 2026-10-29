@@ -1,5 +1,6 @@
 "use client"
 import { useEffect, useState, useSyncExternalStore } from "react"
+import { googleGrantState } from "@agentonic/contracts/google-grant"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import {
   CheckIcon,
@@ -59,14 +60,17 @@ export async function driveCommand(
   return result
 }
 
-/** An account's identity and connection state: Drive's logo, the address and a check. */
+/** An account's identity and connection state: Drive's logo, the address and a check, or until when Google authorizes it (§84). */
 export function DriveAccount({
   account,
   status,
+  expiresAt = null,
 }: {
   account: string
   status: "connected" | "reconnect" | "disconnected"
+  expiresAt?: string | null
 }) {
+  const grant = googleGrantState(status, expiresAt)
   return (
     <div className="flex min-w-0 items-center gap-3">
       <DriveIcon className="size-6 shrink-0" />
@@ -74,20 +78,18 @@ export function DriveAccount({
         <p className="text-sm font-medium">Google Drive</p>
         <p className="text-sm break-all text-muted-foreground">{account}</p>
         <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
-          {status === "connected" ? (
+          {grant.kind === "connected" ? (
             <CircleCheckIcon
-              className={cn("size-3.5", iconTones.success)}
+              className={cn("size-3.5 shrink-0", iconTones.success)}
               aria-hidden="true"
             />
           ) : (
             <TriangleAlertIcon
-              className={cn("size-3.5", iconTones.warning)}
+              className={cn("size-3.5 shrink-0", iconTones.warning)}
               aria-hidden="true"
             />
           )}
-          {status === "connected"
-            ? "Cuenta conectada"
-            : "Necesita volver a conectarse"}
+          {grant.text}
         </p>
       </div>
     </div>

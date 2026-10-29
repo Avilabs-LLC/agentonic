@@ -42,6 +42,7 @@ const icons = {
 export const iconTones: Record<StatusTone, string> = {
   success: "text-emerald-700 dark:text-emerald-300",
   warning: "text-yellow-800 dark:text-yellow-300",
+  amber: "text-amber-700 dark:text-amber-300",
   error: "text-red-700 dark:text-red-300",
   orange: "text-orange-800 dark:text-orange-300",
   sky: "text-sky-700 dark:text-sky-300",

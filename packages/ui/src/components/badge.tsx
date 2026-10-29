@@ -25,6 +25,8 @@ const badgeVariants = cva(
           "border-emerald-200 bg-emerald-100 text-emerald-900 dark:border-emerald-300 dark:bg-background dark:text-emerald-300",
         warning:
           "border-yellow-200 bg-yellow-100 text-yellow-900 dark:border-yellow-300 dark:bg-background dark:text-yellow-300",
+        amber:
+          "border-amber-200 bg-amber-100 text-amber-900 dark:border-amber-300 dark:bg-background dark:text-amber-300",
         error:
           "border-red-200 bg-red-100 text-red-900 dark:border-red-300 dark:bg-background dark:text-red-300",
         orange:

@@ -19,6 +19,7 @@ import {
 export type StatusTone =
   | "success"
   | "warning"
+  | "amber"
   | "error"
   | "orange"
   | "sky"
@@ -179,6 +180,8 @@ export const statusMaps = {
     queued: state("Activación en cola", "violet", "clock"),
     preparing: state("Preparando despliegue", "sky", "activity"),
     running: state("En funcionamiento", "success", "check"),
+    // Running, paused until a Google account behind its tools is reconnected (§84).
+    waiting_reconnect: state("Esperando reconexión", "amber", "pause"),
     offline: state("Sin conexión", "orange", "alert"),
     // Tones match deploymentBadgeVariants, so a badge and an inline
     // indicator of the same state look alike.
@@ -315,6 +318,7 @@ export const submissionBadgeVariants: Record<string, BadgeVariant> = {
 export type BadgeVariant =
   | "success"
   | "warning"
+  | "amber"
   | "error"
   | "orange"
   | "sky"
@@ -346,6 +350,7 @@ export const deploymentBadgeVariants: Record<string, BadgeVariant> = {
   queued: "violet",
   preparing: "sky",
   running: "success",
+  waiting_reconnect: "amber",
   offline: "orange",
   stopped: "indigo",
   failed: "error",

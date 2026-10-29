@@ -120,5 +120,15 @@ describe("Aprender mi estilo", () => {
     expect(
       html(GmailAccount, { account: connection.account, status: "reconnect" })
     ).toContain("Necesita volver a conectarse")
+    // A consent past its date asks for a reconnect before Google refuses (§84).
+    expect(
+      html(GmailAccount, {
+        account: connection.account,
+        status: "connected",
+        expiresAt: "2026-01-01T12:00:00.000Z",
+      })
+    ).toMatch(
+      /lucide-triangle-alert[^>]*>[\s\S]*?La autorización de Google venció el 1\/1\/2026/
+    )
   })
 })

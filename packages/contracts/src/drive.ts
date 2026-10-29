@@ -143,6 +143,8 @@ export const driveConnection = z.object({
   status,
   operations: z.array(driveOperation),
   files: z.array(driveFile).default([]),
+  /** When Google's authorization ends, while the app is in Testing (§84). */
+  expiresAt: z.string().nullable().default(null),
 })
 export const driveState = z.object({
   connections: z.array(driveConnection),
@@ -188,6 +190,7 @@ export const driveKnowledgeConnection = z.object({
   account: z.string(),
   status,
   files: z.number().int().nonnegative(),
+  expiresAt: z.string().nullable().default(null),
 })
 export const driveKnowledgeState = z.object({
   connections: z.array(driveKnowledgeConnection),

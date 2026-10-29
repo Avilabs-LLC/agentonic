@@ -196,6 +196,8 @@ export const gmailConnection = z.object({
   operations: z.array(gmailOperation),
   /** Connected with gmail.modify, so labels can be applied (§68). */
   canLabel: z.boolean().default(false),
+  /** When Google's authorization ends, while the app is in Testing (§84). */
+  expiresAt: z.string().nullable().default(null),
 })
 export const gmailState = z.object({
   connections: z.array(gmailConnection),

@@ -120,6 +120,7 @@ export const runReasonLabels: Record<string, string> = {
   turn_limit: "La conversación alcanzó su límite",
   member_inactive: "Tu acceso al espacio no estaba activo",
   agent_unavailable: "El agente no estaba disponible",
+  google_reconnect: "Google pide volver a conectar la cuenta",
 }
 export const scheduleRun = z.object({
   id: uuid,

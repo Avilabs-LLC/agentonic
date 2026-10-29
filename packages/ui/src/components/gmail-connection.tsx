@@ -1,5 +1,6 @@
 "use client"
 import { driveGrants, gmailGrants, hasWeb } from "@agentonic/contracts/tools"
+import { googleGrantState } from "@agentonic/contracts/google-grant"
 import type { DriveOperation, DriveState } from "@agentonic/contracts/drive"
 import { WEB_GRANT } from "@agentonic/contracts/web"
 import { useState } from "react"
@@ -67,14 +68,17 @@ export async function gmailCommand(
     throw new Error(String(result.error ?? "No se pudo completar la acción."))
   return result
 }
-/** An account's identity and connection state: Gmail's logo, the address and a check. */
+/** An account's identity and connection state: Gmail's logo, the address and a check, or until when Google authorizes it (§84). */
 export function GmailAccount({
   account,
   status,
+  expiresAt = null,
 }: {
   account: string
   status: GmailState["connections"][number]["status"]
+  expiresAt?: string | null
 }) {
+  const grant = googleGrantState(status, expiresAt)
   return (
     <div className="flex min-w-0 items-center gap-3">
       <GmailIcon className="size-6 shrink-0" />
@@ -82,20 +86,18 @@ export function GmailAccount({
         <p className="text-sm font-medium">Gmail</p>
         <p className="text-sm break-all text-muted-foreground">{account}</p>
         <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
-          {status === "connected" ? (
+          {grant.kind === "connected" ? (
             <CircleCheckIcon
-              className={cn("size-3.5", iconTones.success)}
+              className={cn("size-3.5 shrink-0", iconTones.success)}
               aria-hidden="true"
             />
           ) : (
             <TriangleAlertIcon
-              className={cn("size-3.5", iconTones.warning)}
+              className={cn("size-3.5 shrink-0", iconTones.warning)}
               aria-hidden="true"
             />
           )}
-          {status === "connected"
-            ? "Cuenta conectada"
-            : "Necesita volver a conectarse"}
+          {grant.text}
         </p>
       </div>
     </div>
@@ -334,9 +336,15 @@ export function GmailConnection({
             ? state.connections.map((c) => (
                 <div key={c.id} className="space-y-4 rounded-lg border p-4">
                   <div className="flex flex-wrap items-center justify-between gap-4">
-                    <GmailAccount account={c.account} status={c.status} />
+                    <GmailAccount
+                      account={c.account}
+                      status={c.status}
+                      expiresAt={c.expiresAt}
+                    />
                     <div className="flex flex-wrap gap-2">
-                      {(c.status !== "connected" || !c.canLabel) && (
+                      {(googleGrantState(c.status, c.expiresAt).kind !==
+                        "connected" ||
+                        !c.canLabel) && (
                         <Button
                           type="button"
                           variant="outline"
@@ -386,9 +394,14 @@ export function GmailConnection({
           {drive?.connections.map((c) => (
             <div key={c.id} className="space-y-4 rounded-lg border p-4">
               <div className="flex flex-wrap items-center justify-between gap-4">
-                <DriveAccount account={c.account} status={c.status} />
+                <DriveAccount
+                  account={c.account}
+                  status={c.status}
+                  expiresAt={c.expiresAt}
+                />
                 <div className="flex flex-wrap gap-2">
-                  {c.status !== "connected" && (
+                  {googleGrantState(c.status, c.expiresAt).kind !==
+                    "connected" && (
                     <Button
                       type="button"
                       variant="outline"

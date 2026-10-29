@@ -588,7 +588,11 @@ async function serviceLoop() {
       })
     } catch (error) {
       const code = error instanceof Error ? error.message : "lease_lost"
-      await execute("fail", lease, { code }).catch(() => {})
+      // A refused record leaves the turn to the host's next poll (§84).
+      const recorded = await execute("fail", lease, { code }).then(
+        () => true,
+        () => false
+      )
       logJob({
         service: "staging_turn",
         job: lease,
@@ -600,6 +604,7 @@ async function serviceLoop() {
           error instanceof TurnFailure || error instanceof PreviewFailure
             ? error.diagnostic
             : undefined,
+        recordRefused: !recorded,
       })
     } finally {
       clearInterval(timer)
