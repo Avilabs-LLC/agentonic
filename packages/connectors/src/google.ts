@@ -5,13 +5,10 @@ import {
   gmailWriteMessage,
 } from "@agentonic/contracts/gmail"
 import type { Keyring } from "./secrets"
-export const GOOGLE_SCOPES = [
-  "https://www.googleapis.com/auth/gmail.readonly",
-  "https://www.googleapis.com/auth/gmail.compose",
-  // Labels (§68). It would also allow archiving and trashing; the platform's
-  // only modify tool adds user labels.
-  "https://www.googleapis.com/auth/gmail.modify",
-]
+// One scope (§83): reading, drafts, sending and labels (§68), the narrowest
+// that can add a label to a message. It would also allow archiving and
+// trashing; the platform's only change to a message adds user labels.
+export const GOOGLE_SCOPES = ["https://www.googleapis.com/auth/gmail.modify"]
 export type GoogleConfig = {
   clientId: string
   clientSecret: string

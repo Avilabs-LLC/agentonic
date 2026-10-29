@@ -463,7 +463,7 @@ export function GmailConnection({
         title="Herramientas"
         icon={<WrenchIcon />}
         description="Elige qué puede hacer el agente en la próxima versión."
-        footer="Guarda el borrador y prepara una nueva versión para revisar cambios de acceso. Puedes probarlas en Probar agente antes de enviar la versión a revisión. Crear, editar o eliminar borradores, enviar correos y crear o editar documentos siempre requiere tu confirmación."
+        footer="Guarda el borrador y prepara una nueva versión para revisar cambios de acceso. Puedes probarlas en Probar agente antes de enviar la versión a revisión. Crear, editar o eliminar borradores, enviar correos, aplicar etiquetas y crear o editar documentos requiere tu confirmación, salvo los envíos y borradores que autorices en una programación."
       >
         <label className="flex cursor-pointer items-start gap-3 rounded-lg border p-4">
           <Checkbox.Root
@@ -547,10 +547,11 @@ export function GmailConnection({
               {reconnect ? "Volver a conectar Gmail" : "Conectar Gmail"}
             </DialogTitle>
             <DialogDescription>
-              Google te pedirá permiso para leer correos, administrar borradores
-              y organizar el buzón. Su permiso de borradores también permite
-              enviar, y el de organizar permite archivar; Agentonic solo agrega
-              etiquetas y exigirá una confirmación por cada cambio.
+              Google te pedirá un solo permiso para leer, redactar y enviar
+              correos y organizar el buzón. Ese permiso también permitiría
+              archivar; Agentonic solo agrega etiquetas, nunca archiva ni manda
+              correos a la papelera. Cada cambio requiere tu confirmación, salvo
+              los envíos y borradores que autorices en una programación.
             </DialogDescription>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">

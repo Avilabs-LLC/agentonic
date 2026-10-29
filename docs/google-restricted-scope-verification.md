@@ -4,7 +4,7 @@
 
 ## The short answer
 
-- Agentonic asks for two Gmail scopes, `gmail.readonly` and `gmail.compose` ([gmail-connection.md](gmail-connection.md)). Google classes both as **restricted**, the strictest category.
+- Agentonic asks for one Gmail scope, `gmail.modify` ([gmail-connection.md](gmail-connection.md), architecture §83). Google classes it as **restricted**, the strictest category. Until §83 it also asked for `gmail.readonly` and `gmail.compose`, which `gmail.modify` already covers.
 - To let any Google account connect, Agentonic needs **restricted-scope verification**: brand verification, a scope review with a demo video, and an independent **security assessment (CASA)** by a Google-approved lab, **repeated every 12 months**.
 - **Time:** several weeks at best, often two to three months the first time, mostly waiting on reviews and fixing assessment findings.
 - **Money:** the security assessment is paid each year. Google's preferred lab (TAC Security) quotes US$540 to US$1,800 per app per year at Google's negotiated rate; other labs quote roughly US$1,800 to US$6,300. Engineering time for the homepage, privacy policy, video and any fixes comes on top.
@@ -28,7 +28,7 @@ Each step names who acts. The order matters: Google reviews the brand first, the
 
 ### 1. Make the app eligible (Build, Owner)
 
-- Keep the scopes to the minimum. `gmail.readonly` (read and search) and `gmail.compose` (drafts and sending) are the narrowest scopes that support Agentonic's Gmail tools; `gmail.send` alone would not allow reading. Google asks for a justification of each one (draft wording below).
+- Keep the scopes to the minimum. Adding a label to a message ("Aplicar etiquetas", §68, `messages.batchModify`) needs `gmail.modify`; `gmail.labels` only manages label definitions. `gmail.modify` also covers reading, drafts and sending, so it is the only Gmail scope requested (§83). Google asks why narrower scopes aren't enough (text in step 6).
 - The app must follow Google's [branding guidelines](https://developers.google.com/identity/branding-guidelines), the Google APIs Terms of Service and the [API Services User Data Policy](https://developers.google.com/terms/api-services-user-data-policy), including **Limited Use** (see the mapping below).
 
 ### 2. Public homepage (Build, Owner)
@@ -58,9 +58,26 @@ In Google Cloud console → _Google Auth Platform_ → _Branding_: app name "Age
 ### 6. Move to production and request data access (Owner, with Build's text)
 
 - Set the publishing status to **In production**. With unverified restricted scopes the 100-user cap still applies until approval.
-- In the _Verification Center_, declare both scopes and paste the justifications. Draft:
-  - `gmail.readonly`: "Agentonic lets a user give their own AI agent read access to their mailbox, so the agent can find and summarize the user's messages when the user asks in a chat. Reads happen only during the user's own conversation, for the connected account. The conversation keeps the agent's answer and the subjects of the messages it read, for the user only and until the conversation is closed or expires; nothing read is imported into other features."
-  - `gmail.compose`: "The user's agent drafts replies and new messages that the user reviews. Creating, changing or deleting a draft and sending any message each require the user's explicit confirmation in Agentonic; nothing is sent automatically."
+- Under _Data Access_, keep `gmail.modify` and remove `gmail.readonly` and `gmail.compose`, once the installed release asks only for `gmail.modify` (§83).
+- In the _Verification Center_, paste this into "Explain to Google why you need these scopes, how you will use them, and why more limited scopes aren't sufficient" (written 28 October; recheck it against the product before submitting):
+
+  > Agentonic lets a business user build an AI assistant ("agent") and connect their own Gmail account to it, so the agent can work through their mail with them. Connecting grants no actions: the account holder chooses, per agent, which Gmail actions it may take. Only the account holder's own conversations with that agent can use their mailbox; other members of their workspace and Agentonic staff cannot, and automated tests never touch a real mailbox.
+  >
+  > How we use gmail.modify:
+  >
+  > 1. Read and search: when the user asks (for example, "summarize what clients wrote this week"), the agent searches the mailbox and reads the matching messages or threads to answer. Mail is read when the user asks. The conversation keeps the agent's answer and the subjects of the messages it read, for that user, until the conversation is closed or expires. Mail is not imported into the agent's knowledge or used by any other feature.
+  > 2. Drafts and sending: the agent writes replies in the right thread, and new messages, as drafts or ready to send. Every draft change, send and label change is shown to the user with its exact recipients and content, and runs only after the user confirms it. The one exception is a scheduled task the user creates and explicitly authorizes to send or draft without confirmation. It makes at most one such action per run, and the user can cancel it until it starts.
+  > 3. Labels: the agent proposes labels for a batch of messages (for example, "Facturas" on ten invoices). After the user confirms, we create any missing user label and add it to those messages. We never remove labels, archive, trash or permanently delete mail. The only deletion is a draft the user confirms deleting.
+  > 4. Writing style (optional, separate consent): the user can let the agent learn their writing style from their own sent mail of the last 90 days, at most 200 messages. The mail is analyzed and not stored. Only the style guide the user reviews and accepts is kept.
+  >
+  > Why narrower scopes aren't sufficient: adding a label to a message (messages.modify / messages.batchModify) requires gmail.modify. gmail.labels only manages label definitions, and gmail.readonly, gmail.compose and gmail.send can't change a message's labels. gmail.metadata isn't enough because the agent must read message bodies to answer, and gmail.send alone can't read or manage drafts. Since gmail.modify also covers reading, drafts and sending, we request it alone instead of adding gmail.readonly and gmail.compose. We don't request full access (https://mail.google.com/), since nothing in Agentonic permanently deletes mail.
+  >
+  > Data handling: message content goes only to our AI provider (the OpenAI API), only to produce the answer the user asked for, under terms that exclude training. Google user data is never used to train AI models, sold or used for advertising. Tokens are encrypted at rest and erased when the user disconnects. Our use complies with the Google API Services User Data Policy, including the Limited Use requirements.
+
+  If the field caps the length, a shorter version (about 1,000 characters):
+
+  > Agentonic lets a user connect their own Gmail account to an AI agent they configure, so the agent can work through their mail in their own conversations. It searches and reads messages and threads to answer the user's questions. It writes replies and new messages as drafts or sends them, and it proposes labels for batches of messages. Every draft change, send and label change is shown to the user with its exact content and runs only after they confirm. The exception is a send or draft the user explicitly pre-authorizes in a scheduled task: at most one per run, and cancellable. We request gmail.modify because adding labels to messages (messages.batchModify) isn't possible with gmail.labels, gmail.readonly, gmail.compose or gmail.send. It also covers reading and drafts, so we request no other Gmail scope and not full access: Agentonic never trashes, archives or permanently deletes mail. Mail goes only to our AI provider to produce the requested answer, is never used to train models, and is handled under Limited Use.
+
 - Link up to three pages of documentation (the homepage's Gmail section and a help page).
 
 ### 7. Demo video (Build records, Owner uploads)
@@ -68,10 +85,14 @@ In Google Cloud console → _Google Auth Platform_ → _Branding_: app name "Age
 An **unlisted YouTube video in English** (narration or captions) that shows:
 
 1. The full connection flow, with the **browser address bar showing our OAuth client ID** on Google's consent screen, and the app name as configured.
-2. Each scope in use: the agent reading and searching mail in a chat (`gmail.readonly`); creating, editing and deleting a draft, then sending a message after the explicit confirmation (`gmail.compose`).
+2. Every use of `gmail.modify` the text above names: the agent searching and reading mail and threads in a chat; creating, editing and deleting a draft and sending a message, each after its confirmation; a scheduled task with a pre-authorized send; a batch of labels confirmed on one card; and Aprender mi estilo.
 3. Disconnecting Gmail and what happens to stored data.
 
-Use a dedicated test mailbox with synthetic messages (outstanding action B1), never a real customer's mail.
+Record on the hosted beta, after the §83 release is installed and `gmail.readonly` and `gmail.compose` are removed under _Data Access_, so Google's screen asks for `gmail.modify` alone. Google tells already-public apps to record new scopes in a staging environment or a separate project. The hosted beta is that staging environment: it is the nonproduction platform, accounts are invite-only, and §83 adds no scope (`gmail.modify` has been requested since §68). No separate Google Cloud project is needed; that is for apps that have reached the 100-user cap.
+
+- Use a Gmail account made for the video, with a few synthetic messages (an invoice, a client question), listed under _Audience_ → _Test users_. Not the owner's mailbox used for live acceptance (B1), which holds real mail, and never a customer's.
+- Connect it from a demo agent in a test workspace. Before consenting, click the address bar so the `client_id` in the URL is visible.
+- Keep Google's "Google hasn't verified this app" screen in the video and click through it on camera; Google requires it to be shown.
 
 ### 8. Answer the reviewers (Owner, Build)
 
@@ -92,20 +113,20 @@ Google approves the scopes; the warning disappears and the 100-user cap and 7-da
 
 ## What Agentonic already has, and what is missing
 
-| Requirement                                                                                         | Status                                                               |
-| --------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
-| Domain and hosted names (`*.agentonic.avilabs.tech`)                                                | Done (C3)                                                            |
-| Hosted OAuth callback registered                                                                    | Done (C12)                                                           |
-| Narrow scopes, explicit confirmation for every write, no automatic resend                           | Built ([gmail-connection.md](gmail-connection.md))                   |
-| Tokens encrypted at rest, staff and automated evaluations never reach a real mailbox                | Built                                                                |
-| No model training on customer data                                                                  | Platform decision (v1 defers any model training)                     |
-| Live acceptance of the Gmail tools                                                                  | Done on 8 October (B2)                                               |
-| Scheduled cleanup of expired Gmail data                                                             | Open: B3                                                             |
-| Public homepage with a Gmail section and the Limited Use statement                                  | Missing                                                              |
-| Privacy policy, terms, list of outside services                                                     | Missing: D13                                                         |
-| Logo, support email, Search Console verification                                                    | Missing (owner)                                                      |
-| Demo video                                                                                          | Missing; the test mailbox and a hosted test agent now exist (B1, B2) |
-| Security assessment readiness (scans, data deletion on request, security headers, dependency audit) | Not started; expect findings to fix                                  |
+| Requirement                                                                                                         | Status                                                               |
+| ------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| Domain and hosted names (`*.agentonic.avilabs.tech`)                                                                | Done (C3)                                                            |
+| Hosted OAuth callback registered                                                                                    | Done (C12)                                                           |
+| One Gmail scope; confirmation for every write except a schedule's pre-authorized send or draft; no automatic resend | Built ([gmail-connection.md](gmail-connection.md), §58, §83)         |
+| Tokens encrypted at rest, staff and automated evaluations never reach a real mailbox                                | Built                                                                |
+| No model training on customer data                                                                                  | Platform decision (v1 defers any model training)                     |
+| Live acceptance of the Gmail tools                                                                                  | Done on 8 October (B2)                                               |
+| Scheduled cleanup of expired Gmail data                                                                             | Open: B3                                                             |
+| Public homepage with a Gmail section and the Limited Use statement                                                  | Missing                                                              |
+| Privacy policy, terms, list of outside services                                                                     | Missing: D13                                                         |
+| Logo, support email, Search Console verification                                                                    | Missing (owner)                                                      |
+| Demo video                                                                                                          | Missing; the test mailbox and a hosted test agent now exist (B1, B2) |
+| Security assessment readiness (scans, data deletion on request, security headers, dependency audit)                 | Not started; expect findings to fix                                  |
 
 ## Limited Use, mapped to Agentonic
 
