@@ -2889,6 +2889,14 @@ After rollout, saving US$20 again in Ajustar renovación raises NicolAI-Mail's c
 - `tests/runtime-engine.test.ts`: the note is offered only to runtimes that declare `draftNotes`, and the artifact declares it.
 - `tests/chat-render.test.ts`: Markdown answers keep their line breaks; links name their site; other schemes and raw HTML are not rendered. A reply shows its three tabs, and a new message without a note has none.
 
+**Rollout, 14 October 2026.** Installed from `912f98f` on `main`, together with §82, while nothing was running:
+- `platform-0.48.0-912f98fdbeae` (release `701e0b57`);
+- runtime 0.9.0, artifact `1cd43588`, registered as `0.9.0-preview-912f98fd`. Its manifest declares `draftNotes`;
+- staging broker `2c707578`. NicolAI-Mail moved to it and is online;
+- evaluator `8338d80e`, with runtimes 0.3.0 to 0.8.0 registered again beside 0.9.0.
+
+`hosted:check` and `staging:reverify` passed.
+
 ## 82. Each turn shows what it cost — 14 October 2026
 
 **Owner request, 14 October.** Chats and Probar agente should show what each turn cost and what the whole conversation has cost, as Corby does in Slack, so people can see what they spend and keep it under control. Corby ends each reply with "$0.22 este turno · $1.38 en este hilo · model", and adds the thread's figure only once earlier turns cost something.
@@ -2908,6 +2916,8 @@ After rollout, saving US$20 again in Ajustar renovación raises NicolAI-Mail's c
 - `tests/evaluation-database.test.ts`, "records the answer while a failed web read keeps its reservation" (§66): the chat turn reports its settled model call and the open read's hold.
 - `tests/web-database.test.ts`, "reserves conservative web usage…": a Probar turn reports a settled search and an open read.
 - `tests/turn-cost.test.ts`: the line's wording, the conversation total only after earlier spend, the held amount and the running total.
+
+**Rollout, 14 October 2026.** Migration 77 was applied with `pnpm db:migrate` before `platform-0.48.0-912f98fdbeae` was installed. The live database has `turn_spend`, `staging_chat_v76`, `preview_command_v76` and the `retrieval_provider_operations_job` index, and the wrappers keep the customer-only grants. Read from the live ledger beforehand, NicolAI-Mail's four successful GPT-6 Astra turns on 14 October cost US$0.54–1.18 each, and the 06:03 turn will show its US$1.10 hold.
 
 ## 83. Gmail asks for gmail.modify alone — 28 October 2026
 
