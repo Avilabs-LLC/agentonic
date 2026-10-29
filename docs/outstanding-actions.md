@@ -1,6 +1,6 @@
 # Agentonic: outstanding actions
 
-**Maintained by Claude · last updated 28 October 2026.** Every action still open, in the audit brief's order of work (stages A–F), with who acts and how we'll know it's done. [current-state.md](current-state.md) says what runs today. The [architecture record](agentonic-architecture.md) holds the design and the dated detail (§37 is the release checklist).
+**Maintained by Claude · last updated 29 October 2026.** Every action still open, in the audit brief's order of work (stages A–F), with who acts and how we'll know it's done. [current-state.md](current-state.md) says what runs today. The [architecture record](agentonic-architecture.md) holds the design and the dated detail (§37 is the release checklist).
 
 **How this page is kept**
 
@@ -27,7 +27,7 @@
 14. **N18** — Volver atrás (§65): installed 9 October (0.37.1); the owner retries the three paths from the report.
 15. **B9** — mailbox batch turns and follow-ups (§§67–68): installed 13 October (migrations 70–71, platform 0.40.0, broker `cc9e991d`, runtime 0.7.0; evaluator `7c84bad6` since §69); closes when a 0.7.0 version passes the batch case (N20).
 16. **N20** — NicolAI-Mail on runtime 0.7.0: passed on GPT-6 Astra (10/10, 13 Oct), approved and activated; Nico's first chat turn failed because the broker refused requests over 10 tools (§72, v0.42.1, installed 13 Oct with broker `dc6c65b4`); turn 4 failed when Astra asked for 10 reads in one response (§73, v0.42.2, installed 13 Oct with broker `b5844821`). Since §74 (broker `9a036fa1`) his chat also shows each step as it runs. Nico sends his request again. His US$5.00 budget covers about four such Astra turns; authorizing more is his decision.
-17. **N26** — Gmail asks for `gmail.modify` alone (§83): built 28 October, not yet installed (platform 0.48.1). After rollout the owner removes `gmail.readonly` and `gmail.compose` under Google Cloud's Data Access, connects a test account (Google shows one Gmail permission), and pastes the justification from step 6 of [google-restricted-scope-verification.md](google-restricted-scope-verification.md) into the Verification Center.
+17. **N26** — Gmail asks for `gmail.modify` alone (§83): installed 29 October (platform 0.48.1). The owner now removes `gmail.readonly` and `gmail.compose` under Google Cloud's Data Access, connects a test account (Google shows one Gmail permission), and pastes the justification from step 6 of [google-restricted-scope-verification.md](google-restricted-scope-verification.md) into the Verification Center.
 
 ## Follow-ups from recent work
 

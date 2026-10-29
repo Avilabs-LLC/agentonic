@@ -127,7 +127,7 @@ New versions use runtime 0.7.0. Google accepts `gmail.modify` for test users, an
 
 **Each turn shows what it cost (architecture §82), installed 14 October with migration 77 and `platform-0.48.0-912f98fdbeae`.** Under each answer in Chats and Probar agente, a muted line shows what the turn cost and, once earlier turns cost something, the conversation's total so far, as Corby does in Slack. A call that still holds a reservation is shown as "más hasta US$X sin confirmar". The figures come from the provider ledger.
 
-**Gmail asks for one scope (architecture §83), built 28 October, not yet installed.** Connecting Gmail asks Google for `gmail.modify` alone, ahead of Google's restricted-scope review (B5). It no longer also asks for `gmail.readonly` and `gmail.compose`, which `gmail.modify` already covers. Accounts already connected keep working. The connect dialog and the Herramientas card now say that sends and drafts a programación authorizes run without confirmation.
+**Gmail asks for one scope (architecture §83), installed 29 October (platform v0.48.1).** Connecting Gmail asks Google for `gmail.modify` alone, ahead of Google's restricted-scope review (B5). It no longer also asks for `gmail.readonly` and `gmail.compose`, which `gmail.modify` already covers. Accounts already connected keep working. The connect dialog and the Herramientas card now say that sends and drafts a programación authorizes run without confirmation.
 
 ## Operations
 
