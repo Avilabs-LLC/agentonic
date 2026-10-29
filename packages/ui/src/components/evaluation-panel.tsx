@@ -12,6 +12,7 @@ import {
   type EvaluationRecord,
 } from "@agentonic/contracts/evaluation"
 import type { FormResult } from "@agentonic/contracts/authoring"
+import { formatUsd } from "@agentonic/contracts/format"
 import {
   Card,
   CardHeader,
@@ -366,7 +367,7 @@ function Confirmation({
           <Check checked={field.value} onChange={field.onChange}>
             {approve
               ? "He revisado todas las respuestas y su evidencia. Apruebo esta versión y su alcance exacto; esta acción no la despliega."
-              : `Autorizo estos casos y el uso del conocimiento seleccionado de esta versión para una evaluación privada en ${record.environment === "azure_staging" ? "Azure staging" : "desarrollo local"}, hasta USD ${record.budgetUsd.toFixed(2)}. El equipo podrá revisar los resultados. Puedo cancelar la autorización.`}
+              : `Autorizo estos casos y el uso del conocimiento seleccionado de esta versión para una evaluación privada en ${record.environment === "azure_staging" ? "Azure staging" : "desarrollo local"}, hasta ${formatUsd(record.budgetUsd)}. El equipo podrá revisar los resultados. Puedo cancelar la autorización.`}
           </Check>
         )}
       />
@@ -445,17 +446,14 @@ export function EvaluationPanel({
                 {record.environment === "azure_staging"
                   ? "Azure · Staging"
                   : "Mac · Desarrollo"}{" "}
-                · {record.cases.length} casos · Máximo USD{" "}
-                {record.budgetUsd.toFixed(2)}
+                · {record.cases.length} casos · Máximo{" "}
+                {formatUsd(record.budgetUsd)}
               </span>
             </div>
             {record.authorized && (
               <p className="text-xs text-muted-foreground">
-                Consumo y reservas: USD{" "}
-                {(record.committedMicrousd / 1000000).toLocaleString("es-VE", {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 6,
-                })}
+                Consumo y reservas:{" "}
+                {formatUsd(record.committedMicrousd / 1000000)}
               </p>
             )}
             <details className="text-sm">

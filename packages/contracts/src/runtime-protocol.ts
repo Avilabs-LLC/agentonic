@@ -2,7 +2,7 @@ import { z } from "zod"
 import { gmailToolOperation } from "./gmail"
 import { driveOperation } from "./drive"
 import { webArguments } from "./web"
-import { modelId, reasoningLevel } from "./models"
+import { reasoningLevel } from "./models"
 
 // Broker protocol 2. The frozen runtime artifact runs the agent loop: it
 // composes instructions, offers tools, decides when to call them and when to
@@ -46,9 +46,16 @@ export const batchCeilings = {
   turnMs: 240_000,
 } as const
 
+/**
+ * A model name as the runtime reads it (§77). Runtimes before 0.8.0 list the
+ * models they accept, so a new model needed a new runtime; from 0.8.0
+ * (`openModels`) the broker alone decides which models a turn may use.
+ */
+export const modelName = z.string().regex(/^[a-z0-9][a-z0-9.-]{0,62}[a-z0-9]$/)
+
 export const turnSpec = z
   .object({
-    model: modelId,
+    model: modelName,
     reasoning: reasoningLevel.nullable(),
     // `drive` and `driveCalls` go only to runtimes with driveContract 1
     // (runtime 0.6.0): earlier runtimes' strict copies of this schema refuse them.

@@ -1,13 +1,17 @@
 "use client"
 import {
   DEFAULT_MODEL_CONFIGURATION,
-  isSelectableModel,
   modelCatalog,
+  modelConfigurationKey,
+  OLD_RUNTIME_MODELS_NOTE,
+  selectableConfigurationsFor,
   type ModelConfiguration,
 } from "@agentonic/contracts/models"
+import { formatUsd } from "@agentonic/contracts/format"
 import { ModelPicker } from "@workspace/ui/components/model-picker"
 import { ChatComposer } from "@workspace/ui/components/chat-composer"
 import { AgentAnswer } from "@workspace/ui/components/agent-answer"
+import { TurnSteps, thinking } from "@workspace/ui/components/turn-steps"
 import { useCallback, useEffect, useRef, useState } from "react"
 import {
   Loader2Icon,
@@ -31,33 +35,51 @@ import {
 } from "@workspace/ui/components/select"
 import { GmailApprovals } from "@workspace/ui/components/gmail-approvals"
 import { DriveApprovals } from "@workspace/ui/components/drive-approvals"
+import { TurnCost, runningSpend } from "@workspace/ui/components/turn-cost"
 import {
   previewModelName,
   type PreviewModel,
 } from "@agentonic/contracts/preview-models"
-const astraNote = "Astra puede necesitar el límite de US$3,00"
-const astraNoteRestart = "Puedes elegirlo al iniciar otra prueba"
+// Models whose output costs US$20 per million tokens or more (GPT-6 Astra,
+// GPT-5.6 Sol) can reserve more than US$0,25 on one long call (§77).
+const needsLargerLimit = (id: string) =>
+  (modelCatalog.find((m) => m.id === id)?.outputRate ?? 0) >= 20
+const largerLimitNote = (id: string) =>
+  `${modelCatalog.find((m) => m.id === id)?.name ?? id} puede necesitar el límite de US$3,00`
+const largerLimitRestart = "Puedes elegirlo al iniciar otra prueba"
 export function AgentPreview({
   workspaceId,
   agentId,
   candidateId,
+  openModels = false,
   initialState = null,
 }: {
   workspaceId: string
   agentId: string
   candidateId?: string
+  /** The version's runtime accepts any offered model (0.8.0, §77). */
+  openModels?: boolean
   initialState?: PreviewState | null
 }) {
+  const options = selectableConfigurationsFor(openModels)
+  const offered = (c: ModelConfiguration) =>
+    options.some((o) => modelConfigurationKey(o) === modelConfigurationKey(c))
   const [previewId, setPreviewId] = useState<string | null>(
     initialState?.id ?? null
   )
   const [state, setState] = useState<PreviewState | null>(initialState)
-  // A model that is no longer offered falls back to the default.
+  // A model no longer offered, or that the version's runtime can't run,
+  // falls back to the default, or to the first model it can run.
   const lastOffered = initialState?.turns
-    .filter((turn) => isSelectableModel(turn.model))
+    .filter((turn) =>
+      offered({ model: turn.model, reasoning: turn.reasoning ?? null })
+    )
     .at(-1)
   const [model, setModel] = useState<PreviewModel>(
-    lastOffered?.model ?? DEFAULT_MODEL_CONFIGURATION.model
+    lastOffered?.model ??
+      (offered(DEFAULT_MODEL_CONFIGURATION)
+        ? DEFAULT_MODEL_CONFIGURATION.model
+        : (options[0]?.model ?? DEFAULT_MODEL_CONFIGURATION.model))
   )
   const [reasoning, setReasoning] = useState<ModelConfiguration["reasoning"]>(
     lastOffered?.reasoning ??
@@ -214,6 +236,8 @@ export function AgentPreview({
       setBusy(false)
     }
   }
+  // What the conversation had cost when each turn ended (§82).
+  const totals = runningSpend(state?.turns ?? [])
   return (
     <div className="space-y-6">
       <div className="space-y-4 rounded-lg border bg-card p-4 sm:p-6">
@@ -225,9 +249,7 @@ export function AgentPreview({
         <div className="flex flex-wrap items-end justify-between gap-3">
           {previewId ? (
             <p className="self-center text-sm text-muted-foreground">
-              Máximo US$
-              {(state?.budgetUsd ?? budgetUsd).toFixed(2).replace(".", ",")} por
-              prueba
+              Máximo {formatUsd(state?.budgetUsd ?? budgetUsd)} por prueba
             </p>
           ) : (
             <Field className="w-full sm:w-56">
@@ -308,7 +330,7 @@ export function AgentPreview({
               </p>
             </div>
           )}
-          {state?.turns.map((turn) => (
+          {state?.turns.map((turn, n) => (
             <div key={turn.id} className="space-y-4">
               <div className="ml-auto max-w-[90%] rounded-lg border bg-muted/40 px-4 py-3">
                 <p className="mb-1 text-xs font-medium text-muted-foreground">
@@ -322,6 +344,10 @@ export function AgentPreview({
                 <p className="text-xs font-medium text-muted-foreground">
                   Agente · Prueba · {previewModelName(turn.model)}
                 </p>
+                <TurnSteps
+                  steps={turn.steps}
+                  live={turn.status === "queued" || turn.status === "running"}
+                />
                 {turn.answer ? (
                   <>
                     <AgentAnswer text={turn.answer.text} />
@@ -360,6 +386,14 @@ export function AgentPreview({
                       Escribiendo…
                     </p>
                   </>
+                ) : turn.status === "running" && turn.steps?.length ? (
+                  // A running step shows its own spinner (§74).
+                  thinking(turn.steps) && (
+                    <p className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <Loader2Icon className="size-3 animate-spin" />
+                      Pensando…
+                    </p>
+                  )
                 ) : (
                   <p className="text-sm text-muted-foreground">
                     {turn.status === "queued"
@@ -369,6 +403,14 @@ export function AgentPreview({
                         : (previewErrors[turn.error ?? ""] ??
                           "No se pudo completar esta respuesta.")}
                   </p>
+                )}
+                {/* What the turn cost, once it has ended (§82); the model is named above. */}
+                {turn.status !== "queued" && turn.status !== "running" && (
+                  <TurnCost
+                    spentMicrousd={turn.spentMicrousd}
+                    heldMicrousd={turn.heldMicrousd}
+                    totalMicrousd={totals[n]!}
+                  />
                 )}
               </div>
             </div>
@@ -393,6 +435,8 @@ export function AgentPreview({
             model={
               <ModelPicker
                 value={{ model, reasoning }}
+                options={options}
+                note={openModels ? undefined : OLD_RUNTIME_MODELS_NOTE}
                 disabled={busy || waiting}
                 onChange={(choice) => {
                   setModel(choice.model)
@@ -408,12 +452,12 @@ export function AgentPreview({
                   </span>
                   <span className="tabular-nums">{query.length}/1000</span>
                 </p>
-                {model === "gpt-6-astra" &&
+                {needsLargerLimit(model) &&
                   (state?.budgetUsd ?? budgetUsd) < 3 && (
                     <p className="mt-1">
                       {previewId
-                        ? `${astraNote}. ${astraNoteRestart}.`
-                        : `${astraNote}.`}
+                        ? `${largerLimitNote(model)}. ${largerLimitRestart}.`
+                        : `${largerLimitNote(model)}.`}
                     </p>
                   )}
               </>

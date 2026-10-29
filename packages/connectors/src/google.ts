@@ -537,6 +537,51 @@ export async function gmail(
     .parse(data)
 }
 
+/**
+ * The conversation a proposed reply answers, read when its owner opens the
+ * proposal's card (§81): the thread's latest 10 messages, oldest first, as
+ * plain text like gmail.threads.read. Shown to the owner, never stored.
+ */
+export async function replyThread(access: string, messageId: string) {
+  const { threadId } = await replyContext(access, messageId)
+  let response: Response
+  try {
+    response = await fetch(
+      `${GMAIL}threads/${encodeURIComponent(threadId)}?format=full`,
+      {
+        headers: { Authorization: `Bearer ${access}` },
+        signal: AbortSignal.timeout(15000),
+      }
+    )
+  } catch {
+    throw new GoogleError("unavailable")
+  }
+  if (!response.ok)
+    throw new GoogleError(response.status === 401 ? "reconnect" : "rejected")
+  const all =
+    z
+      .object({ messages: z.array(z.unknown()).optional() })
+      .parse(await json(response)).messages ?? []
+  return {
+    messages: all.slice(-THREAD_MESSAGES).map((m) => {
+      const { id, headers, text } = message(m)
+      const header = (name: string) =>
+        headers?.find((h) => h.name.toLowerCase() === name)?.value ?? ""
+      return {
+        id,
+        from: header("from"),
+        to: header("to"),
+        cc: header("cc"),
+        subject: header("subject"),
+        date: header("date"),
+        text: text.trim(),
+        answered: id === messageId,
+      }
+    }),
+    earlierMessages: Math.max(0, all.length - THREAD_MESSAGES),
+  }
+}
+
 // Aprender mi estilo (architecture §57): the account's own sent mail, read once
 // in the worker's memory. Nothing here is stored. A run makes hundreds of reads
 // in a row, so a passing Gmail error (a 5xx, a dropped connection) is retried

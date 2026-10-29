@@ -527,7 +527,7 @@ it("reports exhausted model budget without another provider request", async () =
     true,
     8
   )
-  expect(answer.text).toContain("presupuesto disponible")
+  expect(answer.text).toContain("límite de gasto disponible")
   expect(fetch).not.toHaveBeenCalled()
   expect(execute.mock.calls.map(([op]) => op)).toEqual(["reserve", "web-check"])
 })

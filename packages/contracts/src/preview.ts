@@ -1,6 +1,7 @@
 import { z } from "zod"
 import { isSelectableModel, reasoningLevel } from "./models"
 import { retrievalResult } from "./rag"
+import { turnSteps } from "./turn-steps"
 import { previewModel, DEFAULT_PREVIEW_MODEL } from "./preview-models"
 const identity = { agentId: z.uuid(), previewId: z.uuid() }
 export const previewStartResult = z.discriminatedUnion("ok", [
@@ -68,6 +69,11 @@ export const previewState = z.object({
         query: z.string().nullable(),
         /** The answer as it is being written, while the turn runs (§68). */
         partial: z.string().nullable().optional(),
+        /** What the turn did, step by step (§74); a malformed list shows no steps. */
+        steps: turnSteps.nullable().optional().catch(null),
+        /** What the turn's paid calls cost, and what still holds unsettled (§82). */
+        spentMicrousd: z.number().optional(),
+        heldMicrousd: z.number().optional(),
       })
     )
     .max(10),
@@ -87,7 +93,7 @@ export const previewErrors: Record<string, string> = {
   budget_exhausted:
     "Se alcanzó el presupuesto de esta prueba o el límite de desarrollo.",
   provider_unavailable:
-    "No se pudo completar la respuesta. No se reintentará automáticamente.",
+    "El proveedor de IA rechazó o no respondió la solicitud, así que no se pudo completar la respuesta. No se reintentará automáticamente.",
   configuration_required: "El servicio de pruebas aún no está configurado.",
   lease_lost: "La respuesta se interrumpió o perdió su autorización.",
 }

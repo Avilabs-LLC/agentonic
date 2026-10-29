@@ -59,7 +59,7 @@ In Google Cloud console → _Google Auth Platform_ → _Branding_: app name "Age
 
 - Set the publishing status to **In production**. With unverified restricted scopes the 100-user cap still applies until approval.
 - In the _Verification Center_, declare both scopes and paste the justifications. Draft:
-  - `gmail.readonly`: "Agentonic lets a user give their own AI agent read access to their mailbox, so the agent can find and summarize the user's messages when the user asks in a chat. Reads happen only during the user's own conversation, for the connected account, and are not stored or imported into other features."
+  - `gmail.readonly`: "Agentonic lets a user give their own AI agent read access to their mailbox, so the agent can find and summarize the user's messages when the user asks in a chat. Reads happen only during the user's own conversation, for the connected account. The conversation keeps the agent's answer and the subjects of the messages it read, for the user only and until the conversation is closed or expires; nothing read is imported into other features."
   - `gmail.compose`: "The user's agent drafts replies and new messages that the user reviews. Creating, changing or deleting a draft and sending any message each require the user's explicit confirmation in Agentonic; nothing is sent automatically."
 - Link up to three pages of documentation (the homepage's Gmail section and a help page).
 

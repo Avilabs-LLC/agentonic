@@ -1,16 +1,19 @@
 "use client"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
-import { ArrowLeftIcon, LoaderCircleIcon, CheckIcon } from "lucide-react"
+import { LoaderCircleIcon, CheckIcon } from "lucide-react"
 import {
   batchPassed,
   batchModelGroups,
   batchRunning,
+  type EvaluationBatch,
   type ReviewPreparation,
 } from "@agentonic/contracts/review-flow"
+import { formatUsd } from "@agentonic/contracts/format"
 import {
   evaluationModels,
-  selectableModels,
+  OLD_RUNTIME_MODELS_NOTE,
+  selectableModelsFor,
   modelConfigurationKey,
   modelConfigurationLabel,
   reasoningLabels,
@@ -27,6 +30,7 @@ import {
 } from "@workspace/ui/components/dialog"
 import { Button } from "@workspace/ui/components/button"
 import { Input } from "@workspace/ui/components/input"
+import { useEdgeFade } from "@workspace/ui/components/tabs"
 import { Checkbox } from "@base-ui/react/checkbox"
 import {
   Field,
@@ -60,8 +64,65 @@ export function modelResultsLabel(record: ReviewPreparation) {
     return `Evaluando · ${batchModelGroups(batch).filter((m) => !["queued", "running"].includes(m.status)).length}/${batchModelGroups(batch).length}`
   return `${batchPassed(batch)}/${batchModelGroups(batch).length} modelos al 100 %`
 }
-const usd = (n: number) =>
-  `US$${n.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 4 })}`
+/** One model and level's result in the summary: passed only when it ran
+ * every situation and passed them all. */
+function configurationOutcome(m: EvaluationBatch["models"][number]): {
+  outcome: "passed" | "failed" | "pending" | "attention"
+  label: string
+} {
+  if (m.status === "running") return { outcome: "pending", label: "Evaluando" }
+  if (["queued", "awaiting_consent"].includes(m.status))
+    return { outcome: "pending", label: "En cola" }
+  if (m.status === "passed" && m.total > 0 && m.passed === m.total)
+    return { outcome: "passed", label: "100 %" }
+  if (["error", "cancelled"].includes(m.status))
+    return { outcome: "attention", label: "Interrumpida" }
+  return { outcome: "failed", label: "Con fallos" }
+}
+
+/** Each evaluated model and level as a chip in one row that scrolls
+ * sideways; the pressed chip scrolls into view, so a level opened from the
+ * summary is never hidden past the edge. */
+export function ConfigurationChips({
+  configurations,
+  selected,
+  onSelect,
+}: {
+  configurations: Array<{ id: string; label: string }>
+  selected: string
+  onSelect: (id: string) => void
+}) {
+  const ref = useRef<HTMLDivElement>(null)
+  const fade = useEdgeFade(ref)
+  useEffect(() => {
+    ref.current
+      ?.querySelector('[aria-pressed="true"]')
+      ?.scrollIntoView({ block: "nearest", inline: "nearest" })
+  }, [selected])
+  return (
+    <div ref={ref} className="min-w-0 flex-1 overflow-x-auto" style={fade}>
+      <div
+        role="group"
+        aria-label="Modelos y niveles evaluados"
+        className="flex w-max gap-2 py-0.5"
+      >
+        {configurations.map(({ id, label }) => (
+          <Button
+            key={id}
+            size="sm"
+            variant={id === selected ? "secondary" : "outline"}
+            aria-pressed={id === selected}
+            className="rounded-full"
+            onClick={() => onSelect(id)}
+          >
+            {label}
+          </Button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export function ModelResultsDialog({
   record,
   open,
@@ -81,11 +142,14 @@ export function ModelResultsDialog({
   const [selectedBatch, setSelectedBatch] = useState<string | null>(
     initialBatchId ?? null
   )
-  const [selectedModel, setSelectedModel] = useState<string | null>(null)
+  const [selectedConfiguration, setSelectedConfiguration] = useState<
+    string | null
+  >(null)
   const batch =
     record.batches.find((b) => b.id === selectedBatch) ?? record.batches[0]
-  const model =
-    batch && batchModelGroups(batch).find((m) => m.model === selectedModel)
+  const configuration = batch?.models.find(
+    (m) => m.id === selectedConfiguration
+  )
   const completed = batch?.models.reduce((sum, m) => sum + m.completed, 0) ?? 0
   const total = batch?.models.reduce((sum, m) => sum + m.total, 0) ?? 0
   return (
@@ -116,10 +180,10 @@ export function ModelResultsDialog({
                   label: `Ejecución ${record.batches.length - i}${i === 0 ? " · Más reciente" : ""}`,
                 }))}
                 onValueChange={(value) => {
-                  // Pressing the run already shown keeps the chosen model.
+                  // Pressing the run already shown keeps the chosen level.
                   if (value === batch.id) return
                   setSelectedBatch(value)
-                  setSelectedModel(null)
+                  setSelectedConfiguration(null)
                 }}
               >
                 <SelectTrigger
@@ -147,13 +211,13 @@ export function ModelResultsDialog({
                   {completed}/{total} pruebas completadas
                 </span>
                 <span className="text-muted-foreground">
-                  {usd(
+                  {formatUsd(
                     batch.models.reduce(
                       (sum, m) => sum + m.committedMicrousd,
                       0
                     ) / 1000000
                   )}{" "}
-                  de {usd(batch.budgetUsd)}
+                  de {formatUsd(batch.budgetUsd)}
                 </span>
               </div>
               <progress
@@ -163,39 +227,55 @@ export function ModelResultsDialog({
                 aria-label="Progreso de evaluación"
               />
             </div>
-            {model ? (
+            {configuration ? (
+              // One model and level per chip, each with its own situations
+              // (owner direction, 14 October 2026).
               <div className="space-y-4">
-                <Button variant="ghost" onClick={() => setSelectedModel(null)}>
-                  <ArrowLeftIcon /> Todos los modelos
-                </Button>
-                {model.configurations.map((configuration) => (
-                  <section key={configuration.id} className="space-y-4">
-                    <h3 className="font-medium">
-                      {modelConfigurationLabel(configuration)} ·{" "}
-                      {configuration.passed}/{configuration.total} superadas
-                    </h3>
-                    {configuration.errorCode && (
-                      <p className="text-sm text-destructive">
-                        {configuration.errorCode === "budget_exhausted"
-                          ? "Se alcanzó el límite de esta ejecución: cada llamada reserva su costo máximo antes de empezar, así que el límite puede alcanzarse antes que el consumo. Repite la evaluación con un límite mayor."
+                <div className="flex items-center gap-2">
+                  <ConfigurationChips
+                    configurations={batch.models.map((m) => ({
+                      id: m.id,
+                      label: modelConfigurationLabel(m),
+                    }))}
+                    selected={configuration.id}
+                    onSelect={setSelectedConfiguration}
+                  />
+                  <Button
+                    className="shrink-0"
+                    onClick={() => setSelectedConfiguration(null)}
+                  >
+                    Ir al resumen
+                  </Button>
+                </div>
+                <section className="space-y-3">
+                  <p className="text-sm text-muted-foreground">
+                    {configuration.passed}/{configuration.total} superadas
+                  </p>
+                  {configuration.errorCode && (
+                    <p className="text-sm text-destructive">
+                      {configuration.errorCode === "budget_exhausted"
+                        ? "Se alcanzó el límite de esta ejecución: cada llamada reserva su costo máximo antes de empezar, así que el límite puede alcanzarse antes que el consumo. Repite la evaluación con un límite mayor."
+                        : configuration.errorCode === "provider_unavailable"
+                          ? "El proveedor de IA rechazó o no respondió una llamada, así que la evaluación de este nivel se detuvo."
                           : "La evaluación de este modelo se interrumpió."}{" "}
-                        Se conserva el consumo realizado.
-                      </p>
-                    )}
-                    {configuration.results.length ? (
-                      <ReceiptResults results={configuration.results} />
-                    ) : (
-                      <p className="text-sm text-muted-foreground">
-                        Sin respuestas disponibles todavía.
-                      </p>
-                    )}
-                    <p className="text-xs text-muted-foreground">
-                      Evaluador: {configuration.grader ?? "No registrado"}
+                      Se conserva el consumo realizado.
                     </p>
-                  </section>
-                ))}
+                  )}
+                  {configuration.results.length ? (
+                    <ReceiptResults results={configuration.results} />
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      Sin respuestas disponibles todavía.
+                    </p>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    Evaluador: {configuration.grader ?? "No registrado"}
+                  </p>
+                </section>
               </div>
             ) : (
+              // One row per model and level, on one line (owner direction,
+              // 13 October 2026): each level has its own situations and result.
               <Table aria-label="Resultados por modelo">
                 <TableHeader>
                   <TableRow>
@@ -205,56 +285,31 @@ export function ModelResultsDialog({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {batchModelGroups(batch).map((m) => (
-                    <TableRow key={m.model}>
-                      <TableCell className="whitespace-normal">
-                        <Button
-                          variant="link"
-                          className="h-auto flex-col items-start gap-1 p-0 text-left whitespace-normal text-foreground underline underline-offset-4"
-                          onClick={() => setSelectedModel(m.model)}
-                        >
-                          {modelConfigurationLabel({
-                            model: m.model,
-                            reasoning: null,
-                          })}
-                          <span className="text-xs text-muted-foreground">
-                            {" "}
-                            · {m.configurations.length}{" "}
-                            {m.configurations.length === 1
-                              ? "nivel"
-                              : "niveles"}
-                          </span>
-                        </Button>
-                      </TableCell>
-                      <TableCell>
-                        {m.passed}/{m.total} superadas
-                      </TableCell>
-                      <TableCell>
-                        <ReviewResultStatus
-                          outcome={
-                            m.status === "passed"
-                              ? "passed"
-                              : m.status === "failed"
-                                ? "failed"
-                                : ["queued", "running"].includes(m.status)
-                                  ? "pending"
-                                  : "attention"
-                          }
-                          label={
-                            m.status === "passed"
-                              ? "100 %"
-                              : m.status === "queued"
-                                ? "En cola"
-                                : m.status === "running"
-                                  ? "Evaluando"
-                                  : m.status === "failed"
-                                    ? "Con fallos"
-                                    : "Interrumpida"
-                          }
-                        />
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {batch.models.map((m) => {
+                    const outcome = configurationOutcome(m)
+                    return (
+                      <TableRow key={m.id}>
+                        <TableCell>
+                          <Button
+                            variant="link"
+                            className="h-auto p-0 text-left text-foreground underline underline-offset-4"
+                            onClick={() => setSelectedConfiguration(m.id)}
+                          >
+                            {modelConfigurationLabel(m)}
+                          </Button>
+                        </TableCell>
+                        <TableCell className="tabular-nums">
+                          {m.passed}/{m.total} superadas
+                        </TableCell>
+                        <TableCell>
+                          <ReviewResultStatus
+                            outcome={outcome.outcome}
+                            label={outcome.label}
+                          />
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
                 </TableBody>
               </Table>
             )}
@@ -263,7 +318,7 @@ export function ModelResultsDialog({
         {record.committedMicrousd !== undefined && (
           <p className="text-xs text-muted-foreground">
             Consumo acumulado, incluida la preparación y reservas pendientes:{" "}
-            {usd(record.committedMicrousd / 1000000)}.
+            {formatUsd(record.committedMicrousd / 1000000)}.
           </p>
         )}
       </DialogContent>
@@ -273,30 +328,40 @@ export function ModelResultsDialog({
 
 export function RunModelEvaluationDialog({
   record,
+  openModels = false,
   action,
   onClose,
   onStarted,
 }: {
   record: ReviewPreparation
+  /** The version's runtime accepts any offered model (0.8.0, §77). */
+  openModels?: boolean
   action: (input: unknown) => Promise<FormResult>
   onClose: () => void
   onStarted: () => void
 }) {
   const router = useRouter()
-  const [models, setModels] = useState<ModelConfiguration[]>(
-    () =>
-      (record.batches[0]?.id !== record.evaluationId
+  const offered = selectableModelsFor(openModels)
+  const [models, setModels] = useState<ModelConfiguration[]>(() => {
+    // The previous run's choices that are still offered for this version,
+    // or every offered model at its default level.
+    const previous = (
+      record.batches[0]?.id !== record.evaluationId
         ? record.batches[0]?.models
         : undefined
-      )?.flatMap((m) => {
-        const value = evaluationModels.element.safeParse({
-          model: m.model,
-          reasoning: m.reasoning,
-        })
-        return value.success ? [value.data] : []
-      }) ??
-      selectableModels.map((m) => ({ model: m.id, reasoning: m.defaultLevel }))
-  )
+    )?.flatMap((m) => {
+      const value = evaluationModels.element.safeParse({
+        model: m.model,
+        reasoning: m.reasoning,
+      })
+      return value.success && offered.some((o) => o.id === value.data.model)
+        ? [value.data]
+        : []
+    })
+    return previous?.length
+      ? previous
+      : offered.map((m) => ({ model: m.id, reasoning: m.defaultLevel }))
+  })
   // The limit follows the selected models until the person edits it (§70).
   const [budget, setBudget] = useState(() =>
     String(suggestedEvaluationBudget(models))
@@ -370,10 +435,15 @@ export function RunModelEvaluationDialog({
             confirmados. Cada combinación ejecuta todas las situaciones.
           </DialogDescription>
         </DialogHeader>
+        {!openModels && (
+          <p className="text-sm text-muted-foreground">
+            {OLD_RUNTIME_MODELS_NOTE}
+          </p>
+        )}
         {/* Compact: levels in three columns of short rows (owner direction,
             2026-10-08), so each model takes one or two rows. */}
         <div className="space-y-3">
-          {selectableModels.map((m) => (
+          {offered.map((m) => (
             <fieldset key={m.id} disabled={pending} className="border-b pb-3">
               <legend className="mb-1 text-sm font-medium">{m.name}</legend>
               <div className="grid grid-cols-2 gap-x-4 sm:grid-cols-3">
@@ -430,8 +500,8 @@ export function RunModelEvaluationDialog({
           />
           <FieldDescription>
             Sugerido para esta selección:{" "}
-            {usd(suggestedEvaluationBudget(models))}. Cada llamada reserva su
-            costo máximo antes de empezar; solo se cobra lo consumido.
+            {formatUsd(suggestedEvaluationBudget(models))}. Cada llamada reserva
+            su costo máximo antes de empezar; solo se cobra lo consumido.
           </FieldDescription>
         </Field>
         <ConsentCheckbox
@@ -439,7 +509,7 @@ export function RunModelEvaluationDialog({
           onCheckedChange={(value) => setConsent(value === true)}
           disabled={pending}
         >
-          Autorizo esta ejecución hasta {usd(Number(budget) || 0)}. Cada
+          Autorizo esta ejecución hasta {formatUsd(Number(budget) || 0)}. Cada
           ejecución consume IA y puede generar cargos, incluso si hay fallos.
           Repetirla implica consumo adicional.
         </ConsentCheckbox>

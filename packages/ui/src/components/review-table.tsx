@@ -6,7 +6,7 @@ import { StatusIndicator } from "@workspace/ui/components/status-badge"
 import {
   Absent,
   CellButton,
-  Count,
+  VersionNumber,
   Deadline,
   sortableHeader,
   timeKey,
@@ -248,7 +248,7 @@ export function ReviewTable({
     {
       accessorKey: "versionNumber",
       header: sortableHeader<Review>("Versión"),
-      cell: ({ row }) => <Count value={row.original.versionNumber} />,
+      cell: ({ row }) => <VersionNumber value={row.original.versionNumber} />,
     },
     {
       accessorKey: "number",

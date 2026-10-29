@@ -14,6 +14,7 @@ import {
   gmailToolOperation,
 } from "../packages/contracts/src/gmail"
 import { driveOperation } from "../packages/contracts/src/drive"
+import { turnSteps } from "../packages/contracts/src/turn-steps"
 import { toolOffers } from "../packages/runtime/src/tools/registry"
 import { runAgentTurn } from "../packages/runtime/src/agent/turn"
 import { RuntimeError } from "../packages/runtime/src/agent/envelope"
@@ -40,6 +41,7 @@ import type { Providers } from "../apps/worker/src/providers"
 import { runPreview, verifyRuntime } from "../apps/worker/src/runtime"
 import type { Execute, Lease } from "../apps/worker/src/pipeline"
 import { keyring } from "../packages/connectors/src/secrets"
+import { GoogleError } from "../packages/connectors/src/google"
 import { directProviders } from "../apps/worker/src/providers"
 // @ts-expect-error untyped build script
 import { buildRuntimeArtifact } from "../scripts/runtime-artifact.mjs"
@@ -934,6 +936,233 @@ describe("mailbox batch turns (§67)", () => {
     expect(MAX_TOOL_OFFERS).toBe(16)
   })
 
+  it("keeps the first five calls of a response, drops the rest and goes on (§73)", async () => {
+    // NicolAI-Mail's turn 4 on 13 October: GPT-6 Astra asked for more calls
+    // in one response than a turn takes, and the broker failed the turn.
+    let models = 0
+    const fetch = vi.fn(async () => {
+      models++
+      if (models === 1)
+        return json(
+          calls(
+            ...Array.from(
+              { length: 7 },
+              (_, n) =>
+                ["gmail_read", { id: `b0${n + 1}` }] as [string, unknown]
+            )
+          )
+        )
+      return json(
+        answer({ text: "Leídos.", citations: [], insufficientEvidence: true })
+      )
+    })
+    vi.stubGlobal("fetch", fetch)
+    const gmailTool = vi.fn()
+    const recorded = await turnInProcess(
+      batchSpec(),
+      vi.fn<Execute>().mockResolvedValue({ ok: true }),
+      { providers: mailbox(gmailTool), gmail: grant, batch: true },
+      env()
+    )
+    expect(recorded?.text).toBe("Leídos.")
+    expect(gmailTool.mock.calls.map((c) => c[1])).toEqual(
+      ["b01", "b02", "b03", "b04", "b05"].map((id) => ({ id }))
+    )
+    // The dropped calls are never resent: five calls, five outputs.
+    const second = bodies(fetch)[1].input as { type?: string }[]
+    expect(second.filter((x) => x.type === "function_call")).toHaveLength(5)
+    expect(
+      second.filter((x) => x.type === "function_call_output")
+    ).toHaveLength(5)
+  })
+
+  it("returns refused arguments to the model instead of failing the turn (§73)", async () => {
+    let models = 0
+    const fetch = vi.fn(async () => {
+      models++
+      if (models === 1)
+        return json(calls(["gmail_search", { query: "in:inbox", limit: 50 }]))
+      return json(
+        answer({
+          text: "Corregido.",
+          citations: [],
+          insufficientEvidence: true,
+        })
+      )
+    })
+    vi.stubGlobal("fetch", fetch)
+    const gmailTool = vi.fn()
+    const recorded = await turnInProcess(
+      batchSpec(),
+      vi.fn<Execute>().mockResolvedValue({ ok: true }),
+      { providers: mailbox(gmailTool), gmail: grant, batch: true },
+      env()
+    )
+    expect(recorded?.text).toBe("Corregido.")
+    expect(gmailTool).not.toHaveBeenCalled()
+    expect(JSON.stringify(bodies(fetch)[1].input)).toContain(
+      "invalid_arguments"
+    )
+  })
+
+  it("gives a refused read or proposal back to the model, but stops for a reconnect (§73)", async () => {
+    const run = async (failure: unknown) => {
+      let models = 0
+      const fetch = vi.fn(async () => {
+        models++
+        if (models === 1)
+          return json(
+            calls(
+              ["gmail_read", { id: "b99" }],
+              ["gmail_drafts_create", draft("b01")]
+            )
+          )
+        return json(
+          answer({ text: "Sigo.", citations: [], insufficientEvidence: true })
+        )
+      })
+      vi.stubGlobal("fetch", fetch)
+      const gmailTool = vi.fn(async () => {
+        throw failure
+      })
+      const recorded = await turnInProcess(
+        batchSpec(),
+        vi.fn<Execute>().mockResolvedValue({ ok: true }),
+        {
+          providers: { ...providers, gmailTool } as Providers,
+          gmail: grant,
+          batch: true,
+        },
+        env()
+      )
+      return { recorded, second: JSON.stringify(bodies(fetch)[1]?.input) }
+    }
+    // A message the model named wrongly (Gmail 404) and a proposal the
+    // database refused: both go back to the model, and the turn answers.
+    const notFound = await run(new GoogleError("rejected", "gmail_http_404"))
+    expect(notFound.recorded?.text).toBe("Sigo.")
+    expect(notFound.second).toContain("not_found")
+    const refused = await run(
+      Object.assign(new Error("refused"), { code: "42501" })
+    )
+    expect(refused.second).toContain('\\"refused\\"')
+    // Only the owner can fix a connection that must be reconnected.
+    await expect(run(new GoogleError("reconnect"))).rejects.toMatchObject({
+      code: "reconnect",
+    })
+  })
+
+  it("shows each tool call as a step, and writes the last list before the answer (§74)", async () => {
+    const run = async (
+      options: { steps?: boolean } = {},
+      execute = vi.fn<Execute>().mockResolvedValue({ ok: true })
+    ) => {
+      let models = 0
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () =>
+          ++models === 1
+            ? json(
+                calls(
+                  [
+                    "gmail_search",
+                    { query: "from:ana  newer_than:7d", limit: 10 },
+                  ],
+                  ["gmail_read", { id: "b01" }],
+                  ["gmail_read", { id: "b04" }],
+                  ["gmail_drafts_create", draft("b01")]
+                )
+              )
+            : json(
+                answer({
+                  text: "Listo.",
+                  citations: [],
+                  insufficientEvidence: true,
+                })
+              )
+        )
+      )
+      const gmailTool = vi.fn()
+      const mail = mailbox(gmailTool)
+      gmailTool.mockImplementation(
+        async (operation: string, args: { id?: string }) => {
+          if (operation === "gmail.drafts.create")
+            return {
+              pendingApproval: true,
+              id: "50000000-0000-4000-8000-000000000001",
+            }
+          if (operation === "gmail.read" && args.id === "b04")
+            throw new GoogleError("rejected", "gmail_http_404")
+          if (operation === "gmail.read")
+            return {
+              id: "b01",
+              headers: [
+                { name: "From", value: "Ana <ana@example.invalid>" },
+                { name: "Subject", value: "Cotización\n Q4" },
+              ],
+              text: "Synthetic",
+              untrusted: true,
+            }
+          return found
+        }
+      )
+      const recorded = await turnInProcess(batchSpec(), execute, {
+        providers: mail,
+        gmail: grant,
+        batch: true,
+        ...options,
+      })
+      return { recorded, execute }
+    }
+    const { recorded, execute } = await run({ steps: true })
+    expect(recorded?.text).toContain("Listo.")
+    const operations = execute.mock.calls.map(([operation]) => operation)
+    const lists = execute.mock.calls
+      .filter(([operation]) => operation === "steps")
+      .map(([, , payload]) => payload!.steps)
+    // Every list the database gets is valid, and the last arrives before the answer.
+    for (const list of lists)
+      expect(turnSteps.safeParse(list).success).toBe(true)
+    expect(operations.lastIndexOf("steps")).toBeLessThan(
+      operations.indexOf("answer")
+    )
+    expect(lists.at(-1)).toEqual([
+      {
+        tool: "gmail.search",
+        target: "from:ana newer_than:7d",
+        count: 2,
+        status: "done",
+      },
+      {
+        tool: "gmail.read",
+        target: "Cotización Q4",
+        count: null,
+        status: "done",
+      },
+      { tool: "gmail.read", target: null, count: null, status: "failed" },
+      {
+        tool: "gmail.drafts.create",
+        target: "Re: Synthetic",
+        count: null,
+        status: "proposed",
+      },
+    ])
+    // A step that can't be written never stops the turn.
+    const failing = await run(
+      { steps: true },
+      vi.fn<Execute>(async (operation) => {
+        if (operation === "steps") throw new Error("busy")
+        return { ok: true }
+      })
+    )
+    expect(failing.recorded?.text).toContain("Listo.")
+    // Evaluations record no steps.
+    const evaluation = await run()
+    expect(
+      evaluation.execute.mock.calls.some(([operation]) => operation === "steps")
+    ).toBe(false)
+  })
+
   it("shows the agent what its earlier proposals became (B8)", async () => {
     const fetch = vi
       .fn()
@@ -1108,25 +1337,39 @@ describe("mailbox batch turns (§67)", () => {
       web: false,
       passageIds: [],
     })
-    await expect(
-      legacy.handle({
-        type: "model",
-        id: 1,
-        input: [{ role: "user", content: "Synthetic" }],
-        tools: [{ name: "gmail_search", description: "x" }],
-        toolChoice: "auto",
-        format: {
-          type: "json_schema",
-          name: "agent_preview_answer",
-          strict: true,
-          schema: { type: "object" },
-        },
-      })
-    ).rejects.toMatchObject({ diagnostic: "calls_per_response" })
+    // One call per response for earlier runtimes: a second is dropped, never
+    // run, and the turn goes on (§73).
+    const reply = (await legacy.handle({
+      type: "model",
+      id: 1,
+      input: [{ role: "user", content: "Synthetic" }],
+      tools: [{ name: "gmail_search", description: "x" }],
+      toolChoice: "auto",
+      format: {
+        type: "json_schema",
+        name: "agent_preview_answer",
+        strict: true,
+        schema: { type: "object" },
+      },
+    })) as { items: { item: { type: string; arguments?: string } }[] }
+    const kept = reply.items.filter((x) => x.item.type === "function_call")
+    expect(kept).toHaveLength(1)
+    expect(kept[0]!.item.arguments).toContain('"a"')
     const create = { kind: "gmail", operation: "gmail.drafts.create" } as const
     expect(JSON.stringify(toolParameters(create))).not.toContain("replyTo")
     expect(toolParameters(create, true)).toMatchObject({
       required: expect.arrayContaining(["replyTo"]),
+    })
+    // A note for the owner only for runtimes that declare draftNotes (§81).
+    expect(JSON.stringify(toolParameters(create, true))).not.toContain("note")
+    expect(toolParameters(create, true, true)).toMatchObject({
+      required: expect.arrayContaining(["replyTo", "note"]),
+    })
+    const update = { kind: "gmail", operation: "gmail.drafts.update" } as const
+    expect(toolParameters(update, true, true)).toMatchObject({
+      properties: {
+        message: { required: expect.arrayContaining(["note"]) },
+      },
     })
   })
 })
@@ -1154,6 +1397,10 @@ describe("packaged runtime artifact", () => {
       webResearch: "1",
       // Runtime 0.7.0 (§67): brokers send it batch limits.
       mailboxBatch: "1",
+      // Runtime 0.8.0 (§77): any model the broker offers.
+      openModels: "1",
+      // Runtime 0.9.0 (§81): proposed messages carry a note for the owner.
+      draftNotes: "1",
     })
     const root = join(first.directory, "..")
     expect(
@@ -1262,6 +1509,57 @@ describe("packaged runtime artifact", () => {
       },
     ])
   })
+  it("runs a model its frozen code never named (§77)", async () => {
+    const built = await artifact()
+    const fetch = vi.fn().mockResolvedValue(
+      json(
+        answer({
+          text: "Three years.",
+          citations: [passage],
+          insufficientEvidence: false,
+        })
+      )
+    )
+    vi.stubGlobal("fetch", fetch)
+    const env = envelope(WEB)
+    const execute = vi
+      .fn<Execute>()
+      .mockImplementation(async (op) =>
+        op === "context"
+          ? { ...env, previewModel: "gpt-6-luna", reasoningLevel: "low" }
+          : { ok: true }
+      )
+    await runPreview(
+      job,
+      execute,
+      {
+        manifest: built.manifest,
+        artifactSha256: built.artifactSha256,
+        gitCommit: built.gitCommit,
+      },
+      join(built.directory, ".."),
+      directProviders({
+        openaiKey: "synthetic-openai",
+        browserbaseKey: "synthetic-browserbase",
+      }),
+      new AbortController().signal,
+      false
+    )
+    expect(bodies(fetch)[0]).toMatchObject({
+      model: "gpt-6-luna",
+      reasoning: { effort: "low" },
+    })
+    expect(execute.mock.calls.at(-1)).toEqual([
+      "answer",
+      job,
+      {
+        text: "Three years.",
+        citations: [passage],
+        insufficientEvidence: false,
+        model: "gpt-6-luna",
+      },
+    ])
+  })
   it("reports a runtime answer failure with its diagnostic", async () => {
     const built = await artifact()
     vi.stubGlobal(
@@ -1293,5 +1591,105 @@ describe("packaged runtime artifact", () => {
         new AbortController().signal
       )
     ).rejects.toMatchObject({ diagnostic: "answer_json_invalid" })
+  })
+})
+
+describe("the final answer reaches the runtime in one readable piece (§75)", () => {
+  const message = (value: unknown, phase?: string) => ({
+    type: "message",
+    ...(phase ? { phase } : {}),
+    content: [
+      {
+        type: "output_text",
+        text: typeof value === "string" ? value : JSON.stringify(value),
+      },
+    ],
+  })
+  const reply = (...output: unknown[]) => ({
+    status: "completed",
+    usage: { input_tokens: 10, output_tokens: 10 },
+    output,
+  })
+  const run = async (response: unknown) => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(json(response)))
+    return turnInProcess(
+      spec({ tools: { gmail: [], web: false } }),
+      vi.fn<Execute>().mockResolvedValue({ ok: true })
+    )
+  }
+  it("keeps only the final answer when the model writes progress notes first", async () => {
+    const recorded = await run(
+      reply(
+        { type: "reasoning", id: "rs1" },
+        message(
+          {
+            text: "Voy a revisar tus correos.",
+            citations: [],
+            insufficientEvidence: true,
+          },
+          "commentary"
+        ),
+        { type: "reasoning", id: "rs2" },
+        message(
+          {
+            text: "No tengo acceso a tus correos aquí.",
+            citations: [],
+            insufficientEvidence: true,
+          },
+          "final_answer"
+        )
+      )
+    )
+    expect(recorded?.text).toBe("No tengo acceso a tus correos aquí.")
+  })
+  it("keeps the last message when no phase is named", async () => {
+    const recorded = await run(
+      reply(
+        message({
+          text: "Primero.",
+          citations: [],
+          insufficientEvidence: true,
+        }),
+        message({ text: "Final.", citations: [], insufficientEvidence: true })
+      )
+    )
+    expect(recorded?.text).toBe("Final.")
+  })
+  it("marks an answer that cites no passage as insufficient, and drops invented citations", async () => {
+    // The draft rested on the person's own text: nothing to cite.
+    const uncited = await run(
+      reply(
+        message(
+          {
+            text: "Hola, Ana: recibido.",
+            citations: [],
+            insufficientEvidence: false,
+          },
+          "final_answer"
+        )
+      )
+    )
+    expect(uncited).toMatchObject({
+      text: "Hola, Ana: recibido.",
+      citations: [],
+      insufficientEvidence: true,
+    })
+    const invented = await run(
+      reply(
+        message({
+          text: "Según la guía.",
+          citations: [passage, "29999999-0000-4000-8000-000000000009"],
+          insufficientEvidence: false,
+        })
+      )
+    )
+    expect(invented).toMatchObject({
+      citations: [passage],
+      insufficientEvidence: false,
+    })
+    // Text that isn't an answer is still refused, as before.
+    await expect(run(reply(message("not json")))).rejects.toMatchObject({
+      diagnostic: "answer_json_invalid",
+    })
   })
 })

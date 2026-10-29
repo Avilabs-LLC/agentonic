@@ -16,7 +16,7 @@ import {
 import {
   Absent,
   CellLink,
-  Count,
+  VersionNumber,
   Deadline,
   sortableHeader,
 } from "@workspace/ui/components/table-cells"
@@ -144,7 +144,7 @@ export function ExpiryTable({ rows, now }: { rows: ExpiryRow[]; now: string }) {
     {
       accessorKey: "versionNumber",
       header: header("Versión"),
-      cell: ({ row }) => <Count value={row.original.versionNumber} />,
+      cell: ({ row }) => <VersionNumber value={row.original.versionNumber} />,
     },
     {
       accessorKey: "number",

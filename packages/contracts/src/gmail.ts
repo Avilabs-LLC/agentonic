@@ -88,9 +88,21 @@ const recipients = (v: { to: string[]; cc: string[]; bcc: string[] }) =>
 const replyTo = messageId.describe(
   "Gmail message ID this email answers, from gmail_search or gmail_read: it is sent in that message's thread. null for a new conversation."
 )
-/** A message a tool call may carry. Earlier calls have no `replyTo`. */
+// What the owner should check before confirming one message (runtime 0.9.0,
+// §81). It shows in the message's card and is never sent.
+const note = z
+  .string()
+  .max(500)
+  .describe(
+    "A short note for the owner about this message, in their language: what to check before confirming it, such as an assumption, a fact you could not verify or a blank to fill in. null when there is nothing to flag. Never repeat the message here."
+  )
+/** A message a tool call may carry. Earlier calls have no `replyTo` or `note`. */
 export const gmailMessage = z
-  .object({ ...messageShape, replyTo: replyTo.nullable().optional() })
+  .object({
+    ...messageShape,
+    replyTo: replyTo.nullable().optional(),
+    note: note.nullable().optional(),
+  })
   .strict()
   .refine(recipients)
 // Gmail's own labels, which would move or flag mail, are never applied (§68).
@@ -143,14 +155,22 @@ export const gmailArguments = {
  * The argument schema offered to a model. Strict function schemas need every
  * property, so mailbox-batch runtimes (§67) must give `replyTo`, null for a new
  * conversation, and earlier runtimes are offered the message without it.
+ * Runtimes that declare `draftNotes` (0.9.0, §81) must also give `note`.
  */
 export function offeredGmailArguments(
   operation: keyof typeof gmailArguments,
-  batch: boolean
+  batch: boolean,
+  notes = false
 ) {
   const message = z
     .object(
-      batch ? { ...messageShape, replyTo: replyTo.nullable() } : messageShape
+      batch
+        ? {
+            ...messageShape,
+            replyTo: replyTo.nullable(),
+            ...(notes ? { note: note.nullable() } : {}),
+          }
+        : messageShape
     )
     .strict()
     .refine(recipients)
@@ -203,3 +223,27 @@ export const gmailInvocation = z.object({
   result: z.unknown().optional(),
 })
 export type GmailInvocation = z.infer<typeof gmailInvocation>
+/**
+ * The conversation a proposed reply answers, as its card shows it (§81):
+ * plain text, oldest first, read from Gmail when the card opens.
+ */
+export const gmailThreadView = z.object({
+  messages: z
+    .array(
+      z.object({
+        id: z.string(),
+        from: z.string(),
+        to: z.string(),
+        cc: z.string(),
+        subject: z.string(),
+        date: z.string(),
+        text: z.string(),
+        /** The message the reply answers. */
+        answered: z.boolean(),
+      })
+    )
+    .max(10),
+  /** Earlier messages of a longer thread, not shown. */
+  earlierMessages: z.number().int().min(0),
+})
+export type GmailThreadView = z.infer<typeof gmailThreadView>

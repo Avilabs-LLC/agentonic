@@ -214,7 +214,7 @@ describe("agent copies call providers through the gateway", () => {
     const fetch = vi.fn()
     vi.stubGlobal("fetch", fetch)
     let reserve: unknown = { ok: false }
-    const { copy } = await host(
+    const { copy, sql } = await host(
       directProviders({ openaiKey: HOST_KEY }),
       ({ values }) => {
         if (values[0] !== "reserve") return { ok: true }
@@ -222,6 +222,10 @@ describe("agent copies call providers through the gateway", () => {
         return reserve
       }
     )
+    const settled = () =>
+      sql
+        .filter(({ values }) => values[0] === "settle")
+        .map(({ values }) => JSON.parse(String(values.at(-1))))
     const signal = new AbortController().signal
     expect(await copy.respond(call, job, unused, signal)).toEqual({
       kind: "budget",
@@ -236,6 +240,18 @@ describe("agent copies call providers through the gateway", () => {
     await expect(copy.respond(call, job, unused, signal)).rejects.toThrow(
       "provider_unavailable"
     )
+    // A server error may have been billed: its reservation stays (§66).
+    expect(settled()).toEqual([])
+    // A refusal (no credit, a rate limit) billed nothing: released at zero (§78).
+    fetch.mockResolvedValueOnce(
+      new Response('{"error":{"code":"insufficient_quota"}}', { status: 429 })
+    )
+    await expect(copy.respond(call, job, unused, signal)).rejects.toThrow(
+      "provider_unavailable"
+    )
+    expect(settled()).toMatchObject([
+      { microusd: 0, tokens: 0, outputTokens: 0 },
+    ])
     // An expired secret or lost lease is the database's answer, as before.
     reserve = Object.assign(new Error("permission denied"), { code: "42501" })
     const refused = await copy
@@ -243,6 +259,61 @@ describe("agent copies call providers through the gateway", () => {
       .catch((error: unknown) => error)
     expect(refused).toMatchObject({ code: "42501" })
     expect(categorize(refused)).toBe("refused")
+  })
+
+  it("reserves a long request's input at its counted tokens, at the host (§79)", async () => {
+    // About 40 KB of mail in the input: held byte for byte, a long batch turn's
+    // last call needed a reservation four times its input's real cost.
+    const long: ModelCall = {
+      ...call,
+      model: "gpt-6-astra",
+      reasoning: "low",
+      input: [{ role: "user", content: "Correo sintético. ".repeat(2200) }],
+    }
+    let counted: unknown = {
+      object: "response.input_tokens",
+      input_tokens: 9000,
+    }
+    const fetch = vi.fn<(url: string, init?: RequestInit) => Promise<Response>>(
+      async (url) =>
+        url.endsWith("/input_tokens")
+          ? counted instanceof Response
+            ? counted
+            : new Response(JSON.stringify(counted))
+          : new Response(JSON.stringify(completed))
+    )
+    vi.stubGlobal("fetch", fetch)
+    const { copy, sql } = await host(directProviders({ openaiKey: HOST_KEY }))
+    const reserved = () =>
+      sql
+        .filter(({ values }) => values[0] === "reserve")
+        .map(({ values }) => JSON.parse(String(values.at(-1))).microusd)
+    const signal = new AbortController().signal
+    await copy.respond(long, job, unused, signal)
+    // Counted with the host's key, without what only generation takes.
+    const [url, init] = fetch.mock.calls[0]! as [string, RequestInit]
+    expect(url).toBe("https://api.openai.com/v1/responses/input_tokens")
+    expect(init.headers).toMatchObject({ Authorization: `Bearer ${HOST_KEY}` })
+    const countBody = JSON.parse(String(init.body))
+    expect(countBody).toMatchObject({ model: "gpt-6-astra", input: long.input })
+    for (const field of ["store", "include", "max_output_tokens", "stream"])
+      expect(countBody).not.toHaveProperty(field)
+    // GPT-6 Astra: 10 µUSD per input token, 50 per output token; at low
+    // reasoning outside a batch final answer it may write 4,096 tokens.
+    const output = 4096 * 50
+    expect(reserved()).toEqual([(Math.ceil(9000 * 1.05) + 256) * 10 + output])
+    // A failed or implausible count falls back to one token per byte.
+    for (const answer of [
+      new Response("{}", { status: 500 }),
+      { input_tokens: 10_000_000 },
+    ]) {
+      counted = answer
+      await copy.respond(long, job, unused, signal)
+    }
+    const bytes = Buffer.byteLength(String(fetch.mock.calls.at(-1)![1]!.body))
+    expect(reserved().slice(1)).toEqual(
+      Array(2).fill((bytes + 4096) * 10 + output)
+    )
   })
 
   it("opens Gmail tokens only at the gateway and returns the same failures", async () => {

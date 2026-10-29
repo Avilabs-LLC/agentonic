@@ -1,4 +1,5 @@
 import { WorkspaceName } from "@workspace/ui/components/workspace-name"
+import { formatUsd } from "@agentonic/contracts/format"
 import { DomainStatus } from "@workspace/ui/components/status-badge"
 import { ApprovedModelResults } from "@workspace/ui/components/model-evaluation-dialog"
 import { approvalLabels } from "@agentonic/contracts/lifecycle"
@@ -36,8 +37,6 @@ export function SubmissionReceipt({
           timeZone: r.timezone,
         }).format(new Date(value))
       : "No disponible"
-  const usd = (value: number) =>
-    `USD ${value.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 4 })}`
   return (
     <div className="mx-auto w-full max-w-4xl space-y-6">
       <BackRow href={backHref} />
@@ -67,10 +66,10 @@ export function SubmissionReceipt({
               ["Enviada", date(r.submittedAt)],
               ["Criterios confirmados", date(r.evaluation.confirmedAt)],
               ["Evaluación terminada", date(r.evaluation.finishedAt)],
-              ["Límite autorizado", usd(r.evaluation.budgetUsd)],
+              ["Límite autorizado", formatUsd(r.evaluation.budgetUsd)],
               [
                 "Uso del presupuesto",
-                usd(r.evaluation.committedMicrousd / 1000000),
+                formatUsd(r.evaluation.committedMicrousd / 1000000),
               ],
             ] as [string, React.ReactNode][]
           ).map(([label, value]) => (

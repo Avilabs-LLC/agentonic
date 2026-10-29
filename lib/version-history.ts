@@ -1,8 +1,73 @@
 export const VERSION_HISTORY = [
   {
+    "version": "0.49.0",
+    "date": "2026-10-29",
+    "summary": "Despliegues and Vencimientos show vm-agents-01 as two cards, Agentes and Evaluaciones, with their icons back and each card's two metrics side by side"
+  },
+  {
+    "version": "0.48.0",
+    "date": "2026-10-14",
+    "summary": "Each turn in Chats and Probar agente shows what it cost and the conversation's total so far, from the provider ledger (§82, migration 77)"
+  },
+  {
+    "version": "0.47.0",
+    "date": "2026-10-14",
+    "summary": "A Gmail action's card shows Gmail's logo and the draft's subject; a reply's review has Conversación, Borrador and Notas tabs; answers render Markdown; runtime 0.9.0 adds draft notes and short answers (§81)"
+  },
+  {
+    "version": "0.46.0",
+    "date": "2026-10-14",
+    "summary": "Raising an agent's period budget applies to the current period too, and Activación shows the limit actually in force (§80)."
+  },
+  {
+    "version": "0.45.3",
+    "date": "2026-10-14",
+    "summary": "A long request's reservation holds its counted input tokens instead of one token per byte, so a mail turn's last call fits the budget it will really use (§79)."
+  },
+  {
+    "version": "0.45.2",
+    "date": "2026-10-14",
+    "summary": "Resultados show one chip per model and level, each with only its own situations; situation frame titles in muted text."
+  },
+  {
+    "version": "0.45.1",
+    "date": "2026-10-14",
+    "summary": "OpenAI's platform cap raised to US$100; calls OpenAI refuses release their reservation; clearer budget and provider messages (§78)."
+  },
+  {
+    "version": "0.45.0",
+    "date": "2026-10-13",
+    "summary": "Agents use the Codex models: GPT-6.1 Sol, GPT-6 Astra, GPT-6 Sol, GPT-6 Luna, GPT-5.6 Sol, GPT-5.6 Terra and GPT-5.6 Luna on runtime 0.8.0; GPT-5.4 and GPT-5.4 mini retired for agents (§77)."
+  },
+  {
+    "version": "0.44.0",
+    "date": "2026-10-13",
+    "summary": "Resultados name each situation's sources instead of quoting them, show models as chips with one summary row per level, money to the cent everywhere, and versions as v3 (§76)."
+  },
+  {
+    "version": "0.43.1",
+    "date": "2026-10-13",
+    "summary": "GPT-5.4's progress notes and an uncited answer marked as knowledge-backed no longer fail a turn or stop an evaluation: the broker hands the runtime the final answer alone with a consistent evidence flag, streaming skips the notes, and an unreadable answer fails only its own case"
+  },
+  {
     "version": "0.43.0",
     "date": "2026-10-13",
-    "summary": "Despliegues and Vencimientos show vm-agents-01 as two cards, Agentes and Evaluaciones, with their icons back and each card's two metrics side by side"
+    "summary": "Chats and Probar agente show a turn's steps as it works (searches with their terms, messages and threads read, pages, files and proposals) and fold them above the answer; the broker records them, migration 73 keeps them with the turn and scrubs them with it"
+  },
+  {
+    "version": "0.42.4",
+    "date": "2026-10-13",
+    "summary": "The Recursos column in both agent lists sits tighter: the small counts get two-digit slots and 8px gaps, and the characters count keeps its five-digit slot and wider gap"
+  },
+  {
+    "version": "0.42.3",
+    "date": "2026-10-13",
+    "summary": "The usage tray under the Chats and Probar agente composer hangs from its bottom edge instead of tucking beneath it, so it no longer shows through the translucent composer in dark mode"
+  },
+  {
+    "version": "0.42.2",
+    "date": "2026-10-13",
+    "summary": "A chat turn goes on when the model asks for too much at once: extra tool calls in one response are dropped, refused arguments, failed reads and refused proposals go back to the model, and only a needed reconnect still ends the turn"
   },
   {
     "version": "0.42.1",

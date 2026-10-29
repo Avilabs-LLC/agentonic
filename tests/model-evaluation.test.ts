@@ -24,7 +24,7 @@ it("validates model-specific reasoning levels and rejects duplicate paid configu
       reasoning: "high",
     }).success
   ).toBe(false)
-  const choice = { model: "gpt-5.4-mini", reasoning: "medium" }
+  const choice = { model: "gpt-6-luna", reasoning: "medium" }
   expect(evaluationModels.safeParse([choice, choice]).success).toBe(false)
   expect(
     evaluationModels.safeParse([choice, { ...choice, reasoning: "high" }])
@@ -78,15 +78,21 @@ it("counts a model as fully passing only when every selected level completed and
   batch.models[1]!.passed = 6
   expect(batchPassed(batch)).toBe(2)
 })
-it("no longer offers GPT-4.1 mini for new evaluations or test chats, but still names it (§56)", async () => {
-  const { selectableModels, modelConfigurationLabel } =
+it("offers the Codex models in their order and still names retired ones (§56, §77)", async () => {
+  const { selectableModels, selectableModelsFor, modelConfigurationLabel } =
     await import("../packages/contracts/src/models")
   const { previewCommand } = await import("../packages/contracts/src/preview")
-  const retired = { model: "gpt-4.1-mini-2025-04-14", reasoning: null }
-  expect(selectableModels.map((m) => m.id)).not.toContain(retired.model)
-  expect(modelConfiguration.safeParse(retired).success).toBe(true)
-  expect(evaluationModels.safeParse([retired]).success).toBe(false)
-  expect(modelConfigurationLabel(retired)).toBe("GPT-4.1 mini")
+  expect(selectableModels.map((m) => m.name)).toEqual([
+    "GPT-6.1 Sol",
+    "GPT-6 Astra",
+    "GPT-6 Sol",
+    "GPT-6 Luna",
+    "GPT-5.6 Sol",
+    "GPT-5.6 Terra",
+    "GPT-5.6 Luna",
+  ])
+  // A version on a runtime before 0.8.0 can run only GPT-6 Astra of them.
+  expect(selectableModelsFor(false).map((m) => m.id)).toEqual(["gpt-6-astra"])
   const turn = (model: string) =>
     previewCommand.safeParse({
       operation: "turn",
@@ -98,8 +104,19 @@ it("no longer offers GPT-4.1 mini for new evaluations or test chats, but still n
         model,
       },
     }).success
-  expect(turn(retired.model)).toBe(false)
-  expect(turn("gpt-5.4-mini")).toBe(true)
+  for (const retired of [
+    { model: "gpt-4.1-mini-2025-04-14", reasoning: null },
+    { model: "gpt-5.4-mini", reasoning: "medium" },
+    { model: "gpt-5.4", reasoning: "low" },
+  ]) {
+    expect(modelConfiguration.safeParse(retired).success).toBe(true)
+    expect(evaluationModels.safeParse([retired]).success).toBe(false)
+    expect(turn(retired.model)).toBe(false)
+  }
+  expect(
+    modelConfigurationLabel({ model: "gpt-5.4-mini", reasoning: "medium" })
+  ).toBe("GPT-5.4 mini · Medio")
+  expect(turn("gpt-6-luna")).toBe(true)
 })
 
 it("suggests an evaluation limit that leaves room for each model's reservations (§70)", () => {

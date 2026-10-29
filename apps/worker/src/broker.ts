@@ -32,11 +32,12 @@ import { GoogleError } from "@agentonic/connectors/google"
 import { PreviewFailure, TurnFailure } from "./failure"
 import type { Execute, Lease } from "./pipeline"
 import type { Providers } from "./providers"
+import { StepLog } from "./turn-steps"
 
 // Fixed outcomes the broker records itself: they describe platform state
 // (spend limits, pending confirmations), so no runtime can reword them.
 export const BUDGET_STOP_ANSWER =
-  "La búsqueda alcanzó el presupuesto disponible antes de completar la respuesta. No pude terminar la verificación de todos tus criterios. La búsqueda se ha detenido; no continuará en segundo plano."
+  "No pude terminar la respuesta: se alcanzó el límite de gasto disponible, el de este agente o el de la plataforma, antes de redactarla. No continuará en segundo plano y el consumo registrado se conserva. Si se repite, avisa al equipo de Agentonic."
 export const PROPOSAL_ANSWER =
   "He preparado una acción de Gmail. Revisa la cuenta, los destinatarios y el contenido en la tarjeta de confirmación. Todavía no se ha realizado ningún cambio."
 /** A write the run's schedule pre-authorized (§58): the platform executes it. */
@@ -82,8 +83,12 @@ type Options = {
   passageIds: string[]
   /** The runtime declares mailboxBatch (§67): the turn spec carries its limits. */
   batch?: boolean
+  /** The runtime declares draftNotes (§81): proposed messages carry a note. */
+  notes?: boolean
   /** A chat or preview of a batch runtime shows its answer as it is written (§68). */
   stream?: boolean
+  /** A chat or preview shows the turn's tool calls as they run (§74). */
+  steps?: boolean
 }
 export type Operation =
   | { kind: "gmail"; operation: keyof typeof gmailArguments }
@@ -114,14 +119,47 @@ function messageInvalid(error: { issues: { path: PropertyKey[] }[] }) {
     : "message_invalid"
 }
 /** Argument schemas always come from the shared contracts, never the child. */
-export const toolParameters = (op: Operation, batch = false) =>
-  z.toJSONSchema(
-    op.kind === "gmail"
-      ? offeredGmailArguments(op.operation, batch)
-      : op.kind === "drive"
-        ? driveArguments[op.operation]
-        : webArguments[op.operation]
+const argumentSchema = (op: Operation, batch: boolean, notes = false) =>
+  op.kind === "gmail"
+    ? offeredGmailArguments(op.operation, batch, notes)
+    : op.kind === "drive"
+      ? driveArguments[op.operation]
+      : webArguments[op.operation]
+export const toolParameters = (op: Operation, batch = false, notes = false) =>
+  z.toJSONSchema(argumentSchema(op, batch, notes))
+/**
+ * A failure the model can work around goes back to it as a tool error (§73):
+ * Google refusing or failing one read, or the database refusing one call or
+ * proposal. Nothing ran or was released. A connection that must be reconnected,
+ * or a write whose outcome is unknown, still ends the turn.
+ */
+function recoverable(error: unknown) {
+  if (
+    error instanceof GoogleError &&
+    (error.code === "unavailable" || error.code === "rejected")
   )
+    return {
+      ok: false,
+      error: /_http_404$/.test(error.reason ?? "")
+        ? "not_found"
+        : "unavailable",
+      untrusted: true,
+    }
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    String(error.code) === "42501"
+  )
+    return { ok: false, error: "refused", untrusted: true }
+  return undefined
+}
+/** What a call with arguments the contract refuses gets back; nothing runs (§73). */
+const INVALID_ARGUMENTS = {
+  ok: false,
+  error: "invalid_arguments",
+  untrusted: true,
+} as const
 
 /**
  * Broker side of protocol 2. The runtime decides what to ask; this class
@@ -133,6 +171,8 @@ export const toolParameters = (op: Operation, batch = false) =>
 export class TurnBroker {
   answer?: TurnAnswer & { model: PreviewModel }
   private items = new Map<string, StoredItem>()
+  /** Item references only increase: a deleted item's is never given out again. */
+  private refs = 0
   private calls = new Map<string, { name: string; arguments: string }>()
   private latestCalls = new Set<string>()
   private executed = new Set<string>()
@@ -148,7 +188,14 @@ export class TurnBroker {
   private usedToolEvidence = false
   private webSources = new Set<string>()
 
-  constructor(private o: Options) {}
+  private stepLog?: StepLog
+
+  constructor(private o: Options) {
+    if (o.steps)
+      this.stepLog = new StepLog((steps) =>
+        o.execute("steps", o.job, { steps })
+      )
+  }
 
   /** Handles one runtime message; no reply means the turn is complete. */
   async handle(raw: unknown): Promise<BrokerReply | undefined> {
@@ -193,7 +240,7 @@ export class TurnBroker {
   }
 
   private async model(request: ModelRequest): Promise<BrokerReply | undefined> {
-    const { job, execute, signal, turn, batch } = this.o
+    const { job, execute, signal, turn, batch, notes } = this.o
     if (++this.modelCalls > turn.limits.modelCalls)
       throw mismatch("model_calls")
     // After an unknown provider outcome only a final answer from a research
@@ -212,7 +259,7 @@ export class TurnBroker {
         type: "function",
         name: offer.name,
         description: offer.description,
-        parameters: toolParameters(op, batch),
+        parameters: toolParameters(op, batch, notes),
         strict: true,
       }
     })
@@ -286,16 +333,83 @@ export class TurnBroker {
     for (const item of output.output) {
       const view = this.view(item)
       if (!view) continue
-      const ref = `r${this.items.size + 1}`
+      const ref = `r${++this.refs}`
       this.items.set(ref, { item, view })
       items.push({ ref, item: view })
     }
     const calls = items.filter((x) => x.item.type === "function_call")
     if (calls.length && request.toolChoice === "none")
       throw mismatch("call_after_final")
-    if (calls.length > (batch ? (turn.limits.callsPerResponse ?? 1) : 1))
-      throw mismatch("calls_per_response")
-    return { type: "model", id: request.id, ok: true, items }
+    // A reply without calls is the answer, and frozen runtimes join every
+    // message's text to read it (§75). GPT-5.4 may write progress notes as
+    // "commentary" messages before its "final_answer" one, and the joined
+    // text was no longer JSON. Only the final answer reaches the runtime,
+    // with its evidence flag made consistent.
+    if (!calls.length) this.answerOnly(items)
+    // A model may ask for more calls in one response than a turn takes at once
+    // (§73). The first ones are kept and the rest are dropped before the runtime
+    // sees them: never executed, never resent, so the model can ask again.
+    const perResponse = batch ? (turn.limits.callsPerResponse ?? 1) : 1
+    const dropped = new Set(calls.slice(perResponse).map((x) => x.ref))
+    for (const ref of dropped) {
+      const view = this.items.get(ref)?.view
+      if (view?.type === "function_call") {
+        this.calls.delete(view.callId)
+        this.latestCalls.delete(view.callId)
+      }
+      this.items.delete(ref)
+    }
+    return {
+      type: "model",
+      id: request.id,
+      ok: true,
+      items: items.filter((x) => !dropped.has(x.ref)),
+    }
+  }
+
+  /**
+   * Keeps one message in a final reply: the model's `final_answer`, or the
+   * last message when it names no phase. Then checks the answer's citations
+   * against the passages offered: an invented one is dropped, and an answer
+   * citing none is marked insufficient, since the flag measures knowledge-base
+   * evidence only (§75). A text that isn't such an answer is left for the
+   * runtime to refuse, as before.
+   */
+  private answerOnly(items: { ref: string; item: ProviderItem }[]) {
+    const messages = items.filter((x) => x.item.type === "message")
+    if (!messages.length) return
+    const final = messages.filter(
+      (x) => this.items.get(x.ref)?.item.phase === "final_answer"
+    )
+    const kept = final.length ? final : [messages.at(-1)!]
+    for (const x of messages)
+      if (!kept.includes(x)) {
+        this.items.delete(x.ref)
+        items.splice(items.indexOf(x), 1)
+      }
+    if (kept.length !== 1) return
+    const view = kept[0]!.item
+    if (view.type !== "message") return
+    let answer: unknown
+    try {
+      answer = JSON.parse(view.text)
+    } catch {
+      return
+    }
+    if (
+      typeof answer !== "object" ||
+      answer === null ||
+      !Array.isArray((answer as { citations?: unknown }).citations) ||
+      typeof (answer as { insufficientEvidence?: unknown })
+        .insufficientEvidence !== "boolean"
+    )
+      return
+    const a = answer as { citations: unknown[]; insufficientEvidence: boolean }
+    a.citations = a.citations.filter(
+      (id) => typeof id === "string" && this.o.passageIds.includes(id)
+    )
+    if (!a.citations.length) a.insufficientEvidence = true
+    view.text = JSON.stringify(a)
   }
 
   private view(item: Record<string, unknown>): ProviderItem | undefined {
@@ -346,11 +460,26 @@ export class TurnBroker {
     const op = this.operation(call.name)
     if (!op) throw mismatch("call_not_offered")
     if (++this.toolCalls > turn.limits.toolCalls) throw mismatch("tool_calls")
+    // Arguments the contract refuses go back to the model as a tool error, so
+    // it can correct them; nothing runs and the turn continues (§73).
     let args: unknown
     try {
       args = JSON.parse(call.arguments)
     } catch {
-      throw mismatch("arguments_json")
+      return { type: "tool", id: request.id, output: INVALID_ARGUMENTS }
+    }
+    if (
+      !argumentSchema(
+        op,
+        this.o.batch === true,
+        this.o.notes === true
+      ).safeParse(args).success
+    )
+      return { type: "tool", id: request.id, output: INVALID_ARGUMENTS }
+    const step = this.stepLog?.start(op, args) ?? -1
+    const shown = (output: unknown) => {
+      this.stepLog?.end(step, op, args, output)
+      return output
     }
     if (op.kind === "web") {
       const result = await this.o.providers.webTool(
@@ -367,19 +496,26 @@ export class TurnBroker {
       if (typeof result.url === "string" && typeof result.text === "string")
         this.webSources.add(result.url)
       if (result.ok !== false) this.usedToolEvidence = true
-      return { type: "tool", id: request.id, output: result }
+      return { type: "tool", id: request.id, output: shown(result) }
     }
     if (op.kind === "drive") {
       if (++this.driveCalls > (turn.limits.driveCalls ?? 0))
         throw mismatch("drive_calls")
-      const result = await this.o.providers.driveTool(
-        op.operation,
-        args,
-        this.o.drive!,
-        job,
-        execute,
-        signal
-      )
+      let result: unknown
+      try {
+        result = await this.o.providers.driveTool(
+          op.operation,
+          args,
+          this.o.drive!,
+          job,
+          execute,
+          signal
+        )
+      } catch (error) {
+        const output = recoverable(error)
+        if (!output) throw error
+        return { type: "tool", id: request.id, output: shown(output) }
+      }
       // A proposal ends the turn, except in batch turns, where it returns to
       // the model; a refused write (an unknown file) goes back like a read.
       if (
@@ -387,6 +523,7 @@ export class TurnBroker {
         (result as { pendingApproval?: unknown } | null)?.pendingApproval ===
           true
       ) {
+        shown(result)
         if (this.continues(result)) {
           this.proposals++
           return { type: "tool", id: request.id, output: result }
@@ -399,7 +536,7 @@ export class TurnBroker {
         return undefined
       }
       this.usedToolEvidence = true
-      return { type: "tool", id: request.id, output: result }
+      return { type: "tool", id: request.id, output: shown(result) }
     }
     const read = gmailReads.some((r) => r === op.operation)
     // Batch turns count reads and proposals apart; earlier runtimes share three.
@@ -411,14 +548,22 @@ export class TurnBroker {
         : ++this.gmailCalls > turn.limits.gmailCalls
     )
       throw mismatch("gmail_calls")
-    const result = await this.o.providers.gmailTool(
-      op.operation,
-      args,
-      this.o.gmail!,
-      job,
-      execute,
-      { batch: this.o.batch === true }
-    )
+    let result: unknown
+    try {
+      result = await this.o.providers.gmailTool(
+        op.operation,
+        args,
+        this.o.gmail!,
+        job,
+        execute,
+        { batch: this.o.batch === true }
+      )
+    } catch (error) {
+      const output = recoverable(error)
+      if (!output) throw error
+      return { type: "tool", id: request.id, output: shown(output) }
+    }
+    shown(result)
     if (!read) {
       if (this.continues(result)) {
         this.proposals++
@@ -486,6 +631,8 @@ export class TurnBroker {
 
   private async finish(answer: TurnAnswer) {
     const recorded = { ...answer, model: this.o.turn.model as PreviewModel }
+    // The last steps reach the turn before its answer closes it (§74).
+    await this.stepLog?.flush()
     try {
       await this.o.execute("answer", this.o.job, recorded)
     } catch (error) {

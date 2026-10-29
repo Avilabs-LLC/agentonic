@@ -42,6 +42,7 @@ import {
 } from "@workspace/ui/components/tabs"
 import { Textarea } from "@workspace/ui/components/textarea"
 import { ReviewCriteriaSummary } from "@workspace/ui/components/review-criteria-summary"
+import { SourceIndex } from "@workspace/ui/components/review-receipt-content"
 
 type Action = (input: unknown) => Promise<FormResult>
 export function ReviewCriteriaDialog({
@@ -463,22 +464,16 @@ export function ReviewCriteriaDialog({
                     {current.basis.replace(/\s+/g, " ").trim()}
                   </p>
                 </section>
-                {record.sources
-                  .filter((source) => current.sourceIds.includes(source.id))
-                  .map((source, n) => (
-                    <section
-                      key={source.id}
-                      className="space-y-2 rounded-lg border p-4"
-                    >
-                      <h3 className="font-medium">Fuente {n + 1}</h3>
-                      <p className="break-words whitespace-pre-wrap text-muted-foreground">
-                        {source.text}
-                      </p>
-                    </section>
-                  ))}
-                {!record.sources.some((source) =>
+                {record.sources.some((source) =>
                   current.sourceIds.includes(source.id)
-                ) && (
+                ) ? (
+                  <SourceIndex
+                    title="Fuentes"
+                    sources={record.sources.filter((source) =>
+                      current.sourceIds.includes(source.id)
+                    )}
+                  />
+                ) : (
                   <p className="text-muted-foreground">
                     Esta situación no tiene fuentes adjuntas.
                   </p>

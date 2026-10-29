@@ -786,6 +786,7 @@ model BackgroundJob {
   createdAt   DateTime         @default(now()) @map("created_at") @db.Timestamptz
   updatedAt   DateTime         @default(now()) @map("updated_at") @db.Timestamptz
   partialAnswer String?        @map("partial_answer")
+  steps       Json?
   workspace   Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Restrict, onUpdate: NoAction)
   member      WorkspaceMember? @relation(fields: [workspaceId, memberId], references: [workspaceId, id], onDelete: Restrict, onUpdate: NoAction)
   ingestion   IngestionJob?
@@ -845,6 +846,7 @@ model RetrievalProviderOperation {
   workspace        Workspace               @relation(fields: [workspaceId], references: [id], onDelete: Restrict, onUpdate: NoAction)
   budget           RetrievalProviderBudget @relation(fields: [provider], references: [provider], onDelete: Restrict, onUpdate: NoAction)
 
+  @@index([jobId], map: "retrieval_provider_operations_job")
   @@map("retrieval_provider_operations")
   @@schema("agentonic")
 }
@@ -1180,6 +1182,7 @@ model StagingTurn {
  scrubbedAt DateTime? @map("scrubbed_at") @db.Timestamptz
  deploymentId String? @map("deployment_id") @db.Uuid
  partialAnswer String? @map("partial_answer")
+ steps Json?
  @@unique([conversationId,requestId])
  @@unique([conversationId,number])
  @@map("staging_turns")

@@ -359,6 +359,30 @@ it("requires a new preview to opt into tools and never upgrades the existing ses
     toolsEnabled: true,
   })
 })
+it("shows a preview turn's steps and refuses malformed ones (§74)", async () => {
+  const p = await privatePreview()
+  async function steps(value: unknown, token = p.job.token) {
+    await f.db.exec("RESET ROLE; SET LOCAL ROLE agentonic_worker")
+    return rpc("rag_worker", [
+      "steps",
+      p.job.id,
+      token,
+      JSON.stringify({ steps: value }),
+    ])
+  }
+  const step = {
+    tool: "gmail.threads.read",
+    target: "Cotización Q4",
+    count: 5,
+    status: "done",
+  }
+  expect(await steps([step])).toEqual({ ok: true })
+  await expect(steps([{ ...step, status: "skipped" }])).rejects.toThrow()
+  await expect(steps([step], id(599))).rejects.toThrow()
+  expect(await p.preview("state", { previewId: p.p.id })).toMatchObject({
+    turns: [{ steps: [step] }],
+  })
+})
 it("does not grant normal retrieval jobs Gmail authority", async () => {
   const p = await privatePreview()
   await f.sql(

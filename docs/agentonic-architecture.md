@@ -2220,7 +2220,7 @@ Admin shows a **Reemplazadas** tab in Revisiones when it has reviews, and the "R
 
 **Follow-up, 13 October 2026 — Vencimientos as metric tiles too (owner direction, v0.42.0).** Vencimientos now matches Despliegues: vm-agents-01 as four tiles (Servidor de agentes with its last verification date, Vencimiento de agentes with the deadline's date and time, then the same for evaluaciones). A passed deadline reads "Venció el …" in warning, as in the table's Deadline cell, and a revoked or retired one reads "No aplica". Local (desarrollo) opens from the same header button. Nothing a person must act on is hidden: each deployment row still names its server's deadline and, when it lapses, "Renovar la verificación del servidor". `PlaceGroups` is removed, and the grid, registration value and Local dialog are shared in `server-tiles`. No data, function or migration changed. Installed 13 October at 13:22 UTC with `platform-0.42.0-da632c5fe2d2` (release `2f7df66c`), replacing 0.41.0: Admin, the customer app and the knowledge worker restarted healthy and `hosted:check` passed; no migration was needed.
 
-**Follow-up, 13 October 2026 — server cards by kind, with their icons (owner direction, v0.43.0).** The tiles lost the icons the grid had named each kind with. Both pages now show vm-agents-01 as two cards, one per kind, headed by the grid's icon and word (`BotIcon` Agentes, `FlaskConicalIcon` Evaluaciones), each holding its two former tiles side by side with a divider: Servidor | Trabajador and Servidor | Evaluador in Despliegues, Servidor | Vencimiento in Vencimientos. Each half keeps the tile's label, value and detail, so every fact keeps its rendering. The two cards share a row from xl and stack below it; the Local (desarrollo) dialog shows one per row, and below sm a card stacks its halves. The shared `MetricGroup` sits beside `MetricTile`, which the agent page keeps. No data, function or migration changed.
+**Follow-up, 13 October 2026 — server cards by kind, with their icons (owner direction; released in v0.49.0).** The tiles lost the icons the grid had named each kind with. Both pages now show vm-agents-01 as two cards, one per kind, headed by the grid's icon and word (`BotIcon` Agentes, `FlaskConicalIcon` Evaluaciones), each holding its two former tiles side by side with a divider: Servidor | Trabajador and Servidor | Evaluador in Despliegues, Servidor | Vencimiento in Vencimientos. Each half keeps the tile's label, value and detail, so every fact keeps its rendering. The two cards share a row from xl and stack below it; the Local (desarrollo) dialog shows one per row, and below sm a card stacks its halves. The shared `MetricGroup` sits beside `MetricTile`, which the agent page keeps. No data, function or migration changed.
 
 ## 64. Agentonic's team in Admin: invitations, roles and deactivation — 9 October 2026
 
@@ -2578,3 +2578,345 @@ The runtime is unchanged: runtimes never validated their own requests against th
 3. `platform-0.42.1-63bd5949875b` installed (release `846d14de`): the apps and the knowledge worker restarted healthy and `hosted:check` passed.
 
 `staging:reverify` shows the host on `dc6c65b4` and the evaluator on `02f5920e`, both serving runtimes 0.3.0–0.7.0 and valid for 30 days.
+
+## 73. A turn survives what the model asks for — 13 October 2026
+
+**Found 13 October.** With §72 installed, Nico's next turn in NicolAI-Mail (turn 4, GPT-6 Astra, 15:18 UTC) failed after 16.5 s with `runtime_mismatch`, diagnostic `calls_per_response`. Astra searched the inbox, then asked to read all 10 messages in one response. A batch turn takes at most 5 calls per response (`batchCeilings.callsPerResponse`), and the broker failed the whole turn instead of handling the extra calls. No evaluation saw it: the synthetic mailbox's excerpts carried everything, so models answered without reading each message.
+
+Reviewing the turn for the same kind of fault turned up three more ways a model's request, rather than a real failure, could end a turn:
+
+- arguments that were not JSON;
+- a read Gmail or Drive refused, such as a 404 for a message ID the model named wrongly, or a passing rate limit (the synthetic mailbox answers "not found" instead, so evaluations never saw it);
+- a proposal or check the database refused.
+
+**Change (broker; platform v0.42.2).** At the owner's request, the turn goes on wherever the model can work around the problem:
+
+- **Too many calls in one response.** The broker keeps the first ones up to the limit and drops the rest before the runtime sees them: never executed and never resent, so the model can ask again. The frozen runtimes, which refuse more calls than their limit, never see the excess. Item references only increase, so a dropped item's reference is never given out again.
+- **Arguments the contract refuses**, malformed JSON included, go back to the model as `invalid_arguments`; nothing runs.
+- **A refused or failed read** (Google `unavailable` or `rejected`) goes back as `not_found` or `unavailable`, and **a database refusal** (42501) as `refused`. Nothing ran or was released.
+- **Still fatal:** a connection that must be reconnected, which only its owner can fix, and a write whose outcome is unknown.
+
+**Live check (13 October).** A harness ran the real frozen runtime 0.7.0 artifact and this broker against GPT-6 Astra (low), with Nico's grants (9 Gmail permissions and the web), his request, a 10-email synthetic mailbox sized like real mail, streaming, and his deployment budget (US$5.00 with US$0.56 used):
+
+- Excerpts sufficient: 5 of 5 turns succeeded, each in about 45 s with 3 model calls, labels and 3 drafts proposed, every email covered, peak commitment US$1.73.
+- Each message's request past its 2,000-character excerpt: 5 of 5 succeeded. Astra's second response asked for 10 reads, the broker kept 5, and each turn finished in about 50 s with every email covered; peak commitment US$2.70.
+- The same case on the previous broker failed after 17 s with `calls_per_response`, as Nico's turn did.
+
+The harness spent about US$5.20 on the development key, outside the platform's ledger.
+
+**Budget.** A full Astra turn on mail like this costs US$0.3–0.9 and reserves up to about US$2.1 per call before it starts, since a reservation counts the whole request at the output ceiling. With US$5.00 for 30 days, Nico's deployment can run about four such turns before a reservation no longer fits and the turn ends with the budget answer. Authorizing more (up to US$20 per period) is his decision.
+
+**Tests.** `tests/runtime-engine.test.ts`: "keeps the first five calls of a response, drops the rest and goes on (§73)", "returns refused arguments to the model instead of failing the turn (§73)" and "gives a refused read or proposal back to the model, but stops for a reconnect (§73)". All three fail on the previous broker. Earlier runtimes keep one call per response; the extra one is now dropped instead of failing the turn.
+
+**Rollout, 13 October 2026.** From `babe328` on `main`, with no chat turn, evaluation or job running:
+
+1. Staging broker `b5844821` installed with `install-staging --azure`; the controller moved both running deployments (NicolAI-Mail and Garantías Ferretería Ejemplo) to it.
+2. Evaluator `6bea27a6` deployed and registered with `--replace`, replacing `02f5920e`; runtimes 0.3.0–0.6.0 registered with it again through `runtime:install`.
+3. `platform-0.42.2-babe3286d13f` installed (release `baa07daa`): the apps and the knowledge worker restarted healthy and `hosted:check` passed.
+
+`staging:reverify` shows the host on `b5844821` and the evaluator on `6bea27a6`, both serving runtimes 0.3.0–0.7.0.
+
+## 74. A turn shows its steps — 13 October 2026
+
+**Owner request (13 October).** Chats and Probar agente showed two states: "Preparando respuesta…" and the final answer, with the answer appearing as it is written since §68. The owner asked for something closer to Claude Code and Codex: glimpses of what the agent is doing while it works, before the final answer.
+
+**Owner decisions (13 October).**
+
+- **Detail:** steps show the search terms, the subjects of messages read, the sites read and the names of files. They are kept with the turn and scrubbed with it, like the query and the answer. Until now a web search's terms and a read page's URL were never stored. They are still never logged.
+- **After the answer:** the steps fold into one line above it ("Hizo 6 pasos"), which opens to the list.
+
+**Model (no runtime change).**
+
+- **Broker.** The broker already runs every tool call, so it records the steps; frozen runtimes and approved versions are untouched, and nothing needs evaluating again.
+  - A step is `{tool, target, count, status}`, from `@agentonic/contracts/turn-steps`. The tool is one of the 16 Gmail, Drive and web tools. The target is the search's terms, the message's or thread's subject, the page's host, a file's name, or a draft's subject: one line of at most 200 characters, never message text. The count is how many items it found. The status is `running`, `done`, `proposed` or `failed`.
+  - `StepLog` opens a step when a call's arguments pass and closes it with what came back: a refused or failed read is `failed`, a proposal is `proposed`.
+  - Every change sends the whole list through the turn's lease, one write at a time and best effort, so a failed write never stops the turn. The last list is written before the answer.
+  - Chats and previews record steps (`steps: stream` in `runPreview`). Evaluations don't.
+- **Database (migration 73).**
+  - `steps jsonb` on `staging_turns` and `background_jobs`. `valid_turn_steps` bounds a list to 40 steps with exactly those four fields, known tools and statuses, targets of up to 200 characters and whole counts from 0 to 1,000. It is checked both in the operations and in a CHECK on each column.
+  - `staging_worker` and `rag_worker` take a new `steps` operation, only on the running turn the caller leases.
+  - The chat and preview states return each turn's steps.
+  - Every path that scrubs a chat turn sets `scrubbed_at`, and a trigger then clears its steps. Preview turns keep theirs as long as their query and answer.
+- **Presentation.** `TurnSteps`, shared by Chats and Probar agente:
+  - While the turn runs, it lists the steps in muted text, one line each with the tool's icon. A running step shows a spinner, and a failed one shows "No se pudo …".
+  - Between steps "Pensando…" shows, and the answer still appears as it is written.
+  - Afterwards a "Hizo N pasos" trigger above the answer opens the list. A step left running when its turn ended reads "(sin terminar)".
+  - The copy is past tense and Spanish, for example "Buscó en Gmail «from:ana newer_than:7d» · 8 correos", "Leyó la conversación «Cotización Q4» · 4 mensajes" and "Propuso el borrador «Re: Cotización Q4»".
+- **Not included.**
+  - The model's own reasoning: showing a summary of it would mean asking the provider for reasoning summaries, a change to the model request that the frozen runtimes and evaluations don't make.
+  - Model calls: they show only as "Pensando…" between steps.
+
+**Google verification text.** The `gmail.readonly` justification drafted in `google-restricted-scope-verification.md` said reads "are not stored". The conversation already kept the answer, and now it also keeps the subjects of the messages read. The draft now says what the conversation keeps and for how long.
+
+**Tests.**
+
+- `tests/runtime-engine.test.ts`, "shows each tool call as a step, and writes the last list before the answer (§74)": a search, a read, a refused read and a proposal give four steps; every list is valid for the database; the last list is written before the answer; a failing write doesn't stop the turn; evaluations write none.
+- `tests/evaluation-database.test.ts`: a chat turn's steps are kept, 11 malformed lists are refused, an answered turn's lease can't change them, and closing the conversation clears them.
+- `tests/gmail-database.test.ts`: a preview turn's steps appear in its state, and a wrong lease or status is refused.
+- `tests/turn-steps.test.ts`: every tool and status has a phrase; the text bounds hold.
+
+**Rollout, 13 October 2026.** From `5f9a0ac` on `main`, with no chat turn, preview, job or evaluation running:
+
+1. Migration 73 applied with `pnpm db:migrate`, after checking that the four functions it replaces were still identical to migration 71's.
+2. `platform-0.43.0-5f9a0ac94eee` installed (release `d2e8c24c`, which also carries 0.42.4): the apps and the knowledge worker, which runs previews, restarted healthy and `hosted:check` passed.
+3. Staging broker `9a036fa1` installed with `install-staging --azure`; the controller moved NicolAI-Mail, the one running deployment, to it.
+
+The evaluator stays on `6bea27a6`, since evaluations record no steps. `staging:reverify` shows the host on `9a036fa1` serving runtimes 0.3.0–0.7.0, and every registration valid.
+
+## 75. A model's answer is read as it was meant — 13 October 2026
+
+**Found 13 October.** The owner's first evaluation of `leonardo@avilabs.tech` (runtime 0.7.0; batch `578622d8`, US$8) showed "0/10 superadas · Interrumpida" for GPT-5.4 mini, "1/10 · Interrumpida" for GPT-5.4 and "7/10 · Con fallos" for GPT-6 Astra. The two interruptions were not provider outages. The evaluator's log names the diagnostics, and the case replayed live against the frozen runtime with the agent's own configuration reproduced both:
+
+- **GPT-5.4, case 2 (`answer_json_invalid`):** before its `final_answer` message, GPT-5.4 writes progress notes ("Voy a revisar tus 5 correos…") as separate messages with `phase: "commentary"`, each valid JSON in the answer's format. Frozen runtimes join every message's text to read the answer, so the joined text was no longer JSON. Reproduced in 2 of 2 replays.
+- **GPT-5.4 mini, case 1 (`answer_citations_invalid`):** a draft built only from the email the person pasted was marked `insufficientEvidence: false` with no citations. The frozen runtime refuses that combination, although the flag only measures knowledge-base evidence. Reproduced in 2 of 3 replays.
+- **Either way the whole run stopped:** the evaluator treated a model's malformed answer like an outage, ending the run with `provider_unavailable` instead of failing that case.
+
+The same answers in Chats or Probar agente failed with "No se pudo completar la respuesta". While streaming, a progress note also showed as the start of the answer.
+
+**Change (broker, stream reader and evaluator; no runtime change; platform v0.43.1).**
+
+- **One message for the answer.** A reply without tool calls reaches the runtime with one message: the `final_answer`, or the last message when the model names no phase. Notes are dropped. Replies with calls are unchanged, since the runtime reads no message text from them.
+- **Consistent evidence flag.** In that message, citations that name no offered passage are dropped. An answer that cites none is marked `insufficientEvidence: true`, as the runtime already does after tool use. Text that isn't an answer still reaches the runtime unchanged and is refused as before.
+- **Streaming** skips `commentary` messages, so the answer that appears as it is written is the final one.
+- **Evaluations.** A malformed answer (invalid JSON, wrong shape, citations or an incomplete response) fails its own case, with an explanation and nothing graded, and the run goes on. Any other failure still stops it.
+- **Item references** now only increase. They were `items.size + 1`, which could reuse a live reference after §73 deleted extra calls. The new code deletes notes too.
+
+**Live check (13 October), with the agent's frozen configuration, no tools as business cases run, and this broker:**
+
+| Case | Model | Before | After |
+|---|---|---|---|
+| Case 2, "Procesa mis últimos 5 correos…" | GPT-5.4 medium | 2 of 2 failed | 3 of 3 answered, each reply carrying 2–4 progress notes |
+| Same case, streamed | GPT-5.4 medium | | 2 of 2 answered; the streamed text began with the answer, never a note |
+| Case 1, the pasted-email draft | GPT-5.4 mini medium | 2 of 3 failed | 8 of 8 answered; 2 cited nothing and were marked insufficient |
+
+About US$0.40 on the development key, outside the platform's ledger.
+
+**Tests.**
+
+- `tests/runtime-engine.test.ts`, "the final answer reaches the runtime in one readable piece (§75)": notes before a final answer, unnamed phases, an uncited answer, an invented citation, and text that is still refused.
+- `tests/stream.test.ts`: notes are never streamed.
+- `tests/evaluation-tools.test.ts`: a malformed answer fails its case without grading, and other failures still stop the run.
+
+**Rollout, 13 October 2026.** From `9e55a9b` on `main`, with no chat turn, preview, job or evaluation running:
+
+1. Staging broker `9dfa013a` installed with `install-staging --azure`; the controller moved NicolAI-Mail to it.
+2. Evaluator `ddbdd1cd` deployed and registered with `--replace`, replacing `6bea27a6`; runtimes 0.3.0–0.6.0 registered with it again through `runtime:install`.
+3. `platform-0.43.1-9e55a9ba3796` installed (release `c74e7af7`): the apps and the knowledge worker restarted healthy and `hosted:check` passed.
+
+`staging:reverify` shows the host on `9dfa013a` and the evaluator on `ddbdd1cd`, both serving runtimes 0.3.0–0.7.0, and every registration valid.
+
+## 76. Evidence by name, results by level, money to the cent — 13 October 2026
+
+**Owner directions, 13 October**, after `leonardo@avilabs.tech`'s version 3 evaluation:
+
+- **Evidence.** Every situation in Resultados quoted the whole "Guía de estilo de escritura" under "Consultar evidencia". A situation's evidence is the passages retrieval offered the agent for it. This agent's only collection holds the style guide, so the guide's passages came back for every situation. The owner asked to cite sources by name, like a file index, never their content.
+- **What evidence is.** Evidence is only knowledge: passages from the collections the version may read. The instructions are what is being evaluated, not a source. The grader receives them with every situation as the authority for the agent's own behavior (§56), and a situation that rests only on them has no sources.
+- **Resultados.** The summary shows one row per model and level on one line, so "GPT-6 Astra · Bajo" and "GPT-6 Astra · Medio" each have their own situations and result instead of a wrapped "· 2 niveles". A model's detail shows the evaluated models as chips in a row that scrolls sideways, and a default "Ir al resumen" button instead of "← Todos los modelos". Each level's "Bajo · 9/9 superadas" sits in muted text above its first situation.
+- **Money** has at most two decimals anywhere in either app. "US$2,3617 de US$10,00" claimed a precision the reservations behind it don't have.
+- **Versions** in tables read "v3".
+
+**Propuestas' Versión and Revisión.** Revisión is the review number: the agent's Nth submission, as Admin lists it in Revisiones. It matched Versión because each version was sent once. They differ only when a version is withdrawn and sent again. Configuración's "Revisión 5" was a third counter, the draft's saves. The version frame showed the edit it was frozen from. Propuestas now shows only Versión, as "v3", which opens the proposal, whose details still give the review number. The draft's saves are "Edición N" in Configuración, matching "Criterios, edición N", so "Revisión" means only the review number.
+
+**Change (migration 74, platform v0.44.0; no runtime, broker or evaluator change).**
+
+- `agentonic.evidence_sources(workspace, items)` names the passages a result or a set of criteria rests on. For each passage still current (same id and hash, as before), it returns its document's id and title and its collection's name. `evaluation_model_state` and `review_flow_state` call it in place of the passage text, which no longer leaves the database through these reads. Both were copied verbatim from migrations 35 and 60 after a check against the live definitions.
+- `SourceIndex` lists one line per document with its collection and number of passages. It is used in Resultados, in receipts and in the criteria dialog's Evidencia tab.
+- `formatUsd` gives "US$2,36" to the cent, and a positive amount under half a cent reads "menos de US$0,01". `formatMoney` uses it. It replaces the four- and six-decimal amounts in Resultados, receipts, Activación, Chats and the legacy evaluation panel.
+- `VersionNumber` renders "v3" in both agent lists, the deployment tables, Revisiones, Vencimientos and Admin's agent page. The scrolling fade of `TabsBar` became `useEdgeFade`, which the model chips share.
+- An evaluation stopped by `provider_unavailable` now says that the AI provider refused or didn't answer a call. Version 3's GPT-6 Astra · Medio run stopped that way: the OpenAI account had run out of credit (`insufficient_quota`).
+
+**Rollout order.** `platform:install` refuses a release whose migrations aren't applied, so migration 74 went first. The pages served until the install finished, a few minutes later, expected the passage text. Nothing was running, and it was installed with §77 on 14 October.
+
+**Tests.** `tests/evaluation-database.test.ts`, "model batches separate confirmation from paid runs…": a preparation's sources and a model's result sources carry exactly `id`, `documentId`, `title` and `collection`.
+
+## 77. Agents use the Codex models — 13 October 2026
+
+**Owner decision, 13 October.** GPT-5.4 kept causing trouble: progress notes that frozen runtimes couldn't read (§75), and commitments the agent had no authority to make in `leonardo@avilabs.tech`'s drafts. Agents now get the models the Codex app offers, in its order: GPT-6.1 Sol, GPT-6 Astra, GPT-6 Sol, GPT-6 Luna, GPT-5.6 Sol, GPT-5.6 Terra and GPT-5.6 Luna. Rates and reasoning levels come from developers.openai.com, checked 13 October. GPT-5.4 and GPT-5.4 mini join GPT-4.1 mini in retirement. GPT-5.4 mini stays the platform's own model: it drafts criteria, grades with rubric 6 (§61) and writes style guides (§57).
+
+**Replay before the change.** Version 3's four business situations ran with prompt v5 against each model at its default level (GPT-6 Astra at low). The runtime loop ran from source with this broker and the real rubric 6 grader, without tools, as business cases run. The OpenAI account ran out of credit partway through. Round 1 covered 26 of 28 situations, and the planned second round did not run:
+
+| Model | Passed | Cost per turn |
+|---|---|---|
+| GPT-6.1 Sol | 4/4 | US$0.016 |
+| GPT-6 Astra (low) | 4/4 | US$0.073 |
+| GPT-6 Sol | 3/4 | US$0.016 |
+| GPT-6 Luna | 4/4 | US$0.001 |
+| GPT-5.6 Sol | 2/4 | US$0.033 |
+| GPT-5.6 Terra | 3/4 | US$0.016 |
+| GPT-5.6 Luna | 2/2 | US$0.002 |
+
+The failures promised what Leonardo hadn't stated ("I'll send it shortly"), as GPT-5.4's had. The replay ran on the development key, outside the platform's ledger.
+
+**Runtime 0.8.0.** Runtimes up to 0.7.0 bundle the turn spec's list of model names (`turnSpec.model` was the `modelId` enum), so they refuse any model added later. From 0.8.0 the turn spec takes a bounded model name (`modelName`). Its manifest declares `openModels: "1"`, and the broker alone decides which models a turn may use, against the catalog as before. A later model then needs a catalog, broker and database change, not a new runtime. Nothing else in the runtime changed. The broker refuses a model an earlier runtime doesn't name (`runtime_mismatch`), although the database already keeps such models from its jobs.
+
+**What each version may use.**
+- Only versions frozen on runtime 0.8.0 run the new models. A version on an earlier runtime runs the four models its runtime names. Of those, only GPT-6 Astra is still offered.
+- Evaluar modelos and Probar agente list the models the version's runtime can run. Each version's `openModels` comes from its code release's manifest. A version on an earlier runtime explains that it can use only GPT-6 Astra and that a new version unlocks the rest.
+- New versions are frozen on the newest registered runtime, so preparing a version again after 0.8.0 is registered moves an agent to it. This works even with no draft changes, because the code release differs.
+- Chats keep the configurations a version was approved with, retired or not. Earlier results and approvals keep naming their models.
+
+**Migration 75.**
+- `valid_model_configuration` accepts the new models and their levels. Every configuration valid before stays valid, so existing rows keep satisfying the CHECKs that call it.
+- `runtime_runs_model(code_release, model)` is true for the four names earlier runtimes accept, and for any model on a code release that declares `openModels`.
+- The retirement triggers of migration 60 now refuse GPT-5.4 and GPT-5.4 mini too, and refuse any model the version's runtime can't run. This covers new evaluation batches and test-chat turns.
+- A test-chat turn that names no model gets GPT-6.1 Sol at medium, or GPT-6 Astra at low on earlier runtimes, instead of GPT-5.4 mini. The apps always name one.
+
+**Defaults and limits.**
+- New test chats start on GPT-6.1 Sol at medium.
+- Probar agente's note about the US$3.00 limit now covers every model whose output costs US$20 per million tokens or more, so GPT-5.6 Sol as well as GPT-6 Astra.
+- Previews keep their US$1.00 per-call ceiling (US$3.00 for Astra). Chats and evaluations keep US$5.00 per call.
+
+**Tests.**
+- `tests/runtime-engine.test.ts`: the built artifact declares `openModels` and runs GPT-6 Luna through the credential-free child process.
+- `tests/evaluation-database.test.ts`: retired models are refused for new evaluations. A version on a runtime without `openModels` is refused GPT-6 Luna and allowed GPT-6 Astra. Database tests that used GPT-5.4 as an agent's model now use GPT-6 Luna or GPT-6 Sol on a fixture runtime that declares `openModels`.
+- `tests/web-database.test.ts`: retired and unsupported models are refused for test-chat turns, and a turn without a model gets the runtime's default.
+- `tests/model-evaluation.test.ts`: the catalog's order, the list for earlier runtimes, and the retired models' labels.
+
+**Rollout, 14 October 2026.** From `ae4ac5b` on `main` (§76 and §77 together), with no chat turn, preview, job or evaluation running:
+
+1. Migrations 74 and 75 applied with `pnpm db:migrate`. `platform:install` refuses a release whose migrations aren't applied.
+2. `platform-0.45.0-ae4ac5b6da2d` installed (release `720d5c88`). The apps and the knowledge worker restarted healthy.
+3. Runtime 0.8.0 packaged (artifact `95ad9607`), registered as `0.8.0-preview-ae4ac5b6` with `setup:preview`, and installed with `runtime:install --azure`. The broker installer checks that its runtime is already on the host, so this comes before the broker.
+4. Staging broker `26d06296` installed with `install-staging --azure`. The controller moved NicolAI-Mail's deployment to it.
+5. Evaluator `413426cc` deployed and registered with `--replace`, replacing `ddbdd1cd`. Runtimes 0.3.0–0.7.0 were registered with it again through `runtime:install`.
+
+`hosted:check` passed. `staging:reverify` shows the host on `26d06296` and the evaluator on `413426cc`, both serving runtimes 0.3.0–0.8.0, with every registration valid. In the database, runtime 0.8.0 runs GPT-6.1 Sol and 0.7.0 does not. Live turns on the new models wait for OpenAI credit (N22). The account still returned `insufficient_quota` after the rollout, and NicolAI-Mail's turn at 07:03 UTC failed on it with `provider_unavailable`.
+
+## 78. The OpenAI cap, refused calls and clearer stops — 14 October 2026
+
+**Found 14 October.** NicolAI-Mail's turn at 07:56 UTC, on GPT-6 Astra, searched 10 emails, read 2 threads and 3 messages, and proposed labels. Then its fourth model call, the one that writes the summary, was refused. Nico got the broker's fixed budget text instead of his summary.
+
+The deployment had used US$2.20 of its US$5.00 period. The refusal came from the platform's total OpenAI cap (`retrieval_provider_budgets`). That cap was set to US$25 as a development allowance in September and never resets. It stood at US$23.43 committed: US$21.18 spent and US$2.25 held in open reservations, against a reservation of about US$1.9 for the call.
+
+Two of those reservations, US$1.10 (Nico, 07:03 UTC) and US$0.95 (`leonardo@avilabs.tech`'s GPT-6 Astra · Medio run, 13 October), were calls OpenAI refused with HTTP 429 `insufficient_quota` while the account had no credit. They billed nothing, but the worker keeps every failed call's reservation as possibly billed. The account was topped up on 14 October.
+
+**Owner decision, 14 October.** The cap becomes US$100 in total.
+
+**Change (worker, broker and setup script; no migration; platform v0.45.1).**
+- `setup:rag --budget` accepts an OpenAI cap of up to US$100. Voyage keeps its US$25 ceiling. The cap is still read from `AGENTONIC_OPENAI_RAG_SPEND_CAP_USD`, and accumulated use is kept.
+- When OpenAI answers a call with a 4xx (no credit, a rate limit, an invalid request), the worker settles its reservation at zero before failing the turn. This covers the shared `respond` path used by turns and criteria, and the grader. A 5xx or a dropped connection may have been billed, so its reservation stays as before. The two refused calls above stay reserved: they predate the change, and accumulated usage is never rewritten.
+- The broker's budget stop now says the turn couldn't finish because a spending limit, the agent's or the platform's, was reached before the answer. The old text spoke of a search and criteria.
+- Chats and Probar agente say the AI provider refused or didn't answer, instead of only "No se pudo completar la respuesta".
+
+**Tests.** `tests/provider-gateway.test.ts`: a 500 keeps its reservation, and a 429 settles it at zero.
+
+**Rollout, 14 October 2026.** From `e0211aa` on `main`, with no chat turn, preview, job or evaluation running:
+
+1. `AGENTONIC_OPENAI_RAG_SPEND_CAP_USD` set to 100 in `apps/worker/.env.local`, then `setup:rag --budget`. OpenAI's cap reads US$100 with US$23.43 committed, as before; Voyage is unchanged.
+2. `platform-0.45.1-e0211aaef48b` installed (release `fb3c04ca`), once CI had attached the release's files. The apps and the knowledge worker restarted healthy.
+3. Staging broker `786dfcd8` installed with `install-staging --azure`. The controller moved NicolAI-Mail's deployment to it.
+4. Evaluator `02742183` deployed and registered with `--replace`, replacing `413426cc`. Runtimes 0.3.0–0.7.0 were registered with it again.
+
+`hosted:check` passed. `staging:reverify` shows the host on `786dfcd8` and the evaluator on `02742183`, both serving runtimes 0.3.0–0.8.0, with every registration valid.
+
+## 79. Reservations hold counted input tokens — 14 October 2026
+
+**Found 14 October.** NicolAI-Mail's turn at 09:38 UTC, on GPT-6 Astra · Bajo, searched and read the inbox, proposed 7 drafts and labels for 10 emails, and then lost its summary to the budget stop. This time the cap was the deployment's own US$5.00 period, not the platform's (§78). It had US$2.09 actually spent, US$1.10 held by the refused 07:03 call, and US$1.81 left. The summary call needed about US$1.90 reserved.
+
+The reservation was the problem. Each call reserves the most it could cost, and the input was held at one token per byte of the request. For this mail that is about 3.8 times the tokens OpenAI counted: 118 KB held for 31,404 tokens. On top of that come the output ceiling, here 12,000 tokens at US$50 per million. The turn's four calls cost US$0.98 in all, while each reserved US$1.1–1.8. On Astra a US$5.00 period bought about US$3 of use.
+
+**Change (worker; no migration; platform v0.45.3).**
+- Before a request longer than 16 KB, `respond` asks OpenAI's `POST /v1/responses/input_tokens` for its input tokens. The count is free and takes about half a second.
+- The reservation then holds the counted tokens plus 5 % and 256 tokens, instead of the request's bytes plus 4,096.
+- The count runs where the key is: at the host's gateway for agent copies, and in the evaluator and the knowledge worker for their own calls. An agent copy therefore can't lower its own reservation.
+- The count sends only what shapes the input (model, instructions, input, reasoning, format and tools), since the endpoint refuses `store`, `include`, `stream`, `temperature` and `max_output_tokens`.
+- If counting fails, or answers more tokens than the request has bytes, the byte bound applies as before.
+- The output ceiling is unchanged.
+- For the 09:38 turn's last call, the reservation would have been about US$0.93 instead of US$1.78.
+
+The grader (`review-ai.ts`) still holds its input byte for byte. Its requests are shorter, and its reservations come from the evaluation's own limit.
+
+**Tests.** `tests/provider-gateway.test.ts`, "reserves a long request's input at its counted tokens, at the host (§79)": the count uses the host's key and leaves out the generation-only fields, the reservation follows the count, and a failed or implausible count falls back to the byte bound.
+
+**Not done here.** Releasing the US$1.10 held by the 07:03 call, which OpenAI refused for lack of credit, needs a migration that edits the usage ledger. The owner approved it, but the session's permission check refused writing that migration. It waits for the owner.
+
+**Rollout, 14 October 2026.** From `7d8c6b1` on `main`, with no chat turn, preview, job or evaluation running:
+
+1. `platform-0.45.3-7d8c6b1e8680` installed (release `1a4234d8`), replacing 0.45.2.
+2. Staging broker `9ae92bdc` installed with `install-staging --azure`. The controller moved NicolAI-Mail's deployment to it.
+3. Evaluator `641cc5e3` deployed and registered with `--replace`, replacing `02742183`. Runtimes 0.3.0–0.7.0 were registered with it again.
+
+`hosted:check` passed. `staging:reverify` shows the host on `9ae92bdc` and the evaluator on `641cc5e3`, both serving runtimes 0.3.0–0.8.0, with every registration valid.
+
+## 80. A raised period budget applies now — 14 October 2026
+
+**Found 14 October.** After §79, Nico raised NicolAI-Mail's period budget from US$5 to US$20 in Activación › Ajustar renovación and resent his request at 10:15 UTC. The turn ran well: four calls, each reserving US$0.71–0.89 with counted tokens. It still lost its summary to the budget stop.
+
+Ajustar renovación only set the next period's budget (`period_budget_usd`, §59). The current period kept its ceiling (`budget_usd`, US$5.00). The deployment had US$4.11 committed, including US$1.10 held by the 07:03 call that OpenAI refused, so the summary call's US$0.90 reservation didn't fit. Meanwhile Activación showed "Este período: US$4,11 de US$20,00", because it read the new budget rather than the ceiling in force.
+
+**Owner decision, 14 October.** Raising the period budget applies to the current period as well.
+
+**Change (migration 76, platform v0.46.0).**
+- `deployment_command`'s `renewal` operation now also sets `budget_usd` to at least what earlier periods used (`period_base_microusd`) plus the new period budget.
+- Lowering the period budget keeps the current ceiling until the next renewal. `deployment_immutable` already refuses a shrinking ceiling.
+- The rest of `deployment_command` is migration 66's, checked against the live definition.
+- Activación shows this period's spend against the limit in force: `budget_usd` minus what earlier periods used.
+- The renewal dialog says that a raise applies now and a reduction from the next renewal.
+
+**Not done here.** Two pieces wait for the owner, because this session's permission check refused to write them:
+- applying the new rule to period budgets already raised during the current period, which is NicolAI-Mail's US$20;
+- releasing the US$1.10 refused reservation.
+
+After rollout, saving US$20 again in Ajustar renovación raises NicolAI-Mail's current limit to US$20.
+
+**Tests.** `tests/evaluation-database.test.ts`, "lets the customer turn renewal off, change the period budget and renew by hand near the end": a raise lifts the ceiling to the new budget, and a later reduction leaves it in place.
+
+**Rollout, 14 October 2026.** From `2c807dd` on `main`, with nothing running, migration 76 was applied with `pnpm db:migrate` and `platform-0.46.0-2c807ddf8141` installed (release `ea0b3cdb`). The apps and the knowledge worker restarted healthy and `hosted:check` passed. The live `deployment_command` carries the new statement. NicolAI-Mail keeps its US$5.00 ceiling until Nico saves its period budget again.
+
+## 81. A draft's card shows its conversation — 14 October 2026
+
+**Owner request, 14 October.** NicolAI-Mail's request finally ran end to end and proposed its reply drafts. The owner asked for four changes:
+- the action card carries Gmail's coloured logo;
+- its dialog has tabs: one with the email being answered, the whole thread when there is one, and one with the draft as it is shown now. A third tab could hold caveats;
+- the agent's chat answer stops restating the drafts and the emails they answer. It says what it did and how it went;
+- answers render Markdown instead of showing it raw.
+
+**Change (platform v0.47.0, runtime 0.9.0, no migration).**
+- **The card.** Gmail's logo leads each Gmail action card, and a draft or email shows its subject under the action's name, so several drafts can be told apart.
+- **The dialog.** A reply shows three tabs:
+  - **Conversación**, open first: the thread of the message the draft answers. It is read from Gmail when the card opens and shows the latest 10 messages, oldest first, as plain text. The answered message opens expanded and earlier ones fold to their sender, date and first line.
+  - **Borrador**, or **Correo** for a send: the action as before.
+  - **Notas**, only when the agent left a note.
+
+  A new message with a note shows Borrador and Notas. A new message without a note, labels and deletions show as before, without tabs. Consent and the buttons stay below the tabs.
+- **How the conversation is read.** `gmailThread` (`packages/server/src/gmail.ts`) first runs `gmail_command`'s existing `inspect`. It changes nothing; it checks that the proposal is the caller's own, still pending and unchanged. Then the app refreshes the connection's token and reads the thread with `replyThread` (`packages/connectors/src/google.ts`). It reads the answered message's thread ID from its metadata, then the thread. It keeps only From, To, CC, Subject, Date and the text/plain bodies; HTML, images and attachments are never loaded. Nothing is stored or logged. The owner of the proposal is the mailbox's owner, so this reads their own mail under the account's consent; the agent's grants are not involved. A failed refresh is left to confirmation, which records a reconnect.
+- **Notes (runtime 0.9.0).** The manifest declares `draftNotes: "1"`. Brokers then offer a `note` in drafts and emails: up to 500 characters, required and nullable, for what the owner should check before confirming. The note is part of the confirmed arguments and their hash, and it is never sent: the message is built from its recipients, subject and body alone.
+- **Short answers (runtime 0.9.0).** The batch mailbox policy now tells the model that each card shows the draft, its recipients, the message it answers and its note. After proposing, the model answers in a few sentences: what it did and how it went, naming the messages that have a draft by sender or subject. It never repeats a draft, its note or the original. It still gives anything else the request asks for, such as a summary, tasks, dates or alerts. The count of actions awaiting confirmation is still the broker's (§67).
+- **Markdown answers.** Chats and Probar agente render the agent's answer with the shared `Markdown`, which never renders raw HTML and shows images only as their alt text. Single line breaks stay as before. An answer can echo links from the mail or pages the agent read, so each link shows the site it opens after its text, and only web links can be followed.
+
+**Why a new runtime.** Tool schemas and proposal results come from the host, so the note and the new instruction could have reached existing versions without one. But §67 keeps approved runtimes' schemas and texts byte for byte, because approval binds them. Runtimes 0.7.0 and 0.8.0 are unchanged, and an agent gets notes and short answers with a new version on 0.9.0, evaluated as usual. The card, its tabs and the Markdown answers reach every version at once.
+
+**Tests.**
+- `tests/gmail.test.ts`, "shows a reply's card the conversation it answers as plain text": the thread is found from the answered message, HTML and other headers are dropped, and the answered message is named.
+- `tests/runtime-engine.test.ts`: the note is offered only to runtimes that declare `draftNotes`, and the artifact declares it.
+- `tests/chat-render.test.ts`: Markdown answers keep their line breaks; links name their site; other schemes and raw HTML are not rendered. A reply shows its three tabs, and a new message without a note has none.
+
+**Rollout, 14 October 2026.** Installed from `912f98f` on `main`, together with §82, while nothing was running:
+- `platform-0.48.0-912f98fdbeae` (release `701e0b57`);
+- runtime 0.9.0, artifact `1cd43588`, registered as `0.9.0-preview-912f98fd`. Its manifest declares `draftNotes`;
+- staging broker `2c707578`. NicolAI-Mail moved to it and is online;
+- evaluator `8338d80e`, with runtimes 0.3.0 to 0.8.0 registered again beside 0.9.0.
+
+`hosted:check` and `staging:reverify` passed.
+
+## 82. Each turn shows what it cost — 14 October 2026
+
+**Owner request, 14 October.** Chats and Probar agente should show what each turn cost and what the whole conversation has cost, as Corby does in Slack, so people can see what they spend and keep it under control. Corby ends each reply with "$0.22 este turno · $1.38 en este hilo · model", and adds the thread's figure only once earlier turns cost something.
+
+**Change (migration 77, platform v0.48.0).**
+- **Where the figures come from.** Every paid call of a turn is metered in `retrieval_provider_operations` under the turn's job: model calls, reranking, web searches and reads. A chat turn's job is its `staging_turns` row and a Probar turn's is its `background_jobs` row. `agentonic.turn_spend(job, workspace)` adds up a turn's settled calls (`actual_microusd`). It reports apart what calls still hold without a settled amount (`reserved_microusd`), since their cost is unknown up to that hold (§50, §66). A call the provider refused settles at zero (§78).
+- **How it reaches the chats.** `staging_chat` and `preview_command` keep their live definitions, renamed `staging_chat_v76` and `preview_command_v76`. New wrappers of the same names add `spentMicrousd` and `heldMicrousd` to each turn in `state`. Only the customer role may call the wrappers, as before. A new index on `job_id` keeps the polled state cheap; the ledger had 1,833 rows and no such index.
+- **What the chats show.** When a turn ends, a muted line under its answer shows, in this order:
+  - what the turn cost;
+  - "más hasta US$X sin confirmar" when a call still holds;
+  - the conversation's total through that turn, once earlier turns cost something;
+  - in Chats, the model and level, since Probar already names them above the answer.
+
+  Amounts follow §76: to the cent, and "menos de US$0,01" below that. Failed turns show their cost too. The composer's tray still shows the deployment's spend against its limit.
+
+**Tests.**
+- `tests/evaluation-database.test.ts`, "records the answer while a failed web read keeps its reservation" (§66): the chat turn reports its settled model call and the open read's hold.
+- `tests/web-database.test.ts`, "reserves conservative web usage…": a Probar turn reports a settled search and an open read.
+- `tests/turn-cost.test.ts`: the line's wording, the conversation total only after earlier spend, the held amount and the running total.
+
+**Rollout, 14 October 2026.** Migration 77 was applied with `pnpm db:migrate` before `platform-0.48.0-912f98fdbeae` was installed. The live database has `turn_spend`, `staging_chat_v76`, `preview_command_v76` and the `retrieval_provider_operations_job` index, and the wrappers keep the customer-only grants. Read from the live ledger beforehand, NicolAI-Mail's four successful GPT-6 Astra turns on 14 October cost US$0.54–1.18 each, and the 06:03 turn will show its US$1.10 hold.

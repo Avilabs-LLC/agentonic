@@ -41,12 +41,20 @@ export function partialAnswerText(json: string): string | undefined {
   return out
 }
 
-type StreamEvent = { type?: string; delta?: unknown; response?: unknown }
+type StreamEvent = {
+  type?: string
+  delta?: unknown
+  response?: unknown
+  item_id?: unknown
+  item?: { id?: unknown; phase?: unknown }
+}
 
 /**
  * Reads an OpenAI Responses event stream. Each message delta goes to
  * `onText` with the message text so far; the result is the final response
- * object, or undefined when the stream ended without one.
+ * object, or undefined when the stream ended without one. Progress notes a
+ * model writes as "commentary" messages are not the answer and are skipped
+ * (§75).
  */
 export async function readResponseStream(
   body: ReadableStream<Uint8Array>,
@@ -57,6 +65,7 @@ export async function readResponseStream(
   let buffer = "",
     text = "",
     final: Record<string, unknown> | undefined
+  const notes = new Set<unknown>()
   const handle = (block: string) => {
     const data = block
       .split("\n")
@@ -71,8 +80,14 @@ export async function readResponseStream(
       return
     }
     if (
+      event.type === "response.output_item.added" &&
+      event.item?.phase === "commentary"
+    )
+      notes.add(event.item.id)
+    else if (
       event.type === "response.output_text.delta" &&
-      typeof event.delta === "string"
+      typeof event.delta === "string" &&
+      !notes.has(event.item_id)
     ) {
       text += event.delta
       onText(text)

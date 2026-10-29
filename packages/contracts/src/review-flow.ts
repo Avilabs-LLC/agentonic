@@ -99,6 +99,16 @@ export const originalReviewCriterion = z.object({
   question: z.string(),
   expectedAnswer: z.string(),
 })
+/** A passage a result or situation rests on, named by its document and
+ * collection (§76); its text stays in the database. Fields are optional so a
+ * page served before the migration still reads. */
+export const evidenceSource = z.object({
+  id: z.uuid(),
+  documentId: z.uuid().optional(),
+  title: z.string().optional(),
+  collection: z.string().optional(),
+})
+export type EvidenceSource = z.infer<typeof evidenceSource>
 export const reviewResults = z.array(
   z.object({
     key: z.string(),
@@ -109,7 +119,7 @@ export const reviewResults = z.array(
     answer: z.string(),
     explanation: z.string(),
     suggestion: z.string(),
-    sources: z.array(z.object({ id: z.uuid(), text: z.string() })),
+    sources: z.array(evidenceSource),
   })
 )
 export const modelEvaluation = z.object({
@@ -200,7 +210,7 @@ export const reviewPreparation = z.object({
   evidenceHash: z.string().nullable(),
   summary: z.string(),
   results: reviewResults,
-  sources: z.array(z.object({ id: z.uuid(), text: z.string() })),
+  sources: z.array(evidenceSource),
 })
 export type ReviewCriterion = z.infer<typeof reviewCriterion>
 export type ReviewPreparation = z.infer<typeof reviewPreparation>

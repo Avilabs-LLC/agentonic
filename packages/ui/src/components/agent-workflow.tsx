@@ -86,7 +86,7 @@ function VersionFrame({
           <div className="space-y-0.5">
             <p className="text-sm font-medium">{title}</p>
             <p className="font-mono text-xs text-muted-foreground">
-              Revisión {revision}
+              Edición {revision}
             </p>
           </div>
         </div>

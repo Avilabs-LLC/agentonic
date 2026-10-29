@@ -41,8 +41,9 @@ const resources = [
 /**
  * The Recursos cell of both agent lists: the saved draft's instruction
  * characters, then skills, collections, tools and connections. Every count
- * sits in a fixed-width slot (five digits for characters, three for the rest),
- * so the icons line up from row to row whatever the numbers' length.
+ * sits in a fixed-width slot (five digits for characters, two for the rest),
+ * so the icons line up from row to row whatever the numbers' length. The small
+ * counts are rarely more than one digit, so their slots and gaps stay tight.
  */
 export function ResourceCounts({ value }: { value: ResourceCountsValue }) {
   const ready = value.promptCharacters >= SYSTEM_PROMPT_MIN_CHARACTERS
@@ -53,23 +54,26 @@ export function ResourceCounts({ value }: { value: ResourceCountsValue }) {
       count: value.promptCharacters,
       description: `Instrucciones ${ready ? "listas" : "incompletas"}: ${value.promptCharacters} caracteres`,
       width: "min-w-[5ch]",
+      // Keeps the wide characters count apart from the small ones.
+      space: "mr-1",
     },
     ...resources.map(({ key, label, icon, ...resource }) => ({
       key,
       icon,
       count: value[key],
       description: `${label}: ${value[key]}${"upcoming" in resource ? " · Próximamente" : ""}`,
-      width: "min-w-[3ch]",
+      width: "min-w-[2ch]",
+      space: "",
     })),
   ]
   return (
-    <div className="flex items-center gap-3">
-      {items.map(({ key, icon: Icon, count, description, width }) => (
+    <div className="flex items-center gap-2">
+      {items.map(({ key, icon: Icon, count, description, width, space }) => (
         <Tooltip key={key}>
           <TooltipTrigger
             render={<span tabIndex={0} />}
             aria-label={description}
-            className="inline-flex items-center gap-1.5 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className={`${space} inline-flex items-center gap-1 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring`}
           >
             <Icon
               className="size-4 shrink-0 text-muted-foreground"

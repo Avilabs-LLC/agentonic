@@ -56,6 +56,7 @@ export async function runAuthoringCommand(app: AppKind, input: unknown) {
             codeReleaseId: string
             eligible: boolean
             previewAvailable: boolean
+            openModels: boolean
             content: unknown
             requestedAccess: unknown
             number: number
@@ -67,6 +68,7 @@ export async function runAuthoringCommand(app: AppKind, input: unknown) {
             (row_number() OVER (ORDER BY r.created_at, r.id))::integer AS number,
             r.created_at::text AS "createdAt",
             (r.retired_at IS NULL AND agentonic.can_use_code(r.code_release_id) AND EXISTS(SELECT 1 FROM agentonic.code_releases c WHERE c.id=r.code_release_id AND c.execution_manifest->>'previewContract'='1')) AS "previewAvailable",
+            EXISTS(SELECT 1 FROM agentonic.code_releases c WHERE c.id=r.code_release_id AND c.execution_manifest->>'openModels'='1') AS "openModels",
             (r.retired_at IS NULL AND agentonic.can_use_code(r.code_release_id)
              AND NOT EXISTS (SELECT 1 FROM agentonic.agent_submissions s WHERE s.workspace_id=r.workspace_id AND s.configuration_release_id=r.id)
              AND NOT EXISTS (SELECT 1 FROM jsonb_array_elements_text(r.requested_access_snapshot->'collectionIds') c(id) WHERE NOT agentonic.can_collection(c.id::uuid,'read'))) AS eligible
@@ -123,6 +125,7 @@ export async function runAuthoringCommand(app: AppKind, input: unknown) {
                     })
                   : undefined,
                 canPreview: !!detail?.previewAvailable,
+                openModels: !!detail?.openModels,
                 previewExpiresAt:
                   activePreviews.find((p) => p.candidateId === candidate.id)
                     ?.expiresAt ?? null,

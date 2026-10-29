@@ -1,11 +1,20 @@
 export const formatCount = (value: number) =>
   new Intl.NumberFormat("es-VE").format(value)
-export function formatMoney(value: number | null, currency = "USD") {
-  return value === null
-    ? "Sin medir"
-    : new Intl.NumberFormat("es-VE", { style: "currency", currency }).format(
-        value
-      )
+const cents = new Intl.NumberFormat("es-VE", {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+})
+/** US dollars to the cent, the one way both apps show money: "US$2,36".
+ * More decimals read as precision the figures don't have (owner direction,
+ * 13 October 2026); a positive amount under half a cent reads as such
+ * instead of a zero. */
+export function formatUsd(value: number) {
+  return value > 0 && value < 0.005
+    ? "menos de US$0,01"
+    : `US$${cents.format(value)}`
+}
+export function formatMoney(value: number | null) {
+  return value === null ? "Sin medir" : formatUsd(value)
 }
 export function formatDate(value: Date, timeZone: string) {
   return new Intl.DateTimeFormat("es-VE", {

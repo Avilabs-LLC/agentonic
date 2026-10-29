@@ -162,7 +162,7 @@ beforeEach(async () => {
  INSERT INTO agentonic.code_repositories(id,name,repository_url,visibility,provisioning_status,created_by_staff_id) VALUES('${id(60)}','Synthetic','https://example.invalid/runtime','platform','ready','${staff}');
  INSERT INTO agentonic.agent_templates(id,slug,name,code_repository_id) VALUES('${id(51)}','synthetic','Synthetic','${id(60)}');
  INSERT INTO agentonic.template_versions(id,template_id,version,git_commit_sha,manifest_sha256,structure_manifest,runtime_contract_version) VALUES('${template}','${id(51)}','0.1.0',repeat('a',40),repeat('b',64),'{"platformPolicyText":"Synthetic platform policy"}','0.1');
- INSERT INTO agentonic.code_releases(id,version,template_version_id,git_commit_sha,artifact_sha256,registry_sha256,runtime_contract_version,code_repository_id,artifact_bucket,artifact_key,artifact_size_bytes,published_by_staff_id,execution_manifest) VALUES('${code}','0.1.0','${template}',repeat('a',40),repeat('b',64),repeat('c',64),'0.1','${id(60)}','synthetic','fixture',100,'${staff}','{"previewContract":"1","gmailContract":"1","webContract":"1","model":"gpt-4.1-mini-2025-04-14"}');
+ INSERT INTO agentonic.code_releases(id,version,template_version_id,git_commit_sha,artifact_sha256,registry_sha256,runtime_contract_version,code_repository_id,artifact_bucket,artifact_key,artifact_size_bytes,published_by_staff_id,execution_manifest) VALUES('${code}','0.1.0','${template}',repeat('a',40),repeat('b',64),repeat('c',64),'0.1','${id(60)}','synthetic','fixture',100,'${staff}','{"previewContract":"1","gmailContract":"1","webContract":"1","openModels":"1","model":"gpt-4.1-mini-2025-04-14"}');
  INSERT INTO agentonic.workspace_code_release_grants(workspace_id,code_release_id,granted_by_staff_id) VALUES('${w}','${code}','${staff}');
  INSERT INTO agentonic.agents(id,workspace_id,name,slug,owner_member_id,template_version_id,created_by_member_id) VALUES('${a}','${w}','Synthetic agent','synthetic','${member}','${template}','${member}');
  INSERT INTO agentonic.knowledge_collections(id,workspace_id,name,slug,owner_member_id) VALUES('${collection}','${w}','Knowledge','knowledge','${member}');`,
@@ -2443,6 +2443,13 @@ async function modelReview() {
     "202610130069_staging_open_reservations",
     "202610130070_mailbox_batch_turns",
     "202610130071_mailbox_followups",
+    // Removes two named test agents; any other database is left as it was.
+    "202610130072_remove_test_agents",
+    "202610130073_turn_steps",
+    "202610130074_evidence_names",
+    "202610130075_codex_models",
+    "202610140076_period_budget_now",
+    "202610140077_turn_costs",
   ])
     await db.exec(
       readFileSync(
@@ -2485,7 +2492,7 @@ describe("platform tool cases", () => {
         await flow("run", {
           preparationId: p.preparationId,
           revision,
-          models: [{ model: "gpt-5.4-mini", reasoning: "medium" }],
+          models: [{ model: "gpt-6-luna", reasoning: "medium" }],
           budgetUsd: 3,
           consent: true,
           requestId,
@@ -2559,7 +2566,7 @@ describe("evaluation lessons (§56)", () => {
       await flow("run", {
         preparationId: p.preparationId,
         revision: 1,
-        models: [{ model: "gpt-5.4", reasoning: "low" }],
+        models: [{ model: "gpt-6-sol", reasoning: "low" }],
         budgetUsd: 3,
         consent: true,
         requestId: id(1001),
@@ -2607,7 +2614,7 @@ describe("evaluation lessons (§56)", () => {
   })
   it("decides a batch per model: failing models are left out of the approval and of Chats", async () => {
     const p = await modelReview()
-    const passing = { model: "gpt-5.4-mini", reasoning: "medium" }
+    const passing = { model: "gpt-6-luna", reasoning: "medium" }
     const models = [
       passing,
       { model: "gpt-6-astra", reasoning: "low" },
@@ -2689,8 +2696,8 @@ describe("evaluation lessons (§56)", () => {
   it("keeps a version unapproved when no model passes every level", async () => {
     const p = await modelReview()
     const models = [
-      { model: "gpt-5.4-mini", reasoning: "medium" },
-      { model: "gpt-5.4", reasoning: "low" },
+      { model: "gpt-6-luna", reasoning: "medium" },
+      { model: "gpt-6-sol", reasoning: "low" },
     ]
     await actor()
     await flow("run", {
@@ -2717,19 +2724,53 @@ describe("evaluation lessons (§56)", () => {
       ).rows[0]
     ).toEqual({ status: "needs_changes", submission: "submitted" })
   })
-  it("no longer starts evaluations with GPT-4.1 mini", async () => {
+  it("no longer starts evaluations with GPT-4.1 mini, GPT-5.4 or GPT-5.4 mini (§77)", async () => {
     const p = await modelReview()
     await actor()
-    await expect(
+    for (const model of [
+      { model: "gpt-4.1-mini-2025-04-14", reasoning: null },
+      { model: "gpt-5.4-mini", reasoning: "medium" },
+      { model: "gpt-5.4", reasoning: "low" },
+    ])
+      await expect(
+        flow("run", {
+          preparationId: p.preparationId,
+          revision: 1,
+          models: [model],
+          budgetUsd: 3,
+          consent: true,
+          requestId: id(1030),
+        })
+      ).rejects.toMatchObject({ code: "42501" })
+  })
+  it("offers the Codex models only to versions on a runtime that declares openModels (§77)", async () => {
+    const p = await modelReview()
+    // An earlier runtime: the fixture's code release without openModels.
+    await sql(
+      "ALTER TABLE agentonic.code_releases DISABLE TRIGGER authoring_guard"
+    )
+    await sql(
+      `UPDATE agentonic.code_releases SET execution_manifest=execution_manifest-'openModels' WHERE id=$1`,
+      [code]
+    )
+    await sql(
+      "ALTER TABLE agentonic.code_releases ENABLE TRIGGER authoring_guard"
+    )
+    await actor()
+    const run = (model: string, reasoning: string, n: number) =>
       flow("run", {
         preparationId: p.preparationId,
         revision: 1,
-        models: [{ model: "gpt-4.1-mini-2025-04-14", reasoning: null }],
-        budgetUsd: 3,
+        models: [{ model, reasoning }],
+        budgetUsd: 5,
         consent: true,
-        requestId: id(1030),
+        requestId: id(n),
       })
-    ).rejects.toMatchObject({ code: "42501" })
+    await expect(run("gpt-6-luna", "medium", 1031)).rejects.toMatchObject({
+      code: "42501",
+    })
+    // GPT-6 Astra is named by earlier runtimes' turn spec.
+    expect(await run("gpt-6-astra", "low", 1032)).toMatchObject({ ok: true })
   })
   it("lets GPT-5.4 mini write criteria and shows the writer the requested access", async () => {
     const p = await modelReview()
@@ -2802,7 +2843,7 @@ describe("careful grading (§61)", () => {
       await flow("run", {
         preparationId: p.preparationId,
         revision: 1,
-        models: [{ model: "gpt-5.4", reasoning: "low" }],
+        models: [{ model: "gpt-6-sol", reasoning: "low" }],
         budgetUsd: 3,
         consent: true,
         requestId: id(1101),
@@ -2855,7 +2896,7 @@ describe("careful grading (§61)", () => {
     await flow("run", {
       preparationId: p.preparationId,
       revision: 1,
-      models: [{ model: "gpt-5.4-mini", reasoning: "medium" }],
+      models: [{ model: "gpt-6-luna", reasoning: "medium" }],
       budgetUsd: 3,
       consent: true,
       requestId: id(1110),
@@ -2865,7 +2906,7 @@ describe("careful grading (§61)", () => {
     ])
     // A rubric 6 evaluator replaces it and finishes the queued rubric 5 run as it was.
     await evaluator(6)
-    await finishFlow((await evalClaim())!, "passed", true, "gpt-5.4-mini")
+    await finishFlow((await evalClaim())!, "passed", true, "gpt-6-luna")
     expect(await graders(p.preparationId)).toEqual([
       { version: "grounded-review-v5", reasoning: "low" },
     ])
@@ -2938,7 +2979,7 @@ describe("scheduled jobs (§58)", () => {
     weekday: null,
     everyHours: null,
     timezone: "America/Caracas",
-    model: "gpt-5.4-mini",
+    model: "gpt-6-luna",
     reasoning: "medium",
     autonomy: [],
     consent: false,
@@ -2959,13 +3000,13 @@ describe("scheduled jobs (§58)", () => {
     await flow("run", {
       preparationId: p.preparationId,
       revision: 1,
-      models: [{ model: "gpt-5.4-mini", reasoning: "medium" }],
+      models: [{ model: "gpt-6-luna", reasoning: "medium" }],
       budgetUsd: 3,
       consent: true,
       requestId: id(1101),
     })
     const job = (await evalClaim())!
-    await finishFlow(job, "passed", true, "gpt-5.4-mini")
+    await finishFlow(job, "passed", true, "gpt-6-luna")
     // Versions with tools need staff approval.
     if (gmail)
       expect(await approve({ ...p, evaluationId: job.id })).toMatchObject({
@@ -3149,7 +3190,7 @@ describe("scheduled jobs (§58)", () => {
     expect(turn).toMatchObject({
       title: "Programación: Resumen diario",
       schedule_id: made.id,
-      response_model: "gpt-5.4-mini",
+      response_model: "gpt-6-luna",
     })
     expect(turn.query).toContain("Resume los correos importantes de ayer.")
     expect(turn.query).toContain("Se ejecuta sin una persona presente")
@@ -3378,12 +3419,12 @@ describe("ongoing deployments (§59)", () => {
     await flow("run", {
       preparationId: p.preparationId,
       revision: 1,
-      models: [{ model: "gpt-5.4-mini", reasoning: "medium" }],
+      models: [{ model: "gpt-6-luna", reasoning: "medium" }],
       budgetUsd: 3,
       consent: true,
       requestId: id(1201),
     })
-    await finishFlow((await evalClaim())!, "passed", true, "gpt-5.4-mini")
+    await finishFlow((await evalClaim())!, "passed", true, "gpt-6-luna")
     await sql(
       "WITH h AS (INSERT INTO agentonic.runtime_hosts(environment,database_role,broker_sha256,verified_at,heartbeat_at) VALUES('local','agentonic_deployer_local',repeat('f',64),clock_timestamp(),clock_timestamp()) RETURNING id), b AS (INSERT INTO agentonic.runtime_host_brokers(host_id,broker_sha256) SELECT id,repeat('f',64) FROM h) INSERT INTO agentonic.runtime_host_artifacts(host_id,runtime_sha256) SELECT id,repeat('b',64) FROM h"
     )
@@ -3556,9 +3597,24 @@ describe("ongoing deployments (§59)", () => {
         budgetUsd: 8,
       })
     ).toMatchObject({ ok: true })
+    // Raising the period budget raises the current period's ceiling too (§80).
     expect(await deployment(p.deploymentId)).toMatchObject({
       auto_renew: false,
       budget: 8,
+      ceiling: 8,
+    })
+    // Lowering it waits for the next renewal: a running ceiling never shrinks.
+    await actor()
+    expect(
+      await lifecycleCall("deployment_command", "renewal", {
+        deploymentId: p.deploymentId,
+        autoRenew: false,
+        budgetUsd: 2,
+      })
+    ).toMatchObject({ ok: true })
+    expect(await deployment(p.deploymentId)).toMatchObject({
+      budget: 2,
+      ceiling: 8,
     })
     await endsIn(p.deploymentId, "2 days")
     expect(await renewalTick()).toEqual({ renewed: 0, blocked: 0 })
@@ -3701,12 +3757,12 @@ describe("open reservations in activated chats (§66)", () => {
     await flow("run", {
       preparationId: p.preparationId,
       revision: 1,
-      models: [{ model: "gpt-5.4-mini", reasoning: "medium" }],
+      models: [{ model: "gpt-6-luna", reasoning: "medium" }],
       budgetUsd: 3,
       consent: true,
       requestId: id(1301),
     })
-    await finishFlow((await evalClaim())!, "passed", true, "gpt-5.4-mini")
+    await finishFlow((await evalClaim())!, "passed", true, "gpt-6-luna")
     await sql(
       "WITH h AS (INSERT INTO agentonic.runtime_hosts(environment,database_role,broker_sha256,verified_at,heartbeat_at) VALUES('local','agentonic_deployer_local',repeat('f',64),clock_timestamp(),clock_timestamp()) RETURNING id), b AS (INSERT INTO agentonic.runtime_host_brokers(host_id,broker_sha256) SELECT id,repeat('f',64) FROM h) INSERT INTO agentonic.runtime_host_artifacts(host_id,runtime_sha256) SELECT id,repeat('b',64) FROM h"
     )
@@ -3729,7 +3785,7 @@ describe("open reservations in activated chats (§66)", () => {
       conversationId: conversation.id,
       requestId: id(1303),
       query: "Read a page that redirects",
-      model: "gpt-5.4-mini",
+      model: "gpt-6-luna",
       reasoning: "medium",
     })
     const job = (await stagingWork(deploymentId, "claim")) as unknown as Job
@@ -3738,11 +3794,16 @@ describe("open reservations in activated chats (§66)", () => {
       "INSERT INTO agentonic.retrieval_provider_operations(id,job_id,workspace_id,provider,model,reserved_microusd,agent_id,deployment_id,conversation_id) VALUES($1,$2,$3,'browserbase','web.read',4000,$4,$5,$6)",
       [id(1304), job.id, w, a, deploymentId, conversation.id]
     )
+    // The model call that answered, settled (§82).
+    await sql(
+      "INSERT INTO agentonic.retrieval_provider_operations(id,job_id,workspace_id,provider,model,reserved_microusd,actual_microusd,status,agent_id,deployment_id,conversation_id) VALUES($1,$2,$3,'openai','gpt-6-luna',90000,31234,'settled',$4,$5,$6)",
+      [id(1305), job.id, w, a, deploymentId, conversation.id]
+    )
     const answer = {
       text: "The page redirected, so its content is unverified.",
       citations: [],
       insufficientEvidence: true,
-      model: "gpt-5.4-mini",
+      model: "gpt-6-luna",
     }
     await sql(
       "UPDATE agentonic.deployments SET committed_microusd=budget_usd*1000000+1 WHERE id=$1",
@@ -3771,7 +3832,16 @@ describe("open reservations in activated chats (§66)", () => {
       await chat("state", { conversationId: conversation.id })
     ).toMatchObject({
       ok: true,
-      turns: [{ answer: answer.text, status: "succeeded" }],
+      // Each turn carries what it cost: the settled call, and the open read's
+      // hold, whose cost is unknown (§82).
+      turns: [
+        {
+          answer: answer.text,
+          status: "succeeded",
+          spentMicrousd: 31234,
+          heldMicrousd: 4000,
+        },
+      ],
     })
   })
 })
@@ -3796,12 +3866,12 @@ describe("mailbox batch turns (§67)", () => {
     await flow("run", {
       preparationId: p.preparationId,
       revision: 1,
-      models: [{ model: "gpt-5.4-mini", reasoning: "medium" }],
+      models: [{ model: "gpt-6-luna", reasoning: "medium" }],
       budgetUsd: 3,
       consent: true,
       requestId: id(1401),
     })
-    await finishFlow((await evalClaim())!, "passed", true, "gpt-5.4-mini")
+    await finishFlow((await evalClaim())!, "passed", true, "gpt-6-luna")
     await sql(
       "WITH h AS (INSERT INTO agentonic.runtime_hosts(environment,database_role,broker_sha256,verified_at,heartbeat_at) VALUES('local','agentonic_deployer_local',repeat('f',64),clock_timestamp(),clock_timestamp()) RETURNING id), b AS (INSERT INTO agentonic.runtime_host_brokers(host_id,broker_sha256) SELECT id,repeat('f',64) FROM h) INSERT INTO agentonic.runtime_host_artifacts(host_id,runtime_sha256) SELECT id,repeat('b',64) FROM h"
     )
@@ -3831,7 +3901,7 @@ describe("mailbox batch turns (§67)", () => {
         conversationId: conversation.id,
         requestId: id(n),
         query: "Revisa mis correos",
-        model: "gpt-5.4-mini",
+        model: "gpt-6-luna",
         reasoning: "medium",
       })
       return (await stagingWork(deploymentId, "claim")) as unknown as Job
@@ -3842,7 +3912,7 @@ describe("mailbox batch turns (§67)", () => {
       text: long,
       citations: [],
       insufficientEvidence: true,
-      model: "gpt-5.4-mini",
+      model: "gpt-6-luna",
     })
     // The first turn proposed a draft that the owner confirmed.
     await sql(
@@ -3914,7 +3984,7 @@ describe("mailbox batch turns (§67)", () => {
       text: "y".repeat(30000),
       citations: [],
       insufficientEvidence: true,
-      model: "gpt-5.4-mini",
+      model: "gpt-6-luna",
     })
   })
 
@@ -4012,7 +4082,7 @@ describe("mailbox batch turns (§67)", () => {
       conversationId: conversation.id,
       requestId: id(1510),
       query: "Resume mis correos",
-      model: "gpt-5.4-mini",
+      model: "gpt-6-luna",
       reasoning: "medium",
     })
     const job = (await stagingWork(deploymentId, "claim")) as unknown as Job
@@ -4032,7 +4102,7 @@ describe("mailbox batch turns (§67)", () => {
       text: "Hola, aquí está el resumen.",
       citations: [],
       insufficientEvidence: true,
-      model: "gpt-5.4-mini",
+      model: "gpt-6-luna",
     })
     await actor()
     const done = (
@@ -4053,6 +4123,82 @@ describe("mailbox batch turns (§67)", () => {
         )
       ).rows
     ).toEqual([{ partial_answer: null }])
+  })
+
+  it("keeps a chat turn's steps, refuses malformed ones and scrubs them with the conversation (§74)", async () => {
+    const { turnStepTool } =
+      await import("../packages/contracts/src/turn-steps")
+    const deploymentId = await running()
+    const conversation = await chat("start", {
+      deploymentId,
+      title: "Synthetic steps",
+    })
+    await chat("turn", {
+      conversationId: conversation.id,
+      requestId: id(1520),
+      query: "Busca los correos de Ana",
+      model: "gpt-6-luna",
+      reasoning: "medium",
+    })
+    const job = (await stagingWork(deploymentId, "claim")) as unknown as Job
+    // Every tool the contract names is a valid step, on any runtime.
+    const steps = turnStepTool.options.map((tool, n) => ({
+      tool,
+      target: n % 2 ? null : "from:ana newer_than:7d",
+      count: n % 3 ? null : n,
+      status: (["running", "done", "proposed", "failed"] as const)[n % 4],
+    }))
+    await stagingWork(deploymentId, "steps", job, { steps })
+    const step = {
+      tool: "gmail.search",
+      target: "from:ana",
+      count: 8,
+      status: "done",
+    }
+    for (const bad of [
+      null,
+      { tool: "gmail.search" },
+      [{ ...step, extra: true }],
+      [{ ...step, tool: "gmail.forward" }],
+      [{ ...step, status: "skipped" }],
+      [{ ...step, target: "x".repeat(201) }],
+      [{ ...step, target: 3 }],
+      [{ ...step, count: 1.5 }],
+      [{ ...step, count: -1 }],
+      [{ ...step, count: "8" }],
+      Array.from({ length: 41 }, () => step),
+    ])
+      await expect(
+        stagingWork(deploymentId, "steps", job, { steps: bad })
+      ).rejects.toMatchObject({ code: "42501" })
+    await stagingWork(deploymentId, "steps", job, { steps: [step] })
+    await actor()
+    expect(
+      await chat("state", { conversationId: conversation.id })
+    ).toMatchObject({ turns: [{ status: "running", steps: [step] }] })
+    await stagingWork(deploymentId, "answer", job, {
+      text: "Ana te escribió dos veces.",
+      citations: [],
+      insufficientEvidence: true,
+      model: "gpt-6-luna",
+    })
+    // An answered turn keeps its steps, and its lease no longer writes them.
+    await expect(
+      stagingWork(deploymentId, "steps", job, { steps: [] })
+    ).rejects.toMatchObject({ code: "42501" })
+    await actor()
+    expect(
+      await chat("state", { conversationId: conversation.id })
+    ).toMatchObject({ turns: [{ status: "succeeded", steps: [step] }] })
+    await actor()
+    await chat("close", { conversationId: conversation.id })
+    expect(
+      (
+        await sql("SELECT steps FROM agentonic.staging_turns WHERE id=$1", [
+          job.id,
+        ])
+      ).rows
+    ).toEqual([{ steps: null }])
   })
 
   it("finds the owner's accepted style guide in the version's own sources (§68)", async () => {
@@ -4128,7 +4274,7 @@ describe("mailbox batch turns (§67)", () => {
         await flow("run", {
           preparationId: p.preparationId,
           revision: 1,
-          models: [{ model: "gpt-5.4-mini", reasoning: "medium" }],
+          models: [{ model: "gpt-6-luna", reasoning: "medium" }],
           budgetUsd: 3,
           consent: true,
           requestId,
@@ -4179,7 +4325,7 @@ it("model batches separate confirmation from paid runs, enforce scope and preser
     preparationId: p.preparationId,
     revision: 1,
     models: [
-      { model: "gpt-5.4", reasoning: "low" },
+      { model: "gpt-6-sol", reasoning: "low" },
       { model: "gpt-6-astra", reasoning: "high" },
     ],
     budgetUsd: 3,
@@ -4204,7 +4350,7 @@ it("model batches separate confirmation from paid runs, enforce scope and preser
     })
   ).toMatchObject({ ok: false, code: "busy" })
   const claimedModel = await evalClaim()
-  await finishFlow(claimedModel!, "passed", true, "gpt-5.4")
+  await finishFlow(claimedModel!, "passed", true, "gpt-6-sol")
   expect(
     (
       await sql("SELECT status FROM agentonic.agent_submissions WHERE id=$1", [
@@ -4222,13 +4368,39 @@ it("model batches separate confirmation from paid runs, enforce scope and preser
   await actor()
   const state = await db.query<{
     result: {
-      preparations: { canRun: boolean; batches: { models: unknown[] }[] }[]
+      preparations: {
+        canRun: boolean
+        sources: Record<string, unknown>[]
+        batches: {
+          models: {
+            model: string
+            results: { sources: Record<string, unknown>[] }[]
+          }[]
+        }[]
+      }[]
     }
   }>("SELECT agentonic.review_flow_state($1) result", [a])
   expect(state.rows[0]!.result.preparations[0]).toMatchObject({ canRun: true })
   expect(
     state.rows[0]!.result.preparations[0]!.batches[0]!.models
   ).toHaveLength(2)
+  // Evidence names its documents and never carries the passage text (§76).
+  const named = [
+    ...state.rows[0]!.result.preparations[0]!.sources,
+    ...state.rows[0]!.result.preparations[0]!.batches[0]!.models.find(
+      (m) => m.model === "gpt-6-sol"
+    )!.results[0]!.sources,
+  ]
+  expect(named.length).toBeGreaterThan(1)
+  for (const source of named) {
+    expect(Object.keys(source).sort()).toEqual([
+      "collection",
+      "documentId",
+      "id",
+      "title",
+    ])
+    expect(source.title).toEqual(expect.any(String))
+  }
   expect(await flow("run", { ...payload, requestId: id(991) })).toMatchObject({
     ok: true,
   })
@@ -4246,7 +4418,7 @@ it("model review permits editing and rerunning after success without rewriting t
   const payload = {
     preparationId: p.preparationId,
     revision: 1,
-    models: [{ model: "gpt-5.4-mini", reasoning: "medium" }],
+    models: [{ model: "gpt-6-luna", reasoning: "medium" }],
     budgetUsd: 3,
     consent: true,
     requestId: id(992),
@@ -4254,7 +4426,7 @@ it("model review permits editing and rerunning after success without rewriting t
   await actor()
   await flow("run", payload)
   const job = (await evalClaim())!
-  await finishFlow(job, "passed", true, "gpt-5.4-mini")
+  await finishFlow(job, "passed", true, "gpt-6-luna")
   expect(
     (
       await sql("SELECT status FROM agentonic.agent_submissions WHERE id=$1", [
@@ -4313,8 +4485,8 @@ it("model review validates levels, caps cumulative batch reservations and cancel
   }
   await expect(flow("run", payload)).rejects.toMatchObject({ code: "42501" })
   const choices = [
-    { model: "gpt-5.4-mini", reasoning: "medium" },
-    { model: "gpt-5.4", reasoning: "high" },
+    { model: "gpt-6-luna", reasoning: "medium" },
+    { model: "gpt-6-sol", reasoning: "high" },
   ]
   await flow("run", { ...payload, models: choices })
   const job = (await evalClaim())!
@@ -4358,7 +4530,7 @@ it("model review validates levels, caps cumulative batch reservations and cancel
 it("model review approvals expose only the approved models and levels in live chats and staff receipts", async () => {
   const p = await modelReview()
   const models = [
-    { model: "gpt-5.4-mini", reasoning: "medium" },
+    { model: "gpt-6-luna", reasoning: "medium" },
     { model: "gpt-6-astra", reasoning: "low" },
   ]
   await flow("run", {
@@ -4443,7 +4615,7 @@ it("serves several frozen runtimes side by side and never retires one a deployme
       )
     ).rows[0]
   ).toEqual({ n: 1 })
-  const models = [{ model: "gpt-5.4-mini", reasoning: "medium" }]
+  const models = [{ model: "gpt-6-luna", reasoning: "medium" }]
   await actor()
   await flow("run", {
     preparationId: p.preparationId,
@@ -4598,7 +4770,7 @@ const brokerLive = async (broker: string) =>
 /** A running staging deployment whose serving copy runs broker f, with one leased turn. */
 async function servingOnBroker() {
   const p = await modelReview()
-  const model = { model: "gpt-5.4-mini", reasoning: "medium" }
+  const model = { model: "gpt-6-luna", reasoning: "medium" }
   await actor()
   await flow("run", {
     preparationId: p.preparationId,
@@ -4710,7 +4882,7 @@ it("moves a running deployment to a new broker while the old copy finishes its l
       conversationId: second.id,
       query: "Synthetic question",
       requestId: id(984),
-      model: "gpt-5.4-mini",
+      model: "gpt-6-luna",
       reasoning: "medium",
     })
   ).toMatchObject({ ok: true })
@@ -4830,7 +5002,7 @@ it("rests an idle copy, keeps it available through its controller and wakes it f
       conversationId,
       query: "Synthetic question",
       requestId: id(985),
-      model: "gpt-5.4-mini",
+      model: "gpt-6-luna",
       reasoning: "medium",
     })
   ).toEqual({ ok: false, code: "offline" })
@@ -4948,7 +5120,7 @@ it("refuses a revoked broker's copies at once, restores them and ends every copy
 })
 it("keeps evidence from a retired evaluator registration and withdraws it on revocation", async () => {
   const p = await modelReview()
-  const model = { model: "gpt-5.4-mini", reasoning: "medium" }
+  const model = { model: "gpt-6-luna", reasoning: "medium" }
   await actor()
   await flow("run", {
     preparationId: p.preparationId,
@@ -5236,7 +5408,7 @@ it("keeps the general conversation model in step with a staging chat", async () 
     text: "three years",
     citations,
     insufficientEvidence: false,
-    model: "gpt-5.4-mini",
+    model: "gpt-6-luna",
   })
   state = await general()
   expect(state.runs[0]).toMatchObject({ status: "succeeded" })
@@ -5337,7 +5509,7 @@ it("leaves a running copy of a drop-in broker serving until it moves", async () 
 
 it("shows staff each expiry as its own fact and keeps registrations from customers", async () => {
   const p = await modelReview()
-  const model = { model: "gpt-5.4-mini", reasoning: "medium" }
+  const model = { model: "gpt-6-luna", reasoning: "medium" }
   await actor()
   await flow("run", {
     preparationId: p.preparationId,

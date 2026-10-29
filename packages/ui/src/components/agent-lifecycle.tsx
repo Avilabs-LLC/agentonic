@@ -1,5 +1,9 @@
 "use client"
-import { formatUtcDateTime, formatUtcMinute } from "@agentonic/contracts/format"
+import {
+  formatUsd,
+  formatUtcDateTime,
+  formatUtcMinute,
+} from "@agentonic/contracts/format"
 import {
   customerAvailability,
   customerEnvironmentLabels,
@@ -297,18 +301,19 @@ export function AgentLifecycle({
                         {customerAvailability(d, state, new Date(now))}
                       </p>
                       <p className="text-xs text-muted-foreground">
+                        {/* The limit in force this period, which can differ
+                            from the budget set for the next one (§80). */}
                         {d.periodBudgetUsd != null
-                          ? `Este período: USD ${(d.periodCommittedMicrousd / 1e6).toFixed(4)} de USD ${d.periodBudgetUsd.toFixed(2)}.`
-                          : `Consumo: USD ${(d.committedMicrousd / 1e6).toFixed(4)} de USD ${d.budgetUsd.toFixed(2)} autorizados.`}
+                          ? `Este período: ${formatUsd(d.periodCommittedMicrousd / 1e6)} de ${formatUsd(d.budgetUsd - (d.committedMicrousd - d.periodCommittedMicrousd) / 1e6)}.`
+                          : `Consumo: ${formatUsd(d.committedMicrousd / 1e6)} de ${formatUsd(d.budgetUsd)} autorizados.`}
                       </p>
                       <RenewalLine deployment={d} />
                     </div>
                   ) : (
                     <div className="space-y-1">
                       <p className="text-xs text-muted-foreground">
-                        Uso y reservas: USD{" "}
-                        {(d.committedMicrousd / 1e6).toFixed(4)} de USD{" "}
-                        {d.budgetUsd.toFixed(2)} · Hasta{" "}
+                        Uso y reservas: {formatUsd(d.committedMicrousd / 1e6)}{" "}
+                        de {formatUsd(d.budgetUsd)} · Hasta{" "}
                         {formatUtcDateTime(d.expiresAt)} UTC.
                       </p>
                       <RenewalLine deployment={d} />
@@ -552,7 +557,9 @@ export function AgentLifecycle({
             <DialogTitle>Renovación</DialogTitle>
             <DialogDescription>
               Mientras nada cambie, la autorización se renueva sola 3 días antes
-              de terminar, por 30 días más y con este presupuesto.
+              de terminar, por 30 días más y con este presupuesto. Si lo
+              aumentas, el nuevo presupuesto se aplica también al período
+              actual; si lo reduces, desde la próxima renovación.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-5">
@@ -642,7 +649,7 @@ export function RenewalLine({
   return (
     <p className="text-xs text-muted-foreground">
       {d.autoRenew && d.renewsAt
-        ? `Se renovará automáticamente el ${formatUtcDateTime(d.renewsAt)} UTC por 30 días más${d.periodBudgetUsd != null ? `, con USD ${d.periodBudgetUsd.toFixed(2)} por período` : ""}.`
+        ? `Se renovará automáticamente el ${formatUtcDateTime(d.renewsAt)} UTC por 30 días más${d.periodBudgetUsd != null ? `, con ${formatUsd(d.periodBudgetUsd)} por período` : ""}.`
         : d.autoRenew
           ? "Se renovará automáticamente cada 30 días mientras nada cambie."
           : `No se renovará automáticamente; termina el ${formatUtcDateTime(d.expiresAt)} UTC.`}

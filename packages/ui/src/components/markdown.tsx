@@ -113,16 +113,60 @@ const components: Components = {
   ),
 }
 
+// A model's answer may echo links from mail or web pages it read (§81): each
+// link shows the site it opens, and only web links can be followed.
+const answerComponents: Components = {
+  ...components,
+  a: ({ children, href }) => {
+    const url = URL.canParse(href ?? "") ? new URL(href!) : null
+    const host =
+      url && (url.protocol === "https:" || url.protocol === "http:")
+        ? url.hostname
+        : ""
+    if (!host) return <span>{children}</span>
+    return (
+      <>
+        <a
+          href={href}
+          target="_blank"
+          rel="noopener noreferrer nofollow"
+          className="text-link underline underline-offset-4"
+        >
+          {children}
+        </a>
+        {!(typeof children === "string" && children.includes(host)) && (
+          <span className="text-muted-foreground"> ({host})</span>
+        )}
+      </>
+    )
+  },
+}
+
 export function Markdown({
   children,
   className,
+  answer = false,
 }: {
   children: string
   className?: string
+  /**
+   * A model's answer: single line breaks stay as written, as the answer read
+   * before it rendered Markdown, and links name their site.
+   */
+  answer?: boolean
 }) {
   return (
-    <div className={cn("text-sm break-words", className)}>
-      <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+    <div
+      className={cn(
+        "text-sm break-words",
+        answer && "[&_p]:whitespace-pre-line",
+        className
+      )}
+    >
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={answer ? answerComponents : components}
+      >
         {children}
       </ReactMarkdown>
     </div>
