@@ -88,7 +88,11 @@ An **unlisted YouTube video in English** (narration or captions) that shows:
 2. Every use of `gmail.modify` the text above names: the agent searching and reading mail and threads in a chat; creating, editing and deleting a draft and sending a message, each after its confirmation; a scheduled task with a pre-authorized send; a batch of labels confirmed on one card; and Aprender mi estilo.
 3. Disconnecting Gmail and what happens to stored data.
 
-Use a dedicated test mailbox with synthetic messages (outstanding action B1), never a real customer's mail.
+Record on the hosted beta, after the §83 release is installed and `gmail.readonly` and `gmail.compose` are removed under _Data Access_, so Google's screen asks for `gmail.modify` alone. Google tells already-public apps to record new scopes in a staging environment or a separate project. The hosted beta is that staging environment: it is the nonproduction platform, accounts are invite-only, and §83 adds no scope (`gmail.modify` has been requested since §68). No separate Google Cloud project is needed; that is for apps that have reached the 100-user cap.
+
+- Use a Gmail account made for the video, with a few synthetic messages (an invoice, a client question), listed under _Audience_ → _Test users_. Not the owner's mailbox used for live acceptance (B1), which holds real mail, and never a customer's.
+- Connect it from a demo agent in a test workspace. Before consenting, click the address bar so the `client_id` in the URL is visible.
+- Keep Google's "Google hasn't verified this app" screen in the video and click through it on camera; Google requires it to be shown.
 
 ### 8. Answer the reviewers (Owner, Build)
 
