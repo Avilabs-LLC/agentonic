@@ -111,22 +111,96 @@ After the scope review, Google asks for a **Cloud Application Security Assessmen
 
 Google approves the scopes; the warning disappears and the 100-user cap and 7-day expiry stop applying. **Every 12 months** after the letter's date, Google emails a reminder: the app is reverified and the security assessment repeated (and paid again). Missing it can suspend Gmail access for every customer.
 
+## Google's checklist, answered (2 November 2026)
+
+Google's Third Party Data Safety Team answered the submission for project `agentonic-509018` with its standard checklist and asked for a reply confirming each item. This is what each item rests on, and what the owner still does before replying (N28).
+
+| Google asks for                                              | Where it is                                                                                                                                                                                                             |
+| ------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Least privilege, production-ready, scope justification       | The step 6 text above. The app sends `gmail.modify` and `drive.file`; Google's Picker adds `openid`, `userinfo.email` and `userinfo.profile`, so the Data Access list shows five scopes and matches the consent screen. |
+| Demo video: public or unlisted, scopes expanded, matching    | The owner's recording of a connection from zero (2 November). The scope-functionality parts below are still to record; one video or several, all unlisted.                                                              |
+| Test credentials, no blockers, clear entry point             | `pnpm setup:google-reviewer` creates the account and the "Revisión Google" workspace; the instructions below name every screen. No phone, payment or second factor: TOTP is staff-only.                                 |
+| Privacy policy: access, use, transfer, protection, retention | `https://agentonic.avilabs.tech/privacidad` and `/privacidad/en` (§85), sections 2 to 8. The homepage carries the Gmail and Drive section and the Limited Use statement.                                                |
+| Limited Use, no AI/ML training, no transfer for training     | Policy sections 3 to 5. OpenAI and Voyage are used through their APIs under terms that exclude training; "Aprender mi estilo" is the per-user personalized exception.                                                   |
+| Allowed use cases                                            | Terms section 4 forbids cold email, bulk mail and warming; every send is confirmed or pre-authorized by the account holder, one per scheduled run.                                                                      |
+| Data Portability                                             | Not requested.                                                                                                                                                                                                          |
+| CASA                                                         | After the scope review; pick a lab now (step 9).                                                                                                                                                                        |
+
+### Before replying (owner)
+
+1. Add a DNS **A** record for `agentonic.avilabs.tech` pointing at the VM's address (the same as `app.agentonic.avilabs.tech`), then install platform 0.51.0: the install adds the site to Caddy once the name resolves, and `pnpm hosted:check` confirms the six pages.
+2. Put `https://agentonic.avilabs.tech/`, `/privacidad` and `/terminos` as the homepage, privacy policy and terms links under _Branding_, and verify the domain in Search Console if not done.
+3. Read the policy and the terms; the governing-law clause and the contact address are the owner's to confirm (D13).
+4. Run `pnpm setup:google-reviewer`, sign in as the reviewer (credentials in `.local/google-reviewer.txt`) or as the owner, and build the demo agent in "Revisión Google": Gmail and Drive tools chosen, a version evaluated, sent to review, approved in Admin and activated, so the reviewer's chat answers. Give it instructions that keep it to the reviewer's own test mailbox.
+5. Record what the first video does not show (below), or extend it.
+6. Reply in the same thread with the text below, completed.
+
+### What the demo video must show
+
+Google wants every requested scope exercised and, for writes, the change visible in the Google account. The 2 November recording shows the connection from zero. Still to show, on the hosted beta with the synthetic mailbox:
+
+- the address bar with the OAuth `client_id` on Google's consent screen, and the scopes expanded ("Show all services");
+- Gmail: a search and a read in Chats; a draft created, edited and deleted, each after its confirmation, with Gmail's Drafts folder shown after each; a message sent and shown in Sent; labels applied to a batch and shown on the messages; a scheduled task with a pre-authorized send; "Aprender mi estilo";
+- Drive: files picked with the Picker and read in a chat; a Google Doc created and updated after confirmation, shown in Drive;
+- disconnecting Gmail and Drive, and what the cards say afterwards.
+
+### Reviewer instructions (to paste in the reply, in English)
+
+> Agentonic accounts are created by invitation, so we prepared one for your team. Sign in at https://app.agentonic.avilabs.tech/login with the email and password below. No phone number, payment or second factor is required. The interface is in Spanish; the labels are quoted here.
+>
+> 1. After signing in, open the workspace "Revisión Google" and then "Agentes" → the agent "[name]".
+> 2. On the agent's "Configuración" tab, under "Conexiones", click "Conectar Gmail" and complete Google's consent with any Google account you use for testing. Back on the page, choose the Gmail actions the agent may take ("Acciones") and save. "Conectar Google Drive" works the same way, and "Elegir archivos" opens Google's picker.
+> 3. On the "Activación" tab, authorize the current version with a small budget (for example US$1). Only the member who connected the account can use it in their own chats.
+> 4. Open "Chats", pick the agent and ask, for example, "Resume los correos de esta semana" (summarize this week's mail), "Redacta una respuesta al último correo de X" (draft a reply), or "Etiqueta como Facturas los correos con facturas" (label invoices). Every draft, send or label appears as a card with its exact content and runs only after you confirm it.
+> 5. "Aprender mi estilo" on the Gmail card analyzes your own sent mail, with a separate consent, and shows a style guide for you to accept.
+> 6. To disconnect, use "Desconectar" on the Gmail or Drive card; tokens are erased at once.
+>
+> Email: [from .local/google-reviewer.txt] · Password: [from .local/google-reviewer.txt]
+
+### The reply (draft)
+
+> Subject: Re: OAuth verification – project agentonic-509018 (1021490424445)
+>
+> Hello,
+>
+> We have completed the audit against your checklist and updated the project.
+>
+> Scopes. Agentonic requests https://www.googleapis.com/auth/gmail.modify (restricted) and https://www.googleapis.com/auth/drive.file (non-sensitive). Google's file picker adds openid, userinfo.email and userinfo.profile during the Drive flow; the Data Access list in the Cloud Console matches what the consent screen shows. Both scopes back production-ready, user-facing features. The justification for gmail.modify, including why gmail.readonly, gmail.compose, gmail.send, gmail.labels and gmail.metadata are not sufficient, is in the Verification Center. drive.file is used only for files the user selects with the picker; the agent reads them and creates or updates Google Docs the user confirms.
+>
+> Demo video. [unlisted YouTube URL(s)]. It shows the consent screen with all scopes expanded and the client ID in the address bar, and every function of each scope: searching and reading mail, creating, editing and deleting a draft, sending a message, applying labels to a batch, learning the user's writing style, reading picked Drive files, creating and updating a Google Doc, and disconnecting. For each write the video switches to the Gmail or Drive account to show the change.
+>
+> Test access. [the reviewer instructions above, with the credentials]
+>
+> Privacy policy. https://agentonic.avilabs.tech/privacidad/en (Spanish at /privacidad). It states what Google user data we access, how it is used, with whom it is shared (the OpenAI and Voyage APIs, solely to provide the feature, under terms that exclude model training; our hosting providers; no other party), how it is protected, and retention and deletion per data type.
+>
+> Limited Use and AI/ML. The homepage and the policy carry the statement: "Agentonic's use and transfer to any other app of information received from Google APIs will adhere to the Google API Services User Data Policy, including the Limited Use requirements." Google user data is not used for advertising, lending, sale or transfer to data brokers, and is not used to develop, improve or train AI/ML models. The only learning feature, "Aprender mi estilo", builds a writing-style guide for the consenting user alone from their own sent mail, and stores only the guide the user approves.
+>
+> Use cases. Agentonic is a personal assistant for the account holder's own mailbox and files. Every send, draft change and label change is shown with its exact content and executed only after the user confirms it, or under an explicit per-schedule pre-authorization set by the user (at most one action per run). It never sends unsolicited commercial mail, performs email warming or uses Drive as a CDN. We do not request Data Portability APIs.
+>
+> Live traffic. The app is invitation-only with fewer than 100 users, so the unverified scopes are not exposed to public traffic.
+>
+> CASA. We understand a CASA assessment is required for gmail.modify and are ready to start with an authorized assessor once the scope review is complete.
+>
+> Best regards,
+> [name], Avilabs LLC
+
 ## What Agentonic already has, and what is missing
 
-| Requirement                                                                                                         | Status                                                               |
-| ------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
-| Domain and hosted names (`*.agentonic.avilabs.tech`)                                                                | Done (C3)                                                            |
-| Hosted OAuth callback registered                                                                                    | Done (C12)                                                           |
-| One Gmail scope; confirmation for every write except a schedule's pre-authorized send or draft; no automatic resend | Built ([gmail-connection.md](gmail-connection.md), §58, §83)         |
-| Tokens encrypted at rest, staff and automated evaluations never reach a real mailbox                                | Built                                                                |
-| No model training on customer data                                                                                  | Platform decision (v1 defers any model training)                     |
-| Live acceptance of the Gmail tools                                                                                  | Done on 8 October (B2)                                               |
-| Scheduled cleanup of expired Gmail data                                                                             | Open: B3                                                             |
-| Public homepage with a Gmail section and the Limited Use statement                                                  | Missing                                                              |
-| Privacy policy, terms, list of outside services                                                                     | Missing: D13                                                         |
-| Logo, support email, Search Console verification                                                                    | Missing (owner)                                                      |
-| Demo video                                                                                                          | Missing; the test mailbox and a hosted test agent now exist (B1, B2) |
-| Security assessment readiness (scans, data deletion on request, security headers, dependency audit)                 | Not started; expect findings to fix                                  |
+| Requirement                                                                                                         | Status                                                                         |
+| ------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| Domain and hosted names (`*.agentonic.avilabs.tech`)                                                                | Done (C3)                                                                      |
+| Hosted OAuth callback registered                                                                                    | Done (C12)                                                                     |
+| One Gmail scope; confirmation for every write except a schedule's pre-authorized send or draft; no automatic resend | Built ([gmail-connection.md](gmail-connection.md), §58, §83)                   |
+| Tokens encrypted at rest, staff and automated evaluations never reach a real mailbox                                | Built                                                                          |
+| No model training on customer data                                                                                  | Platform decision (v1 defers any model training)                               |
+| Live acceptance of the Gmail tools                                                                                  | Done on 8 October (B2)                                                         |
+| Scheduled cleanup of expired Gmail data                                                                             | Done on 7 October (B3, migration 54)                                           |
+| Public homepage with a Gmail section and the Limited Use statement                                                  | Built (§85, platform 0.51.0); needs the DNS record for the site                |
+| Privacy policy, terms, list of outside services                                                                     | Built in Spanish and English (§85); owner reviews the wording (D13)            |
+| Logo, support email, Search Console verification                                                                    | Missing (owner)                                                                |
+| Demo video                                                                                                          | Connection flow recorded (2 November); scope functions still to record (below) |
+| Reviewer account and workspace                                                                                      | `pnpm setup:google-reviewer` (§85); the demo agent is built by hand            |
+| Security assessment readiness (scans, data deletion on request, security headers, dependency audit)                 | Not started; expect findings to fix                                            |
 
 ## Limited Use, mapped to Agentonic
 

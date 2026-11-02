@@ -10,8 +10,8 @@ import {
   problems,
   utc,
 } from "./policy.ts"
-import { hostedProblems } from "../hosted-check.mjs"
-import { hostnames } from "../platform-units.mjs"
+import { hostedProblems, siteProblems } from "../hosted-check.mjs"
+import { hostnames, siteHostname } from "../platform-units.mjs"
 
 const token = process.env.GITHUB_TOKEN
 const repo = process.env.GITHUB_REPOSITORY
@@ -58,9 +58,10 @@ const now = new Date()
 // The hosted apps are checked from here, so they are watched even while the Mac is off.
 const found = [
   ...problems(report, now),
-  ...(await hostedProblems(hostnames)).map(
-    (problem) => `Hosted apps: ${problem}.`
-  ),
+  ...[
+    ...(await hostedProblems(hostnames)),
+    ...(await siteProblems(siteHostname)),
+  ].map((problem) => `Hosted apps: ${problem}.`),
 ]
 const fingerprint = found.join("\n")
 const issues = await api("GET", "/issues?state=open&per_page=100")

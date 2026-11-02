@@ -13,6 +13,8 @@ export const hostnames = {
   customer: "app.agentonic.avilabs.tech",
   admin: "admin.agentonic.avilabs.tech",
 }
+/** The public site (architecture §85): the customer app answers it too. Same as packages/contracts/src/site.ts. */
+export const siteHostname = "agentonic.avilabs.tech"
 /** Private listeners behind the proxy; nothing else on the VM uses them. */
 export const ports = { admin: 3100, customer: 3101 }
 export const platformServices = {
@@ -138,8 +140,8 @@ WantedBy=multi-user.target
  * each name passed only to its own app. The admin endpoint is off, so only
  * root can change the proxy (by restarting it).
  */
-export function caddyfile() {
-  const site = (name, maxSize) => `${hostnames[name]} {
+export function caddyfile({ site: withSite = true } = {}) {
+  const site = (name, maxSize, host = hostnames[name]) => `${host} {
 	encode zstd gzip
 	request_body {
 		max_size ${maxSize}
@@ -153,5 +155,5 @@ export function caddyfile() {
 	admin off
 }
 ${site("customer", "12MB")}
-${site("admin", "2MB")}`
+${site("admin", "2MB")}${withSite ? `\n${site("customer", "1MB", siteHostname)}` : ""}`
 }

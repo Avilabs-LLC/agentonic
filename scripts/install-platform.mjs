@@ -9,6 +9,7 @@ import { releaseId } from "./platform-tree.mjs"
 import {
   caddyfile,
   caddyfilePath,
+  siteHostname,
   hostnames,
   platformConfig,
   platformReleases,
@@ -366,9 +367,15 @@ const resolved = await Promise.all(
     )
   )
 )
+// The public site joins once its own name points here (architecture §85).
+const siteResolved =
+  (await lookup(siteHostname).then(
+    (r) => r.address,
+    () => null
+  )) === publicIp
 let proxy = "waiting for DNS"
 if (resolved.every((address) => address === publicIp)) {
-  const config = caddyfile()
+  const config = caddyfile({ site: siteResolved })
   const current = ssh(`sudo cat ${caddyfilePath} 2>/dev/null || true\n`)
   ssh(
     `command -v caddy >/dev/null || (sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q caddy >/dev/null)\n`
@@ -383,7 +390,9 @@ sudo systemctl restart caddy
   }
   proxy =
     ssh(`sudo sha256sum ${caddyfilePath}\n`).split(" ")[0] === sha(config)
-      ? "installed"
+      ? siteResolved
+        ? "installed"
+        : "installed (site waiting for DNS)"
       : "differs"
 }
 

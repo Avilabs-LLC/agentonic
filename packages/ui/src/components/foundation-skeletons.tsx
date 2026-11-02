@@ -335,3 +335,33 @@ export function MembersSkeleton() {
     </div>
   )
 }
+/** A public site page (architecture §85): header, a title, paragraphs. */
+export function SiteSkeleton() {
+  return (
+    <div
+      role="status"
+      aria-label="Cargando página"
+      className="flex min-h-svh flex-col bg-background"
+    >
+      <div className="border-b">
+        <div className="mx-auto flex w-full max-w-3xl items-center justify-between px-6 py-4">
+          <Skeleton className="h-8 w-32" />
+          <Skeleton className="h-7 w-40" />
+        </div>
+      </div>
+      <div className="mx-auto w-full max-w-3xl flex-1 space-y-6 px-6 py-10">
+        <Skeleton className="h-9 w-3/4" />
+        <Skeleton className="h-5 w-full" />
+        <Skeleton className="h-5 w-11/12" />
+        {[1, 2, 3].map((i) => (
+          <div key={i} className="space-y-2 pt-4">
+            <Skeleton className="h-6 w-56" />
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-2/3" />
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
