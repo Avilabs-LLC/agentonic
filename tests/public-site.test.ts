@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { SITE_HOSTNAME, siteRewrite } from "../packages/contracts/src/site"
+import { SITE_HOSTNAME } from "../packages/contracts/src/site"
 import {
   LIMITED_USE_STATEMENT,
   privacyPolicy,
@@ -36,18 +36,10 @@ const render = (component: Component, props: Record<string, unknown>) =>
   )
 
 describe("the public site", () => {
-  it("shows the site at the root of its own host only", () => {
-    expect(siteRewrite(SITE_HOSTNAME, "/")).toBe("/sitio")
-    expect(siteRewrite(`${SITE_HOSTNAME}:443`, "/en")).toBe("/sitio/en")
-    expect(siteRewrite(SITE_HOSTNAME, "/privacidad")).toBeNull()
-    expect(siteRewrite("app.agentonic.avilabs.tech", "/")).toBeNull()
-    expect(siteRewrite(null, "/")).toBeNull()
-  })
-
   it("is proxied by Caddy to the customer app once its name resolves", () => {
     expect(hosted.siteHostname).toBe(SITE_HOSTNAME)
     expect(hosted.caddyfile()).toContain(
-      `${SITE_HOSTNAME} {\n\tencode zstd gzip\n\trequest_body {\n\t\tmax_size 1MB\n\t}\n\theader -Server\n\treverse_proxy 127.0.0.1:3101\n}`
+      `${SITE_HOSTNAME} {\n\tencode zstd gzip\n\trequest_body {\n\t\tmax_size 1MB\n\t}\n\theader -Server\n\t@root path /\n\trewrite @root /sitio\n\t@en path /en\n\trewrite @en /sitio/en\n\treverse_proxy 127.0.0.1:3101\n}`
     )
     expect(hosted.caddyfile({ site: false })).not.toContain(
       `\n${SITE_HOSTNAME} {`
