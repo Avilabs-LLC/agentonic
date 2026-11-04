@@ -1,5 +1,10 @@
 export const VERSION_HISTORY = [
   {
+    "version": "0.51.1",
+    "date": "2026-11-04",
+    "summary": "The public site's root answers: the proxy rewrite keeps the request's own URL and changes only its path (§85)."
+  },
+  {
     "version": "0.51.0",
     "date": "2026-11-02",
     "summary": "The public site on agentonic.avilabs.tech: homepage, privacy policy and terms in Spanish and English for Google's OAuth verification, and the reviewer account (§85)."

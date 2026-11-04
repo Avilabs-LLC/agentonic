@@ -40,10 +40,16 @@ export async function refreshSession(
   // Forward the refreshed cookies, and the policy Next.js reads the nonce from.
   const headers = new Headers(request.headers)
   if (policy) headers.set("Content-Security-Policy", policy)
-  const response = rewrite
-    ? NextResponse.rewrite(new URL(rewrite, request.nextUrl), {
-        request: { headers },
-      })
+  // The rewrite keeps the request's own URL and changes only its path: a URL
+  // built from a different origin (behind the proxy, "https://localhost:3101")
+  // would make Next.js proxy the request to that address over TLS and fail.
+  let destination: URL | undefined
+  if (rewrite) {
+    destination = request.nextUrl.clone()
+    destination.pathname = rewrite
+  }
+  const response = destination
+    ? NextResponse.rewrite(destination, { request: { headers } })
     : NextResponse.next({ request: { headers } })
   refreshed.forEach((cookie) => response.cookies.set(...cookie))
   if (policy) response.headers.set("Content-Security-Policy", policy)

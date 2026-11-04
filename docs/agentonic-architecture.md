@@ -2999,3 +2999,5 @@ Next, under Google Cloud's Data Access, the owner keeps `gmail.modify`, removes 
 **Not changed.** `GOOGLE_TESTING` stays true until the owner confirms the app's publishing status (N26). No migration; the workspace and the account are data, created by the script on the nonproduction project.
 
 **Tests.** `tests/public-site.test.ts`: the rewrite applies to the site's host only; the Caddyfile carries the site's block when asked; each page renders in both languages with the Limited Use statement, both scopes, the processors, the contact address, the language switch and no script. `tests/platform-release.test.ts` keeps the two apps' blocks.
+
+**Rollout, 4 November.** Platform 0.51.0 installed (release `90b4d722`) with the site in Caddy once the owner's DNS record resolved; `/privacidad` and `/terminos` answered, but the rewritten `/` and `/en` answered 500: the rewrite was built from `request.nextUrl` as `https://localhost:3101/sitio`, which Next.js treats as an external address and proxies over TLS to a plain-HTTP port. Platform 0.51.1 clones the request's URL and changes only its path.
