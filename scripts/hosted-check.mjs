@@ -125,3 +125,57 @@ export async function hostedProblems(hostnames, { full = false } = {}) {
   }
   return problems
 }
+
+/**
+ * The public site (architecture §85): its root, English root and the policy
+ * pages answer signed-out visitors over HTTPS with the same headers as the
+ * app. Before its DNS record exists the basic run says nothing; the full run
+ * reports it.
+ */
+export async function siteProblems(site, { full = false } = {}) {
+  const problems = []
+  const get = (url) =>
+    globalThis
+      .fetch(url, {
+        redirect: "manual",
+        signal: globalThis.AbortSignal.timeout(15000),
+      })
+      .catch((error) => ({ failed: error.cause?.code ?? error.name }))
+  const label = `the public site (${site})`
+  const home = await get(`https://${site}/`)
+  if (home.failed) {
+    if (full || home.failed !== "ENOTFOUND")
+      problems.push(`${label} cannot be reached over HTTPS (${home.failed})`)
+    return problems
+  }
+  for (const [path, expected] of [
+    ["/", "Agentonic"],
+    ["/en", "Agentonic"],
+    ["/privacidad", "Limited Use"],
+    ["/privacidad/en", "Limited Use"],
+    ["/terminos", "Términos del servicio"],
+    ["/terminos/en", "Terms of service"],
+  ]) {
+    const page = path === "/" ? home : await get(`https://${site}${path}`)
+    if (page.failed || page.status !== 200) {
+      problems.push(`${label} ${path} answered ${page.status ?? page.failed}`)
+      continue
+    }
+    const body = await page.text().catch(() => "")
+    if (!body.includes(expected))
+      problems.push(`${label} ${path} does not show its page`)
+    if (page.headers.get("set-cookie"))
+      problems.push(`${label} ${path} sets a cookie for a visitor`)
+    if (!page.headers.get("strict-transport-security"))
+      problems.push(`${label} ${path} has no HSTS header`)
+  }
+  if (!full) return problems
+  const plain = await get(`http://${site}/privacidad`)
+  if (
+    plain.failed ||
+    ![301, 308].includes(plain.status) ||
+    !plain.headers.get("location")?.startsWith(`https://${site}/`)
+  )
+    problems.push(`${label} does not redirect plain HTTP to HTTPS`)
+  return problems
+}

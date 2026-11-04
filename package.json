@@ -1,6 +1,6 @@
 {
   "name": "agentonic",
-  "version": "0.50.0",
+  "version": "0.51.0",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@11.21.0",
@@ -28,6 +28,7 @@
     "setup:storage": "node scripts/setup-storage.mjs",
     "setup:storage-identity": "node scripts/setup-storage-identity.mjs",
     "setup:auth-hook": "node scripts/setup-auth-hook.mjs",
+    "setup:google-reviewer": "node scripts/setup-google-reviewer.mjs",
     "setup:template": "node scripts/publish-authoring-template.mjs",
     "db:check-authoring": "node scripts/check-authoring.mjs",
     "db:check-page-reads": "node scripts/check-page-reads.mjs",

@@ -5,7 +5,16 @@ import { authConfiguration } from "./env"
 import { contentSecurityPolicy, nonce, securityHeaders } from "./security"
 import type { AppKind } from "@agentonic/contracts/identity"
 type Cookie = Parameters<NextResponse["cookies"]["set"]>
-export async function refreshSession(request: NextRequest, app: AppKind) {
+/**
+ * Refreshes the session cookies and sets the response policies. `rewrite`
+ * serves another path of the same app for this request (the public site's
+ * host, architecture §85) without changing the address the browser shows.
+ */
+export async function refreshSession(
+  request: NextRequest,
+  app: AppKind,
+  rewrite?: string | null
+) {
   const { url, key, cookieOptions } = authConfiguration(app)
   const refreshed = new Map<string, Cookie>()
   const client = createServerClient(url, key, {
@@ -31,7 +40,11 @@ export async function refreshSession(request: NextRequest, app: AppKind) {
   // Forward the refreshed cookies, and the policy Next.js reads the nonce from.
   const headers = new Headers(request.headers)
   if (policy) headers.set("Content-Security-Policy", policy)
-  const response = NextResponse.next({ request: { headers } })
+  const response = rewrite
+    ? NextResponse.rewrite(new URL(rewrite, request.nextUrl), {
+        request: { headers },
+      })
+    : NextResponse.next({ request: { headers } })
   refreshed.forEach((cookie) => response.cookies.set(...cookie))
   if (policy) response.headers.set("Content-Security-Policy", policy)
   for (const [name, value] of securityHeaders(production, app))

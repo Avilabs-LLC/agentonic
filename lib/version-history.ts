@@ -1,5 +1,10 @@
 export const VERSION_HISTORY = [
   {
+    "version": "0.51.0",
+    "date": "2026-11-02",
+    "summary": "The public site on agentonic.avilabs.tech: homepage, privacy policy and terms in Spanish and English for Google's OAuth verification, and the reviewer account (§85)."
+  },
+  {
     "version": "0.50.0",
     "date": "2026-10-29",
     "summary": "An expired Google authorization pauses the agent until it is reconnected, the turn ends with a clear message, and the Gmail and Drive cards show when Google's authorization ends (§84)."
