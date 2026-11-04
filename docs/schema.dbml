@@ -854,6 +854,7 @@ Table agentonic.agent_environments {
 }
 
 Table agentonic.deployments {
+  member_tools jsonb [note: 'Google account bindings pinned at personal deployment authorization']
   id uuid [pk, not null, default: `gen_random_uuid()`]
   workspace_id uuid [not null]
   agent_id uuid [not null]

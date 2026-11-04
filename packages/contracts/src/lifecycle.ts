@@ -65,6 +65,15 @@ export const lifecycleState = z.object({
       canRequestRenewal: z.boolean(),
       canRenew: z.boolean(),
       canAuthorize: z.boolean(),
+      googleChoices: z
+        .array(
+          z.object({
+            key: z.enum(["connectionId", "driveConnectionId"]),
+            operations: z.array(z.string()),
+            accounts: z.array(z.object({ id: z.uuid(), name: z.string() })),
+          })
+        )
+        .optional(),
     })
   ),
   deployments: z.array(
@@ -145,6 +154,13 @@ export const lifecycleCommand = z.discriminatedUnion("operation", [
         .object({
           submissionId: z.uuid(),
           budgetUsd: periodBudget,
+          accounts: z
+            .object({
+              connectionId: z.uuid().optional(),
+              driveConnectionId: z.uuid().optional(),
+            })
+            .strict()
+            .optional(),
           environment: z.enum(["local", "azure_staging"]),
           autoRenew: z.boolean(),
           consent: z.literal(true),
@@ -273,6 +289,8 @@ export const chatState = z.object({
 })
 export type ChatState = z.infer<typeof chatState>
 export const lifecycleErrors: Record<string, string> = {
+  connection_required:
+    "En Conexiones, habilita todas las operaciones de esta versión en una sola cuenta propia de cada servicio.",
   approval_required:
     "La aprobación no está vigente. Renueva la revisión antes de activar.",
   host_unavailable:

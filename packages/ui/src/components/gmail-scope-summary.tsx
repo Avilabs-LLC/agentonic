@@ -14,7 +14,7 @@ export function GmailScopeSummary({
       title="Herramientas solicitadas"
       description="Capacidades incluidas en esta versión y sujetas a sus permisos vigentes."
       icon={<WrenchIcon />}
-      footer="Las evaluaciones automáticas no utilizan estas herramientas. Las versiones con herramientas requieren revisión del equipo; los cambios de correo y de documentos necesitan confirmación del titular."
+      footer="La evaluación usa datos sintéticos para probar las herramientas. Las versiones con herramientas requieren revisión del equipo; los cambios de correo y de documentos necesitan confirmación del titular."
     >
       {hasWeb(tools) && (
         <div className="mb-4 space-y-2 rounded-lg border bg-muted/20 p-4">
@@ -27,11 +27,13 @@ export function GmailScopeSummary({
       )}
       {gmailGrants(tools).map((g) => (
         <div
-          key={g.connectionId}
+          key={g.connectionId ?? "member-gmail"}
           className="space-y-3 rounded-lg border bg-muted/20 p-4"
         >
           <p className="text-xs text-muted-foreground">
-            Conexión {g.connectionId}
+            {g.connectionId
+              ? `Conexión ${g.connectionId}`
+              : "Cuenta de Gmail de cada persona"}
           </p>
           <ul className="grid gap-2 text-sm sm:grid-cols-2">
             {g.operations.map((op) => (
@@ -46,12 +48,14 @@ export function GmailScopeSummary({
       ))}
       {driveGrants(tools).map((g) => (
         <div
-          key={g.driveConnectionId}
+          key={g.driveConnectionId ?? "member-drive"}
           className="mt-4 space-y-3 rounded-lg border bg-muted/20 p-4"
         >
           <p className="text-sm font-medium">Google Drive</p>
           <p className="text-xs text-muted-foreground">
-            Conexión {g.driveConnectionId}
+            {g.driveConnectionId
+              ? `Conexión ${g.driveConnectionId}`
+              : "Drive de cada persona"}
           </p>
           <ul className="grid gap-2 text-sm sm:grid-cols-2">
             {g.operations.map((op) => (

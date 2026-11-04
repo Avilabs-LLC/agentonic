@@ -157,7 +157,11 @@ describe("Configuración › Google Drive", () => {
       )
     expect(out).not.toContain(">Conectar Gmail<")
     expect(out).toContain("drive@example.invalid")
-    expect(out).toContain("Herramientas de Google Drive")
+    expect(out).toContain("Drive de cada persona")
+    expect(out).toContain("Permisos de mi cuenta de Drive")
+    expect(
+      html(GmailConnection, { ...base, drive: { connections: [] } })
+    ).toContain("Crear documento")
     // Only Brave is told how to let Google's Picker work; the server never is.
     expect(out).not.toContain("Shields")
   })

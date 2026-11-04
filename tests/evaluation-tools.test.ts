@@ -241,56 +241,69 @@ it("searches a fixture mailbox the way Gmail reads operators (§69)", async () =
   expect(await search("in:inbox -ofertas")).toEqual(["m1"])
 })
 
-it("runs a fixture case with the version's own tools and shows the grader what it did", async () => {
-  const access = {
-    version: 1,
-    collectionIds: [],
-    tools: [{ connectionId: id(500), operations: ["gmail.search"] }],
-  }
-  const config = {
-    providers: base,
-    allowTools: false,
-  } as unknown as Configuration
-  let seen: Configuration | undefined
-  processJob.mockImplementation(
-    async (_job: Lease, execute: Execute, config: Configuration) => {
-      seen = config
-      await execute("context", job)
-      expect(await execute("gmail-tools", job)).toEqual({ tools: access.tools })
-      expect(await execute("web-tools", job)).toEqual({ enabled: true })
-      await config.providers.gmailTool(
-        "gmail.search",
-        { query: "pedido", limit: 1 },
-        { connectionId: id(500), operations: ["gmail.search"] },
-        job,
-        execute
-      )
-      await execute("answer", job, { text: "Llega el jueves." })
+it.each([id(500), null])(
+  "runs a fixture case with a reviewed Gmail grant (%s)",
+  async (connectionId) => {
+    const access = {
+      version: 1,
+      collectionIds: [],
+      tools: [{ connectionId, operations: ["gmail.search"] }],
     }
-  )
-  const execute = vi.fn<Execute>(async (operation) =>
-    operation === "fixtures"
-      ? { fixtures }
-      : operation === "context"
-        ? { accessJson: JSON.stringify(access) }
-        : { ok: true }
-  )
-  const grade = vi.fn<Grade>(async () => ({ verdict: "passed" }))
-  await runReviewCase(job, execute, config, grade, signal)
-  expect(seen?.allowTools).toBe(true)
-  expect(grade.mock.calls[0]![0]).toMatchObject({
-    answer: { text: "Llega el jueves." },
-    fixtures,
-    toolCalls: [{ tool: "gmail.search" }],
-  })
-  // The live tool authority is never consulted for a fixture case.
-  expect(execute.mock.calls.map((c) => c[0])).toEqual([
-    "fixtures",
-    "context",
-    "grade-context",
-    "answer",
-  ])
-})
+    const config = {
+      providers: base,
+      allowTools: false,
+    } as unknown as Configuration
+    let seen: Configuration | undefined
+    processJob.mockImplementation(
+      async (_job: Lease, execute: Execute, config: Configuration) => {
+        seen = config
+        await execute("context", job)
+        expect(await execute("gmail-tools", job)).toEqual({
+          tools: [
+            {
+              connectionId: connectionId ?? job.id,
+              operations: ["gmail.search"],
+            },
+          ],
+        })
+        expect(await execute("web-tools", job)).toEqual({ enabled: true })
+        await config.providers.gmailTool(
+          "gmail.search",
+          { query: "pedido", limit: 1 },
+          {
+            connectionId: connectionId ?? job.id,
+            operations: ["gmail.search"],
+          },
+          job,
+          execute
+        )
+        await execute("answer", job, { text: "Llega el jueves." })
+      }
+    )
+    const execute = vi.fn<Execute>(async (operation) =>
+      operation === "fixtures"
+        ? { fixtures }
+        : operation === "context"
+          ? { accessJson: JSON.stringify(access) }
+          : { ok: true }
+    )
+    const grade = vi.fn<Grade>(async () => ({ verdict: "passed" }))
+    await runReviewCase(job, execute, config, grade, signal)
+    expect(seen?.allowTools).toBe(true)
+    expect(grade.mock.calls[0]![0]).toMatchObject({
+      answer: { text: "Llega el jueves." },
+      fixtures,
+      toolCalls: [{ tool: "gmail.search" }],
+    })
+    // The live tool authority is never consulted for a fixture case.
+    expect(execute.mock.calls.map((c) => c[0])).toEqual([
+      "fixtures",
+      "context",
+      "grade-context",
+      "answer",
+    ])
+  }
+)
 
 it("runs a case without fixtures exactly as before: no tools, nothing extra for the grader", async () => {
   const config = {

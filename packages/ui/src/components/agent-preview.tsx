@@ -250,6 +250,7 @@ export function AgentPreview({
           {previewId ? (
             <p className="self-center text-sm text-muted-foreground">
               Máximo {formatUsd(state?.budgetUsd ?? budgetUsd)} por prueba
+              {state && !state.toolsEnabled && " · Sin herramientas"}
             </p>
           ) : (
             <Field className="w-full sm:w-56">

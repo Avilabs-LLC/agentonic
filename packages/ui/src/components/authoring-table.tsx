@@ -139,7 +139,7 @@ export function AuthoringTable({
         <DataTableColumnHeader column={column} title="Agente" />
       ),
       cell: ({ row }) =>
-        row.original.canEdit ? (
+        row.original.canEdit || row.original.canInvoke ? (
           <AgentLink
             href={`/agents/${row.original.id}?workspace=${row.original.workspaceId}`}
             name={row.original.name}

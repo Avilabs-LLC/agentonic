@@ -62,7 +62,7 @@ export async function runLifecycle(
         renew:
           "Nueva revisión iniciada para la misma versión. Revisa los criterios cuando estén listos.",
         authorize:
-          "Uso de pruebas autorizado. El equipo puede activar esta versión.",
+          "Uso de pruebas autorizado. Consulta el estado de la activación.",
         activate:
           "Activación en cola. El estado cambiará cuando se verifique el agente.",
         stop: "Agente detenido. El consumo registrado se conserva.",

@@ -9,6 +9,8 @@ import {
   customerEnvironmentLabels,
   deploymentDisplayStatus,
 } from "@agentonic/contracts/availability"
+import { gmailLabels } from "@agentonic/contracts/gmail"
+import { driveLabels, type DriveOperation } from "@agentonic/contracts/drive"
 import { useEffect, useId, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import {
@@ -82,6 +84,10 @@ export function AgentLifecycle({
     submissionId: string
     requestId: string
   } | null>(null)
+  const [accounts, setAccounts] = useState<Record<string, string>>({})
+  const choices =
+    state.submissions.find((s) => s.id === form?.submissionId)?.googleChoices ??
+    []
   const [consent, setConsent] = useState(false),
     [budget, setBudget] = useState("0.25"),
     [autoRenew, setAutoRenew] = useState(true),
@@ -135,6 +141,15 @@ export function AgentLifecycle({
       : { min: 0.05, max: 1, step: "0.05" }
   function open(operation: "renew" | "authorize", id: string) {
     setError("")
+    const eligible =
+      state.submissions.find((s) => s.id === id)?.googleChoices ?? []
+    setAccounts(
+      Object.fromEntries(
+        eligible.flatMap((c) =>
+          c.accounts.length === 1 ? [[c.key, c.accounts[0]!.id]] : []
+        )
+      )
+    )
     setConsent(false)
     setAutoRenew(true)
     setBudget(
@@ -194,7 +209,7 @@ export function AgentLifecycle({
                   {s.expiresAt && (
                     <p className="text-xs text-muted-foreground">
                       {customer && s.reason === "valid"
-                        ? `Puedes autorizar su uso hasta el ${formatUtcMinute(s.expiresAt)}; el equipo de Agentonic debe activarlo antes de esa fecha.`
+                        ? `Puedes autorizar su uso hasta el ${formatUtcMinute(s.expiresAt)}.`
                         : customer
                           ? `Plazo para activar: ${formatUtcMinute(s.expiresAt)}.`
                           : `Plazo para activar: ${formatUtcDateTime(s.expiresAt)} UTC.`}
@@ -262,13 +277,12 @@ export function AgentLifecycle({
       <AgentSettingsCard
         title={customer ? "Uso en pruebas" : "Despliegues de pruebas"}
         icon={<RocketIcon />}
-        description="Uso privado y de solo lectura. La autorización dura 30 días y se renueva sola mientras nada cambie; cada período tiene su propio presupuesto."
+        description="Uso privado con los permisos aprobados. La autorización dura 30 días y se renueva sola mientras nada cambie; cada período tiene su propio presupuesto."
       >
         {!deployments.length ? (
           customer ? (
             <CardEmptyState title="Sin uso en pruebas">
-              Autoriza el uso de una versión aprobada y el equipo de Agentonic
-              la activará.
+              Autoriza una versión aprobada para usarla en tus chats.
             </CardEmptyState>
           ) : (
             <CardEmptyState title="Sin despliegues de pruebas">
@@ -417,10 +431,59 @@ export function AgentLifecycle({
             <DialogDescription>
               {form?.operation === "renew"
                 ? "Se abrirá una nueva revisión de esta misma versión. Se prepararán criterios para que los revises y confirmes antes de evaluar. La aprobación anterior se conserva."
-                : "Autoriza el uso privado de esta versión y su conocimiento durante 30 días, con un presupuesto por período. Si nada cambia, la autorización se renueva sola cada 30 días; puedes desactivarlo o detener el agente en cualquier momento. El equipo activará el agente."}
+                : "Autoriza el uso privado de esta versión y su conocimiento durante 30 días, con un presupuesto por período. Si nada cambia, la autorización se renueva sola cada 30 días; puedes desactivarlo o detener el agente en cualquier momento. Las versiones aprobadas para cuentas personales se activan al autorizar tu presupuesto."}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-5">
+            {form?.operation === "authorize" &&
+              choices.map((choice) => (
+                <Field key={choice.key}>
+                  <FieldLabel htmlFor={fieldId + choice.key}>
+                    {choice.key === "connectionId"
+                      ? "Mi cuenta de Gmail"
+                      : "Mi cuenta de Drive"}
+                  </FieldLabel>
+                  <p className="text-sm text-muted-foreground">
+                    {choice.operations
+                      .map(
+                        (op) =>
+                          gmailLabels[op] ?? driveLabels[op as DriveOperation]
+                      )
+                      .join(" · ")}
+                  </p>
+                  {choice.accounts.length ? (
+                    <Select
+                      items={choice.accounts.map((account) => ({
+                        value: account.id,
+                        label: account.name,
+                      }))}
+                      value={accounts[choice.key] ?? null}
+                      onValueChange={(v) =>
+                        setAccounts((current) => ({
+                          ...current,
+                          [choice.key]: String(v),
+                        }))
+                      }
+                    >
+                      <SelectTrigger id={fieldId + choice.key}>
+                        <SelectValue placeholder="Elige una cuenta" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {choice.accounts.map((account) => (
+                          <SelectItem key={account.id} value={account.id}>
+                            {account.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <p className="text-sm">
+                      Conecta tu cuenta y habilita estas operaciones en
+                      Conexiones.
+                    </p>
+                  )}
+                </Field>
+              ))}
             {form?.operation === "authorize" && (
               <Field>
                 <FieldLabel htmlFor={`${fieldId}-environment`}>
@@ -514,6 +577,10 @@ export function AgentLifecycle({
               disabled={
                 pending ||
                 !consent ||
+                (form?.operation === "authorize" &&
+                  choices.some(
+                    (c) => !c.accounts.some((a) => a.id === accounts[c.key])
+                  )) ||
                 Number(budget) < bounds.min ||
                 Number(budget) > bounds.max ||
                 !Number.isFinite(Number(budget)) ||
@@ -532,7 +599,11 @@ export function AgentLifecycle({
                     budgetUsd: Number(budget),
                     consent: true,
                     ...(form.operation === "authorize"
-                      ? { environment, autoRenew }
+                      ? {
+                          environment,
+                          autoRenew,
+                          ...(choices.length ? { accounts } : {}),
+                        }
                       : {}),
                   },
                 })

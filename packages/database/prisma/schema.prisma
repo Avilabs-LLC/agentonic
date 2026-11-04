@@ -1091,6 +1091,7 @@ model RuntimeHostBroker {
  @@schema("agentonic")
 }
 model Deployment {
+ memberTools Json? @map("member_tools")
  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
  workspaceId String @map("workspace_id") @db.Uuid
  agentId String @map("agent_id") @db.Uuid

@@ -10,7 +10,12 @@ import { loadReviewFlow } from "@agentonic/server/review-flow"
 import { loadEvaluations } from "@agentonic/server/evaluation"
 import { EvaluationPanel } from "@workspace/ui/components/evaluation-panel"
 import { notFound } from "next/navigation"
-import { loadWorkspace, loadAgent } from "@agentonic/server/authoring"
+import { GmailConnection } from "@workspace/ui/components/gmail-connection"
+import {
+  loadWorkspace,
+  loadAgent,
+  loadAgentListing,
+} from "@agentonic/server/authoring"
 import { RecordHeader, BackRow } from "@workspace/ui/components/record-header"
 import { AgentWorkflow } from "@workspace/ui/components/agent-workflow"
 import { AgentPageTabs } from "@workspace/ui/components/agent-page-tabs"
@@ -35,6 +40,49 @@ export default async function Page({
 }) {
   const { selected } = await customerWorkspace(searchParams)
   const { id } = await params
+  const entry = (await loadAgentListing(selected.id)).find(
+    (agent) => agent.id === id
+  )
+  if (!entry?.canEdit) {
+    if (!entry?.canInvoke) notFound()
+    const [state, gmail, drive] = await Promise.all([
+      loadLifecycle("customer", selected.id, id),
+      loadGmail(selected.id, id),
+      loadDrive(selected.id, id),
+    ])
+    if (!state) notFound()
+    return (
+      <div className="mx-auto w-full max-w-4xl space-y-6">
+        <BackRow href={`/agents?workspace=${selected.id}`} />
+        <RecordHeader
+          title={entry.name}
+          description="Conecta tus cuentas y autoriza un presupuesto para tus chats."
+        />
+        <AgentPageTabs
+          configuration={
+            <GmailConnection
+              state={gmail}
+              drive={drive}
+              workspaceId={selected.id}
+              agentId={id}
+              tools={[]}
+              disabled={false}
+              personalOnly
+            />
+          }
+          activation={
+            <AgentLifecycle
+              state={state}
+              workspaceId={selected.id}
+              action={lifecycleAction.bind(null, selected.id)}
+              audience="customer"
+              now={new Date().toISOString()}
+            />
+          }
+        />
+      </div>
+    )
+  }
   const [
     lifecycle,
     data,

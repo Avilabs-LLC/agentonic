@@ -24,13 +24,17 @@ export const driveLabels: Record<DriveOperation, string> = {
  * `driveConnectionId`, not Gmail's `connectionId`, so every Gmail reader of a
  * frozen snapshot keeps ignoring it.
  */
-export const driveGrant = z
+export const driveVersionGrant = z
   .object({
-    driveConnectionId: z.uuid(),
+    driveConnectionId: z.uuid().nullable(),
     operations: z.array(driveOperation).min(1).max(4),
   })
   .strict()
   .refine((v) => new Set(v.operations).size === v.operations.length)
+export const driveGrant = driveVersionGrant.safeExtend({
+  driveConnectionId: z.uuid(),
+})
+
 export type DriveGrant = z.infer<typeof driveGrant>
 
 /** Files a person may pick for one agent, and for one knowledge account. */

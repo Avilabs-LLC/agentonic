@@ -1,5 +1,10 @@
 export const VERSION_HISTORY = [
   {
+    "version": "0.52.0",
+    "date": "2026-11-04",
+    "summary": "Cada persona puede usar sus propias cuentas de Gmail y Drive y su presupuesto con una versión aprobada."
+  },
+  {
     "version": "0.51.2",
     "date": "2026-11-04",
     "summary": "The public site's root is mapped by Caddy to its page, so the app rewrites nothing across origins (§85)."
