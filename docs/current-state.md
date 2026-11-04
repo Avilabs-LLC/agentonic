@@ -1,6 +1,6 @@
 # Agentonic: current state
 
-**As of 2 November 2026 · platform v0.51.2 · nonproduction only.** A short summary of what runs where, what works and what doesn't exist yet. [The architecture record](agentonic-architecture.md) keeps the full, dated history. If the two disagree about the present, fix this page. Update it whenever a change alters what runs where.
+**As of 4 November 2026 · platform v0.52.0 · nonproduction only.** A short summary of what runs where, what works and what doesn't exist yet. [The architecture record](agentonic-architecture.md) keeps the full, dated history. If the two disagree about the present, fix this page. Update it whenever a change alters what runs where.
 
 ## What runs where
 
@@ -131,7 +131,7 @@ New versions use runtime 0.7.0. Google accepts `gmail.modify` for test users, an
 
 **An expired Google authorization pauses the agent (architecture §84), installed 29 October with migration 78, `platform-0.50.0-5e5f9a971892` and staging broker `e3b50e3d`.** While the Google app is in Testing, a Gmail or Drive consent lasts 7 days. When one runs out, the agent stays deployed but takes no new message: Chats answers that the account must be reconnected, scheduled runs skip, and the agent page shows "Esperando reconexión". Reconnecting the same account resumes it with the same actions and no new authorization. A turn now always ends, including on a deployment that stopped mid-turn. The Gmail and Drive cards show until when Google authorizes each account and warn the day before. On 22 October, before this change, the expiry of Nico's consent stopped NicolAI-Mail and left a turn running (N27).
 
-**Member-owned Google connections (implemented locally, pending rollout).** Runtime 0.10.0 and migration 79 support reviewing Gmail and Drive operations before anyone connects an account. Each member with permission to use the agent selects permissions on their personal accounts and authorizes a separate budget. Staff approval of that version allows these deployments to queue at authorization. Older versions retain their original connection IDs and activation flow. The hosted reviewer agent is still a draft.
+**Member-owned Google connections (release 0.52.0).** Runtime 0.10.0 and migration 79 support reviewing Gmail and Drive operations before anyone connects an account. Each member with permission to use the agent selects permissions on their personal accounts and authorizes a separate budget. Staff approval of that version allows these deployments to queue at authorization. Older versions retain their original connection IDs and activation flow. The release requires granting this runtime to the reviewer workspace and manually approving its version before members can activate it.
 
 ## Operations
 
