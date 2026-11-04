@@ -89,7 +89,7 @@ export async function runReviewCase(
             allowTools: true,
             providers: fixtureProviders(config.providers, fixtures, calls),
           }
-        : config,
+        : { ...config, allowTools: false },
       signal
     )
   } catch (error) {
@@ -119,7 +119,19 @@ export async function runReviewCase(
   const context = await execute("grade-context", job)
   const assessment = await grade(
     {
-      context,
+      context: {
+        ...context,
+        // requestedAccess describes the version. The grader also needs the
+        // actual execution scope of this case, especially when tools are off.
+        caseToolAccess: {
+          availableTools: fixtures ? tools : [],
+          liveGoogleAccounts: false,
+          executedExternalWrites: 0,
+          description: fixtures
+            ? "Herramientas de la versión con datos sintéticos. En toolCalls, pendingApproval=true registra una propuesta: no se creó un borrador en Gmail, no se envió correo y no se escribió en Drive."
+            : "En esta conversación no se ofreció ninguna herramienta de Gmail, Drive ni web, aunque la versión las tenga configuradas.",
+        },
+      },
       answer,
       ...(fixtures ? { fixtures, toolCalls: calls } : {}),
     },
