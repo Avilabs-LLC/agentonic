@@ -291,6 +291,12 @@ it.each([id(500), null])(
     await runReviewCase(job, execute, config, grade, signal)
     expect(seen?.allowTools).toBe(true)
     expect(grade.mock.calls[0]![0]).toMatchObject({
+      context: {
+        caseToolAccess: {
+          availableTools: access.tools,
+          liveGoogleAccounts: false,
+        },
+      },
       answer: { text: "Llega el jueves." },
       fixtures,
       toolCalls: [{ tool: "gmail.search" }],
@@ -305,23 +311,32 @@ it.each([id(500), null])(
   }
 )
 
-it("runs a case without fixtures exactly as before: no tools, nothing extra for the grader", async () => {
+it("reports the actual tool-free case separately from the approved version scope", async () => {
   const config = {
     providers: base,
-    allowTools: false,
+    allowTools: true,
   } as unknown as Configuration
   processJob.mockImplementation(
     async (_job: Lease, execute: Execute, seen: Configuration) => {
-      expect(seen).toBe(config)
+      expect(seen.allowTools).toBe(false)
       await execute("answer", job, { text: "Tres años." })
     }
   )
+  const requestedAccess = {
+    tools: [{ connectionId: null, operations: ["gmail.read"] }],
+  }
   const execute = vi.fn<Execute>(async (operation) =>
-    operation === "fixtures" ? { fixtures: null } : { ok: true }
+    operation === "fixtures" ? { fixtures: null } : { requestedAccess }
   )
   const grade = vi.fn<Grade>(async () => ({ verdict: "passed" }))
   await runReviewCase(job, execute, config, grade, signal)
-  expect(Object.keys(grade.mock.calls[0]![0])).toEqual(["context", "answer"])
+  expect(grade.mock.calls[0]![0]).toMatchObject({
+    context: {
+      requestedAccess,
+      caseToolAccess: { availableTools: [], liveGoogleAccounts: false },
+    },
+    answer: { text: "Tres años." },
+  })
 })
 
 it("fails one case on a malformed answer and lets the run go on (§75)", async () => {
