@@ -141,19 +141,26 @@ WantedBy=multi-user.target
  * root can change the proxy (by restarting it).
  */
 export function caddyfile({ site: withSite = true } = {}) {
-  const site = (name, maxSize, host = hostnames[name]) => `${host} {
+  const site = (name, maxSize, host = hostnames[name], extra = "") => `${host} {
 	encode zstd gzip
 	request_body {
 		max_size ${maxSize}
 	}
-	header -Server
+	header -Server${extra}
 	reverse_proxy 127.0.0.1:${ports[name]}
 }
 `
+  // The public site's root and English root are its pages under /sitio; the
+  // proxy maps them here, so the app never rewrites across origins (§85).
+  const sitePages = `
+	@root path /
+	rewrite @root /sitio
+	@en path /en
+	rewrite @en /sitio/en`
   return `# Agentonic hosted apps. Installed by scripts/install-platform.mjs.
 {
 	admin off
 }
 ${site("customer", "12MB")}
-${site("admin", "2MB")}${withSite ? `\n${site("customer", "1MB", siteHostname)}` : ""}`
+${site("admin", "2MB")}${withSite ? `\n${site("customer", "1MB", siteHostname, sitePages)}` : ""}`
 }
