@@ -1,4 +1,13 @@
-import { readFileSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
+// @ts-expect-error untyped repository packaging script
+import { buildRuntimeArtifact } from "../scripts/runtime-artifact.mjs"
+import { keyring, seal } from "../packages/connectors/src/secrets"
+import { directProviders } from "../apps/worker/src/providers"
+import { jobCall } from "../apps/worker/src/gateway"
+import { runPreview } from "../apps/worker/src/runtime"
+import type { Execute, Lease } from "../apps/worker/src/pipeline"
+import { mkdtempSync, rmSync, readFileSync } from "node:fs"
 import type { PGlite } from "@electric-sql/pglite"
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest"
 const submissionMocks = vi.hoisted(() => ({
@@ -161,7 +170,7 @@ beforeEach(async () => {
  INSERT INTO agentonic.platform_staff(id,user_id,role) VALUES('${staff}','${staff}','administrator');
  INSERT INTO agentonic.code_repositories(id,name,repository_url,visibility,provisioning_status,created_by_staff_id) VALUES('${id(60)}','Synthetic','https://example.invalid/runtime','platform','ready','${staff}');
  INSERT INTO agentonic.agent_templates(id,slug,name,code_repository_id) VALUES('${id(51)}','synthetic','Synthetic','${id(60)}');
- INSERT INTO agentonic.template_versions(id,template_id,version,git_commit_sha,manifest_sha256,structure_manifest,runtime_contract_version) VALUES('${template}','${id(51)}','0.1.0',repeat('a',40),repeat('b',64),'{"platformPolicyText":"Synthetic platform policy"}','0.1');
+ INSERT INTO agentonic.template_versions(id,template_id,version,git_commit_sha,manifest_sha256,structure_manifest,runtime_contract_version) VALUES('${template}','${id(51)}','0.1.0',repeat('a',40),repeat('b',64),'${JSON.stringify({ platformPolicyText: readFileSync("packages/runtime/prompts/platform.md", "utf8") }).replaceAll("'", "''")}','0.1');
  INSERT INTO agentonic.code_releases(id,version,template_version_id,git_commit_sha,artifact_sha256,registry_sha256,runtime_contract_version,code_repository_id,artifact_bucket,artifact_key,artifact_size_bytes,published_by_staff_id,execution_manifest) VALUES('${code}','0.1.0','${template}',repeat('a',40),repeat('b',64),repeat('c',64),'0.1','${id(60)}','synthetic','fixture',100,'${staff}','{"previewContract":"1","gmailContract":"1","webContract":"1","openModels":"1","model":"gpt-4.1-mini-2025-04-14"}');
  INSERT INTO agentonic.workspace_code_release_grants(workspace_id,code_release_id,granted_by_staff_id) VALUES('${w}','${code}','${staff}');
  INSERT INTO agentonic.agents(id,workspace_id,name,slug,owner_member_id,template_version_id,created_by_member_id) VALUES('${a}','${w}','Synthetic agent','synthetic','${member}','${template}','${member}');
@@ -912,9 +921,10 @@ async function finishFlow(
   job: Job,
   verdict = "passed",
   routine = true,
-  executionModel = "gpt-4.1-mini-2025-04-14"
+  executionModel = "gpt-4.1-mini-2025-04-14",
+  caseCount = 3
 ) {
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i < caseCount; i++) {
     await execute(job, "search", { embedding })
     const context = await execute(job, "context")
     const grade = await execute(job, "grade-context")
@@ -2465,6 +2475,7 @@ async function modelReview() {
     "202610140076_period_budget_now",
     "202610140077_turn_costs",
     "202610290078_google_reconnect_pause",
+    "202611040079_member_google_tools",
   ])
     await db.exec(
       readFileSync(
@@ -6081,4 +6092,519 @@ it("renews before expiry and recovers after it without replaying paid work or ex
     ok: true,
   })
   expect(await shown()).toEqual({ authorized: true, online: true })
+})
+
+it("lets two members connect, budget and chat on one approved Google version", async () => {
+  const root = mkdtempSync(join(tmpdir(), "agentonic-member-chat-"))
+  const google = {
+    clientId: "synthetic",
+    clientSecret: "synthetic",
+    redirectUri: "http://localhost",
+    keys: keyring("a".repeat(64)),
+  }
+  try {
+    const built = await buildRuntimeArtifact({
+      output: root,
+      gitCommit: "a".repeat(40),
+    })
+    const runtime = {
+      manifest: built.manifest,
+      artifactSha256: built.artifactSha256,
+      gitCommit: built.gitCommit,
+    }
+
+    const previous = await modelReview()
+    const release = id(1800),
+      second = id(1801)
+    await sql(
+      `INSERT INTO agentonic.code_releases(id,version,template_version_id,git_commit_sha,artifact_sha256,registry_sha256,runtime_contract_version,code_repository_id,artifact_bucket,artifact_key,artifact_size_bytes,published_by_staff_id,execution_manifest)
+    SELECT $1,'member-tools',template_version_id,git_commit_sha,$3,registry_sha256,runtime_contract_version,code_repository_id,artifact_bucket,'member-tools',100,published_by_staff_id, $4::jsonb FROM agentonic.code_releases WHERE id=$2`,
+      [release, code, built.artifactSha256, JSON.stringify(built.manifest)]
+    )
+    await sql(
+      "INSERT INTO agentonic.workspace_code_release_grants(workspace_id,code_release_id,granted_by_staff_id) VALUES($1,$2,$3)",
+      [w, release, staff]
+    )
+    await sql(
+      "INSERT INTO agentonic.workspace_members(id,user_id,workspace_id,role) VALUES($1,$2,$3,'member')",
+      [second, other, w]
+    )
+    await sql(
+      "INSERT INTO agentonic.agent_member_grants(workspace_id,agent_id,member_id,role,granted_by_member_id) VALUES($1,$2,$3,'operator',$4)",
+      [w, a, second, member]
+    )
+    await sql(
+      "UPDATE agentonic.evaluation_workers SET retired_at=clock_timestamp() WHERE database_role='agentonic_eval_azure' AND retired_at IS NULL"
+    )
+    await sql(
+      `WITH worker AS (INSERT INTO agentonic.evaluation_workers(database_role,environment,worker_sha256,verified_at,verification)
+       VALUES('agentonic_eval_azure','azure_staging',repeat('d',64),now(),'{"reviewProtocol":3,"toolFixtures":1,"driveFixtures":1,"isolation":true,"recovery":true,"artifactIntegrity":true}') RETURNING id)
+       INSERT INTO agentonic.evaluation_worker_runtimes(worker_id,runtime_sha256) SELECT id,$1 FROM worker`,
+      [built.artifactSha256]
+    )
+    const tools = [
+      { connectionId: null, operations: ["gmail.search", "gmail.read"] },
+      { driveConnectionId: null, operations: ["drive.files.read"] },
+    ]
+    await actor()
+    expect(
+      await command("draft.save", {
+        agentId: a,
+        revision: 1,
+        content,
+        requestedAccess: { version: 1, tools, collectionIds: [] },
+      })
+    ).toMatchObject({ ok: true })
+    const candidate = await command("candidate.freeze", {
+      agentId: a,
+      revision: 2,
+      codeReleaseId: release,
+    })
+    expect(candidate.ok).toBe(true)
+    async function preview(
+      operation: string,
+      payload: Record<string, unknown>
+    ) {
+      const result = await db.query<{
+        result: { ok: boolean; id: string; toolsEnabled?: boolean }
+      }>("SELECT agentonic.preview_command($1,$2) result", [
+        operation,
+        JSON.stringify({ agentId: a, ...payload }),
+      ])
+      return result.rows[0]!.result
+    }
+    const plain = await preview("start", {
+      candidateId: candidate.id,
+      enableTools: true,
+    })
+    expect(plain.ok).toBe(true)
+    expect(await preview("state", { previewId: plain.id })).toMatchObject({
+      ok: true,
+      toolsEnabled: false,
+    })
+    expect(
+      await preview("turn", {
+        previewId: plain.id,
+        query: "¿Qué puedes hacer?",
+        requestKey: id(1799),
+      })
+    ).toMatchObject({ ok: true })
+    expect(await preview("cancel", { previewId: plain.id })).toMatchObject({
+      ok: true,
+    })
+    const submission = await command("submission.send", {
+      candidateId: candidate.id,
+      consent: true,
+      note: "Synthetic member flow",
+    })
+    expect(submission.ok).toBe(true)
+    const prep = await flow("prepare", {
+      submissionId: submission.id,
+      budgetUsd: 0.25,
+      consent: true,
+      requestId: id(1802),
+    })
+    expect(prep.ok).toBe(true)
+    await db.exec("RESET ROLE;SET LOCAL ROLE agentonic_eval_azure")
+    const prepJob = (
+      await db.query<{ r: Job }>(
+        "SELECT agentonic.review_preparation_claim(repeat('d',64)) r"
+      )
+    ).rows[0]!.r
+    expect(await prepWorker(prepJob, "read")).toMatchObject({
+      requestedAccess: { tools },
+    })
+    await prepWorker(prepJob, "reserve", {
+      id: id(1806),
+      provider: "openai",
+      model: "gpt-5.4-mini",
+      microusd: 50000,
+    })
+    await prepWorker(prepJob, "settle", {
+      id: id(1806),
+      tokens: 100,
+      outputTokens: 50,
+      microusd: 500,
+    })
+    const criteria = previous.criteria.map((c) => ({
+      ...c,
+      sourceIds: [],
+      needsInput: false,
+    }))
+    expect(
+      await prepWorker(prepJob, "prepared", { criteria, risk: "routine" })
+    ).toMatchObject({ ok: true })
+    await actor()
+    expect(
+      await flow("save", {
+        preparationId: prep.id,
+        revision: 0,
+        criteria: criteria.map((c) => ({ ...c, reviewDecision: "approved" })),
+      })
+    ).toMatchObject({ ok: true })
+    expect(
+      await flow("confirm", {
+        preparationId: prep.id,
+        revision: 1,
+        consent: true,
+      })
+    ).toMatchObject({ ok: true })
+    const model = { model: "gpt-6-astra", reasoning: "medium" }
+    expect(
+      await flow("run", {
+        preparationId: prep.id,
+        revision: 1,
+        budgetUsd: 3,
+        models: [model],
+        consent: true,
+        requestId: id(1803),
+      })
+    ).toMatchObject({ ok: true })
+    const evaluation = (await evalClaim())!
+    const dataset = (
+      await sql(
+        "SELECT dataset_snapshot cases FROM agentonic.evaluation_runs WHERE id=$1",
+        [evaluation.id]
+      )
+    ).rows[0] as { cases: { key: string }[] }
+    await db.exec("RESET ROLE;SET LOCAL ROLE agentonic_eval_azure")
+    expect(dataset.cases.map((c) => c.key)).toEqual(
+      expect.arrayContaining([
+        "platform-gmail-injection",
+        "platform-drive-injection",
+      ])
+    )
+    await finishFlow(
+      evaluation,
+      "passed",
+      true,
+      model.model,
+      dataset.cases.length
+    )
+    await actor(staff, w, "agentonic_admin")
+    const opened = await command("review.open", { submissionId: submission.id })
+    expect(
+      await approve({
+        ...previous,
+        submissionId: submission.id,
+        grantId: opened.data.grantId,
+        evaluationId: evaluation.id,
+      })
+    ).toMatchObject({ ok: true })
+    await sql(
+      "WITH h AS (INSERT INTO agentonic.runtime_hosts(environment,database_role,broker_sha256,verified_at,heartbeat_at) VALUES('local','agentonic_deployer_local',repeat('f',64),now(),now()) RETURNING id), b AS (INSERT INTO agentonic.runtime_host_brokers(host_id,broker_sha256) SELECT id,repeat('f',64) FROM h) INSERT INTO agentonic.runtime_host_artifacts(host_id,runtime_sha256) SELECT id,$1 FROM h",
+      [built.artifactSha256]
+    )
+    const users = [owner, other]
+    const deployments: string[] = []
+    const chats: string[] = []
+    for (const [i, user] of users.entries()) {
+      await actor(user)
+      const auth = {
+        submissionId: submission.id,
+        environment: "local",
+        budgetUsd: i + 1,
+        autoRenew: false,
+        consent: true,
+        requestId: id(1810 + i),
+      }
+      expect(
+        await lifecycleCall("deployment_command", "authorize", auth)
+      ).toMatchObject({ ok: false, code: "connection_required" })
+      for (const [j, provider] of (["gmail", "drive"] as const).entries()) {
+        const rpc = async (op: string, payload: Record<string, unknown>) =>
+          (
+            await db.query<{ r: Record<string, unknown> }>(
+              `SELECT agentonic.${provider}_command($1,$2) r`,
+              [op, JSON.stringify(payload)]
+            )
+          ).rows[0]!.r
+        const connectionId = id(1820 + 2 * i + j),
+          state = (i * 2 + j + 1).toString().repeat(64)
+        await rpc("oauth.start", {
+          purpose: "tools",
+          agentId: a,
+          state,
+          connectionId,
+          verifier: "sealed-fixture",
+        })
+        await rpc("oauth.consume", { state })
+        await rpc("oauth.finish", {
+          state,
+          connectionId,
+          account: `fixture-${i}@example.invalid`,
+          credential: seal(
+            { refreshToken: `fixture-${provider}-${i}` },
+            `${provider}:${connectionId}`,
+            google.keys
+          ),
+          canLabel: true,
+        })
+        await rpc("permissions", {
+          agentId: a,
+          connectionId,
+          operations: tools[j]!.operations,
+        })
+        if (provider === "drive")
+          await rpc("files.add", {
+            agentId: a,
+            connectionId,
+            files: [
+              {
+                fileId: `SyntheticFile0${i}`,
+                name: `Private file ${i}`,
+                mimeType: "text/plain",
+              },
+            ],
+          })
+      }
+      const accounts = {
+        connectionId: id(1820 + 2 * i),
+        driveConnectionId: id(1821 + 2 * i),
+      }
+      expect(
+        await lifecycleCall("deployment_command", "authorize", {
+          ...auth,
+          accounts: { ...accounts, connectionId: id(1820 + 2 * (1 - i)) },
+        })
+      ).toMatchObject({ ok: false, code: "connection_required" })
+      const state = (
+        await db.query<{
+          r: {
+            submissions: {
+              id: string
+              canAuthorize: boolean
+              googleChoices: { accounts: { id: string }[] }[]
+            }[]
+          }
+        }>("SELECT agentonic.lifecycle_state($1) r", [a])
+      ).rows[0]!.r
+      const approval = state.submissions.find((s) => s.id === submission.id)
+      expect(approval?.canAuthorize).toBe(true)
+      expect(
+        approval?.googleChoices
+          .flatMap((c) => c.accounts.map((v) => v.id))
+          .sort()
+      ).toEqual(Object.values(accounts).sort())
+      const result = await lifecycleCall("deployment_command", "authorize", {
+        ...auth,
+        accounts,
+      })
+      expect(result.ok).toBe(true)
+      const dep = String(result.id)
+      deployments.push(dep)
+      expect(
+        await lifecycleCall("deployment_command", "authorize", auth)
+      ).toMatchObject({ id: dep })
+      const ready = await hostCall("prepare", dep)
+      expect(ready.manifestHash).toBeTruthy()
+      await db.exec("RESET ROLE; SET LOCAL ROLE agentonic_runtime_local")
+      expect(
+        (
+          await db.query<{ r: unknown }>(
+            "SELECT agentonic.deployment_service('ready',$1,$2,$3) r",
+            [
+              dep,
+              serviceSecret,
+              JSON.stringify({ manifestHash: ready.manifestHash }),
+            ]
+          )
+        ).rows[0]!.r
+      ).toEqual({ ok: true })
+      await actor(user)
+      chats.push(
+        String(
+          (await chat("start", { deploymentId: dep, title: `Personal ${i}` }))
+            .id
+        )
+      )
+    }
+    for (const [i, user] of users.entries()) {
+      await actor(user)
+      const dep = deployments[i]!,
+        conversationId = chats[i]!
+      expect(
+        await chat("start", {
+          deploymentId: deployments[1 - i],
+          title: "Foreign",
+        })
+      ).toMatchObject({ ok: false })
+      expect(
+        await chat("state", { conversationId: chats[1 - i] })
+      ).toMatchObject({ ok: false })
+      expect(
+        await chat("turn", {
+          conversationId,
+          requestId: id(1850 + i),
+          query: "Read my synthetic mail and file.",
+          ...model,
+        })
+      ).toMatchObject({ ok: true })
+      const job = (await stagingWork(dep, "claim")) as unknown as Job
+      const read = async (provider: "gmail" | "drive", connectionId: string) =>
+        callAs(
+          "agentonic_runtime_local",
+          `SELECT agentonic.${provider}_staging($1,$2,$3,$4,$5,$6) result`,
+          [
+            `${provider}-read`,
+            dep,
+            serviceSecret,
+            job.id,
+            job.token,
+            JSON.stringify({
+              connectionId,
+              operation:
+                provider === "gmail" ? "gmail.read" : "drive.files.read",
+            }),
+          ]
+        )
+      expect(await read("gmail", id(1820 + 2 * i))).toMatchObject({
+        credential: expect.any(String),
+      })
+      expect(await read("drive", id(1821 + 2 * i))).toMatchObject({
+        credential: expect.any(String),
+        files: [{ name: `Private file ${i}` }],
+      })
+      await expect(read("gmail", id(1820 + 2 * (1 - i)))).rejects.toThrow()
+      await expect(read("drive", id(1821 + 2 * (1 - i)))).rejects.toThrow()
+      const mailboxText = ["Entrega el jueves", "Entrega el martes"][i]!
+      const fileText = ["Proyecto Orquídea", "Proyecto Aurora"][i]!
+      const answer = mailboxText + ". " + fileText
+      let modelCalls = 0
+      vi.stubGlobal("fetch", async (url: string, init: RequestInit) => {
+        const endpoint = new URL(url)
+        if (endpoint.hostname === "oauth2.googleapis.com") {
+          const token = new URLSearchParams(String(init.body)).get(
+            "refresh_token"
+          )
+          expect([`fixture-gmail-${i}`, `fixture-drive-${i}`]).toContain(token)
+          return Response.json({ access_token: token, expires_in: 3600 })
+        }
+        const token = new Headers(init.headers).get("Authorization")
+        if (endpoint.hostname === "gmail.googleapis.com") {
+          expect(token).toBe(`Bearer fixture-gmail-${i}`)
+          return Response.json({
+            id: "message1",
+            payload: {
+              mimeType: "text/plain",
+              body: { data: Buffer.from(mailboxText).toString("base64url") },
+            },
+          })
+        }
+        if (endpoint.pathname.includes("/drive/v3/files/")) {
+          expect(token).toBe(`Bearer fixture-drive-${i}`)
+          expect(endpoint.pathname.endsWith(`SyntheticFile0${i}`)).toBe(true)
+          return endpoint.searchParams.get("alt") === "media"
+            ? new Response(fileText)
+            : Response.json({
+                id: `SyntheticFile0${i}`,
+                name: `Private file ${i}`,
+                mimeType: "text/plain",
+                version: "1",
+              })
+        }
+        expect(endpoint.hostname).toBe("api.openai.com")
+        if (endpoint.pathname.endsWith("/input_tokens"))
+          return Response.json({ input_tokens: 100 })
+        const body = String(init.body)
+        modelCalls++
+        let output
+        if (modelCalls <= 2) {
+          if (modelCalls === 2) expect(body).toContain(mailboxText)
+          output = {
+            type: "function_call",
+            name: modelCalls === 1 ? "gmail_read" : "drive_files_read",
+            call_id: "tool" + modelCalls,
+            arguments: JSON.stringify({
+              id: modelCalls === 1 ? "message1" : `SyntheticFile0${i}`,
+            }),
+          }
+        } else {
+          expect(body).toContain(fileText)
+          output = {
+            type: "message",
+            content: [
+              {
+                type: "output_text",
+                text: JSON.stringify({
+                  text: answer,
+                  citations: [],
+                  insufficientEvidence: false,
+                }),
+              },
+            ],
+          }
+        }
+        return Response.json({
+          status: "completed",
+          usage: { input_tokens: 10, output_tokens: 10 + i },
+          output: [output],
+        })
+      })
+      const execute: Execute = async (op, lease, payload = {}) => {
+        const result = await callAs(
+          "agentonic_runtime_local",
+          `SELECT agentonic.${jobCall(op)}($1,$2,$3,$4,$5,$6) result`,
+          [
+            op,
+            dep,
+            serviceSecret,
+            lease.id,
+            lease.token,
+            JSON.stringify(payload),
+          ]
+        )
+        return result ?? {}
+      }
+      await runPreview(
+        { ...job, kind: "retrieve" } as Lease,
+        execute,
+        runtime,
+        root,
+        directProviders({ openaiKey: "synthetic", google }),
+        new AbortController().signal
+      )
+      expect(modelCalls).toBe(3)
+      await actor(user)
+      expect(await chat("state", { conversationId })).toMatchObject({
+        committedMicrousd: expect.any(Number),
+        turns: [{ answer, status: "succeeded" }],
+      })
+    }
+    const budgets = await sql(
+      "SELECT period_budget_usd::int budget,committed_microusd::int spent FROM agentonic.deployments WHERE id=ANY($1::uuid[]) ORDER BY budget",
+      [deployments]
+    )
+    const rows = budgets.rows as { budget: number; spent: number }[]
+    expect(rows.map((row) => row.budget)).toEqual([1, 2])
+    expect(Number(rows[0]!.spent)).toBeGreaterThan(0)
+    expect(Number(rows[1]!.spent)).toBeGreaterThan(Number(rows[0]!.spent))
+    // Revoking one account takes effect on its owner's next turn only.
+    await actor(owner)
+    await gmailCommand("disconnect", { connectionId: id(1820) })
+    expect(
+      (
+        await chat("turn", {
+          conversationId: chats[0],
+          query: "Again",
+          requestId: id(1900),
+          ...model,
+        })
+      ).ok
+    ).toBe(false)
+    await actor(other)
+    expect(
+      (
+        await chat("turn", {
+          conversationId: chats[1],
+          query: "Again",
+          requestId: id(1901),
+          ...model,
+        })
+      ).ok
+    ).toBe(true)
+  } finally {
+    vi.unstubAllGlobals()
+    rmSync(root, { recursive: true, force: true })
+  }
 })

@@ -49,13 +49,17 @@ export const gmailLabels: Record<string, string> = {
   "gmail.labels.apply": "Aplicar etiquetas",
   "gmail.threads.read": "Leer hilos",
 }
-export const gmailGrant = z
+export const gmailVersionGrant = z
   .object({
-    connectionId: z.uuid(),
+    connectionId: z.uuid().nullable(),
     operations: z.array(gmailOperation).min(1).max(9),
   })
   .strict()
   .refine((v) => new Set(v.operations).size === v.operations.length)
+export const gmailGrant = gmailVersionGrant.safeExtend({
+  connectionId: z.uuid(),
+})
+
 const id = z.string().regex(/^[a-zA-Z0-9_-]{1,128}$/)
 // A draft has its own ID and wraps a message with another; the model was seen
 // editing a draft by its message ID, which Gmail rejects (B2, 8 October).

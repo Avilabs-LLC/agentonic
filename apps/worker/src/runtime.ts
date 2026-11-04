@@ -15,7 +15,7 @@ import {
   driveGrants,
   hasWeb,
 } from "@agentonic/contracts/tools"
-import type { DriveGrant } from "@agentonic/contracts/drive"
+import { driveGrant, type DriveGrant } from "@agentonic/contracts/drive"
 import { readFileSync } from "node:fs"
 import { createHash } from "node:crypto"
 import { fork } from "node:child_process"
@@ -63,6 +63,7 @@ const runtimeSchema = z
         // Runtime 0.8.0 and later accept any model the broker offers (§77).
         openModels: z.literal("1").optional(),
         // Runtime 0.9.0 and later give each proposed message a note (§81).
+        memberGoogleTools: z.literal("1").optional(),
         draftNotes: z.literal("1").optional(),
         webContract: z.literal("1").optional(),
         webResearch: z.literal("1").optional(),
@@ -142,6 +143,7 @@ export function verifyRuntime(value: unknown, root: string) {
     installed.driveContract !== runtime.manifest.driveContract ||
     installed.mailboxBatch !== runtime.manifest.mailboxBatch ||
     installed.openModels !== runtime.manifest.openModels ||
+    installed.memberGoogleTools !== runtime.manifest.memberGoogleTools ||
     installed.draftNotes !== runtime.manifest.draftNotes ||
     installed.webContract !== runtime.manifest.webContract ||
     installed.webResearch !== runtime.manifest.webResearch ||
@@ -464,7 +466,9 @@ export async function runPreview(
     providers.gmail
   ) {
     const authorized = await execute("gmail-tools", job)
-    grant = gmailGrants(toolGrants.parse(authorized.tools))[0]
+    grant = gmailGrant
+      .optional()
+      .parse(gmailGrants(toolGrants.parse(authorized.tools))[0])
   }
   let drive: DriveGrant | undefined
   if (
@@ -474,7 +478,9 @@ export async function runPreview(
     providers.drive
   ) {
     const authorized = await execute("drive-tools", job)
-    drive = driveGrants(toolGrants.parse(authorized.tools))[0]
+    drive = driveGrant
+      .optional()
+      .parse(driveGrants(toolGrants.parse(authorized.tools))[0])
   }
   let web = false
   if (

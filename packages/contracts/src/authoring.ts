@@ -184,6 +184,7 @@ export const workspaceView = z.object({
 })
 export const agentListing = z.array(
   workspaceView.shape.agents.element.extend({
+    canInvoke: z.boolean().optional(),
     configuration: z
       .object({
         promptCharacters: z.number().int().nonnegative(),

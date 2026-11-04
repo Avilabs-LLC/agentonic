@@ -64,6 +64,7 @@ export async function buildRuntimeArtifact({ output, gitCommit }) {
       openModels: "1",
       // Draft notes (§81): brokers offer each proposed message a note for the owner.
       draftNotes: "1",
+      memberGoogleTools: "1",
       webContract: "1",
       webResearch: "1",
       model: "gpt-4.1-mini-2025-04-14",

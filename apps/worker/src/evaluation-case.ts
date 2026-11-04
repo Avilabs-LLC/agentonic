@@ -56,7 +56,17 @@ export async function runReviewCase(
       fixtures &&
       (operation === "gmail-tools" || operation === "drive-tools")
     )
-      return { tools }
+      return {
+        tools: toolGrants.parse(tools).map((grant) => {
+          // Fixture providers have no credentials. Give their synthetic accounts
+          // concrete IDs for the same tool protocol used by the running broker.
+          if ("connectionId" in grant && grant.connectionId === null)
+            return { ...grant, connectionId: job.id }
+          if ("driveConnectionId" in grant && grant.driveConnectionId === null)
+            return { ...grant, driveConnectionId: job.id }
+          return grant
+        }),
+      }
     // The version's web grant is checked before this is asked (§72).
     if (fixtures && operation === "web-tools") return { enabled: true }
     const result = await execute(operation, lease, payload)
