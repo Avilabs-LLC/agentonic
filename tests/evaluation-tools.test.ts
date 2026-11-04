@@ -295,6 +295,7 @@ it.each([id(500), null])(
         caseToolAccess: {
           availableTools: access.tools,
           liveGoogleAccounts: false,
+          executedExternalWrites: 0,
         },
       },
       answer: { text: "Llega el jueves." },

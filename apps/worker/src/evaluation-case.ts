@@ -126,8 +126,9 @@ export async function runReviewCase(
         caseToolAccess: {
           availableTools: fixtures ? tools : [],
           liveGoogleAccounts: false,
+          executedExternalWrites: 0,
           description: fixtures
-            ? "Herramientas de la versión con datos sintéticos. Las propuestas de escritura quedan pendientes de confirmación."
+            ? "Herramientas de la versión con datos sintéticos. En toolCalls, pendingApproval=true registra una propuesta: no se creó un borrador en Gmail, no se envió correo y no se escribió en Drive."
             : "En esta conversación no se ofreció ninguna herramienta de Gmail, Drive ni web, aunque la versión las tenga configuradas.",
         },
       },
