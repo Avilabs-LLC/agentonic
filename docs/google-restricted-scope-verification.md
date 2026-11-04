@@ -144,13 +144,13 @@ Google wants every requested scope exercised and, for writes, the change visible
 - Drive: files picked with the Picker and read in a chat; a Google Doc created and updated after confirmation, shown in Drive;
 - disconnecting Gmail and Drive, and what the cards say afterwards.
 
-### Reviewer instructions (to paste in the reply, in English)
+### Reviewer instructions (after runtime 0.10.0 and the approved personal-account version are live)
 
 > Agentonic accounts are created by invitation, so we prepared one for your team. Sign in at https://app.agentonic.avilabs.tech/login with the email and password below. No phone number, payment or second factor is required. The interface is in Spanish; the labels are quoted here.
 >
-> 1. After signing in, open the workspace "Revisión Google" and then "Agentes" → the agent "[name]".
-> 2. On the agent's "Configuración" tab, under "Conexiones", click "Conectar Gmail" and complete Google's consent with any Google account you use for testing. Back on the page, choose the Gmail actions the agent may take ("Acciones") and save. "Conectar Google Drive" works the same way, and "Elegir archivos" opens Google's picker.
-> 3. On the "Activación" tab, authorize the current version with a small budget (for example US$1). Only the member who connected the account can use it in their own chats.
+> 1. After signing in, open the workspace "Revisión Google" and then "Agentes" → the agent "Asistente de correo".
+> 2. On the agent's "Configuración" tab, under "Conexiones", click "Conectar Gmail" and complete Google's consent with any Google account you use for testing. Back on the page, select the approved Gmail actions under "Permisos de mi cuenta de Gmail". Each choice saves automatically. "Conectar Google Drive" works the same way, and "Elegir archivos" opens Google's picker.
+> 3. On the "Activación" tab, click "Autorizar activación", select your own connected accounts, set the budget for the period (for example US$1), and confirm. Wait for "En funcionamiento". This starts your personal deployment of the approved version.
 > 4. Open "Chats", pick the agent and ask, for example, "Resume los correos de esta semana" (summarize this week's mail), "Redacta una respuesta al último correo de X" (draft a reply), or "Etiqueta como Facturas los correos con facturas" (label invoices). Every draft, send or label appears as a card with its exact content and runs only after you confirm it.
 > 5. "Aprender mi estilo" on the Gmail card analyzes your own sent mail, with a separate consent, and shows a style guide for you to accept.
 > 6. To disconnect, use "Desconectar" on the Gmail or Drive card; tokens are erased at once.

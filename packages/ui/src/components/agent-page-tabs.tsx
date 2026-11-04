@@ -14,7 +14,7 @@ export function AgentPageTabs({
   schedules,
 }: {
   configuration: ReactNode
-  proposals: ReactNode
+  proposals?: ReactNode
   activation?: ReactNode
   /** Programaciones (§58), for members who can use the agent. */
   schedules?: ReactNode
@@ -27,7 +27,7 @@ export function AgentPageTabs({
           ? "activacion"
           : params.get("tab") === "programaciones" && schedules
             ? "programaciones"
-            : params.get("tab") === "propuestas"
+            : params.get("tab") === "propuestas" && proposals
               ? "propuestas"
               : "configuracion"
       }
@@ -42,9 +42,11 @@ export function AgentPageTabs({
         <TabsTrigger value="configuracion" className="flex-none px-4">
           Configuración
         </TabsTrigger>
-        <TabsTrigger value="propuestas" className="flex-none px-4">
-          Propuestas
-        </TabsTrigger>
+        {proposals && (
+          <TabsTrigger value="propuestas" className="flex-none px-4">
+            Propuestas
+          </TabsTrigger>
+        )}
         {activation && (
           <TabsTrigger value="activacion" className="flex-none px-4">
             Activación
@@ -59,9 +61,11 @@ export function AgentPageTabs({
       <TabsContent value="configuracion" keepMounted className="space-y-6">
         {configuration}
       </TabsContent>
-      <TabsContent value="propuestas" keepMounted className="space-y-6">
-        {proposals}
-      </TabsContent>
+      {proposals && (
+        <TabsContent value="propuestas" keepMounted className="space-y-6">
+          {proposals}
+        </TabsContent>
+      )}
       {activation && (
         <TabsContent value="activacion" className="space-y-6">
           {activation}

@@ -1,9 +1,14 @@
 "use client"
 import { driveGrants, gmailGrants, hasWeb } from "@agentonic/contracts/tools"
 import { googleGrantState } from "@agentonic/contracts/google-grant"
-import type { DriveOperation, DriveState } from "@agentonic/contracts/drive"
+import {
+  driveLabels,
+  driveOperation,
+  type DriveOperation,
+  type DriveState,
+} from "@agentonic/contracts/drive"
 import { WEB_GRANT } from "@agentonic/contracts/web"
-import { useState } from "react"
+import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import {
   PlugIcon,
@@ -220,14 +225,60 @@ export function GmailTools({
     </div>
   )
 }
+function OperationChoices<T extends string>({
+  title,
+  options,
+  labels,
+  selected,
+  disabled,
+  onChange,
+}: {
+  title: string
+  options: readonly T[]
+  labels: Record<T, string>
+  selected: readonly T[]
+  disabled: boolean
+  onChange: (next: T[]) => void
+}) {
+  return (
+    <fieldset disabled={disabled} className="mt-4 grid gap-3 sm:grid-cols-2">
+      <legend className="mb-2 text-sm font-medium">{title}</legend>
+      {options.map((op) => (
+        <label
+          key={op}
+          className="flex items-center gap-3 rounded-lg border p-3 text-sm"
+        >
+          <Checkbox.Root
+            disabled={disabled}
+            checked={selected.includes(op)}
+            onCheckedChange={(checked) =>
+              onChange(
+                checked
+                  ? [...selected, op]
+                  : selected.filter((value) => value !== op)
+              )
+            }
+            className="flex size-4 shrink-0 items-center justify-center rounded border data-checked:bg-primary data-checked:text-primary-foreground"
+          >
+            <Checkbox.Indicator>
+              <CheckIcon className="size-3" />
+            </Checkbox.Indicator>
+          </Checkbox.Root>
+          {labels[op]}
+        </label>
+      ))}
+    </fieldset>
+  )
+}
 export function GmailConnection({
   state,
   drive,
   workspaceId,
   agentId,
   tools,
-  onTools,
+  onTools = () => {},
   disabled,
+  personalOnly = false,
   collections = [],
   agentCollectionIds = [],
 }: {
@@ -237,8 +288,9 @@ export function GmailConnection({
   workspaceId: string
   agentId: string
   tools: AgentView["draft"]["requestedAccess"]["tools"]
-  onTools: (tools: AgentView["draft"]["requestedAccess"]["tools"]) => void
+  onTools?: (tools: AgentView["draft"]["requestedAccess"]["tools"]) => void
   disabled: boolean
+  personalOnly?: boolean
   /** Collections the member curates, for an accepted style guide (§57). */
   collections?: { id: string; name: string }[]
   agentCollectionIds?: string[]
@@ -263,6 +315,31 @@ export function GmailConnection({
   const onDriveTools = (value: typeof tools) =>
     onTools([...tools.filter((g) => !("driveConnectionId" in g)), ...value])
   const withoutWeb = tools.filter((g) => !("capability" in g))
+  const [refreshingPermissions, refreshPermissions] = useTransition()
+  async function personalPermissions(
+    provider: "gmail" | "drive",
+    connectionId: string,
+    operations: string[]
+  ) {
+    setBusy(true)
+    try {
+      const command = provider === "gmail" ? gmailCommand : driveCommand
+      await command(workspaceId, "permissions", {
+        agentId,
+        connectionId,
+        operations,
+      })
+      refreshPermissions(() => router.refresh())
+    } catch (error) {
+      notify.destructive(
+        error instanceof Error
+          ? error.message
+          : "No se pudo guardar el permiso."
+      )
+    } finally {
+      setBusy(false)
+    }
+  }
   async function drivePermission(
     connectionId: string,
     op: DriveOperation,
@@ -375,6 +452,20 @@ export function GmailConnection({
                     </p>
                   )}
                   {c.status === "connected" && (
+                    <OperationChoices
+                      title="Permisos de mi cuenta de Gmail"
+                      options={gmailOperation.options.filter(
+                        (op) => op !== "gmail.labels.apply" || c.canLabel
+                      )}
+                      labels={gmailLabels}
+                      selected={c.operations}
+                      disabled={disabled || busy || refreshingPermissions}
+                      onChange={(ops) =>
+                        void personalPermissions("gmail", c.id, ops)
+                      }
+                    />
+                  )}
+                  {!personalOnly && c.status === "connected" && (
                     <StyleLearning
                       workspaceId={workspaceId}
                       agentId={agentId}
@@ -421,6 +512,18 @@ export function GmailConnection({
                   </Button>
                 </div>
               </div>
+              {c.status === "connected" && (
+                <OperationChoices
+                  title="Permisos de mi cuenta de Drive"
+                  options={driveOperation.options}
+                  labels={driveLabels}
+                  selected={c.operations}
+                  disabled={disabled || busy || refreshingPermissions}
+                  onChange={(ops) =>
+                    void personalPermissions("drive", c.id, ops)
+                  }
+                />
+              )}
               {c.status === "connected" && (
                 <DriveFiles
                   workspaceId={workspaceId}
@@ -472,61 +575,98 @@ export function GmailConnection({
           )}
         </div>
       </AgentSettingsCard>
-      <AgentSettingsCard
-        title="Herramientas"
-        icon={<WrenchIcon />}
-        description="Elige qué puede hacer el agente en la próxima versión."
-        footer="Guarda el borrador y prepara una nueva versión para revisar cambios de acceso. Puedes probarlas en Probar agente antes de enviar la versión a revisión. Crear, editar o eliminar borradores, enviar correos, aplicar etiquetas y crear o editar documentos requiere tu confirmación, salvo los envíos y borradores que autorices en una programación."
-      >
-        <label className="flex cursor-pointer items-start gap-3 rounded-lg border p-4">
-          <Checkbox.Root
-            checked={webEnabled}
-            disabled={disabled || busy}
-            onCheckedChange={(checked) =>
-              onTools(checked ? [...withoutWeb, WEB_GRANT] : withoutWeb)
-            }
-            className="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded border data-checked:bg-primary data-checked:text-primary-foreground"
-          >
-            <Checkbox.Indicator>
-              <CheckIcon className="size-3" />
-            </Checkbox.Indicator>
-          </Checkbox.Root>
-          <span className="space-y-1">
-            <span className="flex flex-wrap items-baseline gap-x-2">
-              <span className="text-sm font-medium">Acceso web</span>
-              <span className="text-xs text-muted-foreground">
-                Solo lectura
+      {!personalOnly && (
+        <AgentSettingsCard
+          title="Herramientas"
+          icon={<WrenchIcon />}
+          description="Elige qué operaciones podrá autorizar cada persona para su propia cuenta."
+          footer="Guarda el borrador y prepara una nueva versión para revisar cambios de acceso. Puedes probarlas en Probar agente antes de enviar la versión a revisión. Crear, editar o eliminar borradores, enviar correos, aplicar etiquetas y crear o editar documentos requiere tu confirmación, salvo los envíos y borradores que autorices en una programación."
+        >
+          <label className="flex cursor-pointer items-start gap-3 rounded-lg border p-4">
+            <Checkbox.Root
+              checked={webEnabled}
+              disabled={disabled || busy}
+              onCheckedChange={(checked) =>
+                onTools(checked ? [...withoutWeb, WEB_GRANT] : withoutWeb)
+              }
+              className="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded border data-checked:bg-primary data-checked:text-primary-foreground"
+            >
+              <Checkbox.Indicator>
+                <CheckIcon className="size-3" />
+              </Checkbox.Indicator>
+            </Checkbox.Root>
+            <span className="space-y-1">
+              <span className="flex flex-wrap items-baseline gap-x-2">
+                <span className="text-sm font-medium">Acceso web</span>
+                <span className="text-xs text-muted-foreground">
+                  Solo lectura
+                </span>
+              </span>
+              <span className="block text-sm text-muted-foreground">
+                Buscar información y leer páginas públicas con enlaces a las
+                fuentes. No requiere conectar una cuenta.
               </span>
             </span>
-            <span className="block text-sm text-muted-foreground">
-              Buscar información y leer páginas públicas con enlaces a las
-              fuentes. No requiere conectar una cuenta.
-            </span>
-          </span>
-        </label>
-        <GmailTools
-          connections={state.connections.filter(
-            (c) => c.status === "connected"
+          </label>
+          {!selected?.connectionId && (
+            <OperationChoices
+              title="Gmail de cada persona"
+              options={gmailOperation.options}
+              labels={gmailLabels}
+              selected={selected?.operations ?? []}
+              disabled={disabled || busy}
+              onChange={(operations) =>
+                onGmailTools(
+                  operations.length ? [{ connectionId: null, operations }] : []
+                )
+              }
+            />
           )}
-          grant={selected}
-          disabled={disabled || busy}
-          onPermission={(connectionId, op, checked) =>
-            void permission(connectionId, op, checked)
-          }
-        />
-        {drive && (
-          <DriveTools
-            connections={drive.connections.filter(
-              (c) => c.status === "connected"
-            )}
-            grant={driveSelected}
-            disabled={disabled || busy}
-            onPermission={(connectionId, op, checked) =>
-              void drivePermission(connectionId, op, checked)
-            }
-          />
-        )}
-      </AgentSettingsCard>
+          {selected?.connectionId && (
+            <GmailTools
+              connections={state.connections.filter(
+                (c) => c.status === "connected"
+              )}
+              grant={{ ...selected, connectionId: selected.connectionId }}
+              disabled={disabled || busy}
+              onPermission={(connectionId, op, checked) =>
+                void permission(connectionId, op, checked)
+              }
+            />
+          )}
+          {drive && !driveSelected?.driveConnectionId && (
+            <OperationChoices
+              title="Drive de cada persona"
+              options={driveOperation.options}
+              labels={driveLabels}
+              selected={driveSelected?.operations ?? []}
+              disabled={disabled || busy}
+              onChange={(operations) =>
+                onDriveTools(
+                  operations.length
+                    ? [{ driveConnectionId: null, operations }]
+                    : []
+                )
+              }
+            />
+          )}
+          {drive && driveSelected?.driveConnectionId && (
+            <DriveTools
+              connections={drive.connections.filter(
+                (c) => c.status === "connected"
+              )}
+              grant={{
+                ...driveSelected,
+                driveConnectionId: driveSelected.driveConnectionId,
+              }}
+              disabled={disabled || busy}
+              onPermission={(connectionId, op, checked) =>
+                void drivePermission(connectionId, op, checked)
+              }
+            />
+          )}
+        </AgentSettingsCard>
+      )}
       <DriveConnectDialog
         open={connectingDrive}
         onOpenChange={setConnectingDrive}
@@ -540,7 +680,8 @@ export function GmailConnection({
         files={0}
         onClose={() => setRemoveDrive(null)}
         onDisconnected={() => {
-          if (driveSelected?.driveConnectionId === removeDrive) onDriveTools([])
+          if (removeDrive && driveSelected?.driveConnectionId === removeDrive)
+            onDriveTools([])
           setRemoveDrive(null)
           router.refresh()
         }}

@@ -196,7 +196,9 @@ function ExceptionApproval({
       </Field>
       <Check checked={reviewed} onChange={setReviewed}>
         Revisé las respuestas, la evidencia y el motivo por el que esta versión
-        requiere atención. Apruebo esta versión y su alcance.
+        requiere atención. Apruebo esta versión y su alcance. Si incluye
+        herramientas de cada persona, quienes tengan permiso para usarla podrán
+        activarla con sus propias cuentas y presupuesto.
       </Check>
       <Button
         type="submit"

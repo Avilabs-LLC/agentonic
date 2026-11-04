@@ -376,6 +376,12 @@ function Confirmation({
           {error}
         </p>
       )}
+      {approve && (
+        <p className="text-sm text-muted-foreground">
+          Aprobar una versión con herramientas de cada persona permite que cada
+          miembro con acceso la active con sus cuentas y presupuesto.
+        </p>
+      )}
       <Button
         disabled={
           !isValid || isSubmitting || (approve && feedback.trim().length < 10)

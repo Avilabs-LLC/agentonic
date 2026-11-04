@@ -131,6 +131,8 @@ New versions use runtime 0.7.0. Google accepts `gmail.modify` for test users, an
 
 **An expired Google authorization pauses the agent (architecture §84), installed 29 October with migration 78, `platform-0.50.0-5e5f9a971892` and staging broker `e3b50e3d`.** While the Google app is in Testing, a Gmail or Drive consent lasts 7 days. When one runs out, the agent stays deployed but takes no new message: Chats answers that the account must be reconnected, scheduled runs skip, and the agent page shows "Esperando reconexión". Reconnecting the same account resumes it with the same actions and no new authorization. A turn now always ends, including on a deployment that stopped mid-turn. The Gmail and Drive cards show until when Google authorizes each account and warn the day before. On 22 October, before this change, the expiry of Nico's consent stopped NicolAI-Mail and left a turn running (N27).
 
+**Member-owned Google connections (implemented locally, pending rollout).** Runtime 0.10.0 and migration 79 support reviewing Gmail and Drive operations before anyone connects an account. Each member with permission to use the agent selects permissions on their personal accounts and authorizes a separate budget. Staff approval of that version allows these deployments to queue at authorization. Older versions retain their original connection IDs and activation flow. The hosted reviewer agent is still a draft.
+
 ## Operations
 
 - **Verification.** Hosts and evaluators stay trusted for 30 days (migration 52; it was 7 until 7 October). A launchd job on the Mac runs `pnpm staging:reverify --renew --publish` at 09:00 and 21:00. It checks the installed files and services over SSH, renews only what passes, and renews anything a week old or more, so the VM keeps working for 23 to 30 days with the Mac off. The GitHub alert for a silent Mac only fires once an expiry is within 5 days. Run `pnpm staging:reverify` (read-only) for live expiry dates and what each environment runs: its worker release and each runtime's version and source commit. The local deployment host has been expired since 26 September on purpose; run `install-staging --local` before using local staging chats.
@@ -217,4 +219,4 @@ The ordered plan is architecture §37; the owner's audit brief tracks progress. 
 | Gmail asks for one scope                                               | §83                  |
 | An expired Google authorization pauses the agent                       | §84                  |
 
-Presentation rules are in the [UI contract](ui/ui-contract.md). The [target schema](schema.dbml) describes 90 tables; 73 exist in the 78 checked-in migrations.
+Presentation rules are in the [UI contract](ui/ui-contract.md). The [target schema](schema.dbml) describes 90 tables; 73 exist in the 79 checked-in migrations.

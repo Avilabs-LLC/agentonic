@@ -88,6 +88,7 @@ export async function runAuthoringCommand(app: AppKind, input: unknown) {
           WHERE template_version_id=${view.agent.templateVersionId}::uuid
             AND retired_at IS NULL AND agentonic.can_use_code(id)
             AND execution_manifest->>'previewContract'='1'
+            AND (${!view.draft.requestedAccess.tools.some((g) => ("connectionId" in g && g.connectionId === null) || ("driveConnectionId" in g && g.driveConnectionId === null))} OR execution_manifest->>'memberGoogleTools'='1')
             AND (${gmailGrants(view.draft.requestedAccess.tools).length === 0} OR execution_manifest->>'gmailContract'='1')
             AND (${driveGrants(view.draft.requestedAccess.tools).length === 0} OR execution_manifest->>'driveContract'='1')
             AND (${!hasWeb(view.draft.requestedAccess.tools)} OR execution_manifest->>'webContract'='1')

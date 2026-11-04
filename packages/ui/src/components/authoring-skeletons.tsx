@@ -108,18 +108,19 @@ export function AgentEditorSkeleton() {
                       ) : section === "tools" ? (
                         <div className="space-y-5">
                           <Skeleton className="h-24 w-full" />
-                          <div className="space-y-4 border-t pt-5">
-                            <Skeleton className="h-5 w-24" />
-                            <div className="flex gap-4 border-b pb-2">
-                              <Skeleton className="h-5 w-56 max-w-full" />
-                              <Skeleton className="h-5 w-48 max-w-full" />
+                          {[9, 4].map((count) => (
+                            <div
+                              key={count}
+                              className="space-y-3 border-t pt-4"
+                            >
+                              <Skeleton className="h-5 w-40" />
+                              <div className="grid gap-3 sm:grid-cols-2">
+                                {Array.from({ length: count }, (_, i) => (
+                                  <Skeleton key={i} className="h-12 w-full" />
+                                ))}
+                              </div>
                             </div>
-                            <div className="grid gap-3 sm:grid-cols-2">
-                              {Array.from({ length: 8 }, (_, i) => (
-                                <Skeleton key={i} className="h-12 w-full" />
-                              ))}
-                            </div>
-                          </div>
+                          ))}
                         </div>
                       ) : section === "connections" ? (
                         <div className="space-y-4">

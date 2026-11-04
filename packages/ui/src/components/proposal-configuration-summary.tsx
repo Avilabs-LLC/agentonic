@@ -26,8 +26,8 @@ export function ProposalConfigurationSummary({
   const connections = gmailGrants(requestedAccess.tools)
   const drives = driveGrants(requestedAccess.tools)
   const connectionCount =
-    new Set(connections.map((item) => item.connectionId)).size +
-    new Set(drives.map((item) => item.driveConnectionId)).size
+    new Set(connections.map((item) => item.connectionId).filter(Boolean)).size +
+    new Set(drives.map((item) => item.driveConnectionId).filter(Boolean)).size
   return (
     <div className="space-y-5 text-sm">
       <dl className="grid grid-cols-2 gap-4 border-y py-4 sm:grid-cols-4">
@@ -79,16 +79,16 @@ export function ProposalConfigurationSummary({
             <p>Acceso web · Buscar y leer páginas públicas.</p>
           )}
           {connections.map((connection) => (
-            <p key={connection.connectionId}>
-              Gmail ·{" "}
+            <p key={connection.connectionId ?? "member-gmail"}>
+              Gmail {connection.connectionId ? "" : "de cada persona"} ·{" "}
               {connection.operations
                 .map((operation) => gmailLabels[operation])
                 .join(" · ")}
             </p>
           ))}
           {drives.map((drive) => (
-            <p key={drive.driveConnectionId}>
-              Google Drive ·{" "}
+            <p key={drive.driveConnectionId ?? "member-drive"}>
+              Google Drive {drive.driveConnectionId ? "" : "de cada persona"} ·{" "}
               {drive.operations
                 .map((operation) => driveLabels[operation])
                 .join(" · ")}
