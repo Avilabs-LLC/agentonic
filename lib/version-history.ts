@@ -1,5 +1,10 @@
 export const VERSION_HISTORY = [
   {
+    "version": "0.52.1",
+    "date": "2026-11-09",
+    "summary": "The privacy policy lists only the two Google scopes the app requests, dated 9 November; the verification doc carries Google's 8 November review and the new scope justification (§85)."
+  },
+  {
     "version": "0.52.0",
     "date": "2026-11-04",
     "summary": "Cada persona puede usar sus propias cuentas de Gmail y Drive y su presupuesto con una versión aprobada."

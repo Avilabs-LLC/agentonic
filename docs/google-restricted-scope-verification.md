@@ -59,24 +59,36 @@ In Google Cloud console → _Google Auth Platform_ → _Branding_: app name "Age
 
 - Set the publishing status to **In production**. With unverified restricted scopes the 100-user cap still applies until approval. Consents given from then on no longer expire after 7 days, so the same release sets `GOOGLE_TESTING` to false in `packages/connectors/src/google.ts` (§84, N26). Accounts connected while in Testing keep their date and reconnect once.
 - Under _Data Access_, keep `gmail.modify` and remove `gmail.readonly` and `gmail.compose`, once the installed release asks only for `gmail.modify` (§83).
-- In the _Verification Center_, paste this into "Explain to Google why you need these scopes, how you will use them, and why more limited scopes aren't sufficient" (written 28 October; recheck it against the product before submitting):
+- In the _Verification Center_, the field "How will the scopes be used?" takes at most 1,000 characters. Paste this (998 characters, written 9 November after Google's review asked for each feature and the API call behind it):
 
-  > Agentonic lets a business user build an AI assistant ("agent") and connect their own Gmail account to it, so the agent can work through their mail with them. Connecting grants no actions: the account holder chooses, per agent, which Gmail actions it may take. Only the account holder's own conversations with that agent can use their mailbox; other members of their workspace and Agentonic staff cannot, and automated tests never touch a real mailbox.
-  >
-  > How we use gmail.modify:
-  >
-  > 1. Read and search: when the user asks (for example, "summarize what clients wrote this week"), the agent searches the mailbox and reads the matching messages or threads to answer. Mail is read when the user asks. The conversation keeps the agent's answer and the subjects of the messages it read, for that user, until the conversation is closed or expires. Mail is not imported into the agent's knowledge or used by any other feature.
-  > 2. Drafts and sending: the agent writes replies in the right thread, and new messages, as drafts or ready to send. Every draft change, send and label change is shown to the user with its exact recipients and content, and runs only after the user confirms it. The one exception is a scheduled task the user creates and explicitly authorizes to send or draft without confirmation. It makes at most one such action per run, and the user can cancel it until it starts.
-  > 3. Labels: the agent proposes labels for a batch of messages (for example, "Facturas" on ten invoices). After the user confirms, we create any missing user label and add it to those messages. We never remove labels, archive, trash or permanently delete mail. The only deletion is a draft the user confirms deleting.
-  > 4. Writing style (optional, separate consent): the user can let the agent learn their writing style from their own sent mail of the last 90 days, at most 200 messages. The mail is analyzed and not stored. Only the style guide the user reviews and accepts is kept.
-  >
-  > Why narrower scopes aren't sufficient: adding a label to a message (messages.modify / messages.batchModify) requires gmail.modify. gmail.labels only manages label definitions, and gmail.readonly, gmail.compose and gmail.send can't change a message's labels. gmail.metadata isn't enough because the agent must read message bodies to answer, and gmail.send alone can't read or manage drafts. Since gmail.modify also covers reading, drafts and sending, we request it alone instead of adding gmail.readonly and gmail.compose. We don't request full access (https://mail.google.com/), since nothing in Agentonic permanently deletes mail.
-  >
-  > Data handling: message content goes only to our AI provider (the OpenAI API), only to produce the answer the user asked for, under terms that exclude training. Google user data is never used to train AI models, sold or used for advertising. Tokens are encrypted at rest and erased when the user disconnects. Our use complies with the Google API Services User Data Policy, including the Limited Use requirements.
+  > Agentonic lets a user connect their own Gmail to an AI agent they configure and use it in private chats. Features and the calls behind them: answer questions about the mailbox (messages.list search, messages.get, threads.get); write replies and new emails (drafts.create, update, delete); send (messages.send); label batches of messages (labels.create, messages.batchModify addLabelIds); learn the user's writing style from their own sent mail, with separate consent. Every draft, send and label change shows its exact content and runs only after the user confirms, except one pre-authorized send or draft per scheduled run. Labeling needs gmail.modify: gmail.labels only edits label definitions, and readonly, compose and send cannot change a message's labels. metadata cannot read bodies; compose and send cannot read the inbox. gmail.modify covers every feature in one scope. We never trash, archive or delete mail, nor request full access. Mail goes only to our AI provider, never for training.
 
-  If the field caps the length, a shorter version (about 1,000 characters):
+  The full justification, for the reply email and anywhere longer text is accepted:
 
-  > Agentonic lets a user connect their own Gmail account to an AI agent they configure, so the agent can work through their mail in their own conversations. It searches and reads messages and threads to answer the user's questions. It writes replies and new messages as drafts or sends them, and it proposes labels for batches of messages. Every draft change, send and label change is shown to the user with its exact content and runs only after they confirm. The exception is a send or draft the user explicitly pre-authorizes in a scheduled task: at most one per run, and cancellable. We request gmail.modify because adding labels to messages (messages.batchModify) isn't possible with gmail.labels, gmail.readonly, gmail.compose or gmail.send. It also covers reading and drafts, so we request no other Gmail scope and not full access: Agentonic never trashes, archives or permanently deletes mail. Mail goes only to our AI provider to produce the requested answer, is never used to train models, and is handled under Limited Use.
+  > Agentonic lets a business user connect their own Gmail account to an AI agent they configure and work with it in private chats. gmail.modify is the narrowest single scope that covers every user-facing feature below, and the only scope that lets the app apply labels to messages.
+  >
+  > User-facing features and the Gmail API calls behind them:
+  >
+  > 1. Answer questions about the mailbox ("What did clients ask this week?"): users.messages.list with a search query, then users.messages.get and users.threads.get to read the bodies the answer needs.
+  > 2. Write replies and new emails: users.drafts.create, update, get, list and delete. Each draft is shown with its exact recipients and text, and is created, changed or deleted only after the user clicks Confirm.
+  > 3. Send email: users.messages.send, only after the user confirms the exact message, or once per run of a scheduled task the user explicitly pre-authorized.
+  > 4. Organize mail with labels ("Label this month's invoices as Facturas"): users.labels.list and users.labels.create, then users.messages.batchModify with addLabelIds on the messages the user confirmed. The label then appears on those messages in Gmail.
+  > 5. Learn my writing style, with separate consent: users.messages.list for sent mail from the last 90 days and users.messages.get on up to 200 sent messages, to draft a style guide the user reviews and accepts.
+  > 6. Identify the connected account: users.getProfile.
+  >
+  > Why narrower scopes cannot be used:
+  >
+  > - Feature 4 calls users.messages.batchModify, which requires gmail.modify. gmail.labels only creates and edits label definitions and cannot apply a label to a message. Neither gmail.readonly nor gmail.compose can change a message's labels.
+  > - gmail.metadata cannot read message bodies, so features 1 and 5 fail.
+  > - gmail.compose and gmail.send cannot search or read the inbox, so features 1 and 5 fail.
+  > - gmail.readonly cannot create drafts or send, so features 2 and 3 fail.
+  > - Even gmail.readonly, gmail.compose and gmail.labels together cannot apply a label to a message.
+  >
+  > We request nothing broader: not https://mail.google.com/. The app never trashes, archives or permanently deletes a message. The only deletion is a draft the user confirms.
+  >
+  > Least privilege inside the app: connecting grants no action. The account holder chooses, per agent, which of these operations it may use. Only their own chats can use the mailbox, and every write needs their confirmation. drive.file is requested in a separate consent, only when the user connects Google Drive, for the files they pick in Google's Picker.
+
+  The first justification (28 October) described the features without the API calls behind them; Google's review of 8 November found it did not explain why narrower scopes cannot be used.
 
 - Link up to three pages of documentation (the homepage's Gmail section and a help page).
 
@@ -111,20 +123,31 @@ After the scope review, Google asks for a **Cloud Application Security Assessmen
 
 Google approves the scopes; the warning disappears and the 100-user cap and 7-day expiry stop applying. **Every 12 months** after the letter's date, Google emails a reminder: the app is reverified and the security assessment repeated (and paid again). Missing it can suspend Gmail access for every customer.
 
+## Google's review, 8 November 2026
+
+After the checklist, the Third-Party Data Safety Team reviewed the submission and asked for four things before it continues:
+
+| Google's item              | Cause                                                                                                                | Fix                                                                                                                                                                                  |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Scope justification        | The 28 October text named features but not the API calls, and did not show why narrower scopes fail.                 | The 9 November texts in step 6: each feature with its calls; labeling messages (`messages.batchModify`) is the feature that needs `gmail.modify`.                                    |
+| Scope discrepancy          | Data Access held five scopes; the app requests two. The three identity scopes were never requested (§85 correction). | Removed from Data Access on 9 November; the privacy policy no longer lists them (0.52.1).                                                                                            |
+| Demo video                 | The 2 November recording showed only the Gmail connection.                                                           | A new video: both consent screens expanded, every feature below, and each write shown in Gmail or Drive. Labeling, narrated as the reason for `gmail.modify`, is the essential part. |
+| Test credentials and steps | Not yet sent.                                                                                                        | The reviewer account and instructions below, once the "Revisión Google" agent has an activated version.                                                                              |
+
 ## Google's checklist, answered (2 November 2026)
 
 Google's Third Party Data Safety Team answered the submission for project `agentonic-509018` with its standard checklist and asked for a reply confirming each item. This is what each item rests on, and what the owner still does before replying (N28).
 
-| Google asks for                                              | Where it is                                                                                                                                                                                                             |
-| ------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Least privilege, production-ready, scope justification       | The step 6 text above. The app sends `gmail.modify` and `drive.file`; Google's Picker adds `openid`, `userinfo.email` and `userinfo.profile`, so the Data Access list shows five scopes and matches the consent screen. |
-| Demo video: public or unlisted, scopes expanded, matching    | The owner's recording of a connection from zero (2 November). The scope-functionality parts below are still to record; one video or several, all unlisted.                                                              |
-| Test credentials, no blockers, clear entry point             | `pnpm setup:google-reviewer` creates the account and the "Revisión Google" workspace; the instructions below name every screen. No phone, payment or second factor: TOTP is staff-only.                                 |
-| Privacy policy: access, use, transfer, protection, retention | `https://agentonic.avilabs.tech/privacidad` and `/privacidad/en` (§85), sections 2 to 8. The homepage carries the Gmail and Drive section and the Limited Use statement.                                                |
-| Limited Use, no AI/ML training, no transfer for training     | Policy sections 3 to 5. OpenAI and Voyage are used through their APIs under terms that exclude training; "Aprender mi estilo" is the per-user personalized exception.                                                   |
-| Allowed use cases                                            | Terms section 4 forbids cold email, bulk mail and warming; every send is confirmed or pre-authorized by the account holder, one per scheduled run.                                                                      |
-| Data Portability                                             | Not requested.                                                                                                                                                                                                          |
-| CASA                                                         | After the scope review; pick a lab now (step 9).                                                                                                                                                                        |
+| Google asks for                                              | Where it is                                                                                                                                                                                                |
+| ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Least privilege, production-ready, scope justification       | The step 6 text above. The app requests `gmail.modify` and `drive.file`, each in its own consent, and the Data Access list holds exactly those two (the three identity scopes were removed on 9 November). |
+| Demo video: public or unlisted, scopes expanded, matching    | The owner's recording of a connection from zero (2 November). The scope-functionality parts below are still to record; one video or several, all unlisted.                                                 |
+| Test credentials, no blockers, clear entry point             | `pnpm setup:google-reviewer` creates the account and the "Revisión Google" workspace; the instructions below name every screen. No phone, payment or second factor: TOTP is staff-only.                    |
+| Privacy policy: access, use, transfer, protection, retention | `https://agentonic.avilabs.tech/privacidad` and `/privacidad/en` (§85), sections 2 to 8. The homepage carries the Gmail and Drive section and the Limited Use statement.                                   |
+| Limited Use, no AI/ML training, no transfer for training     | Policy sections 3 to 5. OpenAI and Voyage are used through their APIs under terms that exclude training; "Aprender mi estilo" is the per-user personalized exception.                                      |
+| Allowed use cases                                            | Terms section 4 forbids cold email, bulk mail and warming; every send is confirmed or pre-authorized by the account holder, one per scheduled run.                                                         |
+| Data Portability                                             | Not requested.                                                                                                                                                                                             |
+| CASA                                                         | After the scope review; pick a lab now (step 9).                                                                                                                                                           |
 
 ### Before replying (owner)
 
@@ -165,7 +188,7 @@ Google wants every requested scope exercised and, for writes, the change visible
 >
 > We have completed the audit against your checklist and updated the project.
 >
-> Scopes. Agentonic requests https://www.googleapis.com/auth/gmail.modify (restricted) and https://www.googleapis.com/auth/drive.file (non-sensitive). Google's file picker adds openid, userinfo.email and userinfo.profile during the Drive flow; the Data Access list in the Cloud Console matches what the consent screen shows. Both scopes back production-ready, user-facing features. The justification for gmail.modify, including why gmail.readonly, gmail.compose, gmail.send, gmail.labels and gmail.metadata are not sufficient, is in the Verification Center. drive.file is used only for files the user selects with the picker; the agent reads them and creates or updates Google Docs the user confirms.
+> Scopes. Agentonic requests https://www.googleapis.com/auth/gmail.modify (restricted) and https://www.googleapis.com/auth/drive.file (non-sensitive). The app uses incremental authorization: connecting Gmail asks for gmail.modify alone, and connecting Google Drive asks for drive.file alone. The Data Access list in the Cloud Console holds exactly these two scopes, and the video shows both consent screens. Both scopes back production-ready, user-facing features. The justification for gmail.modify, including why gmail.readonly, gmail.compose, gmail.send, gmail.labels and gmail.metadata are not sufficient, is in the Verification Center. drive.file is used only for files the user selects with the picker; the agent reads them and creates or updates Google Docs the user confirms.
 >
 > Demo video. [unlisted YouTube URL(s)]. It shows the consent screen with all scopes expanded and the client ID in the address bar, and every function of each scope: searching and reading mail, creating, editing and deleting a draft, sending a message, applying labels to a batch, learning the user's writing style, reading picked Drive files, creating and updating a Google Doc, and disconnecting. For each write the video switches to the Gmail or Drive account to show the change.
 >
