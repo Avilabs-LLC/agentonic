@@ -150,7 +150,7 @@ export const siteHome: Record<
     limitedUseHeading: "Limited Use of Google user data",
   },
 }
-const effective = { es: "2 de noviembre de 2026", en: "2 November 2026" }
+const effective = { es: "9 de noviembre de 2026", en: "9 November 2026" }
 export const privacyPolicy: Record<Locale, SiteDocument> = {
   es: {
     title: "Política de privacidad",
@@ -176,7 +176,6 @@ export const privacyPolicy: Record<Locale, SiteDocument> = {
         bullets: [
           "Gmail (https://www.googleapis.com/auth/gmail.modify): la dirección de la cuenta; los correos e hilos (remitentes, destinatarios, asuntos, fechas, etiquetas y contenido) que el agente busca o lee a petición tuya; los borradores que crea, actualiza o elimina; los correos que envía; y las etiquetas de usuario que crea o aplica tras tu confirmación. Este permiso permitiría también archivar o mover a la papelera; Agentonic no lo hace nunca.",
           "Google Drive (https://www.googleapis.com/auth/drive.file): el nombre, el tipo, la fecha de modificación y el contenido de los archivos que seleccionas con el selector de Google, y de los documentos que el agente crea o actualiza con tu confirmación. No vemos ningún otro archivo de tu Drive.",
-          "Identidad básica al seleccionar archivos (openid, email, profile): al usar el selector de Google, Google puede compartir además tu dirección de correo y los datos básicos de tu perfil. Los usamos solo para comprobar que la cuenta es la que conectaste.",
         ],
       },
       {
@@ -278,7 +277,6 @@ export const privacyPolicy: Record<Locale, SiteDocument> = {
         bullets: [
           "Gmail (https://www.googleapis.com/auth/gmail.modify): the account's address; the messages and threads (senders, recipients, subjects, dates, labels and content) the agent searches or reads at your request; the drafts it creates, updates or deletes; the messages it sends; and the user labels it creates or applies after your confirmation. This scope would also allow archiving or trashing; Agentonic never does either.",
           "Google Drive (https://www.googleapis.com/auth/drive.file): the name, type, modification date and content of the files you select with Google's picker, and of the documents the agent creates or updates with your confirmation. We see no other file in your Drive.",
-          "Basic identity when picking files (openid, email, profile): when you use Google's picker, Google may also share your email address and basic profile data. We use them only to check that the account is the one you connected.",
         ],
       },
       {
