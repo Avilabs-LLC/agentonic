@@ -57,7 +57,7 @@ In Google Cloud console → _Google Auth Platform_ → _Branding_: app name "Age
 
 ### 6. Move to production and request data access (Owner, with Build's text)
 
-- Set the publishing status to **In production**. With unverified restricted scopes the 100-user cap still applies until approval. Consents given from then on no longer expire after 7 days, so the same release sets `GOOGLE_TESTING` to false in `packages/connectors/src/google.ts` (§84, N26). Accounts connected while in Testing keep their date and reconnect once.
+- Set the publishing status to **In production**. With unverified restricted scopes the 100-user cap still applies until approval. Consents given from then on no longer expire after 7 days, so the same release sets `GOOGLE_TESTING` to false in `packages/connectors/src/google.ts` (§84, N26). Accounts connected while in Testing keep their date and reconnect once. _Done 9 November: owner decision, and `GOOGLE_TESTING` false in platform 0.52.2 (§86)._
 - Under _Data Access_, keep `gmail.modify` and remove `gmail.readonly` and `gmail.compose`, once the installed release asks only for `gmail.modify` (§83).
 - In the _Verification Center_, the field "How will the scopes be used?" takes at most 1,000 characters. Paste this (998 characters, written 9 November after Google's review asked for each feature and the API call behind it):
 

@@ -49,9 +49,11 @@ const token = z.object({
   // Sent when the person granted access for a limited time.
   refresh_token_expires_in: z.number().positive().optional(),
 })
-// While the Google app is in Testing (B5, N26), each consent lasts 7 days.
-// Set to false once the app is In production: later consents no longer expire.
-export const GOOGLE_TESTING = true
+// While the Google app was in Testing, each consent lasted 7 days. The app is
+// In production since 9 November (§86): consents expire only when Google says
+// so, through refresh_token_expires_in. Set back to true only if the app
+// returns to Testing.
+export const GOOGLE_TESTING = false
 const TESTING_GRANT_MS = 7 * 24 * 60 * 60 * 1000
 /** When a consent's authorization ends, if it does: Testing's 7 days or Google's own lifetime, whichever is earlier (§84). */
 export function grantExpiry(

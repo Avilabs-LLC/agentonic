@@ -31,7 +31,7 @@ The Drive API and the Picker API are enabled (owner, 9 October). Before the live
 3. **Store the settings.** Put the key and the project number (Cloud console → Project info) in `.env.staging.local` as `GOOGLE_PICKER_API_KEY` and `GOOGLE_CLOUD_PROJECT_NUMBER`. The number is optional: when it is missing or not numeric (a project ID, for example), the server takes it from the OAuth client ID, which begins with it. Then run `node scripts/setup-gmail.mjs`, which copies them to the customer app; `pnpm platform:install` carries them to the VM's `customer.env`. Never put them in chat or in `NEXT_PUBLIC_*` values. The key is restricted, but it is still configuration.
 4. **Prepare a test account.** Keep the account under Test users. In its Drive, create synthetic files named "Prueba Agentonic Drive …": a Doc, a Sheet, a Slides deck, a PDF and a `.md` file.
 
-The callback URI stays the same. As with Gmail in Testing mode, consent lapses after 7 days and at most 100 test users can connect.
+The callback URI stays the same. Since 9 November the app is In production (§86): consents no longer lapse after 7 days, and until Google approves the restricted Gmail scope at most 100 users can connect.
 
 ## Scope and experience
 
