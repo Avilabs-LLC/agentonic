@@ -167,45 +167,94 @@ Google wants every requested scope exercised and, for writes, the change visible
 - Drive: files picked with the Picker and read in a chat; a Google Doc created and updated after confirmation, shown in Drive;
 - disconnecting Gmail and Drive, and what the cards say afterwards.
 
-### Reviewer instructions (after runtime 0.10.0 and the approved personal-account version are live)
+### The reply to Google's 8 November review (9 November)
 
-> Agentonic accounts are created by invitation, so we prepared one for your team. Sign in at https://app.agentonic.avilabs.tech/login with the email and password below. No phone number, payment or second factor is required. The interface is in Spanish; the labels are quoted here.
->
-> 1. After signing in, open the workspace "Revisión Google" and then "Agentes" → the agent "Asistente de correo".
-> 2. On the agent's "Configuración" tab, under "Conexiones", click "Conectar Gmail" and complete Google's consent with any Google account you use for testing. Back on the page, select the approved Gmail actions under "Permisos de mi cuenta de Gmail". Each choice saves automatically. "Conectar Google Drive" works the same way, and "Elegir archivos" opens Google's picker.
-> 3. On the "Activación" tab, click "Autorizar activación", select your own connected accounts, set the budget for the period (for example US$1), and confirm. Wait for "En funcionamiento". This starts your personal deployment of the approved version.
-> 4. Open "Chats", pick the agent and ask, for example, "Resume los correos de esta semana" (summarize this week's mail), "Redacta una respuesta al último correo de X" (draft a reply), or "Etiqueta como Facturas los correos con facturas" (label invoices). Every draft, send or label appears as a card with its exact content and runs only after you confirm it.
-> 5. "Aprender mi estilo" on the Gmail card analyzes your own sent mail, with a separate consent, and shows a style guide for you to accept.
-> 6. To disconnect, use "Desconectar" on the Gmail or Drive card; tokens are erased at once.
->
-> Email: [from .local/google-reviewer.txt] · Password: [from .local/google-reviewer.txt]
+The owner recorded the new video on 9 November, signed in as the reviewer account. It left "Asistente de correo" running for that account (US$15 authorization), with the test Gmail and Drive accounts connected and every operation on. Since platform 0.52.0 each member binds their own Google accounts and authorizes their own budget, and the deployment starts without a staff step, so Google's reviewer can either use that setup or connect their own account. Reply in Google's email thread with this text, the video link and the password from `.local/google-reviewer.txt`, and put the same video link and the 998-character justification in the Verification Center:
 
-### The reply (draft)
-
-> Subject: Re: OAuth verification – project agentonic-509018 (1021490424445)
->
 > Hello,
 >
-> We have completed the audit against your checklist and updated the project.
+> Thank you for the review. We have addressed each item.
 >
-> Scopes. Agentonic requests https://www.googleapis.com/auth/gmail.modify (restricted) and https://www.googleapis.com/auth/drive.file (non-sensitive). The app uses incremental authorization: connecting Gmail asks for gmail.modify alone, and connecting Google Drive asks for drive.file alone. The Data Access list in the Cloud Console holds exactly these two scopes, and the video shows both consent screens. Both scopes back production-ready, user-facing features. The justification for gmail.modify, including why gmail.readonly, gmail.compose, gmail.send, gmail.labels and gmail.metadata are not sufficient, is in the Verification Center. drive.file is used only for files the user selects with the picker; the agent reads them and creates or updates Google Docs the user confirms.
+> 1. Scope justification (https://www.googleapis.com/auth/gmail.modify)
 >
-> Demo video. [unlisted YouTube URL(s)]. It shows the consent screen with all scopes expanded and the client ID in the address bar, and every function of each scope: searching and reading mail, creating, editing and deleting a draft, sending a message, applying labels to a batch, learning the user's writing style, reading picked Drive files, creating and updating a Google Doc, and disconnecting. For each write the video switches to the Gmail or Drive account to show the change.
+> Agentonic lets a business user connect their own Gmail account to an AI agent they configure and work with it in private chats. gmail.modify is the narrowest single scope that covers every user-facing feature below, and the only scope that lets the app apply labels to messages.
 >
-> Test access. [the reviewer instructions above, with the credentials]
+> User-facing features and the Gmail API calls behind them:
 >
-> Privacy policy. https://agentonic.avilabs.tech/privacidad/en (Spanish at /privacidad). It states what Google user data we access, how it is used, with whom it is shared (the OpenAI and Voyage APIs, solely to provide the feature, under terms that exclude model training; our hosting providers; no other party), how it is protected, and retention and deletion per data type.
+> 1. Answer questions about the mailbox ("What did clients ask this week?"): users.messages.list with a search query, then users.messages.get and users.threads.get to read the bodies the answer needs.
+> 2. Write replies and new emails: users.drafts.create, update, get, list and delete. Each draft is shown with its exact recipients and text, and is created, changed or deleted only after the user clicks Confirm.
+> 3. Send email: users.messages.send, only after the user confirms the exact message, or once per run of a scheduled task the user explicitly pre-authorized.
+> 4. Organize mail with labels ("Label this month's invoices as Facturas"): users.labels.list and users.labels.create, then users.messages.batchModify with addLabelIds on the messages the user confirmed. The label then appears on those messages in Gmail.
+> 5. Learn my writing style, with separate consent: users.messages.list for sent mail from the last 90 days and users.messages.get on up to 200 sent messages, to draft a style guide the user reviews and accepts.
+> 6. Identify the connected account: users.getProfile.
 >
-> Limited Use and AI/ML. The homepage and the policy carry the statement: "Agentonic's use and transfer to any other app of information received from Google APIs will adhere to the Google API Services User Data Policy, including the Limited Use requirements." Google user data is not used for advertising, lending, sale or transfer to data brokers, and is not used to develop, improve or train AI/ML models. The only learning feature, "Aprender mi estilo", builds a writing-style guide for the consenting user alone from their own sent mail, and stores only the guide the user approves.
+> Why narrower scopes cannot be used:
 >
-> Use cases. Agentonic is a personal assistant for the account holder's own mailbox and files. Every send, draft change and label change is shown with its exact content and executed only after the user confirms it, or under an explicit per-schedule pre-authorization set by the user (at most one action per run). It never sends unsolicited commercial mail, performs email warming or uses Drive as a CDN. We do not request Data Portability APIs.
+> - Feature 4 calls users.messages.batchModify, which requires gmail.modify. gmail.labels only creates and edits label definitions and cannot apply a label to a message. Neither gmail.readonly nor gmail.compose can change a message's labels.
+> - gmail.metadata cannot read message bodies, so features 1 and 5 fail.
+> - gmail.compose and gmail.send cannot search or read the inbox, so features 1 and 5 fail.
+> - gmail.readonly cannot create drafts or send, so features 2 and 3 fail.
+> - Even gmail.readonly, gmail.compose and gmail.labels together cannot apply a label to a message.
+>   We request nothing broader than gmail.modify (not https://mail.google.com/). The app never trashes, archives or permanently deletes a message; the only deletion is a draft the user confirms.
 >
-> Live traffic. The app is invitation-only with fewer than 100 users, so the unverified scopes are not exposed to public traffic.
+> Least privilege inside the app: connecting grants no action. The account holder chooses, per agent, which of these operations it may use. Only their own chats can use the mailbox, and every write needs their confirmation.
 >
-> CASA. We understand a CASA assessment is required for gmail.modify and are ready to start with an authorized assessor once the scope review is complete.
+> 2. Scope discrepancy
+>
+> We removed openid, userinfo.email and userinfo.profile from the Data Access page; the app never requested them. The Cloud Console now lists exactly the two scopes the app requests, using incremental authorization:
+>
+> - https://www.googleapis.com/auth/gmail.modify, requested only when the user connects Gmail;
+> - https://www.googleapis.com/auth/drive.file, requested only when the user connects Google Drive, for the files they pick in Google's Picker.
+>   The video shows both consent screens. Our privacy policy lists the same two scopes: https://agentonic.avilabs.tech/privacidad/en
+>
+> 3. Demo video
+>
+> [YOUTUBE LINK, unlisted]
+>
+> It shows, on our hosted app:
+>
+> - the Gmail and the Drive consent screens, with the client ID in the address bar and the permissions expanded;
+> - searching and reading mail to answer a question;
+> - creating, editing and deleting a draft, each after confirmation, with the Gmail Drafts folder shown after each step;
+> - sending a message after confirmation, shown in Gmail's Sent folder;
+> - applying a label to a batch of messages after confirmation, shown on those messages in Gmail (this is the step that requires gmail.modify);
+> - a scheduled task that sends one pre-authorized message, shown in Sent;
+> - "Learn my style" from the user's own sent mail, with separate consent;
+> - reading picked Drive files, and creating and updating a Google Doc after confirmation, shown in Drive.
+>
+> 4. Test credentials and steps
+>
+> Agentonic accounts are created by invitation, so we prepared one for your team. No phone number, payment method or second factor is required. The interface is in Spanish; the labels are quoted below.
+>
+> Sign in: https://app.agentonic.avilabs.tech/login
+> Email: google-review@avilabs.tech
+> Password: [PASSWORD]
+>
+> The agent "Asistente de correo" in the workspace "Revisión Google" is already running and connected to our test Gmail and Drive accounts:
+>
+> 1. Open "Chats", choose "Asistente de correo" and ask, for example: "Resume los correos de esta semana" (summarize this week's mail), "Redacta una respuesta al último correo" (draft a reply), "Envía un correo a [address] con..." (send), or "Etiqueta como Facturas los correos con facturas" (label invoices). Every draft, send or label change appears as a card; open "Revisar acción" and confirm to run it.
+> 2. The "Programaciones" tab on the agent holds scheduled tasks; "Ejecutar ahora" runs one immediately.
+> 3. "Aprender mi estilo" on the Gmail card (agent, "Configuración" tab, "Conexiones") learns the user's writing style with separate consent.
+>
+> To connect your own Google account instead:
+>
+> 1. Open "Agentes", then "Asistente de correo", then the "Configuración" tab, "Conexiones".
+> 2. Click "Conectar Gmail" and complete Google's consent. Back in the app, turn on all nine Gmail operations and save. Do the same with "Conectar Google Drive" (four operations), and use "Elegir archivos" to pick files.
+> 3. On the "Activación" tab, click "Detener" on the current authorization, then "Autorizar activación": choose your Gmail and Drive accounts, keep the budget (a spending cap on our AI costs, not a payment), tick the consent box and click "Autorizar uso de pruebas". The agent starts automatically within a minute or two.
+> 4. Use "Chats" as above. "Desconectar" on the Gmail or Drive card disconnects the account and erases its tokens.
+>
+> Additional information
+>
+> - Homepage: https://agentonic.avilabs.tech/ (Spanish) and https://agentonic.avilabs.tech/en
+> - Privacy policy: https://agentonic.avilabs.tech/privacidad/en
+> - Terms: https://agentonic.avilabs.tech/terminos/en
+> - The app's publishing status is In production. It is invitation-only with fewer than 100 users, so the unverified scope is not exposed to public traffic.
+> - Google user data is used only to provide these user-facing features, is sent only to our AI provider to generate the answer the user asked for, and is never used to train AI models. Our use complies with the Google API Services User Data Policy, including the Limited Use requirements.
+> - We understand a CASA assessment is required for gmail.modify and are ready to start it once the scope review is complete.
 >
 > Best regards,
-> [name], Avilabs LLC
+> Leonardo De Barros
+> Avilabs LLC
 
 ## What Agentonic already has, and what is missing
 
