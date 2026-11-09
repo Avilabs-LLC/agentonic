@@ -54,14 +54,14 @@ it("says in the turn's log line when the database refused to record its failure"
   )
 })
 
-it("dates a consent 7 days ahead while the app is in Testing, or earlier when Google says so", async () => {
-  expect(GOOGLE_TESTING).toBe(true)
-  expect(grantExpiry({}, now)).toBe(new Date(now + 168 * hour).toISOString())
+it("dates a consent only when Google gives it a lifetime, now that the app is In production (§86)", async () => {
+  expect(GOOGLE_TESTING).toBe(false)
+  expect(grantExpiry({}, now)).toBeNull()
   expect(grantExpiry({ refresh_token_expires_in: 3600 }, now)).toBe(
     new Date(now + hour).toISOString()
   )
   expect(grantExpiry({ refresh_token_expires_in: 30 * 24 * 3600 }, now)).toBe(
-    new Date(now + 168 * hour).toISOString()
+    new Date(now + 30 * 24 * hour).toISOString()
   )
   // The token response carries Google's lifetime through.
   vi.stubGlobal(
