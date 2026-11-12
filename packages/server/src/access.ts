@@ -79,6 +79,8 @@ export async function runAccessCommand(app: AppKind, input: unknown) {
     return { ok: false as const }
   return execute(app, workspaceId, operation, payload)
 }
+/** An invitation is an activation link: CASA allows at most 48 hours (§87). */
+const INVITATION_HOURS = 48
 export async function issueWorkspaceInvitation(input: unknown) {
   const parsed = invitationRequest.safeParse(input)
   if (!parsed.success) return { ok: false as const }
@@ -89,7 +91,7 @@ export async function issueWorkspaceInvitation(input: unknown) {
     email,
     role,
     tokenHash,
-    expiresAt: new Date(Date.now() + 7 * 86400_000).toISOString(),
+    expiresAt: new Date(Date.now() + INVITATION_HOURS * 3600_000).toISOString(),
   })
   // The caller must deliver this once through the eventual invitation flow.
   // Never persist/log the token or claim an email was sent here.
@@ -177,7 +179,7 @@ export async function issueStaffInvitation(input: unknown) {
     email: parsed.data.email,
     role: parsed.data.role,
     tokenHash,
-    expiresAt: new Date(Date.now() + 7 * 86400_000).toISOString(),
+    expiresAt: new Date(Date.now() + INVITATION_HOURS * 3600_000).toISOString(),
   })
   // Delivered once, by email; never persisted or logged.
   return result.ok ? { ...result, token } : result

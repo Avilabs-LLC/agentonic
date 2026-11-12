@@ -10,12 +10,7 @@ import {
   AuthenticatorCard,
   DisplayNameEditor,
 } from "@workspace/ui/components/account-forms"
-import {
-  confirmMfa,
-  disableMfa,
-  saveDisplayName,
-  startMfa,
-} from "../../actions"
+import { saveDisplayName } from "../../actions"
 export default async function Page() {
   const identity = await requireIdentity("admin")
   const authenticator = await authenticatorState()
@@ -68,12 +63,7 @@ export default async function Page() {
           </dl>
         </CardContent>
       </Card>
-      <AuthenticatorCard
-        enabled={authenticator.enabled}
-        start={startMfa}
-        confirm={confirmMfa}
-        disable={disableMfa}
-      />
+      <AuthenticatorCard enabled={authenticator.enabled} />
     </>
   )
 }

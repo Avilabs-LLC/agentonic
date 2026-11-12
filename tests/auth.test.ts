@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   signIn: vi.fn(),
   signOut: vi.fn(),
   aal: vi.fn(),
+  path: vi.fn(() => "/"),
 }))
 vi.mock("server-only", () => ({}))
 vi.mock("@supabase/ssr", () => ({
@@ -19,6 +20,7 @@ vi.mock("@supabase/ssr", () => ({
 }))
 vi.mock("next/headers", () => ({
   cookies: async () => ({ getAll: () => [], set: vi.fn() }),
+  headers: async () => new Headers({ "x-agentonic-path": mocks.path() }),
 }))
 vi.mock("next/navigation", () => ({
   redirect: (path: string) => {
@@ -35,9 +37,10 @@ beforeEach(() => {
   vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://example.supabase.co")
   vi.stubEnv("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY", "test-public-key")
   mocks.aal.mockResolvedValue({
-    data: { currentLevel: "aal1", nextLevel: "aal1" },
+    data: { currentLevel: "aal2", nextLevel: "aal2" },
     error: null,
   })
+  mocks.path.mockReturnValue("/")
 })
 it("rejects unverifiable sessions before database access", async () => {
   mocks.getUser.mockResolvedValue({
@@ -121,7 +124,7 @@ it("does not expose provider errors or credentials in login feedback", async () 
   expect(JSON.stringify(response)).not.toContain("sensitive")
 })
 
-it("sends enrolled staff to their second factor, and leaves customers and unenrolled staff alone", async () => {
+it("sends every staff session without a second factor to /mfa, enrolled or not; customers never (§87)", async () => {
   mocks.getUser.mockResolvedValue({
     data: {
       user: {
@@ -133,24 +136,43 @@ it("sends enrolled staff to their second factor, and leaves customers and unenro
     error: null,
   })
   mocks.overview.mockResolvedValue({ user: null, staff: null, workspaces: [] })
-  mocks.aal.mockResolvedValue({
-    data: { currentLevel: "aal1", nextLevel: "aal2" },
-    error: null,
-  })
   const { requireVerifiedUser, requirePasswordSession } =
     await import("../packages/server/src/auth")
-  await expect(requireVerifiedUser("admin")).rejects.toThrow("REDIRECT /mfa")
-  // The /mfa page itself only needs the password session.
-  await expect(requirePasswordSession("admin")).resolves.toMatchObject({
-    email: "staff@example.test",
+  for (const data of [
+    // Enrolled, code not yet given.
+    { currentLevel: "aal1", nextLevel: "aal2" },
+    // No authenticator yet: enrolling is part of signing in.
+    { currentLevel: "aal1", nextLevel: "aal1" },
+    // Auth could not say: treated as missing.
+    null,
+  ]) {
+    mocks.aal.mockResolvedValue({ data, error: null })
+    await expect(requireVerifiedUser("admin")).rejects.toThrow(
+      "REDIRECT /mfa"
+    )
+    // The /mfa page itself only needs the password session.
+    await expect(requirePasswordSession("admin")).resolves.toMatchObject({
+      email: "staff@example.test",
+    })
+    // Customers are never asked for a second factor.
+    await expect(requireVerifiedUser("customer")).resolves.toMatchObject({
+      email: "staff@example.test",
+    })
+  }
+  // The redirect returns to the page asked for, and only to a path on this app.
+  mocks.aal.mockResolvedValue({
+    data: { currentLevel: "aal1", nextLevel: "aal1" },
+    error: null,
   })
-  // Customers are never asked for a second factor.
-  await expect(requireVerifiedUser("customer")).resolves.toMatchObject({
-    email: "staff@example.test",
-  })
+  mocks.path.mockReturnValue("/invitation?token=" + "ab".repeat(32))
+  await expect(requireVerifiedUser("admin")).rejects.toThrow(
+    "REDIRECT /mfa?next=%2Finvitation%3Ftoken%3D" + "ab".repeat(32)
+  )
+  mocks.path.mockReturnValue("//evil.example")
+  await expect(requireVerifiedUser("admin")).rejects.toThrow(/^REDIRECT \/mfa$/)
   mocks.aal.mockResolvedValue({
     data: { currentLevel: "aal2", nextLevel: "aal2" },
     error: null,
   })
-  await expect(requirePasswordSession("customer")).resolves.toBeTruthy()
+  await expect(requireVerifiedUser("admin")).resolves.toBeTruthy()
 })

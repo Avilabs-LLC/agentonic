@@ -338,12 +338,15 @@ export async function authenticatorState() {
   await requireVerifiedUser("admin")
   return { enabled: Boolean(await verifiedTotp("admin")) }
 }
-/** Starts enrolment; abandoned unverified factors are removed first. */
+/**
+ * Starts enrolment, part of signing in for staff who have no authenticator yet
+ * (§87); abandoned unverified factors are removed first. Refused once one is active.
+ */
 export async function startAuthenticator(): Promise<
   | { ok: true; factorId: string; qrCode: string; secret: string }
   | { ok: false; message: string }
 > {
-  await requireVerifiedUser("admin")
+  await requirePasswordSession("admin")
   try {
     const client = await authClient("admin")
     const { data: factors } = await client.auth.mfa.listFactors()
@@ -384,7 +387,7 @@ export async function confirmAuthenticator(
 ): Promise<ActionResult> {
   const parsed = mfaEnrollmentCode.safeParse(input)
   if (!parsed.success) return { ok: false, message: "Revisa el código." }
-  await requireVerifiedUser("admin")
+  await requirePasswordSession("admin")
   try {
     return (await verifyCode(parsed.data.factorId, parsed.data.code))
       ? { ok: true }
@@ -414,29 +417,16 @@ export async function verifyAuthenticator(
     return { ok: false, message: "No se pudo conectar. Inténtalo de nuevo." }
   }
 }
-/** Turning it off needs a session that already passed the second factor. */
-export async function disableAuthenticator(): Promise<ActionResult> {
-  await requireVerifiedUser("admin")
-  try {
-    const factor = await verifiedTotp("admin")
-    if (!factor) return { ok: true }
-    const { error } = await (
-      await authClient("admin")
-    ).auth.mfa.unenroll({ factorId: factor.id })
-    return error
-      ? {
-          ok: false,
-          message: "No se pudo desactivar. Vuelve a iniciar sesión.",
-        }
-      : { ok: true }
-  } catch {
-    return { ok: false, message: "No se pudo conectar. Inténtalo de nuevo." }
-  }
-}
-/** Whether this session still owes its second factor. */
-export async function secondFactorPending() {
+/**
+ * What this session still owes before Admin opens (§87): nothing, a code from
+ * its authenticator, or enrolling one. Staff cannot turn the second factor off.
+ */
+export async function secondFactorStep(): Promise<
+  "verified" | "challenge" | "enrol"
+> {
   const { data } = await (
     await authClient("admin")
   ).auth.mfa.getAuthenticatorAssuranceLevel()
-  return data?.nextLevel === "aal2" && data.currentLevel !== "aal2"
+  if (data?.currentLevel === "aal2") return "verified"
+  return (await verifiedTotp("admin")) ? "challenge" : "enrol"
 }

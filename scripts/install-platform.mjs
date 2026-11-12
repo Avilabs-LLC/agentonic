@@ -18,6 +18,8 @@ import {
   platformUnits,
   ports,
   releasePath,
+  secretsAuditPath,
+  secretsAuditRules,
 } from "./platform-units.mjs"
 import { stagingNode } from "./staging-units.mjs"
 // Installs a published platform release on vm-agents-01 (architecture §53):
@@ -304,6 +306,15 @@ try {
   execFileSync("scp", ["-q", "-r", staging, `${host}:${upload}/`])
   ssh(`sudo install -d -m 0700 ${platformConfig}
 for f in admin.env customer.env worker.env ca.pem; do sudo install -m 0600 ${upload}/config/$f ${platformConfig}/$f; done
+`)
+  // Access to the secrets is recorded (CASA 6.7.1, §87): auditd, with one rule.
+  put(secretsAuditPath, secretsAuditRules, "0640")
+  ssh(`if ! command -v auditctl >/dev/null; then
+  sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q auditd >/dev/null
+fi
+sudo systemctl enable --now auditd >/dev/null 2>&1
+sudo augenrules --load >/dev/null
+sudo auditctl -l | grep -q -- "-k agentonic-secrets"
 `)
   // 5. One service at a time, each through its health gate.
   for (const name of ["worker", "customer", "admin"]) {

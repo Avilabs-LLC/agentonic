@@ -31,6 +31,12 @@ export async function refreshSession(request: NextRequest, app: AppKind) {
   // Forward the refreshed cookies, and the policy Next.js reads the nonce from.
   const headers = new Headers(request.headers)
   if (policy) headers.set("Content-Security-Policy", policy)
+  // The page asked for, so the second-factor step can return to it (§87).
+  // Always set here, so a browser cannot supply its own.
+  headers.set(
+    "x-agentonic-path",
+    request.nextUrl.pathname + request.nextUrl.search
+  )
   const response = NextResponse.next({ request: { headers } })
   refreshed.forEach((cookie) => response.cookies.set(...cookie))
   if (policy) response.headers.set("Content-Security-Policy", policy)

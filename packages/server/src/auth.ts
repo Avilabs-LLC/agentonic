@@ -2,11 +2,11 @@ import "server-only"
 import { cache } from "react"
 import { createServerClient } from "@supabase/ssr"
 import { createClient } from "@supabase/supabase-js"
-import { cookies } from "next/headers"
+import { cookies, headers } from "next/headers"
 import { redirect } from "next/navigation"
 import { authConfiguration } from "./env"
 import { identityOverview } from "@agentonic/database/client"
-import { uuid, type AppKind } from "@agentonic/contracts/identity"
+import { safeNext, uuid, type AppKind } from "@agentonic/contracts/identity"
 
 export async function authClient(app: AppKind) {
   const cookieStore = await cookies()
@@ -34,12 +34,15 @@ async function verifiedUser(app: AppKind, secondFactor: boolean) {
   // Server-verified identity; cookie/session payloads and form fields never establish identity.
   const { data, error } = await client.auth.getUser()
   if (error || !data.user || !data.user.email_confirmed_at) redirect("/login")
-  // Staff who enrolled an authenticator must use it every session (architecture §54).
+  // Every staff session passes a second factor; staff without an authenticator
+  // enrol one first (architecture §87). An unreadable level counts as missing.
   if (app === "admin" && secondFactor) {
     const { data: level } =
       await client.auth.mfa.getAuthenticatorAssuranceLevel()
-    if (level?.nextLevel === "aal2" && level.currentLevel !== "aal2")
-      redirect("/mfa")
+    if (level?.currentLevel !== "aal2") {
+      const here = safeNext((await headers()).get("x-agentonic-path"))
+      redirect(here === "/" ? "/mfa" : `/mfa?next=${encodeURIComponent(here)}`)
+    }
   }
   const authId = uuid.parse(data.user.id)
   return { authId, email: data.user.email ?? "" }

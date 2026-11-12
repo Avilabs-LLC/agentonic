@@ -1,5 +1,10 @@
 export const VERSION_HISTORY = [
   {
+    "version": "0.53.0",
+    "date": "2026-11-12",
+    "summary": "CASA readiness: patched dependencies, required staff second factor, 48-hour invitations, audited secrets"
+  },
+  {
     "version": "0.52.2",
     "date": "2026-11-09",
     "summary": "The Google app is In production: new Gmail and Drive consents no longer get a 7-day end date (§86)."

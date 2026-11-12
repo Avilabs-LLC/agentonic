@@ -124,6 +124,12 @@ it("issues a random token once but passes only its hash to the database", async 
   expect(JSON.stringify(args)).toContain(
     createHash("sha256").update(result.token).digest("hex")
   )
+  // An invitation is an activation link: valid for 48 hours at most (§87).
+  const expiresAt = Date.parse(
+    JSON.stringify(args).match(/"expiresAt\\?":\\?"([^"\\]+)/)![1]!
+  )
+  expect(expiresAt - Date.now()).toBeGreaterThan(47 * 3600_000)
+  expect(expiresAt - Date.now()).toBeLessThanOrEqual(48 * 3600_000)
 })
 it("acceptance takes no caller-supplied email and hashes the token before querying", async () => {
   const token = "a".repeat(64)

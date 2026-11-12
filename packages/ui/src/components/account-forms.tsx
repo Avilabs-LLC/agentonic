@@ -32,16 +32,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@workspace/ui/components/card"
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@workspace/ui/components/alert-dialog"
 import { notify } from "@workspace/ui/lib/toast"
 
 // Account flows shared by both apps (architecture §54). Every submission ends in
@@ -246,23 +236,24 @@ export function MfaChallengeForm({
 }
 
 type Enrolment = { factorId: string; qrCode: string; secret: string }
-export function AuthenticatorCard({
-  enabled,
+/**
+ * Enrolling an authenticator while signing in to Admin: staff without one set
+ * it up here before anything opens (architecture §87).
+ */
+export function MfaEnrolment({
   start,
   confirm,
-  disable,
+  next,
 }: {
-  enabled: boolean
   start: () => Promise<
     ({ ok: true } & Enrolment) | { ok: false; message: string }
   >
   confirm: (input: { factorId: string; code: string }) => Promise<ActionResult>
-  disable: () => Promise<ActionResult>
+  next: string
 }) {
   const router = useRouter()
   const [enrolment, setEnrolment] = useState<Enrolment | null>(null)
   const [busy, setBusy] = useState(false)
-  const [confirmOff, setConfirmOff] = useState(false)
   async function begin() {
     setBusy(true)
     try {
@@ -280,117 +271,66 @@ export function AuthenticatorCard({
       setBusy(false)
     }
   }
-  async function turnOff() {
-    setBusy(true)
-    try {
-      const result = await disable()
-      if (!result.ok) {
-        notify.destructive(result.message)
-        return
-      }
-      notify.success("Verificación en dos pasos desactivada.")
-      setConfirmOff(false)
-      router.refresh()
-    } catch {
-      notify.destructive("No se pudo desactivar. Inténtalo de nuevo.")
-    } finally {
-      setBusy(false)
-    }
-  }
+  if (!enrolment)
+    return (
+      <Button type="button" className="w-full" disabled={busy} onClick={begin}>
+        {busy ? "Preparando…" : "Configurar la aplicación"}
+      </Button>
+    )
+  return (
+    <div className="space-y-4">
+      {/* Supabase returns the QR code as an SVG data URI. */}
+      <img
+        src={enrolment.qrCode}
+        alt="Código QR para tu aplicación de verificación"
+        className="mx-auto size-40 rounded-md bg-white p-2"
+      />
+      <p className="text-sm">
+        Escanea el código con tu aplicación, o escribe esta clave:
+      </p>
+      <p className="font-mono text-sm break-all">{enrolment.secret}</p>
+      <CodeForm
+        submitLabel="Activar"
+        onCode={async (code) => {
+          try {
+            const result = await confirm({
+              factorId: enrolment.factorId,
+              code,
+            })
+            if (!result.ok) {
+              notify.destructive(result.message)
+              return
+            }
+            notify.success("Verificación en dos pasos activada.")
+            router.replace(next)
+            router.refresh()
+          } catch {
+            notify.destructive("No se pudo activar. Inténtalo de nuevo.")
+          }
+        }}
+      />
+    </div>
+  )
+}
+/** Mi cuenta in Admin. The second factor is required, so there is no off switch (§87). */
+export function AuthenticatorCard({ enabled }: { enabled: boolean }) {
   return (
     <Card>
       <CardHeader>
         <CardTitle>Verificación en dos pasos</CardTitle>
         <CardDescription>
-          Además de la contraseña, cada inicio de sesión pide un código de una
-          aplicación como Google Authenticator, 1Password o Authy. Es opcional.
+          Obligatoria en Administración: además de la contraseña, cada inicio
+          de sesión pide un código de una aplicación como Google
+          Authenticator, 1Password o Authy. Si pierdes tu aplicación, pide al
+          propietario de la plataforma que la restablezca.
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-4">
-        {enabled ? (
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="inline-flex items-center gap-2 text-sm">
-              <ShieldCheckIcon aria-hidden="true" className="size-4" />
-              Activada
-            </p>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={busy}
-              onClick={() => setConfirmOff(true)}
-            >
-              Desactivar
-            </Button>
-          </div>
-        ) : enrolment ? (
-          <div className="grid gap-4 sm:grid-cols-[auto_minmax(0,1fr)]">
-            {/* Supabase returns the QR code as an SVG data URI. */}
-            <img
-              src={enrolment.qrCode}
-              alt="Código QR para tu aplicación de verificación"
-              className="size-40 rounded-md bg-white p-2"
-            />
-            <div className="space-y-3">
-              <p className="text-sm">
-                Escanea el código con tu aplicación, o escribe esta clave:
-              </p>
-              <p className="font-mono text-sm break-all">{enrolment.secret}</p>
-              <CodeForm
-                submitLabel="Activar"
-                onCode={async (code) => {
-                  try {
-                    const result = await confirm({
-                      factorId: enrolment.factorId,
-                      code,
-                    })
-                    if (!result.ok) {
-                      notify.destructive(result.message)
-                      return
-                    }
-                    notify.success("Verificación en dos pasos activada.")
-                    setEnrolment(null)
-                    router.refresh()
-                  } catch {
-                    notify.destructive(
-                      "No se pudo activar. Inténtalo de nuevo."
-                    )
-                  }
-                }}
-              />
-            </div>
-          </div>
-        ) : (
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-sm text-muted-foreground">No activada</p>
-            <Button type="button" disabled={busy} onClick={begin}>
-              {busy ? "Preparando…" : "Activar"}
-            </Button>
-          </div>
-        )}
+      <CardContent>
+        <p className="inline-flex items-center gap-2 text-sm">
+          <ShieldCheckIcon aria-hidden="true" className="size-4" />
+          {enabled ? "Activada" : "Pendiente"}
+        </p>
       </CardContent>
-      <AlertDialog open={confirmOff} onOpenChange={setConfirmOff}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              Desactivar la verificación en dos pasos
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              Tu cuenta de Administración volverá a abrirse solo con la
-              contraseña. Puedes activarla de nuevo cuando quieras.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={busy}>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              variant="destructive"
-              disabled={busy}
-              onClick={turnOff}
-            >
-              {busy ? "Desactivando…" : "Desactivar"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </Card>
   )
 }

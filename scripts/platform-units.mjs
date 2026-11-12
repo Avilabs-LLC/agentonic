@@ -8,6 +8,14 @@ export const platformReleases = `${platformRoot}/releases`
 export const platformConfig = "/etc/agentonic/platform"
 export const runtimeArtifacts = "/opt/agentonic/runtime/artifacts"
 export const caddyfilePath = "/etc/caddy/Caddyfile"
+/**
+ * Every read or change of the VM's service secrets (everything under
+ * /etc/agentonic: the platform's, the staging gateway's and the evaluator's
+ * environment files) is recorded by the Linux audit daemon (CASA 6.7.1, §87).
+ * Search with: sudo ausearch -k agentonic-secrets
+ */
+export const secretsAuditPath = "/etc/audit/rules.d/agentonic-secrets.rules"
+export const secretsAuditRules = "-w /etc/agentonic -p rwa -k agentonic-secrets\n"
 /** Public names; each app answers only on its own, so their cookies never mix. */
 export const hostnames = {
   customer: "app.agentonic.avilabs.tech",
