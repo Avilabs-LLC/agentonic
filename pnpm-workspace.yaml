@@ -9,3 +9,11 @@ allowBuilds:
   '@prisma/engines': true
   prisma: true
   esbuild: true
+
+# Patched releases of transitive dependencies flagged by `pnpm audit`
+# (CASA readiness, §87). Each stays inside the range its parent accepts.
+overrides:
+  "fast-uri@^3": "^3.1.9"
+  "source-map-js@^1": "^1.2.2"
+  "vite@^8": "^8.3.8"
+  "eslint-plugin-react-hooks>zod": "^4.6.7"
