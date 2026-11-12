@@ -1,6 +1,6 @@
 {
   "name": "agentonic",
-  "version": "0.52.2",
+  "version": "0.53.0",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@11.21.0",
@@ -72,6 +72,6 @@
     "prettier-plugin-tailwindcss": "^0.8.0",
     "tsx": "^4.20.0",
     "typescript": "^5.9.3",
-    "vitest": "^4.0.0"
+    "vitest": "^4.1.12"
   }
 }
