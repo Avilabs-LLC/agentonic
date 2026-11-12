@@ -210,9 +210,10 @@ export function AccountSkeleton({
           <CardHeader className="space-y-2">
             <Skeleton className="h-6 w-56" />
             <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-2/3" />
           </CardHeader>
           <CardContent>
-            <Skeleton className="h-8 w-full" />
+            <Skeleton className="h-5 w-24" />
           </CardContent>
         </Card>
       )}

@@ -11,7 +11,6 @@ import {
   acceptStaff,
   changePassword,
   confirmAuthenticator,
-  disableAuthenticator,
   requestPasswordReset,
   startAuthenticator,
   updateDisplayName,
@@ -37,9 +36,6 @@ export async function startMfa() {
 }
 export async function confirmMfa(input: { factorId: string; code: string }) {
   return confirmAuthenticator(input)
-}
-export async function disableMfa() {
-  return disableAuthenticator()
 }
 export async function saveDisplayName(input: DisplayNameInput) {
   return updateDisplayName("admin", input)

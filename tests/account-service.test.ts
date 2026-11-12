@@ -66,6 +66,7 @@ import {
   inviteMember,
   inviteStaff,
   requestPasswordReset,
+  secondFactorStep,
   startAuthenticator,
   updateDisplayName,
   verifyAuthenticator,
@@ -313,6 +314,21 @@ it("verifies staff codes against their enrolled authenticator, and replaces aban
     secret: "S",
   })
   expect(mocks.unenroll).toHaveBeenCalledWith({ factorId: "f-abandoned" })
+})
+it("asks staff for a code, or to enrol one, until the session passed a second factor (§87)", async () => {
+  const verified = { id: "f-verified", status: "verified" }
+  mocks.aal.mockResolvedValue({ data: { currentLevel: "aal2" } })
+  expect(await secondFactorStep()).toBe("verified")
+  mocks.aal.mockResolvedValue({ data: { currentLevel: "aal1" } })
+  mocks.listFactors.mockResolvedValue({
+    data: { totp: [verified], all: [verified] },
+  })
+  expect(await secondFactorStep()).toBe("challenge")
+  mocks.listFactors.mockResolvedValue({ data: { totp: [], all: [] } })
+  expect(await secondFactorStep()).toBe("enrol")
+  // Auth could not say: never treated as verified.
+  mocks.aal.mockResolvedValue({ data: null })
+  expect(await secondFactorStep()).toBe("enrol")
 })
 it("saves a person's own name only when it is a usable name (N7)", async () => {
   mocks.setName.mockResolvedValue(true)

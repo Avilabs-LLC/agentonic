@@ -64,7 +64,7 @@ export default async function Page({
             <CardHeader>
               <CardTitle>Invitaciones</CardTitle>
               <CardDescription>
-                Cada invitación vale 7 días y solo para su correo.
+                Cada invitación vale 48 horas y solo para su correo.
               </CardDescription>
             </CardHeader>
             <CardContent>
